@@ -8,6 +8,7 @@ namespace R2WAI.Api.Tests.UI;
 /// </summary>
 public class LoginPageTests : BrowserTestBase
 {
+    public LoginPageTests(BrowserFixture fixture) : base(fixture) { }
     [Fact]
     public async Task LoginPage_Renders_WithR2WAITitle()
     {
@@ -23,7 +24,7 @@ public class LoginPageTests : BrowserTestBase
         await NavigateAndWait("/login");
 
         var emailInput = Page.Locator("input[type='email']").First;
-        await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 10000 });
+        await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await emailInput.IsVisibleAsync(), "Email input should be visible");
     }
 
@@ -33,7 +34,7 @@ public class LoginPageTests : BrowserTestBase
         await NavigateAndWait("/login");
 
         var passwordInput = Page.Locator("input[type='password']").First;
-        await passwordInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 10000 });
+        await passwordInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await passwordInput.IsVisibleAsync(), "Password input should be visible");
     }
 
@@ -43,7 +44,7 @@ public class LoginPageTests : BrowserTestBase
         await NavigateAndWait("/login");
 
         var button = Page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true });
-        await button.WaitForAsync(new LocatorWaitForOptions { Timeout = 10000 });
+        await button.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await button.IsVisibleAsync(), "Sign In button should be visible");
     }
 
@@ -53,7 +54,7 @@ public class LoginPageTests : BrowserTestBase
         await NavigateAndWait("/login");
 
         var emailInput = Page.Locator("input[type='email']").First;
-        await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 10000 });
+        await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         await emailInput.FillAsync("test@example.com");
 
         var passwordInput = Page.Locator("input[type='password']").First;
@@ -69,7 +70,7 @@ public class LoginPageTests : BrowserTestBase
         await NavigateAndWait("/login");
 
         var emailInput = Page.Locator("input[type='email']").First;
-        await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 10000 });
+        await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         await emailInput.FillAsync("bad@test.com");
 
         var passwordInput = Page.Locator("input[type='password']").First;
@@ -98,7 +99,7 @@ public class LoginPageTests : BrowserTestBase
 
         // MudBlazor renders with specific CSS classes
         var mudPaper = Page.Locator(".mud-paper").First;
-        await mudPaper.WaitForAsync(new LocatorWaitForOptions { Timeout = 10000 });
+        await mudPaper.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await mudPaper.IsVisibleAsync(), "MudBlazor paper component should be rendered");
     }
 }

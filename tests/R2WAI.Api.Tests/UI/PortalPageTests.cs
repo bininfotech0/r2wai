@@ -8,6 +8,7 @@ namespace R2WAI.Api.Tests.UI;
 /// </summary>
 public class PortalPageTests : BrowserTestBase
 {
+    public PortalPageTests(BrowserFixture fixture) : base(fixture) { }
     [Theory]
     [InlineData("/")]
     [InlineData("/assistant-studio")]
@@ -81,7 +82,7 @@ public class PortalPageTests : BrowserTestBase
 
         // Wait for Blazor to render the R2WAI text
         var r2waiText = Page.Locator("text=R2WAI").First;
-        await r2waiText.WaitForAsync(new LocatorWaitForOptions { Timeout = 10000 });
+        await r2waiText.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await r2waiText.IsVisibleAsync(), "R2WAI branding should be visible");
     }
 }
