@@ -25,7 +25,7 @@ else
                 <MudSimpleTable Dense="true" Elevation="0">
                     <tbody>
                         <tr><td style="width:180px;"><strong>Platform</strong></td><td>R2WAI</td></tr>
-                        <tr><td><strong>Version</strong></td><td>1.0.0</td></tr>
+                        <tr><td><strong>Version</strong></td><td>@_appVersion</td></tr>
                         <tr><td><strong>Description</strong></td><td>Enterprise AI Work Execution Platform</td></tr>
                         <tr><td><strong>.NET Runtime</strong></td><td>@_runtimeVersion</td></tr>
                         <tr><td><strong>OS</strong></td><td>@_osDescription</td></tr>
@@ -52,7 +52,10 @@ else
                                 <div class="icon-container icon-container--@GetIconVariant(feature.Color)">
                                     <MudIcon Icon="@feature.Icon" Size="Size.Small" />
                                 </div>
-                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@feature.Name</MudText>
+                                <div>
+                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@feature.Name</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@feature.Description</MudText>
+                                </div>
                             </div>
                             <StatusBadge Status="Enabled" OverrideColor="Color.Success" />
                         </div>
@@ -159,12 +162,34 @@ else
                 </MudSimpleTable>
             </MudPaper>
         </MudItem>
+
+        <MudItem xs="12">
+            <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--primary">
+                <div class="d-flex align-center gap-2 mb-3">
+                    <div class="icon-container icon-container--primary">
+                        <MudIcon Icon="@Icons.Material.Filled.MenuBook" Size="Size.Small" />
+                    </div>
+                    <MudText Typo="Typo.h6" Class="section-title" Style="margin-bottom: 0;">Resources</MudText>
+                </div>
+                <div class="d-flex flex-wrap gap-3">
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Href="/docs/architecture"
+                               StartIcon="@Icons.Material.Outlined.Architecture">Architecture Guide</MudButton>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Href="/docs/api"
+                               StartIcon="@Icons.Material.Outlined.Api">API Reference</MudButton>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Href="/docs/development"
+                               StartIcon="@Icons.Material.Outlined.Code">Development Guide</MudButton>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Href="/docs/deployment"
+                               StartIcon="@Icons.Material.Outlined.Cloud">Deployment Guide</MudButton>
+                </div>
+            </MudPaper>
+        </MudItem>
     </MudGrid>
 }
 
 @code {
     private bool _loading = true;
     private bool _refreshingHealth;
+    private string _appVersion = string.Empty;
     private string _runtimeVersion = string.Empty;
     private string _osDescription = string.Empty;
     private string _storageProvider = "Local";
@@ -176,12 +201,12 @@ else
 
     private readonly List<FeatureModule> _features = new()
     {
-        new("AI Assistant Studio", Icons.Material.Filled.SmartToy, Color.Primary),
-        new("Workflow Studio", Icons.Material.Filled.AccountTree, Color.Secondary),
-        new("Operations Center", Icons.Material.Filled.Monitor, Color.Tertiary),
-        new("Knowledge & RAG", Icons.Material.Filled.LibraryBooks, Color.Info),
-        new("Integrations", Icons.Material.Filled.Extension, Color.Info),
-        new("Settings & Admin", Icons.Material.Filled.Settings, Color.Default),
+        new("AI Assistant Studio", "Create and manage domain-specific AI assistants with configurable LLMs", Icons.Material.Filled.SmartToy, Color.Primary),
+        new("Workflow Studio", "Design automated business workflows with approval chains and scheduling", Icons.Material.Filled.AccountTree, Color.Secondary),
+        new("Operations Center", "Monitor platform health, analytics, reports, and audit trails", Icons.Material.Filled.Monitor, Color.Tertiary),
+        new("Knowledge & RAG", "Upload documents, build knowledge bases, and enable semantic search with citations", Icons.Material.Filled.LibraryBooks, Color.Info),
+        new("Integrations", "Connect 20+ external systems via REST API connectors and OAuth2", Icons.Material.Filled.Extension, Color.Info),
+        new("Settings & Admin", "Manage users, roles, permissions, AI models, and tenant configuration", Icons.Material.Filled.Settings, Color.Default),
     };
 
     private readonly List<TechItem> _techStack = new()
@@ -201,6 +226,7 @@ else
     {
         if (!firstRender) return;
 
+        _appVersion = typeof(R2WAI.Web.Services.AuthenticatedHttpClient).Assembly.GetName().Version?.ToString() ?? "1.0.0";
         _runtimeVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
         _osDescription = System.Runtime.InteropServices.RuntimeInformation.OSDescription;
         _storageProvider = Configuration["Storage:Provider"] ?? "Local";
@@ -271,7 +297,7 @@ else
         _ => "secondary"
     };
 
-    private record FeatureModule(string Name, string Icon, Color Color);
+    private record FeatureModule(string Name, string Description, string Icon, Color Color);
     private record TechItem(string Category, string Technology);
 
     private class HealthCheckEntry

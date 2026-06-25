@@ -158,7 +158,29 @@ else
             Navigation.NavigateTo("/operations/analytics");
             return;
         }
-        Snackbar.Add($"{type} report generation coming soon.", Severity.Info);
+
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/operations/reports/generate",
+                new { Type = type, Period = "last30days" });
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"{type} report generated successfully.", Severity.Success);
+                await LoadReports();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to generate {type} report.", Severity.Error);
+            }
+        }
+        catch { Snackbar.Add($"Failed to generate {type} report.", Severity.Error); }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
     }
 
     private async Task DownloadReport(ReportItem report)

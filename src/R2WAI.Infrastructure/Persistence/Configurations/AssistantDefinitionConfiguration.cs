@@ -35,6 +35,28 @@ public class AssistantDefinitionConfiguration : IEntityTypeConfiguration<Assista
             .IsRequired()
             .HasDefaultValue(false);
 
+        builder.Property(a => a.PublishStatus)
+            .IsRequired()
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(PublishStatus.Draft);
+
+        builder.Property(a => a.PublishedVersion)
+            .IsRequired()
+            .HasDefaultValue(0);
+
+        builder.Property(a => a.PublishedAt);
+
+        builder.Property(a => a.Tags)
+            .HasColumnType("jsonb");
+
+        builder.Property(a => a.AvatarUrl)
+            .HasMaxLength(500);
+
+        builder.Property(a => a.UsageCount)
+            .IsRequired()
+            .HasDefaultValue(0);
+
         builder.Property(a => a.CreatedAt).IsRequired();
         builder.Property(a => a.ModifiedAt);
 
@@ -55,5 +77,6 @@ public class AssistantDefinitionConfiguration : IEntityTypeConfiguration<Assista
 
         builder.HasIndex(a => new { a.TenantId, a.Name });
         builder.HasIndex(a => new { a.TenantId, a.IsActive });
+        builder.HasIndex(a => new { a.TenantId, a.PublishStatus });
     }
 }

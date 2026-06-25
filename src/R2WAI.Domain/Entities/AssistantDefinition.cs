@@ -15,6 +15,12 @@ public sealed class AssistantDefinition : BaseEntity<Guid>
     public string? Tools { get; private set; }
     public string? Settings { get; private set; }
     public bool IsActive { get; private set; }
+    public PublishStatus PublishStatus { get; private set; } = PublishStatus.Draft;
+    public int PublishedVersion { get; private set; }
+    public DateTime? PublishedAt { get; private set; }
+    public string? Tags { get; private set; }
+    public string? AvatarUrl { get; private set; }
+    public int UsageCount { get; private set; }
 
     public Tenant Tenant { get; private set; } = null!;
     public ModelConfiguration? ModelConfiguration { get; private set; }
@@ -35,13 +41,16 @@ public sealed class AssistantDefinition : BaseEntity<Guid>
     }
 
     public void UpdateDetails(string name, string? description, string? systemPrompt,
-                               string? tools, string? settings)
+                               string? tools, string? settings,
+                               string? tags = null, string? avatarUrl = null)
     {
         Name = name;
         Description = description;
         SystemPrompt = systemPrompt;
         Tools = tools;
         Settings = settings;
+        if (tags is not null) Tags = tags;
+        if (avatarUrl is not null) AvatarUrl = avatarUrl;
         MarkAsModified();
     }
 
@@ -60,12 +69,35 @@ public sealed class AssistantDefinition : BaseEntity<Guid>
     public void Publish()
     {
         IsActive = true;
+        PublishStatus = PublishStatus.Published;
+        PublishedVersion++;
+        PublishedAt = DateTime.UtcNow;
         MarkAsModified();
     }
 
     public void Unpublish()
     {
         IsActive = false;
+        PublishStatus = PublishStatus.Draft;
+        MarkAsModified();
+    }
+
+    public void Archive()
+    {
+        IsActive = false;
+        PublishStatus = PublishStatus.Archived;
+        MarkAsModified();
+    }
+
+    public void SetAvatarUrl(string? avatarUrl)
+    {
+        AvatarUrl = avatarUrl;
+        MarkAsModified();
+    }
+
+    public void IncrementUsageCount()
+    {
+        UsageCount++;
         MarkAsModified();
     }
 

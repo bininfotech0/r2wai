@@ -110,9 +110,11 @@ else
         _loading = false;
     }
 
-    private void OpenCreateDialog()
+    private async Task OpenCreateDialog()
     {
-        Snackbar.Add("Webhook creation dialog coming soon.", Severity.Info);
+        var dialog = await Dialog.ShowAsync<CreateEditWebhookDialog>("Create Webhook");
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadWebhooks();
     }
 
     private async Task CopyEndpoint(WebhookItem webhook)
@@ -141,9 +143,15 @@ else
         Snackbar.Add($"Total calls: {webhook.TotalCalls}", Severity.Info);
     }
 
-    private void EditWebhook(WebhookItem webhook)
+    private async Task EditWebhook(WebhookItem webhook)
     {
-        Snackbar.Add("Webhook editing coming soon.", Severity.Info);
+        var parameters = new DialogParameters<CreateEditWebhookDialog>
+        {
+            { x => x.EditId, webhook.Id.ToString() }
+        };
+        var dialog = await Dialog.ShowAsync<CreateEditWebhookDialog>("Edit Webhook", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadWebhooks();
     }
 
     private async Task DeleteWebhook(WebhookItem webhook)

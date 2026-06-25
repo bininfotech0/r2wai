@@ -7,6 +7,7 @@ public class AssistantProfile : Profile
 {
     public AssistantProfile()
     {
-        CreateMap<AssistantDefinition, AssistantDto>();
+        CreateMap<AssistantDefinition, AssistantDto>()
+            .ForMember(d => d.PublishStatus, opt => opt.MapFrom(s => s.PublishStatus.ToString()));
     }
 }

@@ -1,4 +1,23 @@
 {
+  "name": "r2wai",
+  "version": "1.0.0",
+  "description": "R2WAI - Enterprise AI Work Execution Platform for AI assistants, knowledge management, workflow automation, and enterprise chatbots",
+  "author": "R2WAI Team",
+  "license": "UNLICENSED",
+  "private": true,
+  "keywords": [
+    "enterprise-ai",
+    "blazor",
+    "dotnet",
+    "rag",
+    "knowledge-management",
+    "workflow-automation",
+    "chatbot",
+    "semantic-kernel"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "devDependencies": {
     "playwright": "^1.61.0"
   }

@@ -1,0 +1,148 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Webhook" : "Create Webhook")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
+            </MudItem>
+            @if (!_isEdit)
+            {
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_slug" Label="Slug" Variant="Variant.Outlined"
+                                  HelperText="URL-friendly identifier. Auto-generated from name if left blank." />
+                </MudItem>
+            }
+            <MudItem xs="12">
+                <MudSelect T="string" @bind-Value="_triggerType" Label="Trigger Type" Variant="Variant.Outlined">
+                    <MudSelectItem T="string" Value="@("Workflow")">Workflow</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Event")">Event</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Custom")">Custom</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            @if (_triggerType == "Workflow")
+            {
+                <MudItem xs="12">
+                    <MudSelect T="Guid?" @bind-Value="_workflowId" Label="Workflow" Variant="Variant.Outlined"
+                               HelperText="Select the workflow to trigger when this webhook receives a request.">
+                        @foreach (var wf in _workflows)
+                        {
+                            <MudSelectItem T="Guid?" Value="@wf.Id">@wf.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            }
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_secret" Label="Secret" Variant="Variant.Outlined"
+                              InputType="@(_showSecret ? InputType.Text : InputType.Password)"
+                              Adornment="Adornment.End" AdornmentIcon="@(_showSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="() => _showSecret = !_showSecret"
+                              HelperText="Optional. Used to verify webhook signatures." />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? EditId { get; set; }
+
+    private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private string _name = string.Empty;
+    private string _slug = string.Empty;
+    private string _triggerType = "Workflow";
+    private Guid? _workflowId;
+    private string _secret = string.Empty;
+    private bool _showSecret;
+    private bool _saving;
+    private List<WorkflowOption> _workflows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWorkflows();
+
+        if (_isEdit)
+        {
+            try
+            {
+                var webhook = await Http.GetFromJsonAsync<WebhookEditDto>($"/api/v1/admin/webhooks/{EditId}");
+                if (webhook is not null)
+                {
+                    _name = webhook.Name;
+                    _triggerType = webhook.TriggerType ?? "Workflow";
+                    _workflowId = webhook.WorkflowId;
+                    _secret = webhook.Secret ?? string.Empty;
+                }
+            }
+            catch { Snackbar.Add("Failed to load webhook", Severity.Error); }
+        }
+    }
+
+    private async Task LoadWorkflows()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<WorkflowListResult>("/api/v1/workflows?pageSize=100");
+            _workflows = result?.Items ?? new();
+        }
+        catch { }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_isEdit)
+            {
+                await Http.PutAsJsonAsync($"/api/v1/admin/webhooks/{EditId}",
+                    new { Name = _name, TriggerType = _triggerType, WorkflowId = _workflowId, Secret = (string.IsNullOrEmpty(_secret) ? null : _secret) });
+                Snackbar.Add("Webhook updated", Severity.Success);
+            }
+            else
+            {
+                var slug = string.IsNullOrWhiteSpace(_slug) ? null : _slug;
+                await Http.PostAsJsonAsync("/api/v1/admin/webhooks",
+                    new { Name = _name, Slug = slug, TriggerType = _triggerType, WorkflowId = _workflowId, Secret = (string.IsNullOrEmpty(_secret) ? null : _secret) });
+                Snackbar.Add("Webhook created", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class WebhookEditDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? TriggerType { get; set; }
+        public Guid? WorkflowId { get; set; }
+        public string? Secret { get; set; }
+    }
+
+    private class WorkflowListResult { public List<WorkflowOption>? Items { get; set; } }
+    private class WorkflowOption
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+}

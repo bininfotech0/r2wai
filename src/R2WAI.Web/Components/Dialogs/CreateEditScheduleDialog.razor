@@ -1,0 +1,158 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Schedule" : "Create Schedule")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
+            </MudItem>
+            @if (!_isEdit)
+            {
+                <MudItem xs="12">
+                    <MudSelect T="Guid?" @bind-Value="_workflowId" Label="Workflow" Required="true" Variant="Variant.Outlined">
+                        @foreach (var wf in _workflows)
+                        {
+                            <MudSelectItem T="Guid?" Value="@wf.Id">@wf.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            }
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_cronExpression" Label="Cron Expression" Required="true" Variant="Variant.Outlined"
+                              HelperText="Standard cron format: minute hour day month weekday" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Presets</MudText>
+                <div class="d-flex flex-wrap gap-2">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" OnClick="@(() => SetCron("0 * * * *", "Every hour"))">Every hour</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" OnClick="@(() => SetCron("0 0 * * *", "Daily at midnight"))">Daily at midnight</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" OnClick="@(() => SetCron("0 9 * * 1-5", "Weekdays at 9:00 AM"))">Weekdays at 9am</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" OnClick="@(() => SetCron("0 0 * * 1", "Every Monday at midnight"))">Every Monday</MudChip>
+                </div>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_cronDescription" Label="Description" Variant="Variant.Outlined"
+                              HelperText="Human-readable description of the schedule (e.g., 'Every weekday at 9:00 AM')" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? EditId { get; set; }
+
+    private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private string _name = string.Empty;
+    private Guid? _workflowId;
+    private string _cronExpression = string.Empty;
+    private string _cronDescription = string.Empty;
+    private bool _saving;
+    private List<WorkflowOption> _workflows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWorkflows();
+
+        if (_isEdit)
+        {
+            try
+            {
+                var schedule = await Http.GetFromJsonAsync<ScheduleEditDto>($"/api/v1/workflows/schedules/{EditId}");
+                if (schedule is not null)
+                {
+                    _name = schedule.Name;
+                    _workflowId = schedule.WorkflowId;
+                    _cronExpression = schedule.CronExpression ?? string.Empty;
+                    _cronDescription = schedule.CronDescription ?? string.Empty;
+                }
+            }
+            catch { Snackbar.Add("Failed to load schedule", Severity.Error); }
+        }
+    }
+
+    private async Task LoadWorkflows()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<WorkflowListResult>("/api/v1/workflows?pageSize=100");
+            _workflows = result?.Items ?? new();
+        }
+        catch { }
+    }
+
+    private void SetCron(string expression, string description)
+    {
+        _cronExpression = expression;
+        _cronDescription = description;
+        StateHasChanged();
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_cronExpression))
+        {
+            Snackbar.Add("Cron expression is required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_isEdit)
+            {
+                await Http.PutAsJsonAsync($"/api/v1/workflows/schedules/{EditId}",
+                    new { Name = _name, CronExpression = _cronExpression, CronDescription = _cronDescription });
+                Snackbar.Add("Schedule updated", Severity.Success);
+            }
+            else
+            {
+                if (!_workflowId.HasValue)
+                {
+                    Snackbar.Add("Please select a workflow", Severity.Warning);
+                    _saving = false;
+                    return;
+                }
+                await Http.PostAsJsonAsync("/api/v1/workflows/schedules",
+                    new { WorkflowId = _workflowId.Value, Name = _name, CronExpression = _cronExpression, CronDescription = _cronDescription });
+                Snackbar.Add("Schedule created", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class ScheduleEditDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public Guid WorkflowId { get; set; }
+        public string? CronExpression { get; set; }
+        public string? CronDescription { get; set; }
+    }
+
+    private class WorkflowListResult { public List<WorkflowOption>? Items { get; set; } }
+    private class WorkflowOption
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+}

@@ -12,5 +12,11 @@ public class AssistantDto
     public string? Tools { get; init; }
     public string? Settings { get; init; }
     public bool IsActive { get; init; }
+    public string PublishStatus { get; init; } = "Draft";
+    public int PublishedVersion { get; init; }
+    public DateTime? PublishedAt { get; init; }
+    public string? Tags { get; init; }
+    public string? AvatarUrl { get; init; }
+    public int UsageCount { get; init; }
     public DateTime CreatedAt { get; init; }
 }

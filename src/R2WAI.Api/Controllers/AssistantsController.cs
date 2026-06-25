@@ -75,7 +75,7 @@ public class AssistantsController(
         assistant.Publish();
         await dbContext.SaveChangesAsync(ct);
         logger.LogInformation("Assistant {Id} published", id);
-        return Ok(new { id, isActive = true, status = "Published" });
+        return Ok(new { id, isActive = true, status = "Published", publishedVersion = assistant.PublishedVersion });
     }
 
     [HttpPost("{id:guid}/unpublish")]
@@ -87,6 +87,17 @@ public class AssistantsController(
         await dbContext.SaveChangesAsync(ct);
         logger.LogInformation("Assistant {Id} unpublished", id);
         return Ok(new { id, isActive = false, status = "Draft" });
+    }
+
+    [HttpPost("{id:guid}/archive")]
+    public async Task<IActionResult> Archive(Guid id, CancellationToken ct = default)
+    {
+        var assistant = await dbContext.AssistantDefinitions.FirstOrDefaultAsync(a => a.Id == id, ct);
+        if (assistant is null) return NotFound();
+        assistant.Archive();
+        await dbContext.SaveChangesAsync(ct);
+        logger.LogInformation("Assistant {Id} archived", id);
+        return Ok(new { id, isActive = false, status = "Archived" });
     }
 
     [HttpPost("{id:guid}/chat")]

@@ -247,8 +247,113 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
             });
         }
 
+        var since = DateTime.UtcNow.AddDays(-30);
+
+        var totalTokens = await dbContext.Messages
+            .Where(m => m.TenantId == tenantId && m.TokensUsed != null && m.CreatedAt >= since)
+            .SumAsync(m => (long?)m.TokensUsed, ct) ?? 0L;
+
+        if (totalTokens > 0 || conversationCount > 0)
+        {
+            items.Add(new
+            {
+                Id = Guid.NewGuid(),
+                Name = $"Cost Report - {DateTime.UtcNow:MMM yyyy}",
+                Type = "Cost",
+                Period = "Last 30 days",
+                GeneratedAt = DateTime.UtcNow,
+                Status = "Completed",
+                Stats = new { totalTokens, estimatedCost = Math.Round(totalTokens * 0.000002m, 4) }
+            });
+        }
+
+        var assistantCount = await dbContext.AssistantDefinitions
+            .Where(a => a.TenantId == tenantId && !a.IsDeleted)
+            .CountAsync(ct);
+
+        if (assistantCount > 0)
+        {
+            var assistantStats = await dbContext.AssistantDefinitions
+                .Where(a => a.TenantId == tenantId && !a.IsDeleted)
+                .Select(a => new { a.Name, a.UsageCount })
+                .OrderByDescending(a => a.UsageCount)
+                .Take(5)
+                .ToListAsync(ct);
+
+            items.Add(new
+            {
+                Id = Guid.NewGuid(),
+                Name = $"Assistant Report - {DateTime.UtcNow:MMM yyyy}",
+                Type = "Assistant",
+                Period = "Last 30 days",
+                GeneratedAt = DateTime.UtcNow,
+                Status = "Completed",
+                Stats = new { totalAssistants = assistantCount, topAssistants = assistantStats }
+            });
+        }
+
         return Ok(new { items, total = items.Count, page, pageSize });
     }
+
+    [HttpPost("reports/generate")]
+    public async Task<IActionResult> GenerateReport([FromBody] GenerateReportRequest request, CancellationToken ct = default)
+    {
+        var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
+        if (currentUser.TenantId is null) return Unauthorized();
+        var tenantId = currentUser.TenantId.Value;
+        var since = DateTime.UtcNow.AddDays(-30);
+
+        if (request.Type.Equals("cost", StringComparison.OrdinalIgnoreCase))
+        {
+            var totalTokens = await dbContext.Messages
+                .Where(m => m.TenantId == tenantId && m.TokensUsed != null && m.CreatedAt >= since)
+                .SumAsync(m => (long?)m.TokensUsed, ct) ?? 0L;
+
+            var perAssistant = await dbContext.Conversations
+                .Where(c => c.TenantId == tenantId && c.ReferenceId != null && c.CreatedAt >= since)
+                .GroupBy(c => c.ReferenceId)
+                .Select(g => new { AssistantId = g.Key, Conversations = g.Count() })
+                .ToListAsync(ct);
+
+            return Ok(new
+            {
+                type = "Cost",
+                period = "Last 30 days",
+                totalTokens,
+                estimatedCost = Math.Round(totalTokens * 0.000002m, 4),
+                assistantBreakdown = perAssistant
+            });
+        }
+
+        if (request.Type.Equals("assistant", StringComparison.OrdinalIgnoreCase))
+        {
+            var assistants = await dbContext.AssistantDefinitions
+                .Where(a => a.TenantId == tenantId && !a.IsDeleted)
+                .Select(a => new
+                {
+                    a.Id, a.Name, a.Type, a.PublishStatus, a.UsageCount, a.PublishedVersion, a.CreatedAt
+                })
+                .OrderByDescending(a => a.UsageCount)
+                .ToListAsync(ct);
+
+            var totalConversations = await dbContext.Conversations
+                .Where(c => c.TenantId == tenantId && c.ReferenceId != null && c.CreatedAt >= since)
+                .CountAsync(ct);
+
+            return Ok(new
+            {
+                type = "Assistant",
+                period = "Last 30 days",
+                totalAssistants = assistants.Count,
+                totalConversations,
+                assistants
+            });
+        }
+
+        return BadRequest(new { error = "Invalid report type. Use 'cost' or 'assistant'." });
+    }
+
+    public record GenerateReportRequest(string Type, string? Period = "last30days");
 
     [HttpGet("audit-logs/export")]
     public async Task<IActionResult> ExportAuditLogs(

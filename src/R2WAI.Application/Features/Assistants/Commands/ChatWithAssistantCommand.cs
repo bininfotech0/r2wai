@@ -98,6 +98,7 @@ public class ChatWithAssistantCommandHandler(
             cancellationToken);
 
         conversation.AddMessage(Guid.NewGuid(), null, MessageRole.Assistant, reply);
+        assistant.IncrementUsageCount();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new ChatWithAssistantResult(conversation.Id, reply, 0, citations);

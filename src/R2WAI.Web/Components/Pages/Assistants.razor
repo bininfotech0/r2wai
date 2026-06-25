@@ -137,6 +137,9 @@
                 <MudChip T="string" Size="Size.Small" OnClick="@(() => _filter = "Draft")"
                          Color="@(_filter == "Draft" ? Color.Default : Color.Default)"
                          Variant="@(_filter == "Draft" ? Variant.Filled : Variant.Outlined)">Draft</MudChip>
+                <MudChip T="string" Size="Size.Small" OnClick="@(() => _filter = "Archived")"
+                         Color="@(_filter == "Archived" ? Color.Warning : Color.Default)"
+                         Variant="@(_filter == "Archived" ? Variant.Filled : Variant.Outlined)">Archived</MudChip>
             </div>
 
             @if (_loading)
@@ -172,9 +175,9 @@
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">@assistant.Type</MudText>
                                 </div>
                                 <MudChip T="string" Size="Size.Small"
-                                         Color="@(assistant.IsActive ? Color.Success : Color.Default)"
+                                         Color="@(assistant.PublishStatus == "Published" ? Color.Success : assistant.PublishStatus == "Archived" ? Color.Warning : Color.Default)"
                                          Style="font-size: 0.65rem;">
-                                    @(assistant.IsActive ? "Live" : "Draft")
+                                    @(assistant.PublishStatus == "Published" ? "Live" : assistant.PublishStatus)
                                 </MudChip>
                             </div>
                         </MudListItem>
@@ -199,14 +202,32 @@
         else
         {
             @* Publish Banner *@
-            @if (_selectedAssistant.IsActive)
+            @if (_selectedAssistant.PublishStatus == "Published")
             {
                 <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true" Class="mb-3"
                           Icon="@Icons.Material.Filled.CheckCircle">
                     <div class="d-flex justify-space-between align-center" style="width: 100%;">
-                        <span>This assistant is <strong>published</strong> and available to users.</span>
-                        <MudButton Variant="Variant.Text" Color="Color.Warning" Size="Size.Small" OnClick="UnpublishAssistant">
-                            Unpublish
+                        <span>This assistant is <strong>published</strong> (v@(_selectedAssistant.PublishedVersion)) and available to users.</span>
+                        <div class="d-flex gap-1">
+                            <MudButton Variant="Variant.Text" Color="Color.Warning" Size="Size.Small" OnClick="UnpublishAssistant">
+                                Unpublish
+                            </MudButton>
+                            <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small" OnClick="ArchiveAssistant">
+                                Archive
+                            </MudButton>
+                        </div>
+                    </div>
+                </MudAlert>
+            }
+            else if (_selectedAssistant.PublishStatus == "Archived")
+            {
+                <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                          Icon="@Icons.Material.Filled.Archive">
+                    <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                        <span>This assistant is <strong>archived</strong>.</span>
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Publish" OnClick="PublishAssistant">
+                            Re-publish
                         </MudButton>
                     </div>
                 </MudAlert>
@@ -229,12 +250,34 @@
                 @* Header with actions *@
                 <div class="editor-header d-flex justify-space-between align-center pa-4" style="border-bottom: 1px solid var(--mud-palette-divider);">
                     <div class="d-flex align-center gap-3">
-                        <MudAvatar Color="Color.Primary" Size="Size.Medium">
-                            @(_selectedAssistant.Name.Length > 0 ? _selectedAssistant.Name[0].ToString().ToUpper() : "A")
-                        </MudAvatar>
+                        @if (!string.IsNullOrEmpty(_selectedAssistant.AvatarUrl))
+                        {
+                            <MudAvatar Size="Size.Medium">
+                                <MudImage Src="@_selectedAssistant.AvatarUrl" Alt="@_selectedAssistant.Name" />
+                            </MudAvatar>
+                        }
+                        else
+                        {
+                            <MudAvatar Color="Color.Primary" Size="Size.Medium">
+                                @(_selectedAssistant.Name.Length > 0 ? _selectedAssistant.Name[0].ToString().ToUpper() : "A")
+                            </MudAvatar>
+                        }
                         <div>
-                            <MudText Typo="Typo.h6" Class="gradient-text" Style="font-weight: 600;">@_selectedAssistant.Name</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Created @_selectedAssistant.CreatedAt.ToString("MMM dd, yyyy")</MudText>
+                            <div class="d-flex align-center gap-2">
+                                <MudText Typo="Typo.h6" Class="gradient-text" Style="font-weight: 600;">@_selectedAssistant.Name</MudText>
+                                @if (_selectedAssistant.PublishedVersion > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined"
+                                             Style="font-size: 0.6rem;">v@(_selectedAssistant.PublishedVersion)</MudChip>
+                                }
+                            </div>
+                            <div class="d-flex align-center gap-2">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Created @_selectedAssistant.CreatedAt.ToString("MMM dd, yyyy")</MudText>
+                                @if (_selectedAssistant.UsageCount > 0)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">| @_selectedAssistant.UsageCount uses</MudText>
+                                }
+                            </div>
                         </div>
                     </div>
                     <div class="d-flex gap-1">
@@ -274,6 +317,14 @@
                         <MudItem xs="12">
                             <MudTextField @bind-Value="_editDescription" Label="Description" Variant="Variant.Outlined"
                                           Margin="Margin.Dense" Lines="2" />
+                        </MudItem>
+                        <MudItem xs="12" sm="8">
+                            <MudTextField @bind-Value="_editTags" Label="Tags" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" HelperText="Comma-separated tags for categorization" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudTextField @bind-Value="_editAvatarUrl" Label="Avatar URL" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" Placeholder="https://..." />
                         </MudItem>
                         <MudItem xs="12" sm="6">
                             <MudSelect T="Guid?" @bind-Value="_editModelId" Label="AI Model" Clearable="true"
@@ -416,6 +467,8 @@
     private Guid? _editModelId;
     private Guid? _editWorkflowId;
     private Guid? _editKnowledgeBaseId;
+    private string _editTags = string.Empty;
+    private string _editAvatarUrl = string.Empty;
     private List<DocumentDto> _documents = new();
 
     // Lookups
@@ -432,9 +485,11 @@
             if (!string.IsNullOrWhiteSpace(_searchTerm))
                 list = list.Where(a => a.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
             if (_filter == "Published")
-                list = list.Where(a => a.IsActive);
+                list = list.Where(a => a.PublishStatus == "Published");
             else if (_filter == "Draft")
-                list = list.Where(a => !a.IsActive);
+                list = list.Where(a => a.PublishStatus == "Draft");
+            else if (_filter == "Archived")
+                list = list.Where(a => a.PublishStatus == "Archived");
             return list.ToList();
         }
     }
@@ -616,6 +671,13 @@
                 _editModelId = detail.ModelConfigurationId;
                 _editKnowledgeBaseId = detail.KnowledgeBaseId;
                 _editWorkflowId = null;
+                _editTags = detail.Tags ?? string.Empty;
+                _editAvatarUrl = detail.AvatarUrl ?? string.Empty;
+
+                _selectedAssistant.PublishStatus = detail.PublishStatus ?? "Draft";
+                _selectedAssistant.PublishedVersion = detail.PublishedVersion;
+                _selectedAssistant.AvatarUrl = detail.AvatarUrl;
+                _selectedAssistant.UsageCount = detail.UsageCount;
 
                 if (detail.Tools is not null)
                 {
@@ -657,6 +719,8 @@
                 ModelConfigurationId = _editModelId,
                 KnowledgeBaseId = _editKnowledgeBaseId,
                 Tools = System.Text.Json.JsonSerializer.Serialize(enabledTools),
+                Tags = (string?)(string.IsNullOrWhiteSpace(_editTags) ? null : _editTags),
+                AvatarUrl = (string?)(string.IsNullOrWhiteSpace(_editAvatarUrl) ? null : _editAvatarUrl),
             });
             Snackbar.Add("Assistant saved", Severity.Success);
             _selectedAssistant.Name = _editName;
@@ -672,6 +736,8 @@
         {
             await Http.PostAsync($"/api/v1/assistants/{_selectedAssistant!.Id}/publish", null);
             _selectedAssistant.IsActive = true;
+            _selectedAssistant.PublishStatus = "Published";
+            _selectedAssistant.PublishedVersion++;
             Snackbar.Add("Assistant published!", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add($"Publish failed: {ex.Message}", Severity.Error); }
@@ -683,9 +749,22 @@
         {
             await Http.PostAsync($"/api/v1/assistants/{_selectedAssistant!.Id}/unpublish", null);
             _selectedAssistant.IsActive = false;
+            _selectedAssistant.PublishStatus = "Draft";
             Snackbar.Add("Assistant unpublished", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add($"Unpublish failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ArchiveAssistant()
+    {
+        try
+        {
+            await Http.PostAsync($"/api/v1/assistants/{_selectedAssistant!.Id}/archive", null);
+            _selectedAssistant.IsActive = false;
+            _selectedAssistant.PublishStatus = "Archived";
+            Snackbar.Add("Assistant archived", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Archive failed: {ex.Message}", Severity.Error); }
     }
 
     private async Task DeleteAssistant()
@@ -735,6 +814,10 @@
         public string? Description { get; set; }
         public string? Type { get; set; }
         public bool IsActive { get; set; }
+        public string PublishStatus { get; set; } = "Draft";
+        public int PublishedVersion { get; set; }
+        public string? AvatarUrl { get; set; }
+        public int UsageCount { get; set; }
         public DateTime CreatedAt { get; set; }
     }
     private class AssistantDetailDto
@@ -746,6 +829,12 @@
         public Guid? KnowledgeBaseId { get; set; }
         public Guid? ModelConfigurationId { get; set; }
         public List<string>? Tools { get; set; }
+        public string? PublishStatus { get; set; }
+        public int PublishedVersion { get; set; }
+        public DateTime? PublishedAt { get; set; }
+        public string? Tags { get; set; }
+        public string? AvatarUrl { get; set; }
+        public int UsageCount { get; set; }
     }
     private class DocumentDto
     {

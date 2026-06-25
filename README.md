@@ -45,7 +45,32 @@
 | **Container** | Docker, Kubernetes (AKS) |
 | **Monitoring** | Serilog, Prometheus, Grafana |
 
+## Features
+
+- **AI Assistant Studio** — Create domain-specific assistants (HR, IT, Finance, Legal, Procurement) with natural language or templates, powered by configurable LLMs
+- **RAG Knowledge Bases** — Upload documents (PDF, DOCX, XLSX), process and embed them with pgvector, and enable semantic search with source citations
+- **Workflow Automation** — Design and execute multi-step business workflows with Elsa 3.x, including approval chains, scheduling, and visual process tracking
+- **Approval Engine** — Policy-based approval routing with multi-level chains, SLA tracking, escalation, and real-time notifications
+- **Enterprise Chatbots** — Build embeddable website chatbots backed by AI assistants and knowledge bases
+- **Integrations Marketplace** — Connect 20+ external systems (Salesforce, Slack, Jira, GitHub, etc.) with REST API connectors and OAuth2 support
+- **Operations Center** — Monitor platform health, view AI usage analytics, generate cost/usage/compliance/assistant reports, and track audit logs
+- **Multi-Tenancy** — Isolated workspaces with role-based access control, configurable permissions, and feature flags per tenant
+- **Real-Time Streaming** — SSE-based chat streaming and SignalR live activity feeds
+- **Enterprise Audit Trail** — Immutable audit logging for all mutations with correlation tracking and CSV/JSON export
+
+## Screenshots
+
+| Dashboard | Assistant Studio | Workflow Builder |
+|-----------|-----------------|-----------------|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Assistants](docs/screenshots/assistants.png) | ![Workflows](docs/screenshots/workflows.png) |
+
 ## Quick Start
+
+### Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- [PostgreSQL 16](https://www.postgresql.org/) (or use Docker)
+- [Docker](https://www.docker.com/) (for infrastructure services)
 
 ```bash
 # 1. Start infrastructure
@@ -124,6 +149,21 @@ kubectl apply -k k8s/
 ```
 
 See [docs/deployment/DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md) for full production deployment guide.
+
+## Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `ConnectionStrings__DefaultConnection` | PostgreSQL connection string | Required |
+| `ConnectionStrings__Redis` | Redis connection string | `localhost:6379` |
+| `Jwt__Secret` | JWT signing key (min 32 chars) | Required |
+| `Jwt__Issuer` | JWT issuer | `R2WAI` |
+| `OpenAI__ApiKey` | OpenAI API key for AI features | Optional |
+| `OpenAI__Model` | Default model ID | `gpt-4o` |
+| `Storage__Provider` | Storage backend (`Local` or `MinIO`) | `Local` |
+| `Authentication__EntraId__TenantId` | Azure Entra ID tenant for SSO | Optional |
+
+See [docker/.env.example](docker/.env.example) for a complete list.
 
 ## Contributing
 

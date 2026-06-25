@@ -123,8 +123,9 @@ else
 
     private async Task OpenCreateDialog()
     {
-        // TODO: Open dialog to select workflow and set cron expression
-        Snackbar.Add("Schedule creation dialog coming soon.", Severity.Info);
+        var dialog = await Dialog.ShowAsync<CreateEditScheduleDialog>("Create Schedule");
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadSchedules();
     }
 
     private async Task ToggleSchedule(ScheduleItem schedule, bool isActive)
@@ -150,7 +151,13 @@ else
 
     private async Task EditSchedule(ScheduleItem schedule)
     {
-        Snackbar.Add("Schedule editing coming soon.", Severity.Info);
+        var parameters = new DialogParameters<CreateEditScheduleDialog>
+        {
+            { x => x.EditId, schedule.Id.ToString() }
+        };
+        var dialog = await Dialog.ShowAsync<CreateEditScheduleDialog>("Edit Schedule", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadSchedules();
     }
 
     private async Task DeleteSchedule(ScheduleItem schedule)

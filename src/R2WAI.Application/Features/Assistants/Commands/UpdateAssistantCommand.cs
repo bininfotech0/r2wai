@@ -14,6 +14,8 @@ public record UpdateAssistantCommand : IRequest<AssistantDto>
     public string? Tools { get; init; }
     public string? Settings { get; init; }
     public bool? IsActive { get; init; }
+    public string? Tags { get; init; }
+    public string? AvatarUrl { get; init; }
 }
 
 public class UpdateAssistantCommandValidator : AbstractValidator<UpdateAssistantCommand>
@@ -36,7 +38,8 @@ public class UpdateAssistantCommandHandler(
             ?? throw new NotFoundException(nameof(AssistantDefinition), command.Id);
 
         assistant.UpdateDetails(command.Name, command.Description,
-            command.SystemPrompt, command.Tools, command.Settings);
+            command.SystemPrompt, command.Tools, command.Settings,
+            command.Tags, command.AvatarUrl);
 
         if (command.ModelConfigurationId.HasValue)
             assistant.LinkModelConfiguration(command.ModelConfigurationId.Value);

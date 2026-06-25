@@ -141,7 +141,7 @@ public static class ApplicationDbContextSeed
             Guid.Parse("00000000-0000-0000-0000-000000000301"),
             DefaultTenantId, "Default Approval Policy",
             "Standard approval chain for all workflows",
-            null, "Admin,WorkflowManager", 1, 60, "Admin");
+            null, """["Admin","WorkflowManager"]""", 1, 60, """["Admin"]""");
 
         context.ApprovalPolicies.Add(approvalPolicy);
 
