@@ -46,6 +46,10 @@ public class PostgresIntegrationTests : IAsyncLifetime
                 builder.UseEnvironment("Testing");
                 builder.UseSetting("Authentication:Jwt:SecretKey",
                     "TestingSecretKeyForIntegrationTestsThatIsLongEnough!");
+                builder.UseSetting("Security:EncryptionKey",
+                    Convert.ToBase64String(new byte[32]));
+                builder.UseSetting("ConnectionStrings:Redis", "");
+                builder.UseSetting("Cache:Redis:ConnectionString", "");
                 builder.UseSetting("ConnectionStrings:DefaultConnection",
                     _postgres.GetConnectionString());
 
@@ -303,7 +307,6 @@ public class PostgresIntegrationTests : IAsyncLifetime
         if (ShouldSkip()) return;
         var client = await GetAuthClientAsync();
         var response = await client.GetAsync("/api/v1/admin/analytics/usage?days=30");
-
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
         var doc = JsonDocument.Parse(body);

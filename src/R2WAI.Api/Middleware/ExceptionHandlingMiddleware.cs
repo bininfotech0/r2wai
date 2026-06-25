@@ -8,11 +8,13 @@ public class ExceptionHandlingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
+    private readonly bool _isDevelopment;
 
-    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
+    public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger, IHostEnvironment env)
     {
         _next = next;
         _logger = logger;
+        _isDevelopment = env.IsDevelopment() || env.IsEnvironment("Testing");
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -51,7 +53,10 @@ public class ExceptionHandlingMiddleware
 
             default:
                 statusCode = HttpStatusCode.InternalServerError;
-                problemDetails = new { Status = 500, Title = "Internal Server Error", Detail = "An unexpected error occurred.", Type = "https://tools.ietf.org/html/rfc7231#section-6.6.1" };
+                var detail = _isDevelopment
+                    ? $"{exception.GetType().Name}: {exception.Message}"
+                    : "An unexpected error occurred.";
+                problemDetails = new { Status = 500, Title = "Internal Server Error", Detail = detail, Type = "https://tools.ietf.org/html/rfc7231#section-6.6.1" };
                 break;
         }
 

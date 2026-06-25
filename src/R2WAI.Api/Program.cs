@@ -182,7 +182,10 @@ builder.Services.AddControllers(options =>
     options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
 });
 builder.Services.AddScoped<IStreamingNotificationService, SignalRStreamingService>();
-builder.Services.AddScoped<IWorkflowBridge, WorkflowBridge>();
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.Services.AddScoped<IWorkflowBridge, WorkflowBridge>();
+else
+    builder.Services.AddScoped<IWorkflowBridge, NoOpWorkflowBridge>();
 builder.Services.AddResponseCompression(o =>
 {
     o.EnableForHttps = true;

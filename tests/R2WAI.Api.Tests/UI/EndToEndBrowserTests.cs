@@ -272,6 +272,15 @@ public class EndToEndBrowserTests : BrowserTestBase
     public async Task UserMenu_Structure_HasSignOutOption()
     {
         await NavigateAndWait("/login");
+
+        var emailInput = Page.Locator("input[type='email']").First;
+        await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 10000 });
+        await emailInput.FillAsync("admin@r2wai.io");
+        var passwordInput = Page.Locator("input[type='password']").First;
+        await passwordInput.FillAsync("admin123");
+        var signInButton = Page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true });
+        await signInButton.ClickAsync();
+        await Page.WaitForURLAsync($"{BaseUrl}/**", new PageWaitForURLOptions { Timeout = 15000 });
         await TakeScreenshot("user_menu_structure");
 
         var userMenu = Page.Locator("[aria-label='User menu']");
