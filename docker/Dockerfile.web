@@ -1,0 +1,21 @@
+# Build stage
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /build
+COPY ["Directory.Build.props", "."]
+COPY ["src/R2WAI.Api/R2WAI.Api.csproj", "src/R2WAI.Api/"]
+COPY ["src/R2WAI.Application/R2WAI.Application.csproj", "src/R2WAI.Application/"]
+COPY ["src/R2WAI.Domain/R2WAI.Domain.csproj", "src/R2WAI.Domain/"]
+COPY ["src/R2WAI.Infrastructure/R2WAI.Infrastructure.csproj", "src/R2WAI.Infrastructure/"]
+COPY ["src/R2WAI.Web/R2WAI.Web.csproj", "src/R2WAI.Web/"]
+RUN dotnet restore "src/R2WAI.Web/R2WAI.Web.csproj"
+COPY . .
+RUN dotnet publish "src/R2WAI.Web/R2WAI.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+EXPOSE 80
+ENV ASPNETCORE_ENVIRONMENT=Production
+ENV ASPNETCORE_URLS=http://+:80
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "R2WAI.Web.dll"]

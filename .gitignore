@@ -1,0 +1,35 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.log
+*.vs/
+
+# Node
+node_modules/
+dist/
+.env.local
+.env.production
+
+# Docker
+docker/.env
+
+# Build
+packages/
+*.nupkg
+
+# Test artifacts
+test-results/

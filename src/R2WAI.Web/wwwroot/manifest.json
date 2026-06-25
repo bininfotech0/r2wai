@@ -1,0 +1,17 @@
+{
+  "name": "R2WAI - AI Work Platform",
+  "short_name": "R2WAI",
+  "description": "Enterprise AI platform for building assistants, automating workflows, and executing work with AI.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#7C3AED",
+  "background_color": "#0F0A1A",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,195 @@
+@page "/operations/reports"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>R2WAI - Reports</PageTitle>
+
+<PageHeader Title="Reports" Subtitle="Generate and download platform usage, cost, and compliance reports">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="GenerateReport">
+        Generate Report
+    </MudButton>
+</PageHeader>
+
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
+                 @onclick="@(() => SelectReportType("usage"))">
+            <MudCardContent Class="d-flex flex-column align-center pa-4">
+                <MudIcon Icon="@Icons.Material.Outlined.BarChart" Size="Size.Large" Color="Color.Primary" Class="mb-2" />
+                <MudText Typo="Typo.subtitle2" Align="Align.Center" Style="font-weight: 600;">Usage Report</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                    Conversations, workflows, documents processed
+                </MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
+                 @onclick="@(() => SelectReportType("cost"))">
+            <MudCardContent Class="d-flex flex-column align-center pa-4">
+                <MudIcon Icon="@Icons.Material.Outlined.AttachMoney" Size="Size.Large" Color="Color.Warning" Class="mb-2" />
+                <MudText Typo="Typo.subtitle2" Align="Align.Center" Style="font-weight: 600;">Cost Report</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                    AI token usage, API calls, cost per assistant
+                </MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
+                 @onclick="@(() => SelectReportType("compliance"))">
+            <MudCardContent Class="d-flex flex-column align-center pa-4">
+                <MudIcon Icon="@Icons.Material.Outlined.VerifiedUser" Size="Size.Large" Color="Color.Success" Class="mb-2" />
+                <MudText Typo="Typo.subtitle2" Align="Align.Center" Style="font-weight: 600;">Compliance Report</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                    Audit trail summary, approval SLA compliance
+                </MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
+                 @onclick="@(() => SelectReportType("assistant"))">
+            <MudCardContent Class="d-flex flex-column align-center pa-4">
+                <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Size="Size.Large" Color="Color.Tertiary" Class="mb-2" />
+                <MudText Typo="Typo.subtitle2" Align="Align.Center" Style="font-weight: 600;">Assistant Report</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                    Per-assistant performance, accuracy, user satisfaction
+                </MudText>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.h6" Class="mb-3" Style="font-weight: 600;">Recent Reports</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_reports.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Outlined.Assessment"
+                Title="No reports generated yet"
+                Description="Select a report type above to generate your first platform report." />
+}
+else
+{
+    <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+        <MudTable Items="_reports" Dense="true" Hover="true" Striped="true">
+            <HeaderContent>
+                <MudTh>Report</MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh>Period</MudTh>
+                <MudTh>Generated</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh Style="width: 100px;">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Report">
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Name</MudText>
+                </MudTd>
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Size="Size.Small" Color="@GetTypeColor(context.Type)">@context.Type</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Period">
+                    <MudText Typo="Typo.caption">@context.Period</MudText>
+                </MudTd>
+                <MudTd DataLabel="Generated">
+                    <MudText Typo="Typo.caption">@context.GeneratedAt.ToString("MMM dd, yyyy HH:mm")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <StatusBadge Status="@context.Status" />
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Outlined.Download" Size="Size.Small"
+                                   OnClick="@(() => DownloadReport(context))"
+                                   Disabled="@(context.Status != "Completed")" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private List<ReportItem> _reports = new();
+    private string? _selectedType;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReports();
+    }
+
+    private async Task LoadReports()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ReportListResult>("/api/v1/operations/reports");
+            _reports = result?.Items ?? new();
+        }
+        catch
+        {
+            _reports = new();
+        }
+        _loading = false;
+    }
+
+    private void SelectReportType(string type)
+    {
+        _selectedType = type;
+        GenerateReport();
+    }
+
+    private async Task GenerateReport()
+    {
+        var type = _selectedType ?? "usage";
+        if (type == "compliance")
+        {
+            Navigation.NavigateTo("/operations/audit-logs");
+            return;
+        }
+        if (type == "usage")
+        {
+            Navigation.NavigateTo("/operations/analytics");
+            return;
+        }
+        Snackbar.Add($"{type} report generation coming soon.", Severity.Info);
+    }
+
+    private async Task DownloadReport(ReportItem report)
+    {
+        if (report.Type == "Compliance")
+        {
+            Navigation.NavigateTo("/operations/audit-logs");
+            return;
+        }
+        Snackbar.Add($"Downloading: {report.Name}", Severity.Info);
+    }
+
+    private Color GetTypeColor(string type) => type switch
+    {
+        "Usage" => Color.Primary,
+        "Cost" => Color.Warning,
+        "Compliance" => Color.Success,
+        "Assistant" => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    private class ReportListResult { public List<ReportItem>? Items { get; set; } }
+
+    private class ReportItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "Usage";
+        public string Period { get; set; } = "Last 30 days";
+        public DateTime GeneratedAt { get; set; }
+        public string Status { get; set; } = "Completed";
+        public string? DownloadUrl { get; set; }
+    }
+}

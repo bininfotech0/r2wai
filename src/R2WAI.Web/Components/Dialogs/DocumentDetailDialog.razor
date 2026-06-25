@@ -1,0 +1,263 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@DocumentName</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (_document is not null)
+        {
+            <MudGrid>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.caption">Type</MudText>
+                    <MudText>@_document.FileType</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.caption">Size</MudText>
+                    <MudText>@FormatUtils.FileSize(_document.FileSize)</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.caption">Status</MudText>
+                    <StatusBadge Status="@_document.Status" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.caption">Pages</MudText>
+                    <MudText>@(_document.PageCount?.ToString() ?? "N/A")</MudText>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption">Uploaded</MudText>
+                    <MudText>@_document.CreatedAt.ToString("yyyy-MM-dd HH:mm")</MudText>
+                </MudItem>
+                @if (!string.IsNullOrEmpty(_document.Description))
+                {
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption">Description</MudText>
+                        <MudText>@_document.Description</MudText>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            <MudDivider Class="my-4" />
+
+            @* Content Preview *@
+            <MudExpansionPanels Elevation="0" Dense="true" Class="mb-4">
+                <MudExpansionPanel Text="Content Preview" Icon="@Icons.Material.Outlined.Visibility"
+                                   IsExpandedChanged="OnPreviewExpanded" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+                    @if (_previewLoading)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                    }
+                    else if (!string.IsNullOrEmpty(_previewContent))
+                    {
+                        <MudPaper Elevation="0" Class="pa-3" Style="max-height: 300px; overflow-y: auto; background: var(--mud-palette-background-gray, #f9fafb); border-radius: 6px; font-family: 'Fira Code', monospace; font-size: 0.8rem;">
+                            <MarkdownRenderer Content="@_previewContent" />
+                        </MudPaper>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                            Showing first @Math.Min(_previewContent.Length, 5000) characters of extracted text
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-3">
+                            No extracted content available. The document may still be processing.
+                        </MudText>
+                    }
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+
+            <MudText Typo="Typo.h6" Class="mb-2">AI Actions</MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="4">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.Summarize" OnClick="Summarize"
+                               Disabled="_actionLoading">
+                        Summarize
+                    </MudButton>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.DataObject" OnClick="Extract"
+                               Disabled="_actionLoading">
+                        Extract Data
+                    </MudButton>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.QuestionAnswer" OnClick="ToggleAsk"
+                               Disabled="_actionLoading">
+                        Ask Question
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+
+            @if (_showAskInput)
+            {
+                <MudGrid Class="mt-2">
+                    <MudItem xs="9">
+                        <MudTextField @bind-Value="_question" Label="Ask a question about this document..."
+                                      Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="3" Class="d-flex align-center">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Ask"
+                                   Disabled="@(string.IsNullOrWhiteSpace(_question) || _actionLoading)" FullWidth="true">
+                            Ask
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            }
+
+            @if (_actionLoading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="mt-4" />
+            }
+
+            @if (!string.IsNullOrEmpty(_actionResult))
+            {
+                <MudPaper Class="pa-4 mt-4" Elevation="1" Style="background-color: var(--mud-palette-background-grey);">
+                    <MudText Typo="Typo.caption" Class="mb-2" Style="font-weight: 600;">@_actionResultTitle</MudText>
+                    <MarkdownRenderer Content="@_actionResult" Style="font-size: 0.875rem;" />
+                </MudPaper>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string DocumentId { get; set; } = string.Empty;
+    [Parameter] public string DocumentName { get; set; } = string.Empty;
+
+    private DocumentDetailDto? _document;
+    private bool _loading = true;
+    private bool _actionLoading;
+    private bool _showAskInput;
+    private string _question = string.Empty;
+    private string _actionResult = string.Empty;
+    private string _actionResultTitle = string.Empty;
+    private string _previewContent = string.Empty;
+    private bool _previewLoading;
+    private bool _previewLoaded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loading = true;
+        try
+        {
+            _document = await Http.GetFromJsonAsync<DocumentDetailDto>($"/api/v1/documents/{DocumentId}");
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load document: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private async Task OnPreviewExpanded(bool expanded)
+    {
+        if (!expanded || _previewLoaded) return;
+        _previewLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.GetAsync($"/api/v1/documents/{DocumentId}/content");
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ContentResult>();
+                _previewContent = result?.Content ?? string.Empty;
+                if (_previewContent.Length > 5000)
+                    _previewContent = _previewContent[..5000] + "\n\n... (truncated)";
+            }
+        }
+        catch { }
+        finally
+        {
+            _previewLoading = false;
+            _previewLoaded = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Summarize()
+    {
+        _actionLoading = true;
+        _actionResult = string.Empty;
+        try
+        {
+            var result = await Http.PostAsync($"/api/v1/documents/{DocumentId}/summarize", null);
+            result.EnsureSuccessStatusCode();
+            var summary = await result.Content.ReadFromJsonAsync<SummaryResult>();
+            _actionResultTitle = "Summary";
+            _actionResult = summary?.Summary ?? "No summary generated.";
+        }
+        catch (Exception ex) { Snackbar.Add($"Summarize failed: {ex.Message}", Severity.Error); }
+        finally { _actionLoading = false; }
+    }
+
+    private async Task Extract()
+    {
+        _actionLoading = true;
+        _actionResult = string.Empty;
+        try
+        {
+            var result = await Http.PostAsJsonAsync($"/api/v1/documents/{DocumentId}/extract",
+                new { Schema = "Extract all key information including dates, names, amounts, and important facts." });
+            result.EnsureSuccessStatusCode();
+            var extraction = await result.Content.ReadAsStringAsync();
+            _actionResultTitle = "Extracted Data";
+            _actionResult = extraction;
+        }
+        catch (Exception ex) { Snackbar.Add($"Extract failed: {ex.Message}", Severity.Error); }
+        finally { _actionLoading = false; }
+    }
+
+    private void ToggleAsk()
+    {
+        _showAskInput = !_showAskInput;
+    }
+
+    private async Task Ask()
+    {
+        if (string.IsNullOrWhiteSpace(_question)) return;
+        _actionLoading = true;
+        _actionResult = string.Empty;
+        try
+        {
+            var result = await Http.PostAsJsonAsync($"/api/v1/documents/{DocumentId}/ask",
+                new { Question = _question });
+            result.EnsureSuccessStatusCode();
+            var answer = await result.Content.ReadFromJsonAsync<AskResult>();
+            _actionResultTitle = $"Answer to: {_question}";
+            _actionResult = answer?.Answer ?? "No answer generated.";
+            _question = string.Empty;
+        }
+        catch (Exception ex) { Snackbar.Add($"Ask failed: {ex.Message}", Severity.Error); }
+        finally { _actionLoading = false; }
+    }
+
+    private void Close() => MudDialog.Close();
+
+
+    private class DocumentDetailDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string FileType { get; set; } = string.Empty;
+        public long FileSize { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public int? PageCount { get; set; }
+        public Guid? KnowledgeBaseId { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class SummaryResult { public string? Summary { get; set; } }
+    private class AskResult { public string? Answer { get; set; } }
+    private class ContentResult { public string? Content { get; set; } }
+}

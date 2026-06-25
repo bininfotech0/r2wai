@@ -1,0 +1,42 @@
+<MudPaper Class="@($"pa-4 kpi-card {(OnClick.HasDelegate ? "kpi-card--clickable" : "")}")" Elevation="0"
+          Style="@($"border: 1px solid var(--mud-palette-divider); cursor: {(OnClick.HasDelegate ? "pointer" : "default")};")"
+          @onclick="OnClick">
+    <div class="d-flex justify-space-between align-center mb-2">
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">@Label</MudText>
+        @if (!string.IsNullOrEmpty(Icon))
+        {
+            <div class="icon-container icon-container--primary" style="width: 32px; height: 32px; border-radius: 8px;">
+                <MudIcon Icon="@Icon" Color="@IconColor" Size="Size.Small" />
+            </div>
+        }
+    </div>
+    <div class="d-flex align-center gap-2">
+        <MudText Typo="Typo.h4" Color="@ValueColor" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@Value</MudText>
+        @if (!string.IsNullOrEmpty(Delta))
+        {
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                     Color="@(Trend == TrendDirection.Up ? Color.Success : Trend == TrendDirection.Down ? Color.Error : Color.Default)"
+                     Style="font-size: 0.7rem; font-weight: 700; height: 22px;">
+                @(Trend == TrendDirection.Up ? "↑" : Trend == TrendDirection.Down ? "↓" : "→") @Delta
+            </MudChip>
+        }
+    </div>
+    @if (!string.IsNullOrEmpty(Subtitle))
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@Subtitle</MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public string Value { get; set; } = "0";
+    [Parameter] public string Label { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string? Delta { get; set; }
+    [Parameter] public TrendDirection Trend { get; set; } = TrendDirection.Neutral;
+    [Parameter] public Color ValueColor { get; set; } = Color.Default;
+    [Parameter] public Color IconColor { get; set; } = Color.Default;
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    public enum TrendDirection { Up, Down, Neutral }
+}

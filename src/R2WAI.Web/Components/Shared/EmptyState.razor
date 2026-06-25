@@ -1,0 +1,29 @@
+<div class="d-flex flex-column align-center justify-center pa-8" style="min-height: @MinHeight;">
+    <div class="empty-state-icon">
+        <MudIcon Icon="@Icon" Size="Size.Large" Color="Color.Primary" Style="opacity: 0.6;" />
+    </div>
+    <MudText Typo="Typo.h6" Align="Align.Center" Style="font-weight: 700; letter-spacing: -0.02em;">@Title</MudText>
+    @if (!string.IsNullOrEmpty(Description))
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="mt-2 mb-4"
+                 Style="max-width: 380px; line-height: 1.6;">@Description</MudText>
+    }
+    @if (ActionText is not null)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3 btn-gradient"
+                   StartIcon="@(ActionIcon ?? Icons.Material.Filled.Add)" OnClick="OnAction"
+                   Style="border-radius: 10px; padding: 8px 24px;">
+            @ActionText
+        </MudButton>
+    }
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = Icons.Material.Outlined.Inbox;
+    [Parameter] public string Title { get; set; } = "Nothing here yet";
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public string? ActionText { get; set; }
+    [Parameter] public string? ActionIcon { get; set; }
+    [Parameter] public EventCallback OnAction { get; set; }
+    [Parameter] public string MinHeight { get; set; } = "300px";
+}

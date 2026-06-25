@@ -1,0 +1,159 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit User" : "Create User")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form">
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_email" Label="Email" Required="true" RequiredError="Email is required"
+                              Validation="@(new Func<string, string>(ValidateEmail))"
+                              InputType="InputType.Email" Disabled="_isEdit" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                @if (!_isEdit)
+                {
+                    <MudTextField @bind-Value="_password" Label="Password" Required="true" RequiredError="Password is required"
+                                  InputType="InputType.Password" Variant="Variant.Outlined" />
+                }
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_firstName" Label="First Name" Required="true" RequiredError="First name is required"
+                              Validation="@(new Func<string, string>(ValidateName))" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_lastName" Label="Last Name" Required="true" RequiredError="Last name is required"
+                              Validation="@(new Func<string, string>(ValidateName))" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="string" Label="Roles" MultiSelection="true" @bind-SelectedValues="_selectedRoles" Variant="Variant.Outlined">
+                    @foreach (var role in _availableRoles)
+                    {
+                        <MudSelectItem T="string" Value="@role.Name">@role.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? EditId { get; set; }
+
+    private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private string _email = string.Empty;
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+    private string _password = string.Empty;
+    private IReadOnlyCollection<string> _selectedRoles = new HashSet<string>();
+    private List<RoleOption> _availableRoles = new();
+    private bool _saving;
+    private MudForm _form = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var rolesResult = await Http.GetFromJsonAsync<RolesResult>("/api/v1/admin/roles");
+            _availableRoles = rolesResult?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load roles.", Severity.Warning); }
+
+        if (_isEdit)
+        {
+            try
+            {
+                var user = await Http.GetFromJsonAsync<UserEditDto>($"/api/v1/admin/users?page=1&pageSize=100");
+                // Find the user in the list
+                var allUsers = await Http.GetFromJsonAsync<UsersListResult>("/api/v1/admin/users");
+                var match = allUsers?.Items?.FirstOrDefault(u => u.Id.ToString() == EditId);
+                if (match is not null)
+                {
+                    _email = match.Email;
+                    _firstName = match.FirstName;
+                    _lastName = match.LastName;
+                    _selectedRoles = match.Roles?.ToHashSet() ?? new HashSet<string>();
+                }
+            }
+            catch { Snackbar.Add("Failed to load user", Severity.Error); }
+        }
+    }
+
+    private string ValidateEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return "Email is required";
+        if (!email.Contains('@'))
+            return "Email must contain @";
+        if (email.Length < 5 || !email.Contains('.'))
+            return "Please enter a valid email address";
+        return null!;
+    }
+
+    private string ValidateName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "This field is required";
+        if (name.Trim().Length < 2)
+            return "Must be at least 2 characters";
+        return null!;
+    }
+
+    private async Task Save()
+    {
+        await _form.Validate();
+        if (!_form.IsValid)
+            return;
+
+        _saving = true;
+        try
+        {
+            if (_isEdit)
+            {
+                await Http.PutAsJsonAsync($"/api/v1/admin/users/{EditId}",
+                    new { FirstName = _firstName, LastName = _lastName });
+                Snackbar.Add("User updated", Severity.Success);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(_password))
+                {
+                    Snackbar.Add("Password is required for new users", Severity.Warning);
+                    return;
+                }
+                await Http.PostAsJsonAsync("/api/v1/admin/users",
+                    new { ExternalId = _email, Email = _email, FirstName = _firstName, LastName = _lastName, Password = _password });
+                Snackbar.Add("User created", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class RolesResult { public List<RoleOption> Items { get; set; } = new(); }
+    private class RoleOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private class UsersListResult { public List<UserEditDto> Items { get; set; } = new(); }
+    private class UserEditDto
+    {
+        public Guid Id { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string[]? Roles { get; set; }
+    }
+}

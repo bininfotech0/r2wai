@@ -1,0 +1,310 @@
+@page "/inbox"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - Inbox</PageTitle>
+
+<PageHeader Title="Inbox" Subtitle="Your pending tasks, approvals, and action items" />
+
+<MudGrid Class="mb-4" Spacing="3">
+    <MudItem xs="12" sm="4">
+        <div style="position: relative;">
+            <KpiCard Value="@_pendingCount.ToString()" Label="Pending"
+                     Icon="@Icons.Material.Outlined.HourglassTop" ValueColor="Color.Warning" IconColor="Color.Warning" />
+            @if (_newSinceLastView > 0)
+            {
+                <div class="new-items-badge">+@_newSinceLastView</div>
+            }
+        </div>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <KpiCard Value="@_approvedCount.ToString()" Label="Approved Today"
+                 Icon="@Icons.Material.Outlined.CheckCircle" ValueColor="Color.Success" IconColor="Color.Success" />
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <KpiCard Value="@_overdueCount.ToString()" Label="Overdue"
+                 Icon="@Icons.Material.Outlined.Warning" ValueColor="Color.Error" IconColor="Color.Error" />
+    </MudItem>
+</MudGrid>
+
+<MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+    <div class="d-flex justify-space-between align-center pa-4">
+        <div class="d-flex align-center gap-2">
+            <MudText Typo="Typo.h6" Class="section-title" Style="font-weight: 600;">Pending Approvals</MudText>
+            @if (_autoRefresh)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled"
+                         Style="animation: pulse-soft 1.5s ease-in-out infinite;">
+                    Live
+                </MudChip>
+            }
+        </div>
+        <div class="d-flex align-center gap-2">
+            <MudToggleIconButton Toggled="_autoRefresh" ToggledChanged="OnAutoRefreshToggled"
+                                 Icon="@Icons.Material.Filled.Sync" ToggledIcon="@Icons.Material.Filled.SyncDisabled"
+                                 Color="Color.Success" ToggledColor="Color.Default"
+                                 Size="Size.Small" Title="Toggle auto-refresh" />
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.Refresh" OnClick="ManualRefresh">
+                Refresh
+            </MudButton>
+        </div>
+    </div>
+    <MudDivider />
+
+    @if (_loading)
+    {
+        <div class="pa-4">
+            <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Table" />
+        </div>
+    }
+    else if (_approvals.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.Celebration"
+                    Title="You're all caught up!"
+                    Description="No pending approvals or tasks. Enjoy the moment!"
+                    MinHeight="300px" />
+    }
+    else
+    {
+        <div class="d-flex flex-column stagger-in">
+            @foreach (var approval in _approvals)
+            {
+                <div class="inbox-item inbox-item--@(IsOverdue(approval) ? "urgent" : "normal") @(IsNewItem(approval.Id) ? "inbox-item--new" : "") ma-3">
+                    <div class="d-flex justify-space-between align-start">
+                        <div style="flex: 1;">
+                            <div class="d-flex align-center gap-2 mb-1">
+                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@approval.WorkflowName</MudText>
+                                @if (IsOverdue(approval))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Overdue</MudChip>
+                                }
+                                @if (approval.EscalationLevel > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Escalated L@(approval.EscalationLevel)</MudChip>
+                                }
+                            </div>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Requested by <strong>@approval.RequesterFirstName @approval.RequesterLastName</strong>
+                            </MudText>
+                            <div class="d-flex gap-4 mt-1">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" Class="icon-container" />
+                                    @FormatTimeAgo(approval.RequestedAt)
+                                </MudText>
+                                @if (approval.DueAt.HasValue)
+                                {
+                                    <MudText Typo="Typo.caption" Color="@(IsOverdue(approval) ? Color.Error : Color.Secondary)">
+                                        <MudIcon Icon="@Icons.Material.Outlined.Event" Size="Size.Small" Class="icon-container" />
+                                        Due @approval.DueAt.Value.ToString("MMM dd, HH:mm")
+                                    </MudText>
+                                }
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap inbox-buttons-mobile">
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Check"
+                                       OnClick="@(() => HandleApproval(approval, true))">
+                                Approve
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Close"
+                                       OnClick="@(() => HandleApproval(approval, false))">
+                                Reject
+                            </MudButton>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</MudPaper>
+
+@code {
+    private List<ApprovalDto> _approvals = new();
+    private bool _loading = true;
+    private int _pendingCount;
+    private int _approvedCount;
+    private int _overdueCount;
+
+    private Timer? _pollTimer;
+    private bool _autoRefresh = true;
+    private int _previousPendingCount;
+    private int _newSinceLastView;
+    private HashSet<Guid> _newItemIds = new();
+    private HashSet<Guid> _knownItemIds = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+            _knownItemIds = new HashSet<Guid>(_approvals.Select(a => a.Id));
+            _previousPendingCount = _pendingCount;
+            StartPolling();
+        }
+    }
+
+    private void StartPolling()
+    {
+        _pollTimer?.Dispose();
+        if (_autoRefresh)
+        {
+            _pollTimer = new Timer(async _ =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    await PollForUpdates();
+                    StateHasChanged();
+                });
+            }, null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+        }
+    }
+
+    private async Task PollForUpdates()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ListResult<ApprovalDto>>("/api/v1/approvals/pending");
+            var newApprovals = result?.Items ?? new();
+            var newCount = newApprovals.Count;
+
+            if (newCount > _previousPendingCount)
+            {
+                var diff = newCount - _previousPendingCount;
+                _newSinceLastView += diff;
+                Snackbar.Add($"{diff} new approval{(diff > 1 ? "s" : "")} received!", Severity.Info);
+
+                // Find truly new items
+                var currentIds = new HashSet<Guid>(newApprovals.Select(a => a.Id));
+                _newItemIds = new HashSet<Guid>(currentIds.Except(_knownItemIds));
+
+                // Clear new highlight after 3 seconds
+                _ = Task.Delay(3000).ContinueWith(_ => InvokeAsync(() =>
+                {
+                    _newItemIds.Clear();
+                    StateHasChanged();
+                }));
+            }
+
+            _approvals = newApprovals;
+            _pendingCount = newCount;
+            _overdueCount = _approvals.Count(a => IsOverdue(a));
+            _previousPendingCount = newCount;
+            _knownItemIds = new HashSet<Guid>(_approvals.Select(a => a.Id));
+        }
+        catch
+        {
+            // Silently fail on poll to avoid disrupting the user
+        }
+    }
+
+    private async Task ManualRefresh()
+    {
+        _newSinceLastView = 0;
+        _newItemIds.Clear();
+        await LoadData();
+    }
+
+    private void OnAutoRefreshToggled(bool toggled)
+    {
+        _autoRefresh = toggled;
+        StartPolling();
+    }
+
+    private bool IsNewItem(Guid id) => _newItemIds.Contains(id);
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ListResult<ApprovalDto>>("/api/v1/approvals/pending");
+            _approvals = result?.Items ?? new();
+            _pendingCount = _approvals.Count;
+            _overdueCount = _approvals.Count(a => IsOverdue(a));
+        }
+        catch { Snackbar.Add("Failed to load inbox.", Severity.Warning); }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task HandleApproval(ApprovalDto approval, bool isApprove)
+    {
+        var parameters = new DialogParameters<ApprovalActionDialog>
+        {
+            { x => x.ApprovalId, approval.Id.ToString() },
+            { x => x.WorkflowName, approval.WorkflowName },
+            { x => x.IsApprove, isApprove }
+        };
+        var dialog = await Dialog.ShowAsync<ApprovalActionDialog>(
+            isApprove ? "Approve Request" : "Reject Request", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+        {
+            if (isApprove) _approvedCount++;
+            await LoadData();
+        }
+    }
+
+    private static bool IsOverdue(ApprovalDto a) => a.DueAt.HasValue && a.DueAt.Value < DateTime.UtcNow;
+
+    private static string FormatTimeAgo(DateTime timestamp)
+    {
+        var diff = DateTime.UtcNow - timestamp;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        return $"{(int)diff.TotalDays}d ago";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_pollTimer is not null)
+        {
+            await _pollTimer.DisposeAsync();
+        }
+    }
+
+    private class ListResult<T> { public List<T> Items { get; set; } = new(); }
+    private class ApprovalDto
+    {
+        public Guid Id { get; set; }
+        public string WorkflowName { get; set; } = string.Empty;
+        public string RequesterFirstName { get; set; } = string.Empty;
+        public string RequesterLastName { get; set; } = string.Empty;
+        public DateTime RequestedAt { get; set; }
+        public DateTime? DueAt { get; set; }
+        public int EscalationLevel { get; set; }
+    }
+}
+
+<style>
+    @@keyframes pulse-soft {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    @@keyframes flash-new {
+        0% { background-color: rgba(25, 118, 210, 0.15); }
+        100% { background-color: transparent; }
+    }
+    .inbox-item--new {
+        animation: flash-new 3s ease-out forwards;
+    }
+    .new-items-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background: var(--mud-palette-info);
+        color: white;
+        border-radius: 12px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.4;
+        z-index: 1;
+    }
+</style>

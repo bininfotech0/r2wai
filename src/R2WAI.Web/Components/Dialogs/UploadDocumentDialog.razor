@@ -1,0 +1,347 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Upload Documents</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                               Accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.md,.png,.jpg,.jpeg,.tiff,.bmp"
+                               FilesChanged="OnFilesSelected"
+                               MaximumFileCount="20"
+                               Hidden="false"
+                               InputClass="absolute mud-width-full mud-height-full overflow-hidden z-20"
+                               InputStyle="opacity:0"
+                               @ondragenter="@SetDragStyle"
+                               @ondragleave="@ClearDragStyle"
+                               @ondragend="@ClearDragStyle">
+                    <ActivatorContent>
+                        <MudPaper Height="120px" Outlined="true"
+                                  Class="@($"{_dragClass} d-flex flex-column align-center justify-center rounded-lg cursor-pointer")"
+                                  Style="border-style: dashed; border-width: 2px;">
+                            <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Primary" Size="Size.Large" />
+                            <MudText Typo="Typo.body1" Class="mt-2">Drag files here or click to browse</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                PDF, DOCX, XLSX, PPTX, TXT, CSV, MD, PNG, JPG, TIFF, BMP (max 20 files)
+                            </MudText>
+                        </MudPaper>
+                    </ActivatorContent>
+                </MudFileUpload>
+            </MudItem>
+
+            @if (_fileEntries.Count > 0)
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">
+                        Files (@_fileEntries.Count)
+                    </MudText>
+                    <MudPaper Outlined="true" Class="pa-0" Style="max-height: 220px; overflow-y: auto;">
+                        @foreach (var entry in _fileEntries)
+                        {
+                            <div class="d-flex align-center pa-2 gap-2" style="border-bottom: 1px solid var(--mud-palette-divider);">
+                                @switch (entry.Status)
+                                {
+                                    case FileStatus.Pending:
+                                        <MudIcon Icon="@Icons.Material.Outlined.InsertDriveFile" Size="Size.Small" Color="Color.Default" />
+                                        break;
+                                    case FileStatus.Uploading:
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" Style="width:20px;height:20px;" />
+                                        break;
+                                    case FileStatus.Done:
+                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                                        break;
+                                    case FileStatus.Failed:
+                                        <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Color="Color.Error" />
+                                        break;
+                                }
+                                <div style="flex: 1; min-width: 0;">
+                                    <div class="d-flex align-center gap-2">
+                                        <MudText Typo="Typo.body2" Style="font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                            @entry.File.Name
+                                        </MudText>
+                                        @{ var badge = GetFileTypeBadge(entry.File.Name); }
+                                        <MudChip T="string" Size="Size.Small" Style="@($"height: 20px; font-size: 0.625rem; font-weight: 700; background: {badge.Color}; color: white;")"
+                                                 >@badge.Label</MudChip>
+                                    </div>
+                                    <div class="d-flex align-center gap-2">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @FormatUtils.FileSize(entry.File.Size)
+                                        </MudText>
+                                        @if (entry.Status == FileStatus.Failed && !string.IsNullOrEmpty(entry.ErrorMessage))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Error">@entry.ErrorMessage</MudText>
+                                        }
+                                    </div>
+                                    @if (entry.Status == FileStatus.Uploading)
+                                    {
+                                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Size="Size.Small" Class="mt-1" />
+                                    }
+                                </div>
+                                @if (entry.Status == FileStatus.Pending && !_uploading)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                   OnClick="@(() => RemoveFile(entry))" aria-label="Remove" />
+                                }
+                            </div>
+                        }
+                    </MudPaper>
+                </MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Description (optional)" Lines="2" Disabled="_uploading" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="Guid?" @bind-Value="_knowledgeBaseId" Label="Knowledge Base (optional)" Clearable="true" Disabled="_uploading">
+                    @foreach (var kb in _knowledgeBases)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)kb.Id)">@kb.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudDivider Class="my-3" />
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;" Class="mb-2">Processing Options</MudText>
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudSwitch T="bool" @bind-Value="_enableOcr" Color="Color.Primary" Label="Enable OCR" Disabled="_uploading" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="margin-top: -4px;">
+                    Extract text from scanned PDFs and images
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSwitch T="bool" @bind-Value="_tableExtraction" Color="Color.Primary" Label="Table Extraction" Disabled="_uploading" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="margin-top: -4px;">
+                    Detect and extract structured table data
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="string" @bind-Value="_language" Label="Language" Margin="Margin.Dense" Disabled="_uploading">
+                    <MudSelectItem T="string" Value="@("auto")">Auto-detect</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("en")">English</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("es")">Spanish</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("fr")">French</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("de")">German</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("hi")">Hindi</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("zh")">Chinese</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("ja")">Japanese</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("ar")">Arabic</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="string" @bind-Value="_processingQuality" Label="Processing Quality" Margin="Margin.Dense" Disabled="_uploading">
+                    <MudSelectItem T="string" Value="@("fast")">Fast (lower quality)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("balanced")">Balanced (default)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("high")">High (slower but more accurate)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+
+        @if (_uploading)
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-3" Dense="true" NoIcon="false">
+                Uploading @_currentUploadIndex of @_fileEntries.Count files...
+            </MudAlert>
+        }
+        @if (_uploadComplete)
+        {
+            <MudAlert Severity="@(_failedCount > 0 ? Severity.Warning : Severity.Success)" Class="mt-3" Dense="true">
+                @_succeededCount succeeded@(_failedCount > 0 ? $", {_failedCount} failed" : "")
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_uploading">
+            @(_uploadComplete ? "Close" : "Cancel")
+        </MudButton>
+        @if (!_uploadComplete)
+        {
+            <MudButton OnClick="UploadAll" Variant="Variant.Filled" Color="Color.Primary"
+                       Disabled="@(_fileEntries.Count == 0 || _uploading)"
+                       StartIcon="@(_uploading ? Icons.Material.Filled.HourglassTop : Icons.Material.Filled.CloudUpload)">
+                @if (_uploading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
+                    <span>Uploading...</span>
+                }
+                else
+                {
+                    <span>Upload @(_fileEntries.Count) File@(_fileEntries.Count != 1 ? "s" : "")</span>
+                }
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private string _description = string.Empty;
+    private Guid? _knowledgeBaseId;
+    private bool _uploading;
+    private bool _uploadComplete;
+    private int _currentUploadIndex;
+    private int _succeededCount;
+    private int _failedCount;
+    private List<KnowledgeBaseOption> _knowledgeBases = new();
+    private List<FileEntry> _fileEntries = new();
+
+    // Processing options
+    private bool _enableOcr = true;
+    private bool _tableExtraction = true;
+    private string _language = "auto";
+    private string _processingQuality = "balanced";
+
+    private static readonly string _defaultDragClass = "relative rounded-lg";
+    private string _dragClass = _defaultDragClass;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<KbResult>("/api/v1/knowledgebases");
+            _knowledgeBases = result?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load knowledge bases.", Severity.Warning); }
+    }
+
+    private void OnFilesSelected(IReadOnlyList<IBrowserFile> files)
+    {
+        if (files is null) return;
+
+        foreach (var file in files)
+        {
+            if (_fileEntries.Count >= 20)
+            {
+                Snackbar.Add("Maximum 20 files allowed.", Severity.Warning);
+                break;
+            }
+            if (!_fileEntries.Any(e => e.File.Name == file.Name && e.File.Size == file.Size))
+            {
+                _fileEntries.Add(new FileEntry { File = file, Status = FileStatus.Pending });
+            }
+        }
+        ClearDragStyle();
+    }
+
+    private void RemoveFile(FileEntry entry)
+    {
+        _fileEntries.Remove(entry);
+    }
+
+    private async Task UploadAll()
+    {
+        if (_fileEntries.Count == 0) return;
+
+        _uploading = true;
+        _uploadComplete = false;
+        _succeededCount = 0;
+        _failedCount = 0;
+        _currentUploadIndex = 0;
+
+        foreach (var entry in _fileEntries)
+        {
+            _currentUploadIndex++;
+            entry.Status = FileStatus.Uploading;
+            entry.ErrorMessage = null;
+            StateHasChanged();
+
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                var stream = entry.File.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+                var fileContent = new StreamContent(stream);
+                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
+                    string.IsNullOrEmpty(entry.File.ContentType) ? "application/octet-stream" : entry.File.ContentType);
+                content.Add(fileContent, "file", entry.File.Name);
+
+                if (!string.IsNullOrWhiteSpace(_description))
+                    content.Add(new StringContent(_description), "description");
+
+                if (_knowledgeBaseId.HasValue)
+                    content.Add(new StringContent(_knowledgeBaseId.Value.ToString()), "knowledgeBaseId");
+
+                content.Add(new StringContent(_enableOcr.ToString()), "enableOcr");
+                content.Add(new StringContent(_tableExtraction.ToString()), "tableExtraction");
+                content.Add(new StringContent(_language), "language");
+                content.Add(new StringContent(_processingQuality), "processingQuality");
+
+                var response = await Http.PostAsync("/api/v1/documents/upload", content);
+                response.EnsureSuccessStatusCode();
+
+                entry.Status = FileStatus.Done;
+                _succeededCount++;
+            }
+            catch (Exception ex)
+            {
+                entry.Status = FileStatus.Failed;
+                entry.ErrorMessage = ex.Message;
+                _failedCount++;
+            }
+
+            StateHasChanged();
+        }
+
+        _uploading = false;
+        _uploadComplete = true;
+
+        if (_failedCount == 0)
+        {
+            Snackbar.Add($"All {_succeededCount} documents uploaded successfully", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add($"{_succeededCount} succeeded, {_failedCount} failed", Severity.Warning);
+        }
+    }
+
+    private void Cancel()
+    {
+        if (_uploadComplete && _succeededCount > 0)
+            MudDialog.Close(DialogResult.Ok(true));
+        else
+            MudDialog.Cancel();
+    }
+
+    private void SetDragStyle() => _dragClass = $"{_defaultDragClass} mud-border-primary";
+    private void ClearDragStyle() => _dragClass = _defaultDragClass;
+
+    private enum FileStatus { Pending, Uploading, Done, Failed }
+
+    private class FileEntry
+    {
+        public IBrowserFile File { get; set; } = default!;
+        public FileStatus Status { get; set; } = FileStatus.Pending;
+        public string? ErrorMessage { get; set; }
+    }
+
+    private (string Label, string Color) GetFileTypeBadge(string fileName)
+    {
+        var ext = System.IO.Path.GetExtension(fileName)?.ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => ("PDF", "#d32f2f"),
+            ".docx" or ".doc" => ("DOCX", "#1565c0"),
+            ".xlsx" or ".xls" => ("XLSX", "#2e7d32"),
+            ".pptx" or ".ppt" => ("PPTX", "#e65100"),
+            ".png" or ".jpg" or ".jpeg" or ".tiff" or ".bmp" => ("IMAGE+OCR", "#ef6c00"),
+            ".txt" => ("TXT", "#616161"),
+            ".csv" => ("CSV", "#00838f"),
+            ".md" => ("MD", "#6a1b9a"),
+            _ => ("FILE", "#757575")
+        };
+    }
+
+    private class KbResult { public List<KnowledgeBaseOption> Items { get; set; } = new(); }
+    private class KnowledgeBaseOption
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+}

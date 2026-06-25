@@ -1,0 +1,504 @@
+@page "/templates"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - Template Library</PageTitle>
+
+<PageHeader Title="Template Library" Subtitle="Pre-built workflows and assistants to get started quickly" />
+
+@* Search & Filters *@
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+    <MudGrid>
+        <MudItem xs="12" sm="6">
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Search templates..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+        </MudItem>
+        <MudItem xs="12" sm="6" Class="d-flex align-center justify-end">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @FilteredItems.Count template(s) found
+            </MudText>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@* Tab Bar *@
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" @bind-ActivePanelIndex="_activeTab"
+         Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+
+    @* ──────────────── Workflow Templates ──────────────── *@
+    <MudTabPanel Text="Workflows" Icon="@Icons.Material.Outlined.AccountTree"
+                 BadgeData="@_workflowTemplates.Count" BadgeColor="Color.Primary">
+        <div class="pa-4">
+            <div class="d-flex gap-2 flex-wrap mb-4">
+                @foreach (var cat in _workflowCategories)
+                {
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@(_workflowCategoryFilter == cat ? Color.Primary : Color.Default)"
+                             Variant="@(_workflowCategoryFilter == cat ? Variant.Filled : Variant.Outlined)"
+                             OnClick="@(() => _workflowCategoryFilter = cat)">
+                        @cat
+                    </MudChip>
+                }
+            </div>
+
+            <MudGrid Spacing="3" Class="stagger-in">
+                @foreach (var tmpl in FilteredWorkflowTemplates)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="0" Style="@($"border: 1px solid var(--mud-palette-divider); border-left: 4px solid {GetWorkflowCategoryColor(tmpl.Category)}; border-radius: 12px; height: 100%; display: flex; flex-direction: column;")">
+                            <div class="pa-4" style="flex: 1; display: flex; flex-direction: column;">
+                                <div class="d-flex align-center gap-3 mb-2">
+                                    <MudIcon Icon="@GetWorkflowCategoryIcon(tmpl.Category)"
+                                             Style="@($"color: {GetWorkflowCategoryColor(tmpl.Category)};")" />
+                                    <div style="flex: 1; min-width: 0;">
+                                        <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@tmpl.Name</MudText>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                 Style="@($"color: {GetWorkflowCategoryColor(tmpl.Category)}; border-color: {GetWorkflowCategoryColor(tmpl.Category)}; font-size: 0.625rem; height: 20px;")">
+                                            @tmpl.Category
+                                        </MudChip>
+                                    </div>
+                                </div>
+
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3"
+                                         Style="flex: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                    @tmpl.Description
+                                </MudText>
+
+                                <div class="d-flex justify-space-between align-center">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text"
+                                             Style="font-size: 0.6875rem;">
+                                        @tmpl.StepCount steps
+                                    </MudChip>
+
+                                    @if (_usedWorkflowTemplates.Contains(tmpl.Name))
+                                    {
+                                        <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.Check" Disabled="true">
+                                            Created
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
+                                                   StartIcon="@Icons.Material.Filled.Add"
+                                                   OnClick="@(() => UseWorkflowTemplate(tmpl))"
+                                                   Disabled="@(_creatingTemplate == tmpl.Name)">
+                                            @(_creatingTemplate == tmpl.Name ? "Creating..." : "Use Template")
+                                        </MudButton>
+                                    }
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            @if (FilteredWorkflowTemplates.Count == 0)
+            {
+                <div class="pa-8 text-center">
+                    <MudIcon Icon="@Icons.Material.Outlined.SearchOff" Size="Size.Large" Color="Color.Secondary" Style="opacity: 0.3;" />
+                    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">No workflow templates match your search.</MudText>
+                </div>
+            }
+        </div>
+    </MudTabPanel>
+
+    @* ──────────────── Assistant Templates ──────────────── *@
+    <MudTabPanel Text="Assistants" Icon="@Icons.Material.Outlined.SmartToy"
+                 BadgeData="@_assistantTemplates.Count" BadgeColor="Color.Secondary">
+        <div class="pa-4">
+            <div class="d-flex gap-2 flex-wrap mb-4">
+                @foreach (var cat in _assistantCategories)
+                {
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@(_assistantCategoryFilter == cat ? Color.Primary : Color.Default)"
+                             Variant="@(_assistantCategoryFilter == cat ? Variant.Filled : Variant.Outlined)"
+                             OnClick="@(() => _assistantCategoryFilter = cat)">
+                        @cat
+                    </MudChip>
+                }
+            </div>
+
+            <MudGrid Spacing="3" Class="stagger-in">
+                @foreach (var tmpl in FilteredAssistantTemplates)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="0" Style="@($"border: 1px solid var(--mud-palette-divider); border-left: 4px solid {GetAssistantTypeColor(tmpl.Type)}; border-radius: 12px; height: 100%; display: flex; flex-direction: column;")">
+                            <div class="pa-4" style="flex: 1; display: flex; flex-direction: column;">
+                                <div class="d-flex align-center gap-3 mb-2">
+                                    <MudAvatar Size="Size.Medium" Style="@($"background-color: {GetAssistantTypeColor(tmpl.Type)}; color: white;")">
+                                        <MudIcon Icon="@GetAssistantTypeIcon(tmpl.Type)" Size="Size.Small" />
+                                    </MudAvatar>
+                                    <div style="flex: 1; min-width: 0;">
+                                        <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@tmpl.Name</MudText>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                 Style="@($"color: {GetAssistantTypeColor(tmpl.Type)}; border-color: {GetAssistantTypeColor(tmpl.Type)}; font-size: 0.625rem; height: 20px;")">
+                                            @tmpl.Type
+                                        </MudChip>
+                                    </div>
+                                </div>
+
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3"
+                                         Style="flex: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                    @tmpl.Description
+                                </MudText>
+
+                                <div class="d-flex justify-space-between align-center">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text"
+                                             Style="font-size: 0.6875rem;">
+                                        @tmpl.Type type
+                                    </MudChip>
+
+                                    @if (_usedAssistantTemplates.Contains(tmpl.Name))
+                                    {
+                                        <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.Check" Disabled="true">
+                                            Created
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
+                                                   StartIcon="@Icons.Material.Filled.Add"
+                                                   OnClick="@(() => UseAssistantTemplate(tmpl))"
+                                                   Disabled="@(_creatingTemplate == tmpl.Name)">
+                                            @(_creatingTemplate == tmpl.Name ? "Creating..." : "Use Template")
+                                        </MudButton>
+                                    }
+                                </div>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            @if (FilteredAssistantTemplates.Count == 0)
+            {
+                <div class="pa-8 text-center">
+                    <MudIcon Icon="@Icons.Material.Outlined.SearchOff" Size="Size.Large" Color="Color.Secondary" Style="opacity: 0.3;" />
+                    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">No assistant templates match your search.</MudText>
+                </div>
+            }
+        </div>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private int _activeTab;
+    private string _searchTerm = string.Empty;
+    private string _workflowCategoryFilter = "All";
+    private string _assistantCategoryFilter = "All";
+    private string? _creatingTemplate;
+    private HashSet<string> _usedWorkflowTemplates = new();
+    private HashSet<string> _usedAssistantTemplates = new();
+
+    private static readonly string[] _workflowCategories = { "All", "Approval", "HR", "Finance", "IT", "Operations" };
+    private static readonly string[] _assistantCategories = { "All", "HR", "IT", "Finance", "Legal", "Procurement", "General" };
+
+    // Combined count for the search summary
+    private List<object> FilteredItems => _activeTab == 0
+        ? FilteredWorkflowTemplates.Cast<object>().ToList()
+        : FilteredAssistantTemplates.Cast<object>().ToList();
+
+    // ──────────────── Workflow Templates ────────────────
+    private static readonly List<WorkflowTemplate> _workflowTemplates = new()
+    {
+        // Approval
+        new() { Name = "Invoice Approval", Category = "Approval", StepCount = 3,
+                 Description = "Three-level approval: Submit, Manager Review, Finance Approval.",
+                 Steps = "Submit|Manager Review|Finance Approval" },
+        new() { Name = "Purchase Request", Category = "Approval", StepCount = 4,
+                 Description = "End-to-end purchasing: Submit, Budget Check, Manager Approval, Procurement.",
+                 Steps = "Submit|Budget Check|Manager Approval|Procurement" },
+        new() { Name = "Contract Review", Category = "Approval", StepCount = 4,
+                 Description = "Full contract lifecycle: Draft, Legal Review, Manager Approval, Sign.",
+                 Steps = "Draft|Legal Review|Manager Approval|Sign" },
+        new() { Name = "Travel Request", Category = "Approval", StepCount = 4,
+                 Description = "Travel approval flow: Submit, Manager Review, Finance Approval, Booking.",
+                 Steps = "Submit|Manager Review|Finance Approval|Book Travel" },
+
+        // HR
+        new() { Name = "Employee Onboarding", Category = "HR", StepCount = 4,
+                 Description = "New hire setup: HR Intake, IT Setup, Manager Intro, Training Assignment.",
+                 Steps = "HR Intake|IT Setup|Manager Intro|Training" },
+        new() { Name = "Leave Request", Category = "HR", StepCount = 4,
+                 Description = "Leave management: Submit Request, Manager Approval, HR Update, Calendar Sync.",
+                 Steps = "Submit|Manager Approval|HR Update|Calendar Sync" },
+        new() { Name = "Performance Review", Category = "HR", StepCount = 4,
+                 Description = "Review cycle: Self-Assessment, Manager Review, HR Review, Meeting Schedule.",
+                 Steps = "Self-Assessment|Manager Review|HR Review|Meeting" },
+        new() { Name = "Offboarding", Category = "HR", StepCount = 4,
+                 Description = "Employee exit: Manager Notify, IT Revoke Access, HR Exit Interview, Final Paycheck.",
+                 Steps = "Manager Notify|IT Revoke|HR Exit|Final Paycheck" },
+
+        // Finance
+        new() { Name = "Expense Report", Category = "Finance", StepCount = 5,
+                 Description = "Expense processing: Submit, Receipt Check, Manager Review, Finance Audit, Reimburse.",
+                 Steps = "Submit|Receipt Check|Manager Review|Finance Audit|Reimburse" },
+        new() { Name = "Budget Approval", Category = "Finance", StepCount = 4,
+                 Description = "Budget cycle: Draft Proposal, Department Head Review, CFO Approval, Record.",
+                 Steps = "Draft|Department Head|CFO Approval|Record" },
+
+        // IT
+        new() { Name = "Access Request", Category = "IT", StepCount = 4,
+                 Description = "Access provisioning: Submit Request, Manager Approval, IT Security Review, Provision.",
+                 Steps = "Submit|Manager Approval|IT Security|Provision" },
+        new() { Name = "Change Request", Category = "IT", StepCount = 4,
+                 Description = "Change management: Submit, Impact Analysis, CAB Review, Deploy.",
+                 Steps = "Submit|Impact Analysis|CAB Review|Deploy" },
+        new() { Name = "Incident Response", Category = "IT", StepCount = 5,
+                 Description = "Incident handling: Detect, Triage, Assign, Resolve, Post-Mortem.",
+                 Steps = "Detect|Triage|Assign|Resolve|Post-Mortem" },
+
+        // Operations
+        new() { Name = "Vendor Onboarding", Category = "Operations", StepCount = 5,
+                 Description = "Vendor setup: Application, Due Diligence, Legal Review, Procurement, Activate.",
+                 Steps = "Application|Due Diligence|Legal Review|Procurement|Activate" },
+        new() { Name = "Quality Review", Category = "Operations", StepCount = 4,
+                 Description = "QA process: Sample Collection, Inspection, Report Generation, Corrective Action.",
+                 Steps = "Sample|Inspection|Report|Corrective Action" },
+    };
+
+    // ──────────────── Assistant Templates ────────────────
+    private static readonly List<AssistantTemplate> _assistantTemplates = new()
+    {
+        new() { Name = "HR Onboarding Guide", Type = "HR",
+                 Description = "Guides new employees through onboarding steps, benefits enrollment, and company policies.",
+                 SystemPrompt = "You are an HR onboarding assistant. Help new employees navigate their first days, explain benefits enrollment, company policies, team structures, and answer common onboarding questions. Be warm, welcoming, and thorough." },
+        new() { Name = "IT Helpdesk", Type = "IT",
+                 Description = "Troubleshoots common IT issues, guides password resets, and escalates complex tickets.",
+                 SystemPrompt = "You are an IT helpdesk assistant. Help employees troubleshoot common IT issues such as password resets, VPN connectivity, software installation, printer setup, and account access. Escalate complex issues to the IT team when needed." },
+        new() { Name = "Finance FAQ", Type = "Finance",
+                 Description = "Answers questions about expense policies, budget processes, and financial procedures.",
+                 SystemPrompt = "You are a finance assistant. Help employees with questions about expense report policies, reimbursement procedures, budget approval processes, invoice processing, and financial compliance. Provide accurate and clear guidance." },
+        new() { Name = "Legal Advisor", Type = "Legal",
+                 Description = "Assists with contract questions, compliance policies, and legal process guidance.",
+                 SystemPrompt = "You are a legal advisory assistant. Help employees with questions about contract terms, NDA requirements, compliance policies, data privacy regulations, and legal review processes. Always recommend consulting with the legal team for binding decisions." },
+        new() { Name = "Procurement Assistant", Type = "Procurement",
+                 Description = "Helps with vendor selection, purchase orders, and procurement policy questions.",
+                 SystemPrompt = "You are a procurement assistant. Help employees with vendor selection criteria, purchase order processes, procurement policies, supplier evaluation, and contract negotiation guidance. Ensure compliance with procurement thresholds and approval requirements." },
+        new() { Name = "Sales Enablement", Type = "General",
+                 Description = "Supports sales teams with pitch preparation, proposal drafting, and competitive insights.",
+                 SystemPrompt = "You are a sales enablement assistant. Help sales representatives prepare compelling pitches, draft proposals, analyze competitive landscapes, and craft follow-up communications. Focus on value-driven messaging and customer-centric approaches." },
+        new() { Name = "Customer Support", Type = "General",
+                 Description = "Handles customer inquiries, resolves common issues, and provides product guidance.",
+                 SystemPrompt = "You are a customer support assistant. Help resolve customer inquiries professionally and efficiently. Provide product guidance, troubleshoot common issues, process routine requests, and escalate complex cases appropriately. Maintain a friendly and empathetic tone." },
+        new() { Name = "Executive Briefing", Type = "General",
+                 Description = "Summarizes reports, prepares briefings, and provides data-driven analysis for leadership.",
+                 SystemPrompt = "You are an executive briefing assistant. Help prepare concise briefings, summarize lengthy reports, analyze business metrics, and provide data-driven insights for leadership decisions. Focus on clarity, key takeaways, and actionable recommendations." },
+        new() { Name = "Training Coach", Type = "General",
+                 Description = "Creates learning paths, quizzes, and training content for employee development.",
+                 SystemPrompt = "You are a training and development coach. Help create learning paths, generate quiz questions, develop training materials, and guide employees through skill development programs. Make learning engaging and track progress through clear milestones." },
+        new() { Name = "Compliance Officer", Type = "Legal",
+                 Description = "Monitors compliance requirements, audit checklists, and regulatory obligations.",
+                 SystemPrompt = "You are a compliance assistant. Help employees understand regulatory requirements, prepare for audits, maintain compliance checklists, and navigate industry-specific regulations. Provide clear guidance on reporting obligations and risk mitigation strategies." },
+    };
+
+    private List<WorkflowTemplate> FilteredWorkflowTemplates
+    {
+        get
+        {
+            var list = _workflowTemplates.AsEnumerable();
+            if (_workflowCategoryFilter != "All")
+                list = list.Where(t => t.Category == _workflowCategoryFilter);
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+                list = list.Where(t => t.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                                    || t.Category.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                                    || t.Description.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+            return list.ToList();
+        }
+    }
+
+    private List<AssistantTemplate> FilteredAssistantTemplates
+    {
+        get
+        {
+            var list = _assistantTemplates.AsEnumerable();
+            if (_assistantCategoryFilter != "All")
+                list = list.Where(t => t.Type == _assistantCategoryFilter);
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+                list = list.Where(t => t.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                                    || t.Type.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                                    || t.Description.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+            return list.ToList();
+        }
+    }
+
+    // ──────────────── Actions ────────────────
+    private async Task UseWorkflowTemplate(WorkflowTemplate tmpl)
+    {
+        _creatingTemplate = tmpl.Name;
+        StateHasChanged();
+
+        try
+        {
+            var stepNames = tmpl.Steps.Split('|');
+            var steps = new List<object>();
+            for (int i = 0; i < stepNames.Length; i++)
+            {
+                steps.Add(new { Name = stepNames[i].Trim(), Action = "Action", Order = i });
+            }
+
+            var stepsJson = System.Text.Json.JsonSerializer.Serialize(steps);
+            var response = await Http.PostAsJsonAsync("/api/v1/workflows", new
+            {
+                Name = tmpl.Name,
+                Description = tmpl.Description,
+                Type = tmpl.Category,
+                Steps = stepsJson
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _usedWorkflowTemplates.Add(tmpl.Name);
+                Snackbar.Add($"Workflow '{tmpl.Name}' created! Open the designer to customize.", Severity.Success);
+
+                // Read the response to get the new workflow's ID
+                try
+                {
+                    var created = await response.Content.ReadFromJsonAsync<CreatedResult>();
+                    if (created?.Id is not null)
+                    {
+                        // Navigate after a short delay so the user sees the success message
+                        await Task.Delay(500);
+                        Navigation.NavigateTo($"/workflow-studio/designer/{created.Id}");
+                        return;
+                    }
+                }
+                catch { /* Navigation is optional, continue */ }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to create workflow: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to create workflow: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _creatingTemplate = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UseAssistantTemplate(AssistantTemplate tmpl)
+    {
+        _creatingTemplate = tmpl.Name;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/assistants", new
+            {
+                Name = tmpl.Name,
+                Type = tmpl.Type,
+                Description = tmpl.Description,
+                SystemPrompt = tmpl.SystemPrompt
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _usedAssistantTemplates.Add(tmpl.Name);
+                Snackbar.Add($"Assistant '{tmpl.Name}' created! Configure it in the studio.", Severity.Success);
+
+                try
+                {
+                    var created = await response.Content.ReadFromJsonAsync<CreatedResult>();
+                    if (created?.Id is not null)
+                    {
+                        await Task.Delay(500);
+                        Navigation.NavigateTo($"/assistant-studio");
+                        return;
+                    }
+                }
+                catch { /* Navigation is optional, continue */ }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to create assistant: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to create assistant: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _creatingTemplate = null;
+            StateHasChanged();
+        }
+    }
+
+    // ──────────────── Color & Icon Helpers ────────────────
+    private static string GetWorkflowCategoryColor(string category) => category switch
+    {
+        "Approval" => "#7C3AED",
+        "HR" => "#EC4899",
+        "Finance" => "#EAB308",
+        "IT" => "#3B82F6",
+        "Operations" => "#F97316",
+        _ => "#6B7280"
+    };
+
+    private static string GetWorkflowCategoryIcon(string category) => category switch
+    {
+        "Approval" => Icons.Material.Filled.TaskAlt,
+        "HR" => Icons.Material.Filled.Badge,
+        "Finance" => Icons.Material.Filled.AccountBalance,
+        "IT" => Icons.Material.Filled.Computer,
+        "Operations" => Icons.Material.Filled.Settings,
+        _ => Icons.Material.Filled.AccountTree
+    };
+
+    private static string GetAssistantTypeColor(string type) => type switch
+    {
+        "HR" => "#EC4899",
+        "IT" => "#3B82F6",
+        "Finance" => "#EAB308",
+        "Legal" => "#7C3AED",
+        "Procurement" => "#F97316",
+        "General" => "#10B981",
+        _ => "#6B7280"
+    };
+
+    private static string GetAssistantTypeIcon(string type) => type switch
+    {
+        "HR" => Icons.Material.Filled.Badge,
+        "IT" => Icons.Material.Filled.Computer,
+        "Finance" => Icons.Material.Filled.AccountBalance,
+        "Legal" => Icons.Material.Filled.Gavel,
+        "Procurement" => Icons.Material.Filled.ShoppingCart,
+        "General" => Icons.Material.Filled.SmartToy,
+        _ => Icons.Material.Filled.SmartToy
+    };
+
+    // DTOs
+    private class WorkflowTemplate
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public int StepCount { get; set; }
+        public string Steps { get; set; } = string.Empty;
+    }
+
+    private class AssistantTemplate
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string SystemPrompt { get; set; } = string.Empty;
+    }
+
+    private class CreatedResult
+    {
+        public Guid? Id { get; set; }
+    }
+}

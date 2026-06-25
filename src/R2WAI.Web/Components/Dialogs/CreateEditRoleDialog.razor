@@ -1,0 +1,119 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Role" : "Create Role")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="string" Label="Permissions" MultiSelection="true" @bind-SelectedValues="_selectedPermissions"
+                           HelperText="Select the permissions for this role" Clearable="true" Variant="Variant.Outlined">
+                    <MudSelectItem T="string" Value="@("CanManageUsers")">Manage Users</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanManageRoles")">Manage Roles</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanManageAssistants")">Manage Assistants</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanManageWorkflows")">Manage Workflows</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanManageDocuments")">Manage Documents</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanManageKnowledge")">Manage Knowledge</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanManageIntegrations")">Manage Integrations</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanManageApprovals")">Manage Approvals</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanViewAuditLogs")">View Audit Logs</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanViewAnalytics")">View Analytics</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanManageSettings")">Manage Settings</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("CanManageModels")">Manage AI Models</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? EditId { get; set; }
+
+    private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private string _name = string.Empty;
+    private string _description = string.Empty;
+    private IReadOnlyCollection<string> _selectedPermissions = new HashSet<string>();
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            try
+            {
+                var rolesResult = await Http.GetFromJsonAsync<RolesListResult>("/api/v1/admin/roles");
+                var match = rolesResult?.Items?.FirstOrDefault(r => r.Id.ToString() == EditId);
+                if (match is not null)
+                {
+                    _name = match.Name;
+                    _description = match.Description ?? string.Empty;
+                    _selectedPermissions = (match.Permissions ?? "")
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .ToHashSet();
+                }
+            }
+            catch { Snackbar.Add("Failed to load role", Severity.Error); }
+        }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var payload = new
+            {
+                Name = _name,
+                Description = (string?)(string.IsNullOrWhiteSpace(_description) ? null : _description),
+                Permissions = _selectedPermissions.Any() ? string.Join(",", _selectedPermissions) : null
+            };
+
+            if (_isEdit)
+            {
+                await Http.PutAsJsonAsync($"/api/v1/admin/roles/{EditId}", payload);
+                Snackbar.Add("Role updated", Severity.Success);
+            }
+            else
+            {
+                await Http.PostAsJsonAsync("/api/v1/admin/roles", payload);
+                Snackbar.Add("Role created", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class RolesListResult { public List<RoleEditDto> Items { get; set; } = new(); }
+    private class RoleEditDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Permissions { get; set; }
+    }
+}

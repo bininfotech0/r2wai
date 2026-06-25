@@ -1,0 +1,15 @@
+global using R2WAI.Application.Common.Interfaces;
+global using R2WAI.Application.Common.Exceptions;
+global using R2WAI.Application.Common.Models;
+global using R2WAI.Application.Features.Chatbots.Commands;
+global using R2WAI.Application.Features.Chatbots.Queries;
+global using R2WAI.Application.Features.Chatbots.DTOs;
+global using R2WAI.Application.Features.Chat.Commands;
+global using R2WAI.Application.Features.Assistants.Commands;
+global using R2WAI.Application.Features.Assistants.Queries;
+global using R2WAI.Application.Features.Assistants.DTOs;
+global using R2WAI.Application.Features.Assistants.Mappings;
+global using R2WAI.Domain.Entities;
+global using R2WAI.Domain.Enums;
+global using R2WAI.Domain.Interfaces;
+global using Xunit;

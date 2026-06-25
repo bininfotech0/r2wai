@@ -1,0 +1,32 @@
+<div class="d-flex flex-column align-center justify-center pa-8 error-shake" style="min-height: 250px;">
+    <div class="empty-state-icon" style="background: linear-gradient(135deg, rgba(220, 38, 38, 0.08), rgba(220, 38, 38, 0.04));">
+        <MudIcon Icon="@Icons.Material.Outlined.ErrorOutline" Size="Size.Large" Color="Color.Error" Style="opacity: 0.8;" />
+    </div>
+    <MudText Typo="Typo.h6" Style="font-weight: 700;" Align="Align.Center">Something went wrong</MudText>
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="mt-2"
+                 Style="max-width: 420px; line-height: 1.6;">@ErrorMessage</MudText>
+    }
+    <div class="d-flex gap-2 mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
+                   StartIcon="@Icons.Material.Filled.Refresh" OnClick="OnRetry"
+                   Style="border-radius: 10px;">
+            Try Again
+        </MudButton>
+        @if (ShowReportLink)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                       StartIcon="@Icons.Material.Outlined.BugReport"
+                       Style="border-radius: 10px;">
+                Report Issue
+            </MudButton>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? ErrorMessage { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+    [Parameter] public bool ShowReportLink { get; set; } = true;
+}

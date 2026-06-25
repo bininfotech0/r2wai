@@ -1,0 +1,129 @@
+@* Real-time activity feed with auto-scroll and animations *@
+
+<MudPaper Elevation="0" Class="pa-0" Style="border: 1px solid var(--mud-palette-divider); overflow: hidden;">
+    <div class="d-flex justify-space-between align-center pa-4 pb-2">
+        <div class="d-flex align-center gap-2">
+            <MudText Typo="Typo.subtitle1" Class="section-title" Style="font-weight: 700;">@Title</MudText>
+            @if (IsLive)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled"
+                         Style="height: 20px; font-size: 0.6rem; font-weight: 700; animation: pulse-soft 2s infinite;">
+                    LIVE
+                </MudChip>
+            }
+        </div>
+        @if (OnViewAll.HasDelegate)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" OnClick="OnViewAll">
+                View All
+            </MudButton>
+        }
+    </div>
+
+    <div style="max-height: @MaxHeight; overflow-y: auto; scroll-behavior: smooth;">
+        @if (Items.Count == 0)
+        {
+            <div class="d-flex flex-column align-center justify-center pa-6" style="min-height: 120px;">
+                <MudIcon Icon="@Icons.Material.Outlined.Stream" Size="Size.Medium" Color="Color.Secondary" Style="opacity: 0.3;" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">No recent activity</MudText>
+            </div>
+        }
+        else
+        {
+            <div class="stagger-in">
+                @foreach (var item in Items)
+                {
+                    <div class="d-flex align-center gap-3 px-4 py-3 feed-item @(item.IsNew ? "highlight-new" : "")"
+                         style="border-bottom: 1px solid var(--mud-palette-divider); transition: background 0.15s ease; cursor: @(item.Href is not null ? "pointer" : "default");"
+                         @onclick="@(() => { if (item.Href is not null) OnItemClick.InvokeAsync(item); })">
+                        <div class="icon-container icon-container--@GetIconVariant(item.Type)" style="width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;">
+                            <MudIcon Icon="@GetIcon(item.Type)" Size="Size.Small" Color="@GetColor(item.Type)" />
+                        </div>
+                        <div style="flex: 1; min-width: 0;">
+                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@item.Description</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@item.Source</MudText>
+                        </div>
+                        <div class="d-flex flex-column align-end gap-1">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.65rem; white-space: nowrap;">@FormatTime(item.Timestamp)</MudText>
+                            @if (!string.IsNullOrEmpty(item.Status))
+                            {
+                                <StatusBadge Status="@item.Status" />
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</MudPaper>
+
+<style>
+    .feed-item:hover {
+        background-color: var(--r2-primary-subtle, rgba(124, 58, 237, 0.05)) !important;
+    }
+</style>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Activity Feed";
+    [Parameter] public bool IsLive { get; set; }
+    [Parameter] public string MaxHeight { get; set; } = "400px";
+    [Parameter] public List<FeedItem> Items { get; set; } = new();
+    [Parameter] public EventCallback OnViewAll { get; set; }
+    [Parameter] public EventCallback<FeedItem> OnItemClick { get; set; }
+
+    private static string FormatTime(DateTime timestamp)
+    {
+        var diff = DateTime.Now - timestamp;
+        if (diff.TotalSeconds < 30) return "just now";
+        if (diff.TotalMinutes < 1) return $"{(int)diff.TotalSeconds}s ago";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        return $"{(int)diff.TotalDays}d ago";
+    }
+
+    private static string GetIcon(string type) => type switch
+    {
+        "create" => Icons.Material.Filled.AddCircle,
+        "update" => Icons.Material.Filled.Edit,
+        "delete" => Icons.Material.Filled.Delete,
+        "execute" => Icons.Material.Filled.PlayArrow,
+        "approve" => Icons.Material.Filled.Check,
+        "reject" => Icons.Material.Filled.Close,
+        "publish" => Icons.Material.Filled.Publish,
+        "upload" => Icons.Material.Filled.CloudUpload,
+        "chat" => Icons.Material.Filled.Chat,
+        "error" => Icons.Material.Filled.Error,
+        _ => Icons.Material.Filled.Info,
+    };
+
+    private static Color GetColor(string type) => type switch
+    {
+        "create" or "publish" or "approve" => Color.Success,
+        "update" or "chat" => Color.Primary,
+        "delete" or "reject" or "error" => Color.Error,
+        "execute" => Color.Secondary,
+        "upload" => Color.Tertiary,
+        _ => Color.Default,
+    };
+
+    private static string GetIconVariant(string type) => type switch
+    {
+        "create" or "publish" or "approve" => "success",
+        "update" or "chat" => "primary",
+        "delete" or "reject" or "error" => "error",
+        "execute" => "secondary",
+        "upload" => "success",
+        _ => "primary",
+    };
+
+    public class FeedItem
+    {
+        public string Description { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+        public string Type { get; set; } = "info";
+        public string? Status { get; set; }
+        public string? Href { get; set; }
+        public DateTime Timestamp { get; set; } = DateTime.Now;
+        public bool IsNew { get; set; }
+    }
+}

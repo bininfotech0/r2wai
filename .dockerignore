@@ -1,0 +1,10 @@
+.git
+.github
+**/bin/
+**/obj/
+src/R2WAI.Api/Logs/
+README.md
+ROADMAP.md
+ARCHITECTURE.md
+docs/
+k8s/

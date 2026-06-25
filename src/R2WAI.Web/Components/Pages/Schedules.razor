@@ -1,0 +1,187 @@
+@page "/workflow-studio/schedules"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - Scheduled Workflows</PageTitle>
+
+<PageHeader Title="Scheduled Workflows" Subtitle="Automate recurring workflows with cron-based triggers">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+               Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        New Schedule
+    </MudButton>
+</PageHeader>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_schedules.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Outlined.Schedule"
+                Title="No scheduled workflows"
+                Description="Create recurring schedules to run workflows automatically on a cron-based interval."
+                ActionText="Create First Schedule"
+                ActionIcon="@Icons.Material.Filled.Add"
+                OnAction="OpenCreateDialog" />
+}
+else
+{
+    <MudGrid Spacing="3" Class="stagger-in">
+        @foreach (var schedule in _schedules)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="0" Class="@($"studio-card studio-card--secondary {(schedule.IsActive ? "animate-glow" : "")}")">
+                    <MudCardHeader>
+                        <CardHeaderAvatar>
+                            <div class="icon-container @(schedule.IsActive ? "icon-container--success" : "icon-container--secondary")">
+                                <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" />
+                            </div>
+                        </CardHeaderAvatar>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@schedule.Name</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@schedule.WorkflowName</MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudSwitch T="bool" Value="@schedule.IsActive" Color="Color.Success" Size="Size.Small"
+                                       ValueChanged="@(v => ToggleSchedule(schedule, v))" />
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <div class="d-flex flex-column gap-2">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Outlined.Timer" Size="Size.Small" Color="Color.Secondary" />
+                                <MudText Typo="Typo.body2"><code>@schedule.CronExpression</code></MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@schedule.CronDescription</MudText>
+                            </div>
+                            @if (schedule.NextRunAt.HasValue)
+                            {
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@Icons.Material.Outlined.PlayArrow" Size="Size.Small" Color="Color.Secondary" />
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        Next run: @schedule.NextRunAt.Value.ToString("MMM dd, HH:mm")
+                                    </MudText>
+                                </div>
+                            }
+                            @if (schedule.LastRunAt.HasValue)
+                            {
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@Icons.Material.Outlined.History" Size="Size.Small" Color="Color.Secondary" />
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        Last run: @schedule.LastRunAt.Value.ToString("MMM dd, HH:mm") —
+                                        <StatusBadge Status="@schedule.LastRunStatus" />
+                                    </MudText>
+                                </div>
+                            }
+                        </div>
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Size="Size.Small" Color="Color.Primary" Variant="Variant.Text"
+                                   Class="btn-gradient" Style="--btn-gradient-size: small;"
+                                   StartIcon="@Icons.Material.Outlined.PlayArrow"
+                                   OnClick="@(() => RunNow(schedule))">
+                            Run Now
+                        </MudButton>
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
+                                       OnClick="@(() => EditSchedule(schedule))" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteSchedule(schedule))" />
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private List<ScheduleItem> _schedules = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSchedules();
+    }
+
+    private async Task LoadSchedules()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ScheduleListResult>("/api/v1/workflows/schedules");
+            _schedules = result?.Items ?? new();
+        }
+        catch
+        {
+            _schedules = new();
+        }
+        _loading = false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        // TODO: Open dialog to select workflow and set cron expression
+        Snackbar.Add("Schedule creation dialog coming soon.", Severity.Info);
+    }
+
+    private async Task ToggleSchedule(ScheduleItem schedule, bool isActive)
+    {
+        try
+        {
+            await Http.PostAsJsonAsync($"/api/v1/workflows/schedules/{schedule.Id}/toggle", new { });
+            schedule.IsActive = isActive;
+            Snackbar.Add($"Schedule {(isActive ? "enabled" : "paused")}: {schedule.Name}", isActive ? Severity.Success : Severity.Warning);
+        }
+        catch { Snackbar.Add("Failed to toggle schedule.", Severity.Error); }
+    }
+
+    private async Task RunNow(ScheduleItem schedule)
+    {
+        try
+        {
+            await Http.PostAsJsonAsync($"/api/v1/workflows/{schedule.WorkflowId}/execute", new { });
+            Snackbar.Add($"Workflow triggered: {schedule.Name}", Severity.Success);
+        }
+        catch { Snackbar.Add("Failed to execute workflow.", Severity.Error); }
+    }
+
+    private async Task EditSchedule(ScheduleItem schedule)
+    {
+        Snackbar.Add("Schedule editing coming soon.", Severity.Info);
+    }
+
+    private async Task DeleteSchedule(ScheduleItem schedule)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, schedule.Name } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/workflows/schedules/{schedule.Id}");
+            _schedules.Remove(schedule);
+            Snackbar.Add($"Schedule deleted: {schedule.Name}", Severity.Success);
+        }
+        catch { Snackbar.Add("Failed to delete schedule.", Severity.Error); }
+    }
+
+    private class ScheduleListResult { public List<ScheduleItem>? Items { get; set; } }
+
+    private class ScheduleItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string WorkflowName { get; set; } = "";
+        public Guid WorkflowId { get; set; }
+        public string CronExpression { get; set; } = "0 9 * * 1-5";
+        public string CronDescription { get; set; } = "Every weekday at 9:00 AM";
+        public bool IsActive { get; set; }
+        public DateTime? NextRunAt { get; set; }
+        public DateTime? LastRunAt { get; set; }
+        public string LastRunStatus { get; set; } = "Completed";
+    }
+}

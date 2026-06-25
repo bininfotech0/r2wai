@@ -1,0 +1,175 @@
+@page "/"
+@namespace R2WAI.Web.Components.Pages
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="R2WAI — Enterprise AI Work Platform. Build AI assistants, automate workflows, and execute enterprise work with AI." />
+    <meta name="theme-color" content="#7C3AED" />
+    <meta property="og:title" content="R2WAI - Enterprise AI Work Platform" />
+    <meta property="og:description" content="Build AI assistants, automate workflows, and execute enterprise work with AI." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="R2WAI - Enterprise AI Work Platform" />
+    <title>R2WAI</title>
+    <base href="~/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <link href="css/app.css" rel="stylesheet" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="manifest" href="manifest.json" />
+    <style>
+        .r2-splash {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0F0A1A 0%, #1E1B4B 30%, #4C1D95 65%, #7C3AED 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .r2-splash-logo {
+            width: 64px;
+            height: 64px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #7C3AED, #6D28D9, #4F46E5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 32px rgba(124, 58, 237, 0.4), 0 0 0 0 rgba(124, 58, 237, 0.3);
+            animation: r2-logo-pulse 2s ease-in-out infinite;
+            position: relative;
+        }
+        .r2-splash-logo::before {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 22px;
+            border: 2px solid rgba(167, 139, 250, 0.3);
+            animation: r2-ring-spin 3s linear infinite;
+            border-top-color: #A78BFA;
+        }
+        .r2-splash-logo svg {
+            width: 32px;
+            height: 32px;
+            fill: white;
+        }
+        .r2-splash-title {
+            margin-top: 24px;
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            background: linear-gradient(135deg, #A78BFA, #FFFFFF, #A78BFA);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: r2-text-shimmer 3s ease-in-out infinite;
+        }
+        .r2-splash-subtitle {
+            margin-top: 8px;
+            font-size: 0.8125rem;
+            color: rgba(255, 255, 255, 0.4);
+            letter-spacing: 0.05em;
+        }
+        .r2-splash-dots {
+            display: flex;
+            gap: 6px;
+            margin-top: 32px;
+        }
+        .r2-splash-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #A78BFA;
+            animation: r2-dot-bounce 1.4s ease-in-out infinite;
+        }
+        .r2-splash-dot:nth-child(2) { animation-delay: 0.2s; }
+        .r2-splash-dot:nth-child(3) { animation-delay: 0.4s; }
+        @@keyframes r2-logo-pulse {
+            0%, 100% { box-shadow: 0 8px 32px rgba(124, 58, 237, 0.4), 0 0 0 0 rgba(124, 58, 237, 0.3); }
+            50% { box-shadow: 0 8px 32px rgba(124, 58, 237, 0.5), 0 0 0 12px rgba(124, 58, 237, 0); }
+        }
+        @@keyframes r2-ring-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        @@keyframes r2-text-shimmer {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        @@keyframes r2-dot-bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+            40% { transform: scale(1.2); opacity: 1; }
+        }
+        #blazor-error-ui {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100000;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, #1E1B4B, #4C1D95);
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.875rem;
+            text-align: center;
+            border-top: 2px solid #7C3AED;
+            backdrop-filter: blur(12px);
+        }
+        #blazor-error-ui a { color: #A78BFA; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="r2-splash" id="r2-splash">
+        <div class="r2-splash-logo">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L14.09 8.26L20 9.27L15.55 13.97L16.91 20L12 16.9L7.09 20L8.45 13.97L4 9.27L9.91 8.26L12 2Z"/>
+            </svg>
+        </div>
+        <div class="r2-splash-title">R2WAI</div>
+        <div class="r2-splash-subtitle">AI Work Platform</div>
+        <div class="r2-splash-dots">
+            <span class="r2-splash-dot"></span>
+            <span class="r2-splash-dot"></span>
+            <span class="r2-splash-dot"></span>
+        </div>
+    </div>
+
+    <component type="typeof(R2WAI.Web.Components.App)" render-mode="Server" />
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss" style="margin-left: 16px; cursor: pointer;">Dismiss</a>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@@azure/msal-browser@@4.8.0/lib/msal-browser.min.js" crossorigin="anonymous"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="_framework/blazor.server.js" autostart="false"></script>
+    <script>
+        function hideSplash() {
+            var splash = document.getElementById('r2-splash');
+            if (splash && !splash.dataset.hidden) {
+                splash.dataset.hidden = '1';
+                splash.style.transition = 'opacity 0.5s ease';
+                splash.style.opacity = '0';
+                setTimeout(function () { splash.remove(); }, 500);
+            }
+        }
+        Blazor.start().then(hideSplash);
+        setTimeout(hideSplash, 10000);
+        document.querySelector('#blazor-error-ui .dismiss')?.addEventListener('click', function () {
+            document.getElementById('blazor-error-ui').style.display = 'none';
+        });
+    </script>
+</body>
+</html>

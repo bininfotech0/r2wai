@@ -1,0 +1,118 @@
+@page "/settings"
+@page "/settings/legacy"
+@attribute [Authorize]
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - Settings</PageTitle>
+
+<PageHeader Title="Settings" Subtitle="Manage your platform configuration" />
+
+<MudGrid Spacing="3" Class="stagger-in">
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--primary hover-lift" Style="cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/admin/users"))">
+            <div class="d-flex align-center gap-3 mb-3">
+                <MudAvatar Color="Color.Primary" Size="Size.Medium">
+                    <MudIcon Icon="@Icons.Material.Outlined.PeopleAlt" />
+                </MudAvatar>
+                <div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Users</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Manage user accounts and invitations</MudText>
+                </div>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Create, edit, and deactivate user accounts. Send invitations and manage access.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--secondary hover-lift" Style="cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/admin/roles"))">
+            <div class="d-flex align-center gap-3 mb-3">
+                <MudAvatar Color="Color.Secondary" Size="Size.Medium">
+                    <MudIcon Icon="@Icons.Material.Outlined.Shield" />
+                </MudAvatar>
+                <div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Roles</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Define roles and assign to users</MudText>
+                </div>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Create custom roles with specific access levels for your organization.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--tertiary hover-lift" Style="cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/admin/permissions"))">
+            <div class="d-flex align-center gap-3 mb-3">
+                <MudAvatar Color="Color.Tertiary" Size="Size.Medium">
+                    <MudIcon Icon="@Icons.Material.Outlined.VerifiedUser" />
+                </MudAvatar>
+                <div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Permissions</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Role-permission matrix</MudText>
+                </div>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Configure exactly which features each role can access with the visual permission grid.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--primary hover-lift" Style="cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/admin/models"))">
+            <div class="d-flex align-center gap-3 mb-3">
+                <MudAvatar Color="Color.Info" Size="Size.Medium">
+                    <MudIcon Icon="@Icons.Material.Outlined.ModelTraining" />
+                </MudAvatar>
+                <div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">AI Models</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Configure AI providers</MudText>
+                </div>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Set up OpenAI, Azure OpenAI, or Ollama models. Test connections and set defaults.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--secondary hover-lift" Style="cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/admin/security"))">
+            <div class="d-flex align-center gap-3 mb-3">
+                <MudAvatar Color="Color.Warning" Size="Size.Medium">
+                    <MudIcon Icon="@Icons.Material.Outlined.Lock" />
+                </MudAvatar>
+                <div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Security</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Password and session policies</MudText>
+                </div>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Configure password requirements, session timeouts, and authentication enforcement.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--tertiary hover-lift" Style="cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/settings/tenant"))">
+            <div class="d-flex align-center gap-3 mb-3">
+                <MudAvatar Color="Color.Success" Size="Size.Medium">
+                    <MudIcon Icon="@Icons.Material.Outlined.Domain" />
+                </MudAvatar>
+                <div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Tenant</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Organization settings</MudText>
+                </div>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Configure organization name, domain, feature flags, and usage limits.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>

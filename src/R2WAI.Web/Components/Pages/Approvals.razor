@@ -1,0 +1,165 @@
+@page "/workflow-studio/approvals"
+@page "/approvals"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - Approvals</PageTitle>
+
+<PageHeader Title="Approvals" Subtitle="Review and process pending approval requests">
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default"
+               StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadData">
+        Refresh
+    </MudButton>
+</PageHeader>
+
+<MudGrid Class="mb-4" Spacing="3">
+    <MudItem xs="12" sm="4">
+        <KpiCard Value="@_pendingCount.ToString()" Label="Pending"
+                 Icon="@Icons.Material.Outlined.HourglassTop" ValueColor="Color.Warning" IconColor="Color.Warning" />
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <KpiCard Value="@_overdueCount.ToString()" Label="Overdue"
+                 Icon="@Icons.Material.Outlined.Warning" ValueColor="Color.Error" IconColor="Color.Error" />
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <KpiCard Value="@_escalatedCount.ToString()" Label="Escalated"
+                 Icon="@Icons.Material.Outlined.TrendingUp" ValueColor="Color.Info" IconColor="Color.Info" />
+    </MudItem>
+</MudGrid>
+
+@if (_loading)
+{
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Table" />
+}
+else if (_approvals.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Outlined.TaskAlt"
+                Title="All clear!"
+                Description="No pending approvals. All requests have been processed."
+                MinHeight="300px" />
+}
+else
+{
+    <div class="d-flex flex-column gap-3">
+        @foreach (var approval in _approvals.OrderByDescending(a => a.EscalationLevel).ThenBy(a => a.DueAt ?? DateTime.MaxValue))
+        {
+            var isOverdue = approval.DueAt.HasValue && approval.DueAt < DateTime.UtcNow;
+            <MudPaper Elevation="0" Class="pa-4"
+                      Style="@($"border: 1px solid var(--mud-palette-divider); border-left: 4px solid var(--mud-palette-{(isOverdue ? "error" : approval.EscalationLevel > 0 ? "warning" : "info")}); border-radius: 10px;")">
+                <div class="d-flex justify-space-between align-start">
+                    <div style="flex: 1;">
+                        <div class="d-flex align-center gap-2 mb-1">
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@approval.WorkflowName</MudText>
+                            @if (isOverdue)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Style="font-size: 0.65rem;">Overdue</MudChip>
+                            }
+                            @if (approval.EscalationLevel > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Style="font-size: 0.65rem;">
+                                    Escalated L@(approval.EscalationLevel)
+                                </MudChip>
+                            }
+                        </div>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Requested by <strong>@approval.RequesterFirstName @approval.RequesterLastName</strong>
+                        </MudText>
+                        <div class="d-flex gap-4 mt-1">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small"
+                                         Style="font-size: 14px; vertical-align: middle;" />
+                                @FormatTimeAgo(approval.RequestedAt)
+                            </MudText>
+                            @if (approval.DueAt.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Color="@(isOverdue ? Color.Error : Color.Secondary)">
+                                    <MudIcon Icon="@Icons.Material.Outlined.Event" Size="Size.Small"
+                                             Style="font-size: 14px; vertical-align: middle;" />
+                                    Due @approval.DueAt.Value.ToString("MMM dd, HH:mm")
+                                </MudText>
+                            }
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Check"
+                                   OnClick="@(() => HandleApproval(approval, true))">
+                            Approve
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Close"
+                                   OnClick="@(() => HandleApproval(approval, false))">
+                            Reject
+                        </MudButton>
+                    </div>
+                </div>
+            </MudPaper>
+        }
+    </div>
+}
+
+@code {
+    private List<ApprovalDto> _approvals = new();
+    private bool _loading = true;
+    private int _pendingCount;
+    private int _overdueCount;
+    private int _escalatedCount;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ListResult>("/api/v1/approvals/pending");
+            _approvals = result?.Items ?? new();
+            _pendingCount = _approvals.Count;
+            _overdueCount = _approvals.Count(a => a.DueAt.HasValue && a.DueAt < DateTime.UtcNow);
+            _escalatedCount = _approvals.Count(a => a.EscalationLevel > 0);
+        }
+        catch { Snackbar.Add("Failed to load approvals.", Severity.Warning); }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task HandleApproval(ApprovalDto approval, bool isApprove)
+    {
+        var parameters = new DialogParameters<ApprovalActionDialog>
+        {
+            { x => x.ApprovalId, approval.Id.ToString() },
+            { x => x.WorkflowName, approval.WorkflowName },
+            { x => x.IsApprove, isApprove }
+        };
+        var dialog = await Dialog.ShowAsync<ApprovalActionDialog>(
+            isApprove ? "Approve Request" : "Reject Request", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadData();
+    }
+
+    private static string FormatTimeAgo(DateTime timestamp)
+    {
+        var diff = DateTime.UtcNow - timestamp;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        return $"{(int)diff.TotalDays}d ago";
+    }
+
+    private class ListResult { public List<ApprovalDto> Items { get; set; } = new(); }
+    private class ApprovalDto
+    {
+        public Guid Id { get; set; }
+        public string WorkflowName { get; set; } = string.Empty;
+        public string RequesterFirstName { get; set; } = string.Empty;
+        public string RequesterLastName { get; set; } = string.Empty;
+        public DateTime RequestedAt { get; set; }
+        public DateTime? DueAt { get; set; }
+        public int EscalationLevel { get; set; }
+    }
+}

@@ -1,0 +1,172 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: api
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: api
+subjects:
+  - kind: ServiceAccount
+    name: r2wai-api
+    namespace: r2wai
+roleRef:
+  kind: Role
+  name: r2wai-api
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: api
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: r2wai
+    component: api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: r2wai
+      component: api
+  template:
+    metadata:
+      labels:
+        app: r2wai
+        component: api
+    spec:
+      serviceAccountName: r2wai-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: r2wai-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          envFrom:
+            - configMapRef:
+                name: r2wai-config
+            - secretRef:
+                name: r2wai-secrets
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: r2wai
+      component: api
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: r2wai-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

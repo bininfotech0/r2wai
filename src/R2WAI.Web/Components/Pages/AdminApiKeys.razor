@@ -1,0 +1,201 @@
+@page "/admin/api-keys"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - API Keys</PageTitle>
+
+<PageHeader Title="API Keys" Subtitle="Manage API keys for programmatic access and service-to-service authentication">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        Generate Key
+    </MudButton>
+</PageHeader>
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mb-4" Variant="Variant.Outlined">
+    API keys grant programmatic access to the R2WAI API. Treat keys like passwords — never share them in code or public repositories.
+</MudAlert>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_apiKeys.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Outlined.Key"
+                Title="No API keys"
+                Description="Generate API keys for external systems, CI/CD pipelines, or service integrations to authenticate with the R2WAI API."
+                ActionText="Generate First Key"
+                ActionIcon="@Icons.Material.Filled.Add"
+                OnAction="OpenCreateDialog" />
+}
+else
+{
+    <MudPaper Elevation="0" Class="stagger-in" Style="border: 1px solid var(--mud-palette-divider);">
+        <MudTable Items="_apiKeys" Dense="true" Hover="true">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Key</MudTh>
+                <MudTh>Scopes</MudTh>
+                <MudTh>Created</MudTh>
+                <MudTh>Expires</MudTh>
+                <MudTh>Last Used</MudTh>
+                <MudTh Style="width: 100px;">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">
+                    <div class="d-flex align-center gap-2">
+                        <span class="health-dot @(context.IsActive ? "health-dot--healthy" : "health-dot--unhealthy")"></span>
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Name</MudText>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Key">
+                    <code style="font-size: 0.75rem; background: var(--mud-palette-background-grey); padding: 2px 6px; border-radius: 4px;">
+                        @context.KeyPrefix••••••••
+                    </code>
+                </MudTd>
+                <MudTd DataLabel="Scopes">
+                    @if (!string.IsNullOrEmpty(context.Scopes))
+                    {
+                        @foreach (var scope in context.Scopes.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
+                                     Style="font-size: 0.6875rem;">@scope.Trim()</MudChip>
+                        }
+                    }
+                </MudTd>
+                <MudTd DataLabel="Created">
+                    <MudText Typo="Typo.caption">@context.CreatedAt.ToString("MMM dd, yyyy")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Expires">
+                    @if (context.ExpiresAt.HasValue)
+                    {
+                        var isExpired = context.ExpiresAt.Value < DateTime.UtcNow;
+                        <MudText Typo="Typo.caption" Color="@(isExpired ? Color.Error : Color.Default)">
+                            @context.ExpiresAt.Value.ToString("MMM dd, yyyy")
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Last Used">
+                    @if (context.LastUsedAt.HasValue)
+                    {
+                        <MudText Typo="Typo.caption">@context.LastUsedAt.Value.ToString("MMM dd, HH:mm")</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
+                    }
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Outlined.Refresh" Size="Size.Small"
+                                   OnClick="@(() => RegenerateKey(context))" />
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => RevokeKey(context))" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private List<ApiKeyItem> _apiKeys = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadApiKeys();
+    }
+
+    private async Task LoadApiKeys()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ApiKeyListResult>("/api/v1/admin/api-keys");
+            _apiKeys = result?.Items ?? new();
+        }
+        catch
+        {
+            _apiKeys = new();
+        }
+        _loading = false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/admin/api-keys",
+                new { Name = $"API Key {DateTime.Now:yyyyMMdd-HHmm}", Scopes = new[] { "read", "write" }, Roles = new[] { "User" } });
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CreateKeyResult>();
+                Snackbar.Add($"Key created! Copy it now — it won't be shown again: {result?.Key}", Severity.Success);
+                await LoadApiKeys();
+            }
+            else
+            {
+                Snackbar.Add("Failed to create API key.", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task RegenerateKey(ApiKeyItem key)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, $"key: {key.Name}" } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Regenerate", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/admin/api-keys/{key.Id}/regenerate", new { });
+            if (response.IsSuccessStatusCode)
+            {
+                var regenerated = await response.Content.ReadFromJsonAsync<CreateKeyResult>();
+                Snackbar.Add($"Key regenerated! Copy it now: {regenerated?.Key}", Severity.Success);
+                await LoadApiKeys();
+            }
+        }
+        catch { Snackbar.Add("Failed to regenerate key.", Severity.Error); }
+    }
+
+    private async Task RevokeKey(ApiKeyItem key)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, key.Name } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Revoke", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/admin/api-keys/{key.Id}");
+            _apiKeys.Remove(key);
+            Snackbar.Add($"API key revoked: {key.Name}", Severity.Success);
+        }
+        catch { Snackbar.Add("Failed to revoke key.", Severity.Error); }
+    }
+
+    private class CreateKeyResult { public string? Key { get; set; } }
+    private class ApiKeyListResult { public List<ApiKeyItem>? Items { get; set; } }
+
+    private class ApiKeyItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string KeyPrefix { get; set; } = "r2w_";
+        public string? Scopes { get; set; }
+        public string? Roles { get; set; }
+        public bool IsActive { get; set; } = true;
+        public DateTime CreatedAt { get; set; }
+        public DateTime? ExpiresAt { get; set; }
+        public DateTime? LastUsedAt { get; set; }
+    }
+}

@@ -1,0 +1,78 @@
+@* SVG Donut Chart — lightweight, no JS dependencies *@
+
+<div class="donut-chart-container" style="width: @(Size)px; height: @(Size)px; position: relative;">
+    <svg viewBox="0 0 @ViewBox @ViewBox" style="width: 100%; height: 100%; transform: rotate(-90deg);">
+        @* Background ring *@
+        <circle cx="@Center" cy="@Center" r="@Radius"
+                fill="none" stroke="var(--mud-palette-divider)" stroke-width="@StrokeWidth" />
+
+        @* Data segments *@
+        @{
+            double offset = 0;
+            var total = Segments.Sum(s => s.Value);
+        }
+        @foreach (var segment in Segments)
+        {
+            var pct = total > 0 ? segment.Value / total : 0;
+            var dashLength = Circumference * pct;
+            var dashGap = Circumference - dashLength;
+            var dashOffset = Circumference * offset;
+
+            <circle cx="@Center" cy="@Center" r="@Radius"
+                    fill="none" stroke="@segment.Color" stroke-width="@StrokeWidth"
+                    stroke-dasharray="@dashLength.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) @dashGap.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)"
+                    stroke-dashoffset="@((-dashOffset).ToString("F2", System.Globalization.CultureInfo.InvariantCulture))"
+                    stroke-linecap="round"
+                    style="transition: stroke-dasharray 0.6s ease, stroke-dashoffset 0.6s ease;">
+                <title>@segment.Label: @segment.Value.ToString("N0") (@((pct * 100).ToString("F1"))%)</title>
+            </circle>
+
+            offset += pct;
+        }
+    </svg>
+
+    @* Center label *@
+    @if (!string.IsNullOrEmpty(CenterLabel))
+    {
+        <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <span class="animate-count" style="font-size: @(Size / 5)px; font-weight: 800; letter-spacing: -0.03em; color: var(--mud-palette-text-primary);">@CenterValue</span>
+            <span style="font-size: @(Math.Max(Size / 10, 10))px; color: var(--mud-palette-text-secondary); font-weight: 500;">@CenterLabel</span>
+        </div>
+    }
+</div>
+
+@* Legend *@
+@if (ShowLegend)
+{
+    <div class="d-flex flex-wrap gap-3 justify-center mt-3">
+        @foreach (var segment in Segments)
+        {
+            <div class="d-flex align-center gap-1">
+                <span style="width: 10px; height: 10px; border-radius: 3px; background: @segment.Color; display: inline-block;"></span>
+                <MudText Typo="Typo.caption" Style="font-weight: 500;">@segment.Label</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">(@segment.Value.ToString("N0"))</MudText>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int Size { get; set; } = 160;
+    [Parameter] public int StrokeWidth { get; set; } = 20;
+    [Parameter] public string? CenterLabel { get; set; }
+    [Parameter] public string? CenterValue { get; set; }
+    [Parameter] public bool ShowLegend { get; set; } = true;
+    [Parameter] public List<ChartSegment> Segments { get; set; } = new();
+
+    private int ViewBox => Size;
+    private double Center => Size / 2.0;
+    private double Radius => (Size - StrokeWidth) / 2.0;
+    private double Circumference => 2 * Math.PI * Radius;
+
+    public class ChartSegment
+    {
+        public string Label { get; set; } = string.Empty;
+        public double Value { get; set; }
+        public string Color { get; set; } = "#7C3AED";
+    }
+}

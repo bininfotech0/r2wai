@@ -1,0 +1,87 @@
+services:
+  r2wai-web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+    ports:
+      - "8080:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ApiBaseUrl=http://r2wai-api
+    depends_on:
+      r2wai-api:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - r2wai-network
+
+  r2wai-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "5000:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=r2wai;Username=r2wai;Password=${DB_PASSWORD}
+      - Authentication__Jwt__SecretKey=${JWT_SECRET}
+      - Authentication__Jwt__ExpirationMinutes=15
+      - Authentication__Jwt__RefreshTokenExpirationDays=7
+      - Security__EncryptionKey=${ENCRYPTION_KEY}
+      - AI__Provider=${AI_PROVIDER:-ollama}
+      - AI__OpenAI__ApiKey=${OPENAI_API_KEY}
+      - AI__Ollama__Endpoint=${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
+      - AI__Ollama__ModelId=${OLLAMA_MODEL:-qwen2.5-coder:7b}
+      - AI__Ollama__EmbeddingModel=${OLLAMA_EMBEDDING_MODEL:-qwen2.5-coder:7b}
+      - Storage__Provider=${STORAGE_PROVIDER:-Local}
+      - ConnectionStrings__Redis=
+      - Cache__Redis__ConnectionString=
+      - Authentication__ApiKeys__0__Key=${API_KEY_0:-r2w_dev_test_key_do_not_use_in_production}
+      - Authentication__ApiKeys__0__Name=Docker Dev Key
+      - Authentication__ApiKeys__0__UserId=00000000-0000-0000-0000-000000000001
+      - Authentication__ApiKeys__0__TenantId=00000000-0000-0000-0000-000000000001
+      - Authentication__ApiKeys__0__Roles__0=Admin
+      - Authentication__ApiKeys__0__Roles__1=WorkflowManager
+      - Authentication__ApiKeys__0__Scopes__0=read
+      - Authentication__ApiKeys__0__Scopes__1=write
+      - Authentication__ApiKeys__0__Enabled=true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x dotnet > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - r2wai-network
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: r2wai
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: r2wai
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U r2wai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - r2wai-network
+
+volumes:
+  postgres-data:
+
+networks:
+  r2wai-network:
+    driver: bridge

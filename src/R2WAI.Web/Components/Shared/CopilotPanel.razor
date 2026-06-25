@@ -1,0 +1,340 @@
+@inject NavigationManager Navigation
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+
+@if (IsOpen)
+{
+<div class="copilot-panel copilot-panel-mobile" style="position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 100vw); z-index: 1300; background: var(--mud-palette-surface); border-left: 1px solid var(--mud-palette-divider); display: flex; flex-direction: column; box-shadow: -4px 0 16px rgba(0,0,0,0.1); animation: slideInRight 0.25s ease-out;">
+    <div class="copilot-header pa-3 d-flex justify-space-between align-center"
+         style="border-bottom: 1px solid var(--mud-palette-divider);">
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Color="Color.Primary" Size="Size.Small" />
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">R2WAI Copilot</MudText>
+        </div>
+        <MudIconButton Icon="@Icons.Material.Outlined.Close" Size="Size.Small" OnClick="Close" aria-label="Close copilot" />
+    </div>
+
+    <div class="copilot-context px-3 py-2" style="background: var(--mud-palette-background); border-bottom: 1px solid var(--mud-palette-divider);">
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            <MudIcon Icon="@Icons.Material.Outlined.LocationOn" Size="Size.Small" Style="font-size: 14px; vertical-align: middle;" />
+            @GetCurrentPageName()
+        </MudText>
+    </div>
+
+    <div class="copilot-messages pa-3" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
+        @if (_messages.Count == 0)
+        {
+            <div class="text-center pa-6">
+                <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Size="Size.Large" Color="Color.Primary" Style="opacity: 0.3;" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-3">
+                    Ask me anything about R2WAI
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                    I can create assistants, build workflows, search knowledge, and more.
+                </MudText>
+                <div class="d-flex flex-column gap-2 mt-4">
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default" FullWidth="true"
+                               OnClick="@(() => SendSuggestion("Create an HR onboarding assistant"))"
+                               Style="border-radius: 8px; text-transform: none; justify-content: flex-start;">
+                        "Create an HR onboarding assistant"
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default" FullWidth="true"
+                               OnClick="@(() => SendSuggestion("Show me pending approvals"))"
+                               Style="border-radius: 8px; text-transform: none; justify-content: flex-start;">
+                        "Show me pending approvals"
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default" FullWidth="true"
+                               OnClick="@(() => SendSuggestion("What workflows failed today?"))"
+                               Style="border-radius: 8px; text-transform: none; justify-content: flex-start;">
+                        "What workflows failed today?"
+                    </MudButton>
+                </div>
+            </div>
+        }
+        else
+        {
+            @foreach (var msg in _messages)
+            {
+                <div class="@($"copilot-message copilot-message--{(msg.IsUser ? "user" : "assistant")}")">
+                    @if (!msg.IsUser)
+                    {
+                        <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Size="Size.Small" Color="Color.Primary"
+                                 Style="margin-right: 8px; margin-top: 2px;" />
+                    }
+                    <div style="flex: 1;">
+                        @if (msg.IsUser)
+                        {
+                            <MudText Typo="Typo.body2">@msg.Content</MudText>
+                        }
+                        else
+                        {
+                            <MarkdownRenderer Content="@msg.Content" Style="font-size: 0.875rem;" />
+                        }
+                        @if (msg.Actions.Count > 0)
+                        {
+                            <div class="d-flex gap-2 mt-2">
+                                @foreach (var action in msg.Actions)
+                                {
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                               OnClick="@(() => ExecuteAction(action))" Style="border-radius: 8px;">
+                                        @action.Label
+                                    </MudButton>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (_isThinking && !_isStreaming)
+            {
+                <div class="copilot-message copilot-message--assistant">
+                    <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Size="Size.Small" Color="Color.Primary"
+                             Style="margin-right: 8px; margin-top: 2px;" />
+                    <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                </div>
+            }
+        }
+    </div>
+
+    <div class="copilot-input pa-3" style="border-top: 1px solid var(--mud-palette-divider);">
+        <MudTextField @bind-Value="_input" Placeholder="Ask R2WAI anything..."
+                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Send"
+                      AdornmentColor="Color.Primary" OnAdornmentClick="SendMessage"
+                      OnKeyUp="HandleKeyUp" Immediate="true"
+                      Style="border-radius: 10px;" aria-label="Copilot input" />
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private string _input = string.Empty;
+    private bool _isThinking;
+    private bool _isStreaming;
+    private List<CopilotMessage> _messages = new();
+
+    public void Open()
+    {
+        IsOpen = true;
+        IsOpenChanged.InvokeAsync(true);
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        IsOpen = false;
+        IsOpenChanged.InvokeAsync(false);
+        StateHasChanged();
+    }
+
+    public void Toggle()
+    {
+        if (IsOpen) Close(); else Open();
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_input))
+            await SendMessage();
+    }
+
+    private async Task SendSuggestion(string text)
+    {
+        _input = text;
+        await SendMessage();
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+
+        var userMessage = _input.Trim();
+        _messages.Add(new CopilotMessage { Content = userMessage, IsUser = true });
+        _input = string.Empty;
+        _isThinking = true;
+        StateHasChanged();
+
+        try
+        {
+            var streamMessage = $"[Context: user is on {GetCurrentPageName()} page] {userMessage}";
+            var response = await Http.PostAsJsonAsync("/api/v1/chat/stream", new
+            {
+                Message = streamMessage
+            });
+
+            if (response.IsSuccessStatusCode && response.Content.Headers.ContentType?.MediaType == "text/event-stream")
+            {
+                _isThinking = false;
+                _isStreaming = true;
+                var streamingMsg = new CopilotMessage { Content = "", IsUser = false };
+                _messages.Add(streamingMsg);
+                StateHasChanged();
+
+                using var stream = await response.Content.ReadAsStreamAsync();
+                using var reader = new System.IO.StreamReader(stream);
+
+                while (!reader.EndOfStream)
+                {
+                    var line = await reader.ReadLineAsync();
+                    if (string.IsNullOrEmpty(line)) continue;
+                    if (!line.StartsWith("data: ")) continue;
+
+                    var data = line["data: ".Length..];
+                    if (data == "[DONE]") break;
+
+                    try
+                    {
+                        var chunk = System.Text.Json.JsonSerializer.Deserialize<StreamChunk>(data);
+                        if (chunk?.content is not null)
+                        {
+                            streamingMsg.Content += chunk.content;
+                            await InvokeAsync(StateHasChanged);
+                        }
+                    }
+                    catch { }
+                }
+
+                streamingMsg.Actions = GetContextualActions(userMessage);
+                _isStreaming = false;
+            }
+            else if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<CopilotChatResponse>();
+                _messages.Add(new CopilotMessage
+                {
+                    Content = result?.Reply ?? "I processed your request.",
+                    IsUser = false,
+                    Actions = GetContextualActions(userMessage)
+                });
+            }
+            else
+            {
+                _messages.Add(new CopilotMessage
+                {
+                    Content = GetSmartResponse(userMessage),
+                    IsUser = false,
+                    Actions = GetContextualActions(userMessage)
+                });
+            }
+        }
+        catch
+        {
+            if (_isStreaming)
+            {
+                _isStreaming = false;
+            }
+            else
+            {
+                _messages.Add(new CopilotMessage
+                {
+                    Content = GetSmartResponse(userMessage),
+                    IsUser = false,
+                    Actions = GetContextualActions(userMessage)
+                });
+            }
+        }
+        finally
+        {
+            _isThinking = false;
+            _isStreaming = false;
+            StateHasChanged();
+        }
+    }
+
+    private record StreamChunk(string? content);
+
+    private List<CopilotAction> GetContextualActions(string input)
+    {
+        var lower = input.ToLowerInvariant();
+        if (lower.Contains("assistant") || lower.Contains("ai") || lower.Contains("create"))
+            return new() { new() { Label = "Go to Assistants", Url = "/assistant-studio" } };
+        if (lower.Contains("workflow") || lower.Contains("approval") || lower.Contains("flow"))
+            return new() { new() { Label = "Go to Workflows", Url = "/workflow-studio" } };
+        if (lower.Contains("knowledge") || lower.Contains("document") || lower.Contains("upload"))
+            return new() { new() { Label = "Go to Knowledge", Url = "/assistant-studio/knowledge" } };
+        if (lower.Contains("user") || lower.Contains("role") || lower.Contains("setting"))
+            return new() { new() { Label = "Go to Admin", Url = "/admin/users" } };
+        if (lower.Contains("operation") || lower.Contains("health") || lower.Contains("error"))
+            return new() { new() { Label = "Go to Operations", Url = "/operations" } };
+        return new() { new() { Label = "Go to Home", Url = "/" } };
+    }
+
+    private void ExecuteAction(CopilotAction action)
+    {
+        if (!string.IsNullOrEmpty(action.Url))
+            Navigation.NavigateTo(action.Url);
+    }
+
+    private string GetCurrentPageName()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var path = uri.AbsolutePath.Trim('/');
+        return path switch
+        {
+            "" => "Home",
+            "assistant-studio" => "AI Assistant Studio",
+            "workflow-studio" => "Workflow Studio",
+            "operations" => "Operations Center",
+            "settings" => "User Management",
+            "admin/users" => "User Management",
+            "inbox" => "Inbox",
+            _ when path.StartsWith("assistant-studio") => "AI Studio",
+            _ when path.StartsWith("workflow-studio") => "Workflow Studio",
+            _ when path.StartsWith("operations") => "Operations",
+            _ when path.StartsWith("admin") || path.StartsWith("settings") => "Administration",
+            _ => path
+        };
+    }
+
+    private class CopilotMessage
+    {
+        public string Content { get; set; } = string.Empty;
+        public bool IsUser { get; set; }
+        public List<CopilotAction> Actions { get; set; } = new();
+    }
+
+    private class CopilotAction
+    {
+        public string Label { get; set; } = string.Empty;
+        public string? Url { get; set; }
+    }
+
+    private string GetSmartResponse(string input)
+    {
+        var lower = input.ToLowerInvariant();
+        if (lower.Contains("create") && lower.Contains("assistant"))
+            return "I can help you create an assistant! Head to the AI Assistant Studio where you can describe what you need and I'll generate the configuration for you.";
+        if (lower.Contains("approval") || lower.Contains("pending"))
+            return "You can view and manage pending approvals in your Inbox. Each approval shows the workflow name, requester, and due date.";
+        if (lower.Contains("workflow") && (lower.Contains("fail") || lower.Contains("error")))
+            return "Check the Operations Hub for failed workflows. You can see step-by-step execution details and retry failed steps.";
+        if (lower.Contains("upload") || lower.Contains("document"))
+            return "You can upload documents in the Documents section. Supported formats include PDF, DOCX, XLSX, TXT, and more. Documents are automatically processed and indexed for knowledge search.";
+        if (lower.Contains("search") || lower.Contains("find"))
+            return "Use the Command Palette (Ctrl+K) for quick navigation, or search across your knowledge bases from the Home page command bar.";
+        if (lower.Contains("model") || lower.Contains("openai") || lower.Contains("ollama"))
+            return "Configure AI models in Settings > AI Models. You can set up OpenAI, Azure OpenAI, or Ollama providers and test connections before using them.";
+        return "I can help you navigate R2WAI, create assistants, manage workflows, and search your knowledge bases. What would you like to do?";
+    }
+
+    private class CopilotChatResponse
+    {
+        public string? Reply { get; set; }
+        public Guid ConversationId { get; set; }
+    }
+
+    private class AssistantsResult
+    {
+        public List<AssistantItem>? Items { get; set; }
+    }
+
+    private class AssistantItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+}

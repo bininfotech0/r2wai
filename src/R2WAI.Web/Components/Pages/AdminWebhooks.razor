@@ -1,0 +1,179 @@
+@page "/admin/webhooks"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject IJSRuntime JS
+
+<PageTitle>R2WAI - Webhooks</PageTitle>
+
+<PageHeader Title="Webhooks" Subtitle="Manage inbound webhook endpoints that trigger workflows and events">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        New Webhook
+    </MudButton>
+</PageHeader>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_webhooks.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Outlined.Webhook"
+                Title="No webhooks configured"
+                Description="Create webhook endpoints to receive events from external systems and trigger workflows automatically."
+                ActionText="Create First Webhook"
+                ActionIcon="@Icons.Material.Filled.Add"
+                OnAction="OpenCreateDialog" />
+}
+else
+{
+    <MudPaper Elevation="0" Class="stagger-in" Style="border: 1px solid var(--mud-palette-divider);">
+        <MudTable Items="_webhooks" Dense="true" Hover="true">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Endpoint</MudTh>
+                <MudTh>Trigger</MudTh>
+                <MudTh>Last Called</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh Style="width: 120px;">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">
+                    <div class="d-flex align-center gap-2">
+                        <span class="health-dot @(context.IsActive ? "health-dot--healthy" : "health-dot--unhealthy")"></span>
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Name</MudText>
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Endpoint">
+                    <div class="d-flex align-center gap-1">
+                        <code style="font-size: 0.75rem; background: var(--mud-palette-background-grey); padding: 2px 6px; border-radius: 4px;">
+                            @context.EndpointUrl
+                        </code>
+                        <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Size="Size.Small"
+                                       OnClick="@(() => CopyEndpoint(context))" />
+                    </div>
+                </MudTd>
+                <MudTd DataLabel="Trigger">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@context.TriggerType</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Last Called">
+                    @if (context.LastCalledAt.HasValue)
+                    {
+                        <MudText Typo="Typo.caption">@context.LastCalledAt.Value.ToString("MMM dd, HH:mm")</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudSwitch T="bool" Value="@context.IsActive" Color="Color.Success" Size="Size.Small"
+                               ValueChanged="@(v => ToggleWebhook(context, v))" />
+                </MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Outlined.History" Size="Size.Small"
+                                   OnClick="@(() => ViewHistory(context))" />
+                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
+                                   OnClick="@(() => EditWebhook(context))" />
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteWebhook(context))" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
+
+@code {
+    private bool _loading = true;
+    private List<WebhookItem> _webhooks = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWebhooks();
+    }
+
+    private async Task LoadWebhooks()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<WebhookListResult>("/api/v1/admin/webhooks");
+            _webhooks = result?.Items ?? new();
+        }
+        catch
+        {
+            _webhooks = new();
+        }
+        _loading = false;
+    }
+
+    private void OpenCreateDialog()
+    {
+        Snackbar.Add("Webhook creation dialog coming soon.", Severity.Info);
+    }
+
+    private async Task CopyEndpoint(WebhookItem webhook)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", webhook.EndpointUrl);
+            Snackbar.Add("Endpoint URL copied to clipboard.", Severity.Success);
+        }
+        catch { Snackbar.Add(webhook.EndpointUrl, Severity.Info); }
+    }
+
+    private async Task ToggleWebhook(WebhookItem webhook, bool isActive)
+    {
+        try
+        {
+            await Http.PostAsJsonAsync($"/api/v1/admin/webhooks/{webhook.Id}/toggle", new { });
+            webhook.IsActive = isActive;
+            Snackbar.Add($"Webhook {(isActive ? "enabled" : "disabled")}: {webhook.Name}", isActive ? Severity.Success : Severity.Warning);
+        }
+        catch { Snackbar.Add("Failed to toggle webhook.", Severity.Error); }
+    }
+
+    private void ViewHistory(WebhookItem webhook)
+    {
+        Snackbar.Add($"Total calls: {webhook.TotalCalls}", Severity.Info);
+    }
+
+    private void EditWebhook(WebhookItem webhook)
+    {
+        Snackbar.Add("Webhook editing coming soon.", Severity.Info);
+    }
+
+    private async Task DeleteWebhook(WebhookItem webhook)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, webhook.Name } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/admin/webhooks/{webhook.Id}");
+            _webhooks.Remove(webhook);
+            Snackbar.Add($"Webhook deleted: {webhook.Name}", Severity.Success);
+        }
+        catch { Snackbar.Add("Failed to delete webhook.", Severity.Error); }
+    }
+
+    private class WebhookListResult { public List<WebhookItem>? Items { get; set; } }
+
+    private class WebhookItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string EndpointUrl { get; set; } = "/api/v1/webhooks/...";
+        public string TriggerType { get; set; } = "Workflow";
+        public Guid? WorkflowId { get; set; }
+        public string? Secret { get; set; }
+        public bool IsActive { get; set; } = true;
+        public DateTime? LastCalledAt { get; set; }
+        public int TotalCalls { get; set; }
+    }
+}

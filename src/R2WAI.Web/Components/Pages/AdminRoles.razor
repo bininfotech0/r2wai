@@ -1,0 +1,192 @@
+@page "/admin/roles"
+@page "/settings/roles"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - Role Management</PageTitle>
+
+<PageHeader Title="Roles & Permissions" Subtitle="Define roles and manage access control">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateRoleDialog">
+        New Role
+    </MudButton>
+</PageHeader>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="5">
+        <div class="d-flex align-center gap-2 mb-3">
+            <div class="icon-container icon-container--primary">
+                <MudIcon Icon="@Icons.Material.Outlined.Group" Size="Size.Small" />
+            </div>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">Roles</MudText>
+        </div>
+        <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+            @if (_loading)
+            {
+                <div class="pa-4"><LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Detail" /></div>
+            }
+            else
+            {
+                <MudList T="RoleDto" Dense="true" Class="stagger-in">
+                    @foreach (var role in _roles)
+                    {
+                        <MudListItem OnClick="@(() => SelectRole(role))"
+                                     Style="@(_selectedRole?.Id == role.Id ? "background-color: var(--mud-palette-primary-lighten);" : "")">
+                            <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                                <div>
+                                    <MudText Typo="Typo.subtitle2">@role.Name</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@(role.Description ?? "No description")</MudText>
+                                </div>
+                                <div class="d-flex align-center gap-1">
+                                    @if (role.IsSystem)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">System</MudChip>
+                                    }
+                                    @if (!role.IsSystem)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                       OnClick="@(() => OpenEditRoleDialog(role))" />
+                                    }
+                                </div>
+                            </div>
+                        </MudListItem>
+                        <MudDivider />
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="7">
+        <div class="d-flex align-center gap-2 mb-3">
+            <div class="icon-container icon-container--secondary">
+                <MudIcon Icon="@Icons.Material.Outlined.Shield" Size="Size.Small" />
+            </div>
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                @(_selectedRole is not null ? $"Permissions — {_selectedRole.Name}" : "Permission Matrix")
+            </MudText>
+        </div>
+        <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+            @if (_selectedRole is null)
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.Shield" Title="Select a role"
+                            Description="Choose a role from the list to view and edit its permissions."
+                            MinHeight="300px" />
+            }
+            else if (_selectedRole.IsSystem)
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-4">System roles cannot be modified.</MudAlert>
+            }
+            else
+            {
+                @foreach (var group in _permissionGroups)
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mb-2 mt-3" Style="font-weight: 600;">@group.Category</MudText>
+                    <MudGrid Spacing="2">
+                        @foreach (var perm in group.Permissions)
+                        {
+                            <MudItem xs="12" sm="6">
+                                <MudSwitch T="bool" Color="Color.Primary"
+                                           Value="@GetPermissionState(perm.Value)"
+                                           ValueChanged="@((bool v) => TogglePermission(perm.Value, v))"
+                                           Label="@perm.Label" />
+                            </MudItem>
+                        }
+                    </MudGrid>
+                    <MudDivider Class="my-2" />
+                }
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<RoleDto> _roles = new();
+    private RoleDto? _selectedRole;
+    private HashSet<string> _selectedPermissions = new();
+    private bool _loading = true;
+
+    private readonly List<PermissionGroup> _permissionGroups = new()
+    {
+        new("Users", new() { new("View Users", "UserRead"), new("Create Users", "UserCreate"), new("Edit Users", "UserUpdate"), new("Delete Users", "UserDelete") }),
+        new("Documents", new() { new("View Documents", "DocumentRead"), new("Upload Documents", "DocumentUpload"), new("Delete Documents", "DocumentDelete") }),
+        new("Knowledge Bases", new() { new("View KBs", "KnowledgeBaseRead"), new("Create KBs", "KnowledgeBaseCreate"), new("Update KBs", "KnowledgeBaseUpdate"), new("Delete KBs", "KnowledgeBaseDelete") }),
+        new("Workflows", new() { new("View Workflows", "WorkflowRead"), new("Create Workflows", "WorkflowCreate"), new("Edit Workflows", "WorkflowUpdate"), new("Execute Workflows", "WorkflowExecute") }),
+        new("Conversations", new() { new("View Conversations", "ConversationRead"), new("Send Messages", "ConversationSend"), new("Delete Conversations", "ConversationDelete") }),
+        new("Administration", new() { new("View Audit Logs", "AuditView"), new("Manage Configuration", "ConfigurationManage") }),
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Http.GetFromJsonAsync<RolesResult>("/api/v1/admin/roles");
+            _roles = result?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load roles", Severity.Warning); }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private void SelectRole(RoleDto role)
+    {
+        _selectedRole = role;
+        _selectedPermissions = string.IsNullOrEmpty(role.Permissions)
+            ? new()
+            : new HashSet<string>(role.Permissions.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private bool GetPermissionState(string perm) => _selectedPermissions.Contains(perm);
+
+    private async Task TogglePermission(string perm, bool enabled)
+    {
+        if (enabled) _selectedPermissions.Add(perm);
+        else _selectedPermissions.Remove(perm);
+
+        try
+        {
+            await Http.PutAsJsonAsync($"/api/v1/admin/roles/{_selectedRole!.Id}", new
+            {
+                Name = _selectedRole.Name,
+                Description = _selectedRole.Description,
+                Permissions = string.Join(",", _selectedPermissions)
+            });
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to update: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task OpenCreateRoleDialog()
+    {
+        var dialog = await Dialog.ShowAsync<CreateEditRoleDialog>("New Role");
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadData();
+    }
+
+    private async Task OpenEditRoleDialog(RoleDto role)
+    {
+        var parameters = new DialogParameters<CreateEditRoleDialog> { { x => x.EditId, role.Id.ToString() } };
+        var dialog = await Dialog.ShowAsync<CreateEditRoleDialog>("Edit Role", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadData();
+    }
+
+    private record PermissionItem(string Label, string Value);
+    private record PermissionGroup(string Category, List<PermissionItem> Permissions);
+    private class RolesResult { public List<RoleDto> Items { get; set; } = new(); }
+    private class RoleDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Permissions { get; set; }
+        public bool IsSystem { get; set; }
+    }
+}

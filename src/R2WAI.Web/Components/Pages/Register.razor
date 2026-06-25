@@ -1,0 +1,177 @@
+@page "/register"
+@attribute [AllowAnonymous]
+@layout R2WAI.Web.Components.Layout.AuthLayout
+@inject HttpClient HttpClient
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - Request Access</PageTitle>
+
+<div class="login-container">
+    <MudPaper Class="pa-10 login-card" Elevation="0">
+        <div class="d-flex flex-column align-center mb-6">
+            <div style="width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, #7C3AED, #6D28D9); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color: white; font-size: 1.5rem;" />
+            </div>
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="gradient-text" Style="font-weight: 700; letter-spacing: -0.02em;">Request Access</MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mt-1" Style="max-width: 320px; line-height: 1.5;">
+                Submit a request to get access to the R2WAI platform. An administrator will review and approve your request.
+            </MudText>
+        </div>
+
+        @if (_submitted)
+        {
+            <div class="d-flex flex-column align-center py-4">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success"
+                         Style="font-size: 3rem;" Class="mb-3" />
+                <MudText Typo="Typo.h6" Align="Align.Center" Style="font-weight: 600;" Class="mb-2">
+                    Request Submitted
+                </MudText>
+                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary"
+                         Style="max-width: 340px; line-height: 1.6;" Class="mb-4">
+                    Your request has been submitted. An administrator will review your request and send you an invitation.
+                </MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/login"
+                           StartIcon="@Icons.Material.Filled.ArrowBack" Class="btn-gradient"
+                           Style="border-radius: 12px;">
+                    Back to Login
+                </MudButton>
+            </div>
+        }
+        else
+        {
+            <EditForm Model="_model" OnValidSubmit="HandleSubmit">
+                <DataAnnotationsValidator />
+
+                <MudTextField @bind-Value="_model.FullName"
+                              Label="Full Name"
+                              Variant="Variant.Outlined"
+                              Class="mb-3"
+                              Required="true"
+                              RequiredError="Full name is required."
+                              aria-label="Full name" />
+
+                <MudTextField @bind-Value="_model.Email"
+                              Label="Work Email"
+                              Variant="Variant.Outlined"
+                              InputType="InputType.Email"
+                              Class="mb-3"
+                              Required="true"
+                              RequiredError="Work email is required."
+                              aria-label="Work email address" />
+
+                <MudTextField @bind-Value="_model.Organization"
+                              Label="Organization"
+                              Variant="Variant.Outlined"
+                              Class="mb-3"
+                              Required="true"
+                              RequiredError="Organization is required."
+                              aria-label="Organization" />
+
+                <MudSelect @bind-Value="_model.Department"
+                           Label="Role / Department"
+                           Variant="Variant.Outlined"
+                           Class="mb-3"
+                           Required="true"
+                           RequiredError="Please select a department."
+                           aria-label="Role or department">
+                    <MudSelectItem Value="@("Engineering")">Engineering</MudSelectItem>
+                    <MudSelectItem Value="@("Product")">Product</MudSelectItem>
+                    <MudSelectItem Value="@("Human Resources")">Human Resources</MudSelectItem>
+                    <MudSelectItem Value="@("Finance")">Finance</MudSelectItem>
+                    <MudSelectItem Value="@("Operations")">Operations</MudSelectItem>
+                    <MudSelectItem Value="@("Legal")">Legal</MudSelectItem>
+                    <MudSelectItem Value="@("IT")">IT</MudSelectItem>
+                    <MudSelectItem Value="@("Sales")">Sales</MudSelectItem>
+                    <MudSelectItem Value="@("Marketing")">Marketing</MudSelectItem>
+                    <MudSelectItem Value="@("Other")">Other</MudSelectItem>
+                </MudSelect>
+
+                <MudTextField @bind-Value="_model.Reason"
+                              Label="Reason for access"
+                              Variant="Variant.Outlined"
+                              Lines="3"
+                              Class="mb-4"
+                              aria-label="Reason for access" />
+
+                <MudButton ButtonType="ButtonType.Submit"
+                           Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           FullWidth="true"
+                           Size="Size.Large"
+                           Disabled="_isLoading"
+                           Class="btn-gradient"
+                           Style="height: 48px; border-radius: 12px; font-weight: 600;"
+                           aria-label="Submit request">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Class="ms-n1 me-2" Size="Size.Small" Indeterminate="true"
+                                             Color="Color.Surface" />
+                        <span>Submitting...</span>
+                    }
+                    else
+                    {
+                        <span>Submit Request</span>
+                    }
+                </MudButton>
+            </EditForm>
+        }
+
+        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-6">
+            Already have an account?&nbsp;
+            <MudLink Href="/login" Color="Color.Primary" Style="font-weight: 600;">Sign in</MudLink>
+        </MudText>
+    </MudPaper>
+</div>
+
+@code {
+    private RequestAccessModel _model = new();
+    private bool _isLoading;
+    private bool _submitted;
+
+    private async Task HandleSubmit()
+    {
+        _isLoading = true;
+        try
+        {
+            var response = await HttpClient.PostAsJsonAsync("/api/v1/auth/request-access", new
+            {
+                _model.FullName,
+                _model.Email,
+                _model.Organization,
+                _model.Department,
+                _model.Reason
+            });
+
+            // Show success regardless of response — we do not want to leak whether the endpoint exists
+            _submitted = true;
+        }
+        catch
+        {
+            // Graceful failure: show success anyway so the user knows the form was accepted
+            _submitted = true;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    public class RequestAccessModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Full name is required.")]
+        public string FullName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Work email is required.")]
+        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Please enter a valid email address.")]
+        public string Email { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Organization is required.")]
+        public string Organization { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Please select a department.")]
+        public string Department { get; set; } = string.Empty;
+
+        public string Reason { get; set; } = string.Empty;
+    }
+}

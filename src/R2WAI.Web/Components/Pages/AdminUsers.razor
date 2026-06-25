@@ -1,0 +1,133 @@
+@page "/admin/users"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - User Management</PageTitle>
+
+<PageHeader Title="User Management" Subtitle="Manage platform users and their access">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+               Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenCreateUserDialog">
+        Invite User
+    </MudButton>
+</PageHeader>
+
+<MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);" Class="admin-page animate-slide-in">
+    <MudDataGrid T="UserDto" Items="_users" Hover="true" Dense="true" Loading="_loading" Elevation="0">
+        <ToolBarContent>
+            <MudTextField @bind-Value="_search" Placeholder="Search users..." Immediate="true" DebounceInterval="300"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 300px;" />
+            <MudSpacer />
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@_users.Count users</MudText>
+        </ToolBarContent>
+        <Columns>
+            <TemplateColumn Title="User" SortBy="@(x => x.Email)">
+                <CellTemplate>
+                    <div class="d-flex align-center gap-2">
+                        <MudAvatar Size="Size.Small" Color="Color.Primary" Style="width: 28px; height: 28px; font-size: 0.7rem;">
+                            @(context.Item.Email.Length > 0 ? context.Item.Email[0].ToString().ToUpper() : "U")
+                        </MudAvatar>
+                        <div>
+                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Item.FirstName @context.Item.LastName</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Item.Email</MudText>
+                        </div>
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Roles">
+                <CellTemplate>
+                    <div class="d-flex gap-1 flex-wrap">
+                        @foreach (var role in context.Item.Roles)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@role</MudChip>
+                        }
+                    </div>
+                </CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
+                <CellTemplate>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                   OnClick="@(() => OpenEditUserDialog(context.Item))" aria-label="Edit" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteUser(context.Item))" aria-label="Delete" />
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+        <NoRecordsContent>
+            <EmptyState Icon="@Icons.Material.Outlined.PeopleAlt" Title="No users found"
+                        Description="Invite users to start collaborating." MinHeight="200px" />
+        </NoRecordsContent>
+    </MudDataGrid>
+</MudPaper>
+
+@code {
+    private List<UserDto> _users = new();
+    private bool _loading = true;
+    private string _search = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Http.GetFromJsonAsync<UsersResult>("/api/v1/admin/users");
+            _users = result?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load users", Severity.Warning); }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task OpenCreateUserDialog()
+    {
+        var dialog = await Dialog.ShowAsync<CreateEditUserDialog>("Invite User");
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadData();
+    }
+
+    private async Task OpenEditUserDialog(UserDto user)
+    {
+        var parameters = new DialogParameters<CreateEditUserDialog> { { x => x.EditId, user.Id.ToString() } };
+        var dialog = await Dialog.ShowAsync<CreateEditUserDialog>("Edit User", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadData();
+    }
+
+    private async Task DeleteUser(UserDto user)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, user.Email },
+            { x => x.Description, "This user will lose access to the platform." }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/admin/users/{user.Id}");
+            Snackbar.Add("User deleted", Severity.Success);
+            await LoadData();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    private class UsersResult { public List<UserDto> Items { get; set; } = new(); }
+    private class UserDto
+    {
+        public Guid Id { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string[] Roles { get; set; } = [];
+    }
+}

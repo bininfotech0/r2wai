@@ -1,0 +1,97 @@
+services:
+  r2wai-web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.web
+    ports:
+      - "8080:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ApiBaseUrl=http://r2wai-api
+    depends_on:
+      r2wai-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - r2wai-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  r2wai-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "5000:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=r2wai;Username=r2wai;Password=${DB_PASSWORD}
+      - Authentication__Jwt__SecretKey=${JWT_SECRET}
+      - Authentication__Jwt__ExpirationMinutes=15
+      - Authentication__Jwt__RefreshTokenExpirationDays=7
+      - AI__OpenAI__ApiKey=${OPENAI_API_KEY}
+      - Storage__Provider=local
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - Email__SmtpHost=${SMTP_HOST:-}
+      - Email__SmtpPort=${SMTP_PORT:-587}
+      - Email__SmtpUser=${SMTP_USER:-}
+      - Email__SmtpPassword=${SMTP_PASSWORD:-}
+      - Email__FromAddress=${EMAIL_FROM:-noreply@r2wai.com}
+      - Email__EnableSsl=true
+      - CORS__AllowedOrigins__0=${CORS_ORIGIN_0:-http://localhost:8080}
+      - CORS__AllowedOrigins__1=${CORS_ORIGIN_1:-}
+      - CORS__AllowedOrigins__2=${CORS_ORIGIN_2:-}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - r2wai-network
+    volumes:
+      - api-storage:/app/App_Data/Storage
+      - api-logs:/app/Logs
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: r2wai
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: r2wai
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backups:/backups
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U r2wai -d r2wai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - r2wai-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+volumes:
+  postgres-data:
+  api-storage:
+  api-logs:
+
+networks:
+  r2wai-network:
+    driver: bridge

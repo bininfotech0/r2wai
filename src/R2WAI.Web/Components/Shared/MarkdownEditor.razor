@@ -1,0 +1,186 @@
+@* Markdown Editor with formatting toolbar — no JS dependencies *@
+
+<div class="md-editor @(Focused ? "md-editor--focused" : "")" style="@Style">
+    @* Toolbar *@
+    <div class="md-editor-toolbar">
+        <div class="d-flex align-center gap-1 flex-wrap">
+            <MudTooltip Text="Bold (Ctrl+B)" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.FormatBold" Size="Size.Small"
+                               OnClick="@(() => InsertFormatting("**", "**", "bold text"))"
+                               Class="md-toolbar-btn" aria-label="Bold" />
+            </MudTooltip>
+            <MudTooltip Text="Italic (Ctrl+I)" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.FormatItalic" Size="Size.Small"
+                               OnClick="@(() => InsertFormatting("*", "*", "italic text"))"
+                               Class="md-toolbar-btn" aria-label="Italic" />
+            </MudTooltip>
+            <MudTooltip Text="Code" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.Code" Size="Size.Small"
+                               OnClick="@(() => InsertFormatting("`", "`", "code"))"
+                               Class="md-toolbar-btn" aria-label="Inline code" />
+            </MudTooltip>
+
+            <div class="md-toolbar-divider"></div>
+
+            <MudTooltip Text="Heading" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.Title" Size="Size.Small"
+                               OnClick="@(() => InsertPrefix("## ", "Heading"))"
+                               Class="md-toolbar-btn" aria-label="Heading" />
+            </MudTooltip>
+            <MudTooltip Text="Bullet list" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.FormatListBulleted" Size="Size.Small"
+                               OnClick="@(() => InsertPrefix("- ", "List item"))"
+                               Class="md-toolbar-btn" aria-label="Bullet list" />
+            </MudTooltip>
+            <MudTooltip Text="Numbered list" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.FormatListNumbered" Size="Size.Small"
+                               OnClick="@(() => InsertPrefix("1. ", "List item"))"
+                               Class="md-toolbar-btn" aria-label="Numbered list" />
+            </MudTooltip>
+
+            <div class="md-toolbar-divider"></div>
+
+            <MudTooltip Text="Code block" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.DataObject" Size="Size.Small"
+                               OnClick="@(() => InsertBlock("```\n", "\n```", "code here"))"
+                               Class="md-toolbar-btn" aria-label="Code block" />
+            </MudTooltip>
+            <MudTooltip Text="Quote" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.FormatQuote" Size="Size.Small"
+                               OnClick="@(() => InsertPrefix("> ", "Quote"))"
+                               Class="md-toolbar-btn" aria-label="Blockquote" />
+            </MudTooltip>
+            <MudTooltip Text="Horizontal rule" Placement="Placement.Top">
+                <MudIconButton Icon="@Icons.Material.Filled.HorizontalRule" Size="Size.Small"
+                               OnClick="@(() => InsertBlock("\n---\n", "", ""))"
+                               Class="md-toolbar-btn" aria-label="Horizontal rule" />
+            </MudTooltip>
+
+            <MudSpacer />
+
+            @* Mode toggle *@
+            <MudToggleIconButton @bind-Toggled="ShowPreview"
+                                 Icon="@Icons.Material.Outlined.Visibility" ToggledIcon="@Icons.Material.Filled.Edit"
+                                 Size="Size.Small" Color="Color.Default" ToggledColor="Color.Primary"
+                                 Class="md-toolbar-btn" aria-label="Toggle preview" />
+
+            @if (!string.IsNullOrEmpty(HelperText))
+            {
+                <MudTooltip Text="@HelperText" Placement="Placement.Top">
+                    <MudIconButton Icon="@Icons.Material.Outlined.HelpOutline" Size="Size.Small"
+                                   Color="Color.Default" Class="md-toolbar-btn" Style="opacity: 0.5;" />
+                </MudTooltip>
+            }
+        </div>
+    </div>
+
+    @* Editor / Preview *@
+    @if (ShowPreview)
+    {
+        <div class="md-editor-preview pa-3" style="min-height: @(Lines * 24)px; max-height: @(MaxHeight);">
+            @if (string.IsNullOrWhiteSpace(Value))
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Style="opacity: 0.5; font-style: italic;">Nothing to preview</MudText>
+            }
+            else
+            {
+                <div class="md-rendered">
+                    @((MarkupString)RenderMarkdown(Value))
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <MudTextField @bind-Value="Value" Lines="@Lines" Variant="Variant.Text"
+                      Placeholder="@Placeholder" Class="md-editor-textarea"
+                      DisableUnderLine="true" Immediate="true"
+                      OnFocus="@(() => { Focused = true; StateHasChanged(); })"
+                      OnBlur="@(() => { Focused = false; StateHasChanged(); })"
+                      Style="@($"font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 0.8125rem; line-height: 1.6;")" />
+    }
+
+    @* Footer *@
+    <div class="md-editor-footer">
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.65rem;">
+            @(Value?.Length ?? 0) characters
+            @if (MaxLength > 0)
+            {
+                <text> / @MaxLength</text>
+            }
+        </MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.65rem;">
+            Markdown supported
+        </MudText>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Write with markdown...";
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public int Lines { get; set; } = 6;
+    [Parameter] public string MaxHeight { get; set; } = "400px";
+    [Parameter] public int MaxLength { get; set; }
+    [Parameter] public string? Style { get; set; }
+
+    private bool ShowPreview;
+    private bool Focused;
+
+    private async Task InsertFormatting(string prefix, string suffix, string placeholder)
+    {
+        Value = (Value ?? "") + $"{prefix}{placeholder}{suffix}";
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task InsertPrefix(string prefix, string placeholder)
+    {
+        var newLine = string.IsNullOrEmpty(Value) || Value.EndsWith('\n') ? "" : "\n";
+        Value = (Value ?? "") + $"{newLine}{prefix}{placeholder}";
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task InsertBlock(string prefix, string suffix, string placeholder)
+    {
+        var newLine = string.IsNullOrEmpty(Value) || Value.EndsWith('\n') ? "" : "\n";
+        Value = (Value ?? "") + $"{newLine}{prefix}{placeholder}{suffix}";
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private static string RenderMarkdown(string? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown)) return string.Empty;
+
+        var html = System.Net.WebUtility.HtmlEncode(markdown);
+
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"```([\s\S]*?)```",
+            m => $"<pre><code>{m.Groups[1].Value.Trim()}</code></pre>");
+
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*(.+?)\*", "<em>$1</em>");
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"`(.+?)`", "<code>$1</code>");
+
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^## (.+)$", "<h4>$1</h4>",
+            System.Text.RegularExpressions.RegexOptions.Multiline);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^# (.+)$", "<h3>$1</h3>",
+            System.Text.RegularExpressions.RegexOptions.Multiline);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^### (.+)$", "<h5>$1</h5>",
+            System.Text.RegularExpressions.RegexOptions.Multiline);
+
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^&gt; (.+)$", "<blockquote>$1</blockquote>",
+            System.Text.RegularExpressions.RegexOptions.Multiline);
+
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^- (.+)$", "<li>$1</li>",
+            System.Text.RegularExpressions.RegexOptions.Multiline);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"(<li>.*</li>)", "<ul>$1</ul>");
+
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"^---$", "<hr/>",
+            System.Text.RegularExpressions.RegexOptions.Multiline);
+
+        html = html.Replace("\n", "<br/>");
+
+        return html;
+    }
+}

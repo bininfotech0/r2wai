@@ -1,0 +1,45 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Routing
+
+<Router AppAssembly="@typeof(Routes).Assembly">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated != true)
+                {
+                    <RedirectToLogin />
+                }
+                else
+                {
+                    <div class="d-flex flex-column align-center justify-center pa-8" style="min-height: 60vh;">
+                        <div class="empty-state-icon" style="width: 72px; height: 72px;">
+                            <MudIcon Icon="@Icons.Material.Outlined.Lock" Size="Size.Large" Color="Color.Warning" Style="opacity: 0.7;" />
+                        </div>
+                        <MudText Typo="Typo.h6" Style="font-weight: 700;" Class="mt-4">Access Denied</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2" Style="max-width: 360px; text-align: center; line-height: 1.6;">
+                            You don't have permission to access this resource. Contact your administrator for access.
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4 btn-gradient"
+                                   StartIcon="@Icons.Material.Filled.Home" Href="/" Style="border-radius: 10px;">
+                            Go Home
+                        </MudButton>
+                    </div>
+                }
+            </NotAuthorized>
+            <Authorizing>
+                <div class="d-flex flex-column align-center justify-center" style="min-height: 60vh;">
+                    <div style="width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, #7C3AED, #6D28D9, #4F46E5); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3); animation: pulse-soft 2s ease-in-out infinite;">
+                        <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color: white; font-size: 1.25rem;" />
+                    </div>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-3" Style="font-weight: 500;">Verifying access...</MudText>
+                </div>
+            </Authorizing>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="@typeof(Layout.MainLayout)">
+            <NotFoundPage />
+        </LayoutView>
+    </NotFound>
+</Router>

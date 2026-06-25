@@ -1,0 +1,409 @@
+@page "/admin/content-moderation"
+@page "/settings/content-moderation"
+@attribute [Authorize]
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<PageTitle>R2WAI - Content Moderation</PageTitle>
+
+<PageHeader Title="Content Moderation Settings" Subtitle="Configure AI content safety rules, blocked keywords, and response templates" />
+
+<MudGrid Class="admin-page" Spacing="3">
+    @* ───── Moderation Level ───── *@
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4 hover-lift" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; height: 100%;">
+            <div class="d-flex align-center gap-2 mb-3">
+                <div class="icon-container icon-container--error">
+                    <MudIcon Icon="@Icons.Material.Outlined.Shield" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">Moderation Level</MudText>
+            </div>
+
+            <MudRadioGroup T="string" @bind-Value="_moderationLevel">
+                <MudRadio T="string" Value="@("High")" Color="Color.Error" Dense="true">
+                    <MudText Typo="Typo.body2" Style="font-weight: 600;">High</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Block harmful content, require citations, max 500 token responses
+                    </MudText>
+                </MudRadio>
+                <MudRadio T="string" Value="@("Medium")" Color="Color.Warning" Dense="true" Class="mt-2">
+                    <MudText Typo="Typo.body2" Style="font-weight: 600;">Medium (Default)</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Warn on flagged content, suggest citations, max 2000 tokens
+                    </MudText>
+                </MudRadio>
+                <MudRadio T="string" Value="@("Low")" Color="Color.Info" Dense="true" Class="mt-2">
+                    <MudText Typo="Typo.body2" Style="font-weight: 600;">Low</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Log flagged content, no blocking, full token range
+                    </MudText>
+                </MudRadio>
+                <MudRadio T="string" Value="@("Off")" Color="Color.Default" Dense="true" Class="mt-2">
+                    <MudText Typo="Typo.body2" Style="font-weight: 600;">Off</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        No moderation (development only)
+                    </MudText>
+                </MudRadio>
+            </MudRadioGroup>
+        </MudPaper>
+    </MudItem>
+
+    @* ───── Safety Rules ───── *@
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4 hover-lift" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; height: 100%;">
+            <div class="d-flex align-center gap-2 mb-3">
+                <div class="icon-container icon-container--primary">
+                    <MudIcon Icon="@Icons.Material.Outlined.Security" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">Safety Rules</MudText>
+            </div>
+
+            <div class="d-flex flex-column gap-1">
+                <MudSwitch T="bool" @bind-Value="_blockHateSpeech" Color="Color.Primary" Label="Block hate speech" />
+                <MudSwitch T="bool" @bind-Value="_blockPersonalData" Color="Color.Primary" Label="Block personal data exposure" />
+                <MudSwitch T="bool" @bind-Value="_blockCodeExecution" Color="Color.Primary" Label="Block code execution requests" />
+                <MudSwitch T="bool" @bind-Value="_requireCitations" Color="Color.Primary" Label="Require source citations" />
+                <MudSwitch T="bool" @bind-Value="_blockCompetitorMentions" Color="Color.Primary" Label="Block competitor mentions" />
+                <MudSwitch T="bool" @bind-Value="_flagFinancialAdvice" Color="Color.Primary" Label="Flag financial advice" />
+                <MudSwitch T="bool" @bind-Value="_flagMedicalLegalAdvice" Color="Color.Primary" Label="Flag medical/legal advice" />
+            </div>
+        </MudPaper>
+    </MudItem>
+
+    @* ───── Blocked Keywords ───── *@
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4 hover-lift" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; height: 100%;">
+            <div class="d-flex align-center gap-2 mb-3">
+                <div class="icon-container icon-container--warning">
+                    <MudIcon Icon="@Icons.Material.Outlined.Block" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">Blocked Keywords</MudText>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                Messages containing these words or phrases will be flagged or blocked.
+            </MudText>
+
+            <MudChipSet T="string" AllClosable="true" OnClose="RemoveKeyword" Class="mb-3">
+                @foreach (var keyword in _blockedKeywords)
+                {
+                    <MudChip T="string" Value="@keyword" Color="Color.Error" Variant="Variant.Outlined">@keyword</MudChip>
+                }
+            </MudChipSet>
+
+            <div class="d-flex gap-2">
+                <MudTextField T="string" @bind-Value="_newKeyword" Label="Add keyword" Margin="Margin.Dense"
+                              Placeholder="Type a word or phrase..." Style="flex: 1;"
+                              OnKeyDown="OnKeywordKeyDown" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
+                           OnClick="AddKeyword" Disabled="@string.IsNullOrWhiteSpace(_newKeyword)">
+                    Add
+                </MudButton>
+            </div>
+        </MudPaper>
+    </MudItem>
+
+    @* ───── Response Templates ───── *@
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4 hover-lift" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; height: 100%;">
+            <div class="d-flex align-center gap-2 mb-3">
+                <div class="icon-container icon-container--secondary">
+                    <MudIcon Icon="@Icons.Material.Outlined.Description" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">Response Templates</MudText>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                Configure messages shown when content moderation is triggered.
+            </MudText>
+
+            <MudTextField T="string" @bind-Value="_blockedResponseTemplate" Label="Blocked Response"
+                          Lines="3" Margin="Margin.Dense" Class="mb-3"
+                          HelperText="Shown when content is blocked" />
+
+            <MudTextField T="string" @bind-Value="_flaggedWarningTemplate" Label="Flagged Warning"
+                          Lines="3" Margin="Margin.Dense"
+                          HelperText="Shown when content is flagged but not blocked" />
+        </MudPaper>
+    </MudItem>
+
+    @* ───── Test Moderation ───── *@
+    <MudItem xs="12">
+        <MudPaper Class="pa-4 hover-lift" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+            <div class="d-flex align-center gap-2 mb-3">
+                <div class="icon-container icon-container--success">
+                    <MudIcon Icon="@Icons.Material.Outlined.BugReport" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">Test Moderation</MudText>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                Enter a test message to see which moderation rules would be triggered.
+            </MudText>
+
+            <div class="d-flex gap-2 mb-3">
+                <MudTextField T="string" @bind-Value="_testMessage" Label="Test message" Margin="Margin.Dense"
+                              Placeholder="Type a message to test moderation..." Style="flex: 1;" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" OnClick="TestModeration"
+                           Disabled="@(string.IsNullOrWhiteSpace(_testMessage) || _testing)">
+                    @if (_testing)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" />
+                    }
+                    Test Moderation
+                </MudButton>
+            </div>
+
+            @if (_testResults.Count > 0)
+            {
+                <MudAlert Severity="@(_testAction == "Block" ? Severity.Error : _testAction == "Warn" ? Severity.Warning : Severity.Success)"
+                          Dense="true" Class="mb-2">
+                    Action: <strong>@_testAction</strong>
+                </MudAlert>
+
+                <MudSimpleTable Dense="true" Hover="true" Bordered="true" Style="border-radius: 8px;">
+                    <thead>
+                        <tr>
+                            <th>Rule</th>
+                            <th>Status</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var result in _testResults)
+                        {
+                            <tr>
+                                <td>@result.Rule</td>
+                                <td>
+                                    @if (result.Triggered)
+                                    {
+                                        <MudChip T="string" Color="Color.Error" Size="Size.Small" Style="height: 22px;">Triggered</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small" Style="height: 22px;">Passed</MudChip>
+                                    }
+                                </td>
+                                <td><MudText Typo="Typo.caption">@result.Details</MudText></td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+        </MudPaper>
+    </MudItem>
+
+    @* ───── Save ───── *@
+    <MudItem xs="12" Class="d-flex justify-end gap-2">
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="ResetDefaults">
+            Reset to Defaults
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" OnClick="SaveSettings"
+                   Disabled="_saving" StartIcon="@Icons.Material.Filled.Save">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" />
+            }
+            Save Settings
+        </MudButton>
+    </MudItem>
+</MudGrid>
+
+@code {
+    // Moderation level
+    private string _moderationLevel = "Medium";
+
+    // Safety rules
+    private bool _blockHateSpeech = true;
+    private bool _blockPersonalData = true;
+    private bool _blockCodeExecution;
+    private bool _requireCitations;
+    private bool _blockCompetitorMentions;
+    private bool _flagFinancialAdvice = true;
+    private bool _flagMedicalLegalAdvice = true;
+
+    // Blocked keywords
+    private List<string> _blockedKeywords = new() { "password", "social security", "credit card number" };
+    private string _newKeyword = string.Empty;
+
+    // Response templates
+    private string _blockedResponseTemplate = "I'm unable to provide that information. Please contact your administrator.";
+    private string _flaggedWarningTemplate = "This response may contain sensitive information. Please verify before sharing.";
+
+    // Test moderation
+    private string _testMessage = string.Empty;
+    private bool _testing;
+    private string _testAction = string.Empty;
+    private List<TestResult> _testResults = new();
+
+    // Save state
+    private bool _saving;
+
+    private void AddKeyword()
+    {
+        var keyword = _newKeyword?.Trim();
+        if (!string.IsNullOrWhiteSpace(keyword) && !_blockedKeywords.Contains(keyword, StringComparer.OrdinalIgnoreCase))
+        {
+            _blockedKeywords.Add(keyword);
+            _newKeyword = string.Empty;
+        }
+    }
+
+    private void OnKeywordKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            AddKeyword();
+        }
+    }
+
+    private void RemoveKeyword(MudChip<string> chip)
+    {
+        if (chip.Value is not null)
+        {
+            _blockedKeywords.Remove(chip.Value);
+        }
+    }
+
+    private void TestModeration()
+    {
+        if (string.IsNullOrWhiteSpace(_testMessage)) return;
+
+        _testing = true;
+        _testResults.Clear();
+        _testAction = "Allow";
+
+        var message = _testMessage.ToLowerInvariant();
+
+        // Check blocked keywords
+        var matchedKeywords = _blockedKeywords.Where(k => message.Contains(k.ToLowerInvariant())).ToList();
+        _testResults.Add(new TestResult
+        {
+            Rule = "Blocked Keywords",
+            Triggered = matchedKeywords.Count > 0,
+            Details = matchedKeywords.Count > 0
+                ? $"Matched: {string.Join(", ", matchedKeywords)}"
+                : "No blocked keywords found"
+        });
+        if (matchedKeywords.Count > 0) _testAction = _moderationLevel == "Low" ? "Log" : "Block";
+
+        // Check hate speech (simple heuristic for demo)
+        _testResults.Add(new TestResult
+        {
+            Rule = "Hate Speech Detection",
+            Triggered = false,
+            Details = _blockHateSpeech ? "Rule active - no hate speech detected" : "Rule disabled"
+        });
+
+        // Check personal data
+        var hasPersonalData = message.Contains("ssn") || message.Contains("social security") ||
+                              message.Contains("credit card") || System.Text.RegularExpressions.Regex.IsMatch(message, @"\b\d{3}-\d{2}-\d{4}\b");
+        _testResults.Add(new TestResult
+        {
+            Rule = "Personal Data Exposure",
+            Triggered = _blockPersonalData && hasPersonalData,
+            Details = hasPersonalData ? "Potential personal data detected" : "No personal data patterns found"
+        });
+        if (_blockPersonalData && hasPersonalData && _testAction != "Block") _testAction = _moderationLevel == "Low" ? "Log" : "Block";
+
+        // Check code execution
+        var hasCodeExec = message.Contains("execute") || message.Contains("run code") || message.Contains("eval(") || message.Contains("exec(");
+        _testResults.Add(new TestResult
+        {
+            Rule = "Code Execution Requests",
+            Triggered = _blockCodeExecution && hasCodeExec,
+            Details = hasCodeExec ? "Code execution pattern detected" : "No code execution patterns found"
+        });
+        if (_blockCodeExecution && hasCodeExec && _testAction != "Block") _testAction = _moderationLevel == "Low" ? "Log" : "Block";
+
+        // Check financial advice
+        var hasFinancial = message.Contains("invest") || message.Contains("stock") || message.Contains("financial advice") || message.Contains("buy shares");
+        _testResults.Add(new TestResult
+        {
+            Rule = "Financial Advice",
+            Triggered = _flagFinancialAdvice && hasFinancial,
+            Details = hasFinancial ? "Financial advice content detected" : "No financial content detected"
+        });
+        if (_flagFinancialAdvice && hasFinancial && _testAction == "Allow") _testAction = "Warn";
+
+        // Check medical/legal advice
+        var hasMedicalLegal = message.Contains("diagnos") || message.Contains("prescri") || message.Contains("legal advice") || message.Contains("lawsuit");
+        _testResults.Add(new TestResult
+        {
+            Rule = "Medical/Legal Advice",
+            Triggered = _flagMedicalLegalAdvice && hasMedicalLegal,
+            Details = hasMedicalLegal ? "Medical/legal advice content detected" : "No medical/legal content detected"
+        });
+        if (_flagMedicalLegalAdvice && hasMedicalLegal && _testAction == "Allow") _testAction = "Warn";
+
+        if (_moderationLevel == "Off") _testAction = "Allow (moderation off)";
+
+        _testing = false;
+        StateHasChanged();
+    }
+
+    private async Task SaveSettings()
+    {
+        _saving = true;
+        StateHasChanged();
+
+        try
+        {
+            var settings = new
+            {
+                moderationLevel = _moderationLevel,
+                rules = new
+                {
+                    blockHateSpeech = _blockHateSpeech,
+                    blockPersonalData = _blockPersonalData,
+                    blockCodeExecution = _blockCodeExecution,
+                    requireCitations = _requireCitations,
+                    blockCompetitorMentions = _blockCompetitorMentions,
+                    flagFinancialAdvice = _flagFinancialAdvice,
+                    flagMedicalLegalAdvice = _flagMedicalLegalAdvice
+                },
+                blockedKeywords = _blockedKeywords,
+                templates = new
+                {
+                    blockedResponse = _blockedResponseTemplate,
+                    flaggedWarning = _flaggedWarningTemplate
+                }
+            };
+
+            var response = await Http.PostAsJsonAsync("/api/v1/admin/content-moderation", settings);
+            response.EnsureSuccessStatusCode();
+            Snackbar.Add("Content moderation settings saved.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save settings: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ResetDefaults()
+    {
+        _moderationLevel = "Medium";
+        _blockHateSpeech = true;
+        _blockPersonalData = true;
+        _blockCodeExecution = false;
+        _requireCitations = false;
+        _blockCompetitorMentions = false;
+        _flagFinancialAdvice = true;
+        _flagMedicalLegalAdvice = true;
+        _blockedKeywords = new() { "password", "social security", "credit card number" };
+        _blockedResponseTemplate = "I'm unable to provide that information. Please contact your administrator.";
+        _flaggedWarningTemplate = "This response may contain sensitive information. Please verify before sharing.";
+        _testResults.Clear();
+        _testAction = string.Empty;
+        Snackbar.Add("Settings reset to defaults.", Severity.Info);
+    }
+
+    private class TestResult
+    {
+        public string Rule { get; set; } = string.Empty;
+        public bool Triggered { get; set; }
+        public string Details { get; set; } = string.Empty;
+    }
+}

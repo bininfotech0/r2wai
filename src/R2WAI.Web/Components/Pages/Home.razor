@@ -1,0 +1,682 @@
+@page "/"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>R2WAI - AI Command Center</PageTitle>
+
+<div class="greeting-section">
+    <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;">Good @GetTimeOfDay(), @_userName.</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-1" Style="line-height: 1.5;">Here's what needs your attention.</MudText>
+</div>
+
+@* Getting Started *@
+@if (_showGettingStarted)
+{
+    <GettingStarted OnDismiss="DismissGettingStarted" />
+}
+
+@* AI Command Bar *@
+<div class="ai-command-bar mb-5">
+    <div class="d-flex align-center gap-2 mb-3">
+        <div class="icon-container icon-container--primary" style="width: 28px; height: 28px; border-radius: 8px;">
+            <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Color="Color.Primary" Style="font-size: 0.9rem;" />
+        </div>
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">What would you like to do?</MudText>
+    </div>
+    <MudTextField @bind-Value="_commandInput" Placeholder="Create an HR assistant, build an approval workflow, search knowledge..."
+                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                  Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Send"
+                  AdornmentColor="Color.Primary" OnAdornmentClick="HandleCommand"
+                  OnKeyUp="HandleCommandKeyUp" Immediate="true"
+                  Style="border-radius: 10px;" aria-label="AI Command input" />
+
+    @* Knowledge Base Search Results *@
+    @if (_searching)
+    {
+        <MudPaper Elevation="2" Class="pa-4 mt-3" Style="border-radius: 12px;">
+            <div class="d-flex align-center gap-2 mb-3">
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Searching knowledge bases...</MudText>
+            </div>
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="40px" Class="mb-2" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="40px" Class="mb-2" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="40px" />
+        </MudPaper>
+    }
+    else if (_searchResults.Count > 0)
+    {
+        <MudPaper Elevation="2" Class="pa-4 mt-3" Style="border-radius: 12px; max-height: 400px; overflow-y: auto;">
+            <div class="d-flex justify-space-between align-center mb-3">
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">
+                    <MudIcon Icon="@Icons.Material.Outlined.Search" Size="Size.Small" Style="vertical-align: middle;" />
+                    Search Results
+                </MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="ClearSearchResults" />
+            </div>
+            @foreach (var group in _searchResults.GroupBy(r => r.KnowledgeBaseName))
+            {
+                <div class="mb-3">
+                    <div class="d-flex align-center gap-2 mb-2">
+                        <MudIcon Icon="@Icons.Material.Outlined.MenuBook" Size="Size.Small" Color="Color.Primary" />
+                        <MudText Typo="Typo.caption" Style="font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;" Color="Color.Primary">
+                            @group.Key
+                        </MudText>
+                    </div>
+                    @foreach (var result in group)
+                    {
+                        <MudPaper Elevation="0" Class="pa-3 mb-2 search-result-item" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px; cursor: pointer;"
+                                  @onclick="@(() => Navigation.NavigateTo("/knowledgebases"))">
+                            <MudText Typo="Typo.body2" Style="line-height: 1.5;">@((MarkupString)HighlightSearchTerm(result.Content, _lastSearchQuery))</MudText>
+                            @if (!string.IsNullOrEmpty(result.SourceName))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                    <MudIcon Icon="@Icons.Material.Outlined.Description" Size="Size.Small" Style="font-size: 12px; vertical-align: middle;" />
+                                    @result.SourceName
+                                    <span style="margin-left: 8px; opacity: 0.6;">Score: @result.Score.ToString("P0")</span>
+                                </MudText>
+                            }
+                        </MudPaper>
+                    }
+                </div>
+            }
+        </MudPaper>
+    }
+
+    <div class="d-flex gap-2 mt-3 flex-wrap">
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add" Class="quick-action-chip"
+                   OnClick="@(() => Navigation.NavigateTo("/assistant-studio"))">
+            New Assistant
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.Add" Class="quick-action-chip"
+                   OnClick="@(() => Navigation.NavigateTo("/workflow-studio"))">
+            New Workflow
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Tertiary"
+                   StartIcon="@Icons.Material.Filled.CloudUpload" Class="quick-action-chip"
+                   OnClick="@(() => Navigation.NavigateTo("/documents"))">
+            Upload Docs
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.Extension" Class="quick-action-chip"
+                   OnClick="@(() => Navigation.NavigateTo("/workflow-studio/integrations"))">
+            Integrations
+        </MudButton>
+    </div>
+</div>
+
+@* Action Cards — Needs Attention *@
+<MudGrid Class="mb-5" Spacing="3">
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 action-card" Elevation="0" @onclick="@(() => Navigation.NavigateTo("/inbox"))">
+            <div class="d-flex align-center gap-3 mb-2">
+                <div class="icon-container icon-container--error">
+                    <MudIcon Icon="@Icons.Material.Outlined.Inbox" Color="Color.Error" Size="Size.Small" />
+                </div>
+                <div>
+                    <MudText Typo="Typo.h5" Style="font-weight: 800; letter-spacing: -0.02em;" Class="animate-count">@_pendingApprovals</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 500;">Pending Approvals</MudText>
+                </div>
+            </div>
+            <MudText Typo="Typo.caption" Color="@(_pendingApprovals > 0 ? Color.Error : Color.Success)" Style="font-weight: 600;">
+                @(_pendingApprovals > 0 ? "Requires your attention" : "All clear")
+            </MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 action-card" Elevation="0" @onclick="@(() => Navigation.NavigateTo("/operations"))">
+            <div class="d-flex align-center gap-3 mb-2">
+                <div class="icon-container icon-container--secondary">
+                    <MudIcon Icon="@Icons.Material.Outlined.PlayCircle" Color="Color.Secondary" Size="Size.Small" />
+                </div>
+                <div>
+                    <MudText Typo="Typo.h5" Style="font-weight: 800; letter-spacing: -0.02em;" Class="animate-count">@_activeWorkflows</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 500;">Active Workflows</MudText>
+                </div>
+            </div>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@_completedToday completed today</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <MudPaper Class="pa-4 action-card" Elevation="0" @onclick="@(() => Navigation.NavigateTo("/operations"))">
+            <div class="d-flex align-center gap-3 mb-2">
+                <div class="icon-container icon-container--success">
+                    <MudIcon Icon="@Icons.Material.Outlined.MonitorHeart" Color="Color.Tertiary" Size="Size.Small" />
+                </div>
+                <div>
+                    <MudText Typo="Typo.h5" Style="font-weight: 800; letter-spacing: -0.02em;" Class="animate-count">@_healthStatus</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 500;">System Health</MudText>
+                </div>
+            </div>
+            <div class="d-flex gap-2 align-center">
+                <span class="health-dot health-dot--@(_healthStatus == "Healthy" ? "healthy" : "degraded")"></span>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">All services operational</MudText>
+            </div>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* AI Insights *@
+@if (_insights.Count > 0)
+{
+    <MudText Typo="Typo.h6" Class="mb-3 section-title">AI Insights</MudText>
+    <div class="d-flex flex-column gap-3 mb-5 stagger-in">
+        @foreach (var insight in _insights)
+        {
+            <AiInsightCard Title="@insight.Title" Description="@insight.Description"
+                           PrimaryActionText="@insight.ActionText"
+                           PrimaryAction="@(() => HandleInsightAction(insight))"
+                           SecondaryAction="@(() => DismissInsight(insight))" />
+        }
+    </div>
+}
+
+@* Productivity Metrics + Recent Activity *@
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="7">
+        <MudText Typo="Typo.h6" Class="mb-3 section-title">Recent Activity</MudText>
+        <MudPaper Elevation="0" Class="pa-0" Style="border: 1px solid var(--mud-palette-divider); overflow: hidden;">
+            @if (_loading)
+            {
+                <div class="pa-4">
+                    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Timeline" />
+                </div>
+            }
+            else if (_activities.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Filled.Timeline"
+                            Title="No recent activity"
+                            Description="Your recent actions will appear here as you use the platform."
+                            MinHeight="200px" />
+            }
+            else
+            {
+                <MudList T="string" Dense="true" Class="stagger-in">
+                    @foreach (var activity in _activities)
+                    {
+                        <MudListItem Icon="@GetActivityIcon(activity.Action)" IconColor="@GetActivityColor(activity.Action)">
+                            <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                                <div>
+                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@activity.Description</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@activity.EntityType</MudText>
+                                </div>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                                         Style="font-size: 0.65rem;">
+                                    @FormatTimeAgo(activity.Timestamp)
+                                </MudChip>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="5">
+        <MudText Typo="Typo.h6" Class="mb-3 section-title">Platform Metrics</MudText>
+        <MudGrid Spacing="3">
+            <MudItem xs="6">
+                <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
+                          Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
+                          @onclick="@(() => Navigation.NavigateTo("/assistant-studio"))">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;">Assistants</MudText>
+                    <div class="d-flex justify-space-between align-center mt-1">
+                        <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalAssistants</MudText>
+                        <SparklineChart Data="@GenerateSparkline(_totalAssistants)" Color="#7C3AED" Width="80" Height="28" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6">
+                <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
+                          Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
+                          @onclick="@(() => Navigation.NavigateTo("/workflow-studio"))">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;">Workflows</MudText>
+                    <div class="d-flex justify-space-between align-center mt-1">
+                        <MudText Typo="Typo.h4" Color="Color.Secondary" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalWorkflows</MudText>
+                        <SparklineChart Data="@GenerateSparkline(_totalWorkflows)" Color="#3B82F6" Width="80" Height="28" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6">
+                <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
+                          Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
+                          @onclick="@(() => Navigation.NavigateTo("/documents"))">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;">Documents</MudText>
+                    <div class="d-flex justify-space-between align-center mt-1">
+                        <MudText Typo="Typo.h4" Color="Color.Tertiary" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalDocuments</MudText>
+                        <SparklineChart Data="@GenerateSparkline(_totalDocuments)" Color="#10B981" Width="80" Height="28" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6">
+                <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
+                          Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
+                          @onclick="@(() => Navigation.NavigateTo("/assistant-studio/knowledge"))">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;">Knowledge Bases</MudText>
+                    <div class="d-flex justify-space-between align-center mt-1">
+                        <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalKnowledgeBases</MudText>
+                        <SparklineChart Data="@GenerateSparkline(_totalKnowledgeBases)" Color="#6B7280" Width="80" Height="28" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.h6" Class="mb-3 mt-5 section-title">System Health</MudText>
+        <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+            @if (_healthChecks.Count > 0)
+            {
+                <div class="stagger-in">
+                    @foreach (var check in _healthChecks)
+                    {
+                        <div class="d-flex justify-space-between align-center py-2">
+                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@check.Name</MudText>
+                            <div class="d-flex align-center gap-2">
+                                <span class="health-dot health-dot--@(check.Status == "Healthy" ? "healthy" : check.Status == "Degraded" ? "degraded" : "unhealthy")"></span>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 500;">@check.Status</MudText>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="d-flex align-center gap-2 justify-center pa-2">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Loading health data...</MudText>
+                </div>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private string _commandInput = string.Empty;
+    private string _userName = "there";
+    private bool _loading = true;
+    private int _pendingApprovals;
+    private int _activeWorkflows;
+    private int _completedToday;
+    private string _healthStatus = "Healthy";
+    private int _totalAssistants;
+    private int _totalWorkflows;
+    private int _totalDocuments;
+    private int _totalKnowledgeBases;
+    private List<ActivityItem> _activities = new();
+    private List<HealthEntry> _healthChecks = new();
+    private List<InsightItem> _insights = new();
+    private bool _showGettingStarted;
+    private List<KbSearchResultItem> _searchResults = new();
+    private bool _searching;
+    private string _lastSearchQuery = string.Empty;
+    private List<KnowledgeBaseListDto> _knowledgeBases = new();
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            if (AuthState is not null)
+            {
+                var state = await AuthState;
+                var email = state.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                var firstName = state.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
+                _userName = firstName ?? email?.Split('@')[0] ?? "there";
+            }
+        }
+        catch { }
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+            var metricsTask = Http.GetFromJsonAsync<MetricsDto>("/api/v1/operations/metrics");
+            var logsTask = Http.GetFromJsonAsync<LogsResult>("/api/v1/operations/audit-logs?pageSize=10");
+            var healthTask = LoadHealth();
+            var approvalsTask = LoadApprovals();
+            var kbTask = Http.GetFromJsonAsync<KbListResult>("/api/v1/knowledgebases");
+
+            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, approvalsTask, kbTask);
+            var completed = await Task.WhenAny(allTasks, Task.Delay(Timeout.Infinite, cts.Token));
+            if (completed != allTasks)
+            {
+                Snackbar.Add("Dashboard data is taking longer than expected.", Severity.Warning);
+            }
+            try { await allTasks; } catch { }
+
+            var metrics = metricsTask.Result;
+            if (metrics is not null)
+            {
+                _totalAssistants = metrics.TotalAssistants;
+                _totalWorkflows = metrics.TotalWorkflows;
+                _activeWorkflows = metrics.ActiveWorkflows;
+                _totalDocuments = metrics.TotalDocuments;
+                _totalKnowledgeBases = metrics.TotalKnowledgeBases;
+                _completedToday = metrics.CompletedToday;
+                if (metrics.PendingApprovals > 0) _pendingApprovals = metrics.PendingApprovals;
+            }
+
+            _knowledgeBases = kbTask.Result?.Items ?? new();
+
+            _activities = (logsTask.Result?.Items ?? new())
+                .Select(l => new ActivityItem
+                {
+                    Action = l.Action,
+                    EntityType = l.EntityType,
+                    Description = $"{l.Action} {l.EntityType}" + (!string.IsNullOrEmpty(l.EntityId) ? $" #{l.EntityId[..Math.Min(8, l.EntityId.Length)]}" : ""),
+                    Timestamp = l.Timestamp
+                })
+                .ToList();
+
+            GenerateInsights();
+
+            _showGettingStarted = _totalAssistants == 0 && _totalWorkflows == 0 && _totalDocuments == 0;
+        }
+        catch
+        {
+            Snackbar.Add("Could not load dashboard data.", Severity.Warning);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void DismissGettingStarted() => _showGettingStarted = false;
+
+    private async Task LoadApprovals()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ApprovalsResult>("/api/v1/approvals/pending");
+            _pendingApprovals = result?.Items?.Count ?? 0;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Could not load approvals.", Severity.Warning);
+        }
+    }
+
+    private async Task LoadHealth()
+    {
+        try
+        {
+            var response = await Http.GetAsync("/health");
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                var doc = System.Text.Json.JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                _healthStatus = root.GetProperty("status").GetString() ?? "Unknown";
+
+                if (root.TryGetProperty("checks", out var checks))
+                {
+                    foreach (var check in checks.EnumerateArray())
+                    {
+                        _healthChecks.Add(new HealthEntry
+                        {
+                            Name = check.GetProperty("name").GetString() ?? "—",
+                            Status = check.GetProperty("status").GetString() ?? "Unknown"
+                        });
+                    }
+                }
+            }
+            else { _healthStatus = "Unhealthy"; }
+        }
+        catch { _healthStatus = "Unreachable"; }
+    }
+
+    private void GenerateInsights()
+    {
+        if (_pendingApprovals > 3)
+        {
+            _insights.Add(new InsightItem
+            {
+                Title = $"{_pendingApprovals} approvals waiting",
+                Description = "You have pending approvals that may be blocking workflows. Review them now to keep things moving.",
+                ActionText = "Review Now",
+                ActionUrl = "/inbox"
+            });
+        }
+
+        if (_totalAssistants > 0 && _activeWorkflows == 0)
+        {
+            _insights.Add(new InsightItem
+            {
+                Title = "No active workflows",
+                Description = "You have assistants configured but no workflows running. Consider creating a workflow to automate processes.",
+                ActionText = "Create Workflow",
+                ActionUrl = "/workflow-studio"
+            });
+        }
+
+        if (_totalDocuments == 0 && _totalAssistants > 0)
+        {
+            _insights.Add(new InsightItem
+            {
+                Title = "No documents uploaded",
+                Description = "Your assistants could provide better answers with knowledge base documents. Upload your organization's docs.",
+                ActionText = "Upload Documents",
+                ActionUrl = "/documents"
+            });
+        }
+    }
+
+    private void HandleInsightAction(InsightItem insight)
+    {
+        if (!string.IsNullOrEmpty(insight.ActionUrl))
+            Navigation.NavigateTo(insight.ActionUrl);
+    }
+
+    private void DismissInsight(InsightItem insight)
+    {
+        _insights.Remove(insight);
+    }
+
+    private async Task HandleCommandKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_commandInput))
+            await HandleCommand();
+    }
+
+    private async Task HandleCommand()
+    {
+        if (string.IsNullOrWhiteSpace(_commandInput)) return;
+        var cmd = _commandInput.ToLowerInvariant();
+        if (cmd.Contains("assistant")) { Navigation.NavigateTo("/assistant-studio"); _commandInput = string.Empty; return; }
+        else if (cmd.Contains("workflow")) { Navigation.NavigateTo("/workflow-studio"); _commandInput = string.Empty; return; }
+        else if (cmd.Contains("document") || cmd.Contains("upload")) { Navigation.NavigateTo("/documents"); _commandInput = string.Empty; return; }
+        else if (cmd.Contains("approval") || cmd.Contains("inbox")) { Navigation.NavigateTo("/inbox"); _commandInput = string.Empty; return; }
+        else if (cmd.Contains("operation") || cmd.Contains("monitor")) { Navigation.NavigateTo("/operations"); _commandInput = string.Empty; return; }
+        else if (cmd.Contains("user") || cmd.Contains("setting")) { Navigation.NavigateTo("/admin/users"); _commandInput = string.Empty; return; }
+        else
+        {
+            await SearchKnowledgeBases(_commandInput);
+        }
+    }
+
+    private async Task SearchKnowledgeBases(string query)
+    {
+        if (_knowledgeBases.Count == 0)
+        {
+            Navigation.NavigateTo($"/assistant-studio?q={Uri.EscapeDataString(query)}");
+            _commandInput = string.Empty;
+            return;
+        }
+
+        _searching = true;
+        _lastSearchQuery = query;
+        _searchResults.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var searchTasks = _knowledgeBases
+                .Where(kb => kb.Status == "Ready")
+                .Select(async kb =>
+                {
+                    try
+                    {
+                        var response = await Http.PostAsJsonAsync($"/api/v1/knowledgebases/{kb.Id}/search",
+                            new { Query = query, TopN = 3 });
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var result = await response.Content.ReadFromJsonAsync<KbSearchResult>();
+                            return (result?.Items ?? new()).Select(item => new KbSearchResultItem
+                            {
+                                KnowledgeBaseName = kb.Name,
+                                KnowledgeBaseId = kb.Id,
+                                Content = item.Content.Length > 200 ? item.Content[..200] + "..." : item.Content,
+                                SourceName = item.SourceName,
+                                Score = item.Score
+                            }).ToList();
+                        }
+                    }
+                    catch { }
+                    return new List<KbSearchResultItem>();
+                });
+
+            var results = await Task.WhenAll(searchTasks);
+            _searchResults = results.SelectMany(r => r).OrderByDescending(r => r.Score).ToList();
+
+            if (_searchResults.Count == 0)
+            {
+                Snackbar.Add("No results found in knowledge bases.", Severity.Info);
+            }
+        }
+        catch
+        {
+            Snackbar.Add("Search failed. Please try again.", Severity.Warning);
+        }
+        finally
+        {
+            _searching = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearSearchResults()
+    {
+        _searchResults.Clear();
+        _lastSearchQuery = string.Empty;
+    }
+
+    private static string HighlightSearchTerm(string text, string term)
+    {
+        if (string.IsNullOrEmpty(term) || string.IsNullOrEmpty(text)) return text ?? string.Empty;
+        var index = text.IndexOf(term, StringComparison.OrdinalIgnoreCase);
+        if (index < 0) return System.Net.WebUtility.HtmlEncode(text);
+        var before = System.Net.WebUtility.HtmlEncode(text[..index]);
+        var match = System.Net.WebUtility.HtmlEncode(text.Substring(index, term.Length));
+        var after = System.Net.WebUtility.HtmlEncode(text[(index + term.Length)..]);
+        return $"{before}<mark style=\"background: rgba(124, 58, 237, 0.15); padding: 2px 4px; border-radius: 3px; font-weight: 600;\">{match}</mark>{after}";
+    }
+
+    private static List<double> GenerateSparkline(int currentValue)
+    {
+        if (currentValue <= 0) return new List<double> { 0, 0, 0, 0, 0, 0, 0 };
+        var points = new List<double>(7);
+        for (var i = 0; i < 7; i++)
+            points.Add(Math.Max(0, Math.Round(currentValue * (0.3 + 0.7 * i / 6.0))));
+        return points;
+    }
+
+    private static string GetTimeOfDay()
+    {
+        var hour = DateTime.Now.Hour;
+        return hour switch { < 12 => "morning", < 17 => "afternoon", _ => "evening" };
+    }
+
+    private static string FormatTimeAgo(DateTime timestamp)
+    {
+        var diff = DateTime.Now - timestamp;
+        if (diff.TotalMinutes < 1) return "Just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        return $"{(int)diff.TotalDays}d ago";
+    }
+
+    private string GetActivityIcon(string action) => action switch
+    {
+        "Create" => Icons.Material.Filled.AddCircle,
+        "Update" => Icons.Material.Filled.Edit,
+        "Delete" => Icons.Material.Filled.Delete,
+        "Publish" => Icons.Material.Filled.Publish,
+        "Execute" => Icons.Material.Filled.PlayArrow,
+        _ => Icons.Material.Filled.Info,
+    };
+
+    private Color GetActivityColor(string action) => action switch
+    {
+        "Create" => Color.Success,
+        "Update" => Color.Primary,
+        "Delete" => Color.Error,
+        "Publish" => Color.Info,
+        "Execute" => Color.Secondary,
+        _ => Color.Default,
+    };
+
+    private class MetricsDto
+    {
+        public int TotalWorkflows { get; set; }
+        public int ActiveWorkflows { get; set; }
+        public int TotalDocuments { get; set; }
+        public int TotalKnowledgeBases { get; set; }
+        public int TotalAssistants { get; set; }
+        public int PendingApprovals { get; set; }
+        public int CompletedToday { get; set; }
+    }
+    private class LogsResult { public List<AuditLogDto> Items { get; set; } = new(); }
+    private class AuditLogDto
+    {
+        public string Action { get; set; } = string.Empty;
+        public string EntityType { get; set; } = string.Empty;
+        public string EntityId { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+    }
+    private class ApprovalsResult { public List<object> Items { get; set; } = new(); }
+    private class HealthEntry { public string Name { get; set; } = string.Empty; public string Status { get; set; } = string.Empty; }
+    private class ActivityItem
+    {
+        public string Action { get; set; } = string.Empty;
+        public string EntityType { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+    }
+    private class InsightItem
+    {
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string ActionText { get; set; } = string.Empty;
+        public string? ActionUrl { get; set; }
+    }
+    private class KbListResult { public List<KnowledgeBaseListDto> Items { get; set; } = new(); }
+    private class KnowledgeBaseListDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+    }
+    private class KbSearchResult { public List<KbSearchItem> Items { get; set; } = new(); }
+    private class KbSearchItem
+    {
+        public string Content { get; set; } = string.Empty;
+        public string? SourceName { get; set; }
+        public double Score { get; set; }
+    }
+    private class KbSearchResultItem
+    {
+        public string KnowledgeBaseName { get; set; } = string.Empty;
+        public Guid KnowledgeBaseId { get; set; }
+        public string Content { get; set; } = string.Empty;
+        public string? SourceName { get; set; }
+        public double Score { get; set; }
+    }
+}

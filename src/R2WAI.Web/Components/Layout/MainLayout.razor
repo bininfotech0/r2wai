@@ -1,0 +1,533 @@
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+@inject JwtAuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject IConfiguration Configuration
+@inject TokenStorageService TokenStorage
+@inject ISnackbar Snackbar
+@inject ThemeService ThemeService
+@inject IJSRuntime JS
+@inject AuthenticatedHttpClient Http
+@inject IDialogService Dialog
+@attribute [Authorize]
+
+<MudThemeProvider Theme="ThemeService.CurrentTheme" IsDarkMode="ThemeService.IsDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<CommandPalette @ref="_commandPalette" />
+<CopilotPanel @bind-IsOpen="_copilotOpen" />
+
+<MudLayout>
+    <a href="#main-content" class="skip-nav" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:10001;"
+       onfocus="this.style.left='8px';this.style.top='8px';this.style.width='auto';this.style.height='auto';this.style.overflow='visible';"
+       onblur="this.style.left='-9999px';this.style.width='1px';this.style.height='1px';this.style.overflow='hidden';">
+        Skip to main content
+    </a>
+
+    @* Top App Bar *@
+    <MudAppBar Elevation="0" role="banner">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       OnClick="ToggleDrawer" aria-label="Toggle navigation" />
+        <MudLink Href="/" Underline="Underline.None" Class="d-flex align-center gap-2 ml-1" Style="color: inherit;">
+            <div class="r2-logo" style="width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, #7C3AED, #6D28D9, #4F46E5); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color: white; font-size: 0.85rem;" />
+            </div>
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 800; letter-spacing: -0.03em; font-size: 1rem;">R2WAI</MudText>
+        </MudLink>
+        <MudSpacer />
+
+        @* Command Palette Trigger — full on desktop, icon on mobile *@
+        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Default" Class="mr-2 d-none d-md-flex"
+                   StartIcon="@Icons.Material.Outlined.AutoAwesome" OnClick="OpenCommandPalette"
+                   Style="border: 1.5px solid var(--mud-palette-divider); border-radius: 10px; padding: 4px 14px; transition: all 0.15s ease;"
+                   aria-label="Command palette (Ctrl+K)">
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Ask R2WAI anything...</MudText>
+            <span class="kbd-hint ml-2">Ctrl+K</span>
+        </MudButton>
+        <MudIconButton Icon="@Icons.Material.Outlined.Search" Color="Color.Default" Size="Size.Small"
+                       OnClick="OpenCommandPalette" Class="d-flex d-md-none"
+                       aria-label="Search" />
+
+        @* Dark Mode Toggle *@
+        <MudTooltip Text="@(ThemeService.IsDarkMode ? "Light mode" : "Dark mode")" Placement="Placement.Bottom">
+            <MudIconButton Icon="@(ThemeService.IsDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                           Color="Color.Default" OnClick="ToggleDarkMode" aria-label="Toggle dark mode"
+                           Size="Size.Small" />
+        </MudTooltip>
+
+        @* Notifications *@
+        <MudBadge Content="@_unreadCount" Visible="@(_unreadCount > 0)" Color="Color.Error" Overlap="true">
+            <MudTooltip Text="Notifications" Placement="Placement.Bottom">
+                <MudIconButton Icon="@Icons.Material.Outlined.Notifications" Color="Color.Default"
+                               OnClick="ToggleNotifications" aria-label="Notifications" Size="Size.Small" />
+            </MudTooltip>
+        </MudBadge>
+        <MudPopover Open="_notificationsOpen" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight"
+                    Class="pa-2">
+            <NotificationPanel Notifications="_notifications" OnChanged="OnNotificationsChanged" />
+        </MudPopover>
+
+        @* Copilot Toggle *@
+        <MudTooltip Text="AI Copilot (Ctrl+/)" Placement="Placement.Bottom">
+            <MudIconButton Icon="@Icons.Material.Outlined.AutoAwesome" Color="@(_copilotOpen ? Color.Primary : Color.Default)"
+                           OnClick="ToggleCopilot" aria-label="Toggle AI Copilot" Size="Size.Small" Class="ml-1" />
+        </MudTooltip>
+
+        @* User Menu *@
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true"
+                 aria-label="User menu">
+            <ActivatorContent>
+                <MudTooltip Text="Account menu" Placement="Placement.Bottom">
+                    <div @onclick="context.ToggleAsync" style="cursor: pointer; display: inline-flex; margin-left: 4px;">
+                        <MudAvatar Color="Color.Primary" Style="width: 32px; height: 32px; font-size: 0.75rem; background: linear-gradient(135deg, #7C3AED, #6D28D9);">
+                            @(_userEmail?.Length > 0 ? _userEmail[0].ToString().ToUpper() : "U")
+                        </MudAvatar>
+                    </div>
+                </MudTooltip>
+            </ActivatorContent>
+            <ChildContent>
+                <MudMenuItem Href="/profile" Icon="@Icons.Material.Outlined.Person">
+                    @_userEmail
+                </MudMenuItem>
+                <MudMenuItem Href="/settings" Icon="@Icons.Material.Outlined.Settings">
+                    Settings
+                </MudMenuItem>
+                <MudDivider />
+                <MudMenuItem OnClick="HandleLogout" Icon="@Icons.Material.Outlined.Logout">Sign Out</MudMenuItem>
+            </ChildContent>
+        </MudMenu>
+    </MudAppBar>
+
+    @* Loading Progress Bar *@
+    @if (_isNavigating)
+    {
+        <div class="page-progress">
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        </div>
+    }
+
+    @* Side Navigation Drawer *@
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0"
+               Breakpoint="Breakpoint.Md" Variant="DrawerVariant.Responsive" aria-label="Main navigation">
+        <div class="pa-4 pb-2">
+            <MudText Typo="Typo.h6" Style="color: #FFFFFF; font-weight: 800; letter-spacing: -0.03em;">R2WAI</MudText>
+            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase;">AI Work Platform</MudText>
+        </div>
+
+        <MudNavMenu>
+            <MudNavLink Href="/" Icon="@Icons.Material.Outlined.SpaceDashboard" Match="NavLinkMatch.All">Home</MudNavLink>
+
+            <MudNavGroup Title="Studio" Icon="@Icons.Material.Outlined.AutoAwesome" Expanded="true" HideExpandIcon="false"
+                         Style="color: rgba(255,255,255,0.65);">
+                <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">Assistants</MudNavLink>
+                <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
+                <MudNavLink Href="/workflow-studio" Icon="@Icons.Material.Outlined.AccountTree">Workflows</MudNavLink>
+                <MudNavLink Href="/workflow-studio/schedules" Icon="@Icons.Material.Outlined.Schedule">Schedules</MudNavLink>
+                <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Chatbots</MudNavLink>
+                <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Extension">Integrations</MudNavLink>
+                <MudNavLink Href="/assistant-studio/tools" Icon="@Icons.Material.Outlined.Build">Tools</MudNavLink>
+                <MudNavLink Href="/templates" Icon="@Icons.Material.Outlined.Dashboard">Templates</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavGroup Title="Workspace" Icon="@Icons.Material.Outlined.WorkOutline" Expanded="true" HideExpandIcon="false"
+                         Style="color: rgba(255,255,255,0.65);">
+                <MudNavLink Href="/inbox" Icon="@Icons.Material.Outlined.Inbox">
+                    <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                        <span>Inbox</span>
+                        @if (_pendingApprovalCount > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error"
+                                     Style="height: 20px; font-size: 0.65rem; min-width: 20px; font-weight: 700;">
+                                @_pendingApprovalCount
+                            </MudChip>
+                        }
+                    </div>
+                </MudNavLink>
+                <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
+                <MudNavLink Href="/workflow-studio/approvals" Icon="@Icons.Material.Outlined.TaskAlt">Approvals</MudNavLink>
+                <MudNavLink Href="/documents" Icon="@Icons.Material.Outlined.Description">Documents</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavGroup Title="Monitor" Icon="@Icons.Material.Outlined.MonitorHeart" Expanded="false" HideExpandIcon="false"
+                         Style="color: rgba(255,255,255,0.65);">
+                <MudNavLink Href="/operations" Icon="@Icons.Material.Outlined.Dashboard">Dashboard</MudNavLink>
+                <MudNavLink Href="/operations/ai" Icon="@Icons.Material.Outlined.Psychology">AI Ops</MudNavLink>
+                <MudNavLink Href="/operations/analytics" Icon="@Icons.Material.Outlined.BarChart">Analytics</MudNavLink>
+                <MudNavLink Href="/operations/reports" Icon="@Icons.Material.Outlined.Assessment">Reports</MudNavLink>
+                <MudNavLink Href="/operations/audit-logs" Icon="@Icons.Material.Outlined.History">Audit Trail</MudNavLink>
+                <MudNavLink Href="/operations/errors" Icon="@Icons.Material.Outlined.BugReport">Errors</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavGroup Title="Settings" Icon="@Icons.Material.Outlined.Settings" Expanded="false" HideExpandIcon="false"
+                         Style="color: rgba(255,255,255,0.65);">
+                <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users</MudNavLink>
+                <MudNavLink Href="/admin/roles" Icon="@Icons.Material.Outlined.Shield">Roles</MudNavLink>
+                <MudNavLink Href="/admin/permissions" Icon="@Icons.Material.Outlined.VerifiedUser">Permissions</MudNavLink>
+                <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
+                <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">AI Models</MudNavLink>
+                <MudNavLink Href="/admin/webhooks" Icon="@Icons.Material.Outlined.Webhook">Webhooks</MudNavLink>
+                <MudNavLink Href="/admin/api-keys" Icon="@Icons.Material.Outlined.Key">API Keys</MudNavLink>
+                <MudNavLink Href="/admin/content-moderation" Icon="@Icons.Material.Outlined.Security">Moderation</MudNavLink>
+                <MudNavLink Href="/settings/tenant" Icon="@Icons.Material.Outlined.Domain">Tenant</MudNavLink>
+            </MudNavGroup>
+        </MudNavMenu>
+
+        <MudSpacer />
+        <div class="pa-4 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
+            <MudText Typo="Typo.caption" Align="Align.Center"
+                     Style="color: rgba(255,255,255,0.2); font-size: 0.625rem; letter-spacing: 0.05em;">
+                R2WAI v2.0
+            </MudText>
+        </div>
+    </MudDrawer>
+
+    <MudMainContent Class="pa-3 pa-sm-5">
+        <MudBreadcrumbs Items="_breadcrumbs" Class="mb-3 px-0" MaxItems="4" aria-label="Breadcrumb navigation" />
+        <main id="main-content" role="main" aria-label="Main content">
+            @Body
+        </main>
+    </MudMainContent>
+</MudLayout>
+
+@* Mobile Bottom Navigation *@
+<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="/" class="mobile-bottom-nav-item @(IsActiveRoute("/", true) ? "active" : "")">
+        <MudIcon Icon="@(IsActiveRoute("/", true) ? Icons.Material.Filled.SpaceDashboard : Icons.Material.Outlined.SpaceDashboard)" Class="mobile-nav-icon" />
+        <span class="mobile-nav-label">Home</span>
+    </a>
+    <a href="/assistant-studio" class="mobile-bottom-nav-item @(IsActiveRoute("/assistant-studio") ? "active" : "")">
+        <MudIcon Icon="@(IsActiveRoute("/assistant-studio") ? Icons.Material.Filled.SmartToy : Icons.Material.Outlined.SmartToy)" Class="mobile-nav-icon" />
+        <span class="mobile-nav-label">Assistants</span>
+    </a>
+    <a href="/inbox" class="mobile-bottom-nav-item @(IsActiveRoute("/inbox") ? "active" : "")" style="position: relative;">
+        @if (_pendingApprovalCount > 0)
+        {
+            <span style="position: absolute; top: 2px; right: calc(50% - 16px); background: linear-gradient(135deg, #EF4444, #DC2626); color: white; font-size: 0.5625rem; font-weight: 700; border-radius: 99px; padding: 1px 5px; min-width: 16px; text-align: center; animation: pulse-soft 2s infinite; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);">@_pendingApprovalCount</span>
+        }
+        <MudIcon Icon="@(IsActiveRoute("/inbox") ? Icons.Material.Filled.Inbox : Icons.Material.Outlined.Inbox)" Class="mobile-nav-icon" />
+        <span class="mobile-nav-label">Inbox</span>
+    </a>
+    <a href="/workflow-studio" class="mobile-bottom-nav-item @(IsActiveRoute("/workflow-studio") ? "active" : "")">
+        <MudIcon Icon="@(IsActiveRoute("/workflow-studio") ? Icons.Material.Filled.AccountTree : Icons.Material.Outlined.AccountTree)" Class="mobile-nav-icon" />
+        <span class="mobile-nav-label">Workflows</span>
+    </a>
+    <a href="/operations" class="mobile-bottom-nav-item @(IsActiveRoute("/operations") ? "active" : "")">
+        <MudIcon Icon="@(IsActiveRoute("/operations") ? Icons.Material.Filled.MonitorHeart : Icons.Material.Outlined.MonitorHeart)" Class="mobile-nav-icon" />
+        <span class="mobile-nav-label">Monitor</span>
+    </a>
+</nav>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _notificationsOpen;
+    private bool _copilotOpen;
+    private bool _isNavigating;
+    private string _userEmail = "Loading...";
+    private int _pendingApprovalCount;
+    private List<R2WAI.Web.Components.Shared.NotificationPanel.NotificationItem> _notifications = new();
+    private Microsoft.AspNetCore.SignalR.Client.HubConnection? _hubConnection;
+    private List<BreadcrumbItem> _breadcrumbs = new();
+    private CommandPalette? _commandPalette;
+    private DotNetObjectReference<MainLayout>? _dotNetRef;
+
+    private int _unreadCount => _notifications.Count(n => !n.IsRead);
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        ThemeService.OnChange += StateHasChanged;
+        Http.OnSessionExpired += HandleSessionExpired;
+        UpdateBreadcrumbs();
+    }
+
+    private void HandleSessionExpired()
+    {
+        InvokeAsync(() =>
+        {
+            Snackbar.Add("Your session has expired. Please sign in again.", Severity.Warning);
+            Navigation.NavigateTo("/login", forceLoad: true);
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                if (AuthState is not null)
+                {
+                    var state = await AuthState;
+                    var email = state.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                    _userEmail = email ?? "User";
+                    StateHasChanged();
+                }
+            }
+            catch { _userEmail = "User"; }
+
+            try { await LoadThemePreference(); } catch { }
+            try { await RegisterKeyboardShortcuts(); } catch { }
+            try { await ConnectToNotificationHub(); } catch { }
+            try { await LoadPendingApprovalCount(); } catch { }
+        }
+    }
+
+    private async Task LoadPendingApprovalCount()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ApprovalCountResult>("/api/v1/approvals/pending");
+            _pendingApprovalCount = result?.Items?.Count ?? 0;
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    private async Task LoadThemePreference()
+    {
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "r2wai_dark_mode");
+            if (saved is "true" && !ThemeService.IsDarkMode)
+                ThemeService.SetDarkMode(true);
+            else if (saved is "false" && ThemeService.IsDarkMode)
+                ThemeService.SetDarkMode(false);
+        }
+        catch { }
+    }
+
+    private IJSObjectReference? _shortcutsModule;
+
+    private async Task RegisterKeyboardShortcuts()
+    {
+        try
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            _shortcutsModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/shortcuts.js");
+            await _shortcutsModule.InvokeVoidAsync("register", _dotNetRef);
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public void ToggleCommandPalette()
+    {
+        _commandPalette?.Toggle();
+        InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void ToggleCopilotShortcut()
+    {
+        _copilotOpen = !_copilotOpen;
+        InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void HandleEscape()
+    {
+        if (_copilotOpen) { _copilotOpen = false; InvokeAsync(StateHasChanged); return; }
+        if (_notificationsOpen) { _notificationsOpen = false; InvokeAsync(StateHasChanged); return; }
+    }
+
+    [JSInvokable]
+    public void HandleNewShortcut()
+    {
+        var path = new Uri(Navigation.Uri).AbsolutePath.TrimEnd('/');
+        var target = path switch
+        {
+            "/assistant-studio" or "/assistants" => "/assistant-studio",
+            "/workflow-studio" or "/workflows" => "/workflow-studio",
+            "/documents" => "/documents",
+            _ => "/assistant-studio"
+        };
+        InvokeAsync(() => Navigation.NavigateTo(target));
+    }
+
+    [JSInvokable]
+    public void NavigateTo(string path)
+    {
+        InvokeAsync(() => Navigation.NavigateTo(path));
+    }
+
+    [JSInvokable]
+    public void ShowShortcutsHelp()
+    {
+        InvokeAsync(async () =>
+        {
+            await Dialog.ShowAsync<KeyboardShortcutsHelp>("Keyboard Shortcuts",
+                new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        });
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _isNavigating = true;
+        InvokeAsync(StateHasChanged);
+
+        _ = Task.Delay(400).ContinueWith(_ => InvokeAsync(() =>
+        {
+            _isNavigating = false;
+            StateHasChanged();
+        }));
+
+        UpdateBreadcrumbs();
+    }
+
+    private void UpdateBreadcrumbs()
+    {
+        var uri = new Uri(Navigation.Uri);
+        var path = uri.AbsolutePath.Trim('/');
+        _breadcrumbs = new List<BreadcrumbItem> { new("Home", "/", icon: Icons.Material.Filled.Home) };
+
+        if (string.IsNullOrEmpty(path)) return;
+
+        var segments = path.Split('/');
+        var accumulated = "";
+
+        var nameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["assistant-studio"] = "Studio",
+            ["workflow-studio"] = "Studio",
+            ["operations"] = "Monitor",
+            ["settings"] = "Settings",
+            ["admin"] = "Settings",
+            ["knowledge"] = "Knowledge",
+            ["tools"] = "Tools",
+            ["approvals"] = "Approvals",
+            ["integrations"] = "Integrations",
+            ["audit-logs"] = "Audit Trail",
+            ["errors"] = "Errors",
+            ["analytics"] = "Analytics",
+            ["reports"] = "Reports",
+            ["schedules"] = "Schedules",
+            ["designer"] = "Designer",
+            ["runs"] = "Runs",
+            ["playground"] = "Playground",
+            ["tenant"] = "Tenant",
+            ["roles"] = "Roles",
+            ["models"] = "AI Models",
+            ["permissions"] = "Permissions",
+            ["security"] = "Security",
+            ["users"] = "Users",
+            ["profile"] = "Profile",
+            ["login"] = "Login",
+            ["about"] = "About",
+            ["chatbots"] = "Chatbots",
+            ["documents"] = "Documents",
+            ["ai"] = "AI Ops",
+            ["inbox"] = "Inbox",
+            ["templates"] = "Templates",
+            ["content-moderation"] = "Moderation",
+            ["webhooks"] = "Webhooks",
+            ["api-keys"] = "API Keys",
+        };
+
+        foreach (var segment in segments)
+        {
+            if (Guid.TryParse(segment, out _)) continue;
+            accumulated += "/" + segment;
+            var name = nameMap.TryGetValue(segment, out var mapped) ? mapped : segment;
+            _breadcrumbs.Add(new BreadcrumbItem(name, accumulated));
+        }
+    }
+
+    private async Task ToggleDarkMode()
+    {
+        ThemeService.ToggleDarkMode();
+        try { await JS.InvokeVoidAsync("localStorage.setItem", "r2wai_dark_mode", ThemeService.IsDarkMode ? "true" : "false"); }
+        catch { }
+    }
+
+    private void OpenCommandPalette() => _commandPalette?.Open();
+    private void ToggleCopilot() => _copilotOpen = !_copilotOpen;
+
+    private async Task ConnectToNotificationHub()
+    {
+        try
+        {
+            var apiBase = Configuration["ApiPublicUrl"]
+                ?? Configuration["ApiBaseUrl"]
+                ?? Configuration["SignalR:HubUrl"]
+                ?? "http://localhost:5000";
+            var token = await TokenStorage.GetTokenAsync();
+
+            _hubConnection = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
+                .WithUrl($"{apiBase}/hubs/notification", options =>
+                {
+                    if (!string.IsNullOrEmpty(token))
+                        options.AccessTokenProvider = () => Task.FromResult<string?>(token);
+                })
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<string, string, string?>("ReceiveNotification", (title, message, type) =>
+            {
+                _notifications.Insert(0, new R2WAI.Web.Components.Shared.NotificationPanel.NotificationItem
+                {
+                    Title = title,
+                    Message = message,
+                    Type = type,
+                    Timestamp = DateTime.Now
+                });
+                InvokeAsync(() =>
+                {
+                    Snackbar.Add($"{title}: {message}", type switch
+                    {
+                        "success" => Severity.Success,
+                        "error" => Severity.Error,
+                        "warning" => Severity.Warning,
+                        _ => Severity.Info
+                    });
+                    StateHasChanged();
+                });
+            });
+
+            await _hubConnection.StartAsync();
+        }
+        catch
+        {
+            Snackbar.Add("Real-time notifications unavailable.", Severity.Warning);
+        }
+    }
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    private void ToggleNotifications() => _notificationsOpen = !_notificationsOpen;
+    private void OnNotificationsChanged() => StateHasChanged();
+
+    private bool IsActiveRoute(string path, bool exact = false)
+    {
+        var currentPath = new Uri(Navigation.Uri).AbsolutePath.TrimEnd('/');
+        var targetPath = path.TrimEnd('/');
+        if (exact) return string.Equals(currentPath, targetPath, StringComparison.OrdinalIgnoreCase);
+        return currentPath.StartsWith(targetPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthStateProvider.LogoutAsync();
+        Navigation.NavigateTo("/login", forceLoad: true);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        ThemeService.OnChange -= StateHasChanged;
+        Http.OnSessionExpired -= HandleSessionExpired;
+        _dotNetRef?.Dispose();
+        if (_shortcutsModule is not null)
+        {
+            try { await _shortcutsModule.InvokeVoidAsync("dispose"); } catch { }
+            await _shortcutsModule.DisposeAsync();
+        }
+        if (_hubConnection is not null)
+            await _hubConnection.DisposeAsync();
+    }
+
+    private class ApprovalCountResult { public List<object>? Items { get; set; } }
+}

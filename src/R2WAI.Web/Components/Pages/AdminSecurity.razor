@@ -1,0 +1,130 @@
+@page "/admin/security"
+@page "/settings/security"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>R2WAI - Security Settings</PageTitle>
+
+<PageHeader Title="Security" Subtitle="Password policies, session management, and authentication" />
+
+<MudGrid Spacing="3" Class="admin-page">
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="0" Class="pa-4 hover-lift" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+            <div class="d-flex align-center gap-2 mb-4">
+                <div class="icon-container icon-container--primary">
+                    <MudIcon Icon="@Icons.Material.Outlined.Lock" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Password Policy</MudText>
+            </div>
+            <MudNumericField @bind-Value="_minPasswordLength" Label="Minimum Password Length"
+                             Min="6" Max="128" Class="mb-4" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudSwitch @bind-Value="_requireUppercase" Label="Require uppercase letter" Color="Color.Primary" Class="mb-2" />
+            <MudSwitch @bind-Value="_requireDigit" Label="Require digit" Color="Color.Primary" Class="mb-2" />
+            <MudSwitch @bind-Value="_requireSpecialChar" Label="Require special character" Color="Color.Primary" />
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="0" Class="pa-4 hover-lift" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+            <div class="d-flex align-center gap-2 mb-4">
+                <div class="icon-container icon-container--secondary">
+                    <MudIcon Icon="@Icons.Material.Outlined.Timer" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Session Policy</MudText>
+            </div>
+            <MudNumericField @bind-Value="_sessionTimeoutMinutes" Label="Session Timeout (minutes)"
+                             Min="5" Max="1440" Class="mb-4" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            <MudNumericField @bind-Value="_maxConcurrentSessions" Label="Max Concurrent Sessions"
+                             Min="1" Max="10" Class="mb-4" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="0" Class="pa-4 hover-lift" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+            <div class="d-flex align-center gap-2 mb-4">
+                <div class="icon-container icon-container--warning">
+                    <MudIcon Icon="@Icons.Material.Outlined.Shield" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Authentication</MudText>
+            </div>
+            <MudSwitch @bind-Value="_enforceEntraId" Label="Enforce Entra ID (disable local login)" Color="Color.Primary" Class="mb-2" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                When enabled, users must authenticate through Microsoft Entra ID. Local password login will be disabled.
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12">
+        <div class="d-flex justify-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" OnClick="SaveSettings"
+                       StartIcon="@Icons.Material.Filled.Save" Disabled="_saving">
+                @(_saving ? "Saving..." : "Save Security Settings")
+            </MudButton>
+        </div>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private int _minPasswordLength = 8;
+    private bool _requireUppercase = true;
+    private bool _requireDigit = true;
+    private bool _requireSpecialChar;
+    private int _sessionTimeoutMinutes = 15;
+    private int _maxConcurrentSessions = 3;
+    private bool _enforceEntraId;
+    private bool _saving;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var settings = await Http.GetFromJsonAsync<SecuritySettingsDto>("/api/v1/admin/settings");
+            if (settings is not null)
+            {
+                _minPasswordLength = settings.MinPasswordLength > 0 ? settings.MinPasswordLength : 8;
+                _requireUppercase = settings.RequireUppercase;
+                _requireDigit = settings.RequireDigit;
+                _requireSpecialChar = settings.RequireSpecialChar;
+                _sessionTimeoutMinutes = settings.SessionTimeoutMinutes > 0 ? settings.SessionTimeoutMinutes : 15;
+                _maxConcurrentSessions = settings.MaxConcurrentSessions > 0 ? settings.MaxConcurrentSessions : 3;
+                _enforceEntraId = settings.EnforceEntraId;
+            }
+        }
+        catch { }
+        StateHasChanged();
+    }
+
+    private async Task SaveSettings()
+    {
+        _saving = true;
+        try
+        {
+            await Http.PutAsJsonAsync("/api/v1/admin/settings", new
+            {
+                MinPasswordLength = _minPasswordLength,
+                RequireUppercase = _requireUppercase,
+                RequireDigit = _requireDigit,
+                RequireSpecialChar = _requireSpecialChar,
+                SessionTimeoutMinutes = _sessionTimeoutMinutes,
+                MaxConcurrentSessions = _maxConcurrentSessions,
+                EnforceEntraId = _enforceEntraId
+            });
+            Snackbar.Add("Security settings saved", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private class SecuritySettingsDto
+    {
+        public int MinPasswordLength { get; set; }
+        public bool RequireUppercase { get; set; }
+        public bool RequireDigit { get; set; }
+        public bool RequireSpecialChar { get; set; }
+        public int SessionTimeoutMinutes { get; set; }
+        public int MaxConcurrentSessions { get; set; }
+        public bool EnforceEntraId { get; set; }
+    }
+}

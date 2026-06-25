@@ -1,0 +1,252 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@layout R2WAI.Web.Components.Layout.AuthLayout
+@inject HttpClient HttpClient
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject JwtAuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
+@inject IConfiguration Configuration
+
+<PageTitle>R2WAI - Login</PageTitle>
+
+<div class="login-container">
+    <MudPaper Class="pa-6 pa-sm-10 login-card" Elevation="0">
+        <div class="d-flex flex-column align-center mb-8">
+            <div style="width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, #7C3AED, #6D28D9); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color: white; font-size: 1.5rem;" />
+            </div>
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="gradient-text" Style="font-weight: 700; letter-spacing: -0.02em;">R2WAI</MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mt-1" Style="max-width: 280px; line-height: 1.5;">
+                The AI work platform for enterprise teams. Build assistants, automate workflows, and get work done.
+            </MudText>
+        </div>
+
+        <EditForm Model="_loginModel" OnValidSubmit="HandleLogin">
+            <DataAnnotationsValidator />
+
+            <MudTextField @bind-Value="_loginModel.Email"
+                          Label="Email address"
+                          Variant="Variant.Outlined"
+                          InputType="InputType.Email"
+                          Class="mb-4"
+                          Required="true"
+                          RequiredError="Email is required."
+                          aria-label="Email address" />
+
+            <MudTextField @bind-Value="_loginModel.Password"
+                          Label="Password"
+                          Variant="Variant.Outlined"
+                          InputType="InputType.Password"
+                          Class="mb-2"
+                          Required="true"
+                          RequiredError="Password is required."
+                          aria-label="Password" />
+
+            <div class="d-flex justify-space-between align-center mb-5">
+                <MudCheckBox T="bool" @bind-Value="_rememberMe" Label="Remember me"
+                             Color="Color.Primary" Dense="true"
+                             Style="font-size: 0.8125rem;" />
+                <MudLink Href="/forgot-password" Typo="Typo.caption" Color="Color.Primary"
+                         Style="font-weight: 500;">
+                    Forgot password?
+                </MudLink>
+            </div>
+
+            <MudButton ButtonType="ButtonType.Submit"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       Size="Size.Large"
+                       Disabled="_isLoading"
+                       Class="btn-gradient"
+                       Style="height: 48px; border-radius: 10px; font-weight: 600;"
+                       aria-label="Sign in">
+                @if (_isLoading)
+                {
+                    <MudProgressCircular Class="ms-n1 me-2" Size="Size.Small" Indeterminate="true"
+                                         Color="Color.Surface" />
+                    <span>Signing in...</span>
+                }
+                else
+                {
+                    <span>Continue</span>
+                }
+            </MudButton>
+        </EditForm>
+
+        <div class="d-flex align-center gap-2 my-5">
+            <MudDivider Style="flex: 1;" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary">or continue with</MudText>
+            <MudDivider Style="flex: 1;" />
+        </div>
+
+        <div class="d-flex gap-2">
+            <MudTooltip Text="Google SSO available in enterprise plan" Placement="Placement.Top">
+                <MudButton FullWidth="true" Variant="Variant.Outlined" Size="Size.Medium"
+                           Style="border-radius: 10px; border-width: 1.5px; height: 42px; opacity: 0.5; transition: all 0.15s ease;"
+                           StartIcon="@Icons.Custom.Brands.Google" Disabled="true"
+                           aria-label="Sign in with Google (enterprise)">
+                    Google
+                </MudButton>
+            </MudTooltip>
+            <MudButton FullWidth="true" Variant="Variant.Outlined" Size="Size.Medium"
+                       Style="border-radius: 10px; border-width: 1.5px; height: 42px; transition: all 0.15s ease;"
+                       StartIcon="@Icons.Custom.Brands.MicrosoftAzure"
+                       OnClick="HandleMicrosoftLogin"
+                       Disabled="@(_isMsalLoading || !_msalConfigured)"
+                       aria-label="Sign in with Microsoft">
+                @if (_isMsalLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" /> }
+                Microsoft
+            </MudButton>
+        </div>
+
+        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-6">
+            Don't have an account?&nbsp;
+            <MudLink Href="/register" Color="Color.Primary" Style="font-weight: 600;">Request access</MudLink>
+        </MudText>
+        <MudText Typo="Typo.caption" Align="Align.Center" Class="mt-3" Style="color: rgba(255,255,255,0.3); font-size: 0.7rem; letter-spacing: 0.03em;">
+            Secured by enterprise-grade encryption
+        </MudText>
+    </MudPaper>
+</div>
+
+@code {
+    private LoginModel _loginModel = new();
+    private bool _isLoading;
+    private bool _rememberMe;
+    private bool _msalConfigured;
+    private bool _isMsalLoading;
+    private IJSObjectReference? _authModule;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var clientId = Configuration["Authentication:EntraId:ClientId"];
+            var tenantId = Configuration["Authentication:EntraId:TenantId"];
+            if (!string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(tenantId))
+            {
+                _authModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+                _msalConfigured = await _authModule.InvokeAsync<bool>("initMsal", clientId, tenantId);
+                StateHasChanged();
+            }
+        }
+        catch { }
+    }
+
+    private async Task HandleMicrosoftLogin()
+    {
+        if (_authModule is null) return;
+        _isMsalLoading = true;
+        try
+        {
+            var result = await _authModule.InvokeAsync<MsalResult>("loginMicrosoft");
+            if (!result.Success)
+            {
+                if (result.Error != "cancelled")
+                    Snackbar.Add($"Microsoft login failed: {result.Error}", Severity.Error);
+                return;
+            }
+
+            var response = await HttpClient.PostAsJsonAsync("/api/v1/auth/entra-id", new { idToken = result.IdToken });
+            if (response.IsSuccessStatusCode)
+            {
+                var loginResponse = await response.Content.ReadFromJsonAsync<LoginResponse>();
+                if (loginResponse is not null)
+                {
+                    var userJson = System.Text.Json.JsonSerializer.Serialize(loginResponse.User);
+                    await AuthStateProvider.LoginAsync(loginResponse.Token, loginResponse.RefreshToken, userJson);
+                    Snackbar.Add($"Welcome, {result.Email}!", Severity.Success);
+                    Navigation.NavigateTo(ReturnUrl ?? "/");
+                }
+            }
+            else
+            {
+                Snackbar.Add("Microsoft account not provisioned in this workspace.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Login error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isMsalLoading = false;
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        _isLoading = true;
+
+        try
+        {
+            var response = await HttpClient.PostAsJsonAsync("/api/v1/auth/login", _loginModel);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var loginResponse = await response.Content.ReadFromJsonAsync<LoginResponse>();
+                if (loginResponse is not null)
+                {
+                    var userJson = System.Text.Json.JsonSerializer.Serialize(loginResponse.User);
+                    await AuthStateProvider.LoginAsync(loginResponse.Token, loginResponse.RefreshToken, userJson);
+                    Snackbar.Add("Login successful!", Severity.Success);
+                    Navigation.NavigateTo(ReturnUrl ?? "/");
+                }
+            }
+            else
+            {
+                Snackbar.Add("Invalid email or password.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Unable to connect to server: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    public class LoginModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+
+    public class LoginResponse
+    {
+        public string Token { get; set; } = string.Empty;
+        public string RefreshToken { get; set; } = string.Empty;
+        public DateTime ExpiresAt { get; set; }
+        public UserInfoDto User { get; set; } = new();
+    }
+
+    public class UserInfoDto
+    {
+        public Guid Id { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string? AvatarUrl { get; set; }
+        public string Role { get; set; } = string.Empty;
+        public string[] Roles { get; set; } = [];
+        public Guid TenantId { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    private class MsalResult
+    {
+        public bool Success { get; set; }
+        public string? IdToken { get; set; }
+        public string? Email { get; set; }
+        public string? Error { get; set; }
+    }
+}

@@ -1,0 +1,182 @@
+@page "/assistant-studio/chatbots"
+@page "/chatbots"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - Chatbots</PageTitle>
+
+<PageHeader Title="Chatbot Management" Subtitle="Configure and deploy enterprise chatbots">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        New Chatbot
+    </MudButton>
+</PageHeader>
+
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+    <MudTextField @bind-Value="_searchTerm" Placeholder="Search chatbots..."
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                  Immediate="true" DebounceInterval="300" />
+</MudPaper>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-4" />
+}
+else if (!_filteredChatbots.Any())
+{
+    <EmptyState Icon="@Icons.Material.Outlined.SmartToy"
+                Title="No chatbots found"
+                Description="Create your first chatbot to deploy an enterprise conversational AI."
+                ActionText="New Chatbot"
+                OnAction="OpenCreateDialog"
+                MinHeight="300px" />
+}
+else
+{
+    <MudGrid Spacing="3" Class="stagger-in">
+        @foreach (var chatbot in _filteredChatbots)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; height: 100%;">
+                    <div class="d-flex justify-space-between align-center mb-3">
+                        <div class="d-flex align-center gap-2">
+                            <div class="icon-container icon-container--primary">
+                                <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Color="Color.Primary" Size="Size.Small" />
+                            </div>
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@chatbot.Name</MudText>
+                        </div>
+                        <StatusBadge Status="@chatbot.Status" />
+                    </div>
+                    <div class="d-flex flex-column gap-1 mb-4">
+                        @if (!string.IsNullOrEmpty(chatbot.Description))
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@chatbot.Description</MudText>
+                        }
+                        @if (!string.IsNullOrEmpty(chatbot.WelcomeMessage))
+                        {
+                            <div class="d-flex justify-space-between">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Welcome</MudText>
+                                <MudText Typo="Typo.body2" Style="font-weight: 500; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@chatbot.WelcomeMessage</MudText>
+                            </div>
+                        }
+                        <div class="d-flex justify-space-between">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Created</MudText>
+                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@chatbot.CreatedAt.ToString("yyyy-MM-dd")</MudText>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" FullWidth="true"
+                                   OnClick="@(() => OpenEditDialog(chatbot))">
+                            Configure
+                        </MudButton>
+                        <MudIconButton Icon="@Icons.Material.Filled.Code" Size="Size.Small" Color="Color.Info"
+                                       OnClick="@(() => OpenEmbedDialog(chatbot))" aria-label="Embed" />
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary"
+                                       OnClick="@(() => PreviewChatbot(chatbot))" aria-label="Preview" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteChatbot(chatbot))" aria-label="Delete" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<ChatbotDto> _chatbots = new();
+    private string _searchTerm = string.Empty;
+    private bool _loading = true;
+
+    private IEnumerable<ChatbotDto> _filteredChatbots =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _chatbots
+            : _chatbots.Where(c => c.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await LoadChatbots(); }
+
+    private async Task LoadChatbots()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ChatbotsResult>("/api/v1/chatbots");
+            _chatbots = result?.Items ?? new();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await Dialog.ShowAsync<CreateEditChatbotDialog>("New Chatbot");
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+            await LoadChatbots();
+    }
+
+    private async Task OpenEditDialog(ChatbotDto chatbot)
+    {
+        var parameters = new DialogParameters<CreateEditChatbotDialog>
+        {
+            { x => x.EditId, chatbot.Id.ToString() }
+        };
+        var dialog = await Dialog.ShowAsync<CreateEditChatbotDialog>("Edit Chatbot", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+            await LoadChatbots();
+    }
+
+    private async Task DeleteChatbot(ChatbotDto chatbot)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, chatbot.Name }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/chatbots/{chatbot.Id}");
+            Snackbar.Add("Chatbot deleted", Severity.Success);
+            await LoadChatbots();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+
+    private async Task OpenEmbedDialog(ChatbotDto chatbot)
+    {
+        var parameters = new DialogParameters<ChatbotEmbedDialog>
+        {
+            { x => x.ChatbotId, chatbot.Id.ToString() },
+            { x => x.ChatbotName, chatbot.Name },
+            { x => x.WelcomeMessage, chatbot.WelcomeMessage }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await Dialog.ShowAsync<ChatbotEmbedDialog>($"Embed {chatbot.Name}", parameters, options);
+    }
+
+    private void PreviewChatbot(ChatbotDto chatbot)
+    {
+        Navigation.NavigateTo($"/chatbot/{chatbot.Id}", forceLoad: true);
+    }
+
+    private class ChatbotsResult { public List<ChatbotDto> Items { get; set; } = new(); }
+    private class ChatbotDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? WelcomeMessage { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public Guid? KnowledgeBaseId { get; set; }
+        public Guid? ModelConfigurationId { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+}

@@ -1,0 +1,40 @@
+@* Animated circular progress ring *@
+
+@{
+    var circumference = 2 * Math.PI * Radius;
+    var dashLength = circumference * (Value / 100.0);
+    var dashGap = circumference - dashLength;
+}
+
+<div style="position: relative; width: @(Size)px; height: @(Size)px; display: inline-flex; align-items: center; justify-content: center;">
+    <svg viewBox="0 0 @Size @Size" style="width: 100%; height: 100%; transform: rotate(-90deg);">
+        <circle cx="@(Size / 2)" cy="@(Size / 2)" r="@Radius"
+                fill="none" stroke="var(--mud-palette-divider)" stroke-width="@StrokeWidth" />
+        <circle cx="@(Size / 2)" cy="@(Size / 2)" r="@Radius"
+                fill="none" stroke="@Color" stroke-width="@StrokeWidth"
+                stroke-dasharray="@dashLength.ToString("F2", System.Globalization.CultureInfo.InvariantCulture) @dashGap.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)"
+                stroke-linecap="round"
+                style="transition: stroke-dasharray 0.8s cubic-bezier(0.22, 1, 0.36, 1); filter: drop-shadow(0 0 4px @(Color)40);" />
+    </svg>
+    <div style="position: absolute; display: flex; flex-direction: column; align-items: center;">
+        <span class="animate-count" style="font-size: @(Size / 4)px; font-weight: 800; letter-spacing: -0.03em; color: var(--mud-palette-text-primary);">
+            @(ShowPercentage ? $"{Value:F0}%" : Label)
+        </span>
+        @if (!string.IsNullOrEmpty(Subtitle))
+        {
+            <span style="font-size: @(Math.Max(Size / 8, 9))px; color: var(--mud-palette-text-secondary);">@Subtitle</span>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public double Value { get; set; }
+    [Parameter] public int Size { get; set; } = 100;
+    [Parameter] public int StrokeWidth { get; set; } = 8;
+    [Parameter] public string Color { get; set; } = "#7C3AED";
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public bool ShowPercentage { get; set; } = true;
+
+    private double Radius => (Size - StrokeWidth) / 2.0;
+}

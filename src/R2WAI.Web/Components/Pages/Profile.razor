@@ -1,0 +1,446 @@
+@page "/profile"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>R2WAI - Profile</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4 gradient-text">My Profile</MudText>
+
+<MudPaper Class="pa-6 animate-slide-in" Elevation="0" MaxWidth="600px" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+    <MudGrid>
+        <MudItem xs="12" Class="d-flex flex-column align-center mb-4">
+            @if (!string.IsNullOrEmpty(_avatarPreviewUrl))
+            {
+                <MudAvatar Style="width: 80px; height: 80px;">
+                    <MudImage Src="@_avatarPreviewUrl" Alt="Profile photo" Style="width: 80px; height: 80px; object-fit: cover;" />
+                </MudAvatar>
+            }
+            else
+            {
+                <MudAvatar Color="Color.Primary" Style="width: 80px; height: 80px; font-size: 2rem;">
+                    @(_firstName?.Length > 0 ? _firstName[0].ToString().ToUpper() : "?")
+                </MudAvatar>
+            }
+            <MudFileUpload T="IBrowserFile" Accept=".jpg,.jpeg,.png,.gif" MaximumFileCount="1"
+                           FilesChanged="OnAvatarSelected" Class="mt-2">
+                <ActivatorContent>
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.PhotoCamera">
+                        Upload Photo
+                    </MudButton>
+                </ActivatorContent>
+            </MudFileUpload>
+            @if (_avatarFile is not null)
+            {
+                <div class="d-flex align-center gap-2 mt-1">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@_avatarFile.Name</MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                               Class="btn-gradient"
+                               OnClick="UploadAvatar" Disabled="_uploadingAvatar">
+                        @(_uploadingAvatar ? "Uploading..." : "Save Photo")
+                    </MudButton>
+                </div>
+            }
+        </MudItem>
+
+        @if (_editing)
+        {
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_firstName" Label="First Name" Required="true"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_lastName" Label="Last Name" Required="true"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Email</MudText>
+                <MudText Typo="Typo.body1">@_email</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption">Roles</MudText>
+                <MudText Typo="Typo.body1">@_roles</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption">Tenant ID</MudText>
+                <CopyToClipboard Text="@_tenantId" Style="font-family: monospace; font-size: 0.85rem;" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex justify-end gap-2">
+                <MudButton Variant="Variant.Outlined" OnClick="CancelEdit">Cancel</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveProfile"
+                           Class="btn-gradient"
+                           Disabled="_saving" StartIcon="@Icons.Material.Filled.Save">
+                    @(_saving ? "Saving..." : "Save")
+                </MudButton>
+            </MudItem>
+        }
+        else
+        {
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption">Email</MudText>
+                <MudText Typo="Typo.body1">@_email</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption">Name</MudText>
+                <MudText Typo="Typo.body1">@_firstName @_lastName</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption">Roles</MudText>
+                <MudText Typo="Typo.body1">@_roles</MudText>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption">Tenant ID</MudText>
+                <CopyToClipboard Text="@_tenantId" Style="font-family: monospace; font-size: 0.85rem;" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex justify-end">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="StartEdit"
+                           StartIcon="@Icons.Material.Filled.Edit">
+                    Edit Profile
+                </MudButton>
+            </MudItem>
+        }
+    </MudGrid>
+</MudPaper>
+
+@* Password Change Section *@
+<MudPaper Class="pa-6 mt-4 animate-slide-in" Elevation="0" MaxWidth="600px" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+    <MudText Typo="Typo.h6" Class="mb-4 section-title" Style="font-weight: 600;">Change Password</MudText>
+    <MudGrid Spacing="3">
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_currentPassword" Label="Current Password" Required="true"
+                          InputType="InputType.Password" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_newPassword" Label="New Password" Required="true"
+                          InputType="InputType.Password" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          HelperText="Must be at least 8 characters" />
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_confirmPassword" Label="Confirm New Password" Required="true"
+                          InputType="InputType.Password" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        @if (!string.IsNullOrEmpty(_passwordError))
+        {
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Error" Dense="true" Variant="Variant.Outlined">@_passwordError</MudAlert>
+            </MudItem>
+        }
+        <MudItem xs="12" Class="d-flex justify-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ChangePassword"
+                       Class="btn-gradient"
+                       Disabled="_changingPassword" StartIcon="@Icons.Material.Filled.Lock">
+                @(_changingPassword ? "Changing..." : "Change Password")
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@* Notification Preferences Section *@
+<MudPaper Class="pa-6 mt-4 animate-slide-in" Elevation="0" MaxWidth="600px" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+    <MudText Typo="Typo.h6" Class="mb-2 section-title" Style="font-weight: 600;">Notification Preferences</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">Choose which notifications you receive and how.</MudText>
+
+    <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+        <thead>
+            <tr>
+                <th style="min-width: 220px;">Notification Type</th>
+                <th style="text-align: center; width: 100px;">In-App</th>
+                <th style="text-align: center; width: 100px;">Email</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">Approval Requests</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">When an approval is assigned to you</MudText>
+                </td>
+                <td style="text-align: center;"><MudCheckBox T="bool" Value="true" Disabled="true" Color="Color.Primary" Dense="true" /></td>
+                <td style="text-align: center;"><MudCheckBox T="bool" @bind-Value="_notifyApprovalRequests" Color="Color.Primary" Dense="true" /></td>
+            </tr>
+            <tr>
+                <td>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">Workflow Completions</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">When a workflow run finishes</MudText>
+                </td>
+                <td style="text-align: center;"><MudCheckBox T="bool" @bind-Value="_inAppWorkflowCompletions" Color="Color.Primary" Dense="true" /></td>
+                <td style="text-align: center;"><MudCheckBox T="bool" @bind-Value="_notifyWorkflowCompletions" Color="Color.Primary" Dense="true" /></td>
+            </tr>
+            <tr>
+                <td>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">Workflow Failures</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">When a workflow run fails</MudText>
+                </td>
+                <td style="text-align: center;"><MudCheckBox T="bool" @bind-Value="_inAppWorkflowFailures" Color="Color.Primary" Dense="true" /></td>
+                <td style="text-align: center;"><MudCheckBox T="bool" @bind-Value="_emailWorkflowFailures" Color="Color.Primary" Dense="true" /></td>
+            </tr>
+            <tr>
+                <td>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">Escalations</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">When an approval is escalated to you</MudText>
+                </td>
+                <td style="text-align: center;"><MudCheckBox T="bool" Value="true" Disabled="true" Color="Color.Primary" Dense="true" /></td>
+                <td style="text-align: center;"><MudCheckBox T="bool" @bind-Value="_notifyEscalations" Color="Color.Primary" Dense="true" /></td>
+            </tr>
+            <tr>
+                <td>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">Document Processing</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">When a document finishes processing</MudText>
+                </td>
+                <td style="text-align: center;"><MudCheckBox T="bool" @bind-Value="_notifyNewDocuments" Color="Color.Primary" Dense="true" /></td>
+                <td style="text-align: center;"><MudCheckBox T="bool" @bind-Value="_emailDocumentProcessing" Color="Color.Primary" Dense="true" /></td>
+            </tr>
+            <tr>
+                <td>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">System Announcements</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Maintenance, updates, new features</MudText>
+                </td>
+                <td style="text-align: center;"><MudCheckBox T="bool" @bind-Value="_inAppAnnouncements" Color="Color.Primary" Dense="true" /></td>
+                <td style="text-align: center;"><MudCheckBox T="bool" @bind-Value="_emailAnnouncements" Color="Color.Primary" Dense="true" /></td>
+            </tr>
+        </tbody>
+    </MudSimpleTable>
+
+    <div class="d-flex justify-end mt-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SavePreferences"
+                   Class="btn-gradient"
+                   Disabled="_savingPreferences" StartIcon="@Icons.Material.Filled.Save">
+            @(_savingPreferences ? "Saving..." : "Save Preferences")
+        </MudButton>
+    </div>
+</MudPaper>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private string _email = string.Empty;
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+    private string _originalFirstName = string.Empty;
+    private string _originalLastName = string.Empty;
+    private string _roles = string.Empty;
+    private string _tenantId = string.Empty;
+    private bool _editing;
+    private bool _saving;
+
+    // Avatar
+    private IBrowserFile? _avatarFile;
+    private string? _avatarPreviewUrl;
+    private bool _uploadingAvatar;
+
+    // Password
+    private string _currentPassword = string.Empty;
+    private string _newPassword = string.Empty;
+    private string _confirmPassword = string.Empty;
+    private string _passwordError = string.Empty;
+    private bool _changingPassword;
+
+    // Notification Preferences — Email
+    private bool _notifyApprovalRequests = true;
+    private bool _notifyWorkflowCompletions = true;
+    private bool _notifyEscalations = true;
+    private bool _emailWorkflowFailures = true;
+    private bool _emailDocumentProcessing;
+    private bool _emailAnnouncements = true;
+
+    // Notification Preferences — In-App
+    private bool _notifyNewDocuments = true;
+    private bool _inAppWorkflowCompletions = true;
+    private bool _inAppWorkflowFailures = true;
+    private bool _inAppAnnouncements = true;
+
+    private bool _savingPreferences;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var state = await AuthState;
+            var user = state.User;
+            _email = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "—";
+            _firstName = user.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value
+                ?? user.FindFirst("first_name")?.Value ?? "";
+            _lastName = user.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value
+                ?? user.FindFirst("last_name")?.Value ?? "";
+            _tenantId = user.FindFirst("tenant_id")?.Value ?? "—";
+
+            var roleClaims = user.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value);
+            _roles = roleClaims.Any() ? string.Join(", ", roleClaims) : "—";
+
+            _originalFirstName = _firstName;
+            _originalLastName = _lastName;
+        }
+    }
+
+    private void StartEdit() => _editing = true;
+
+    private void CancelEdit()
+    {
+        _firstName = _originalFirstName;
+        _lastName = _originalLastName;
+        _editing = false;
+    }
+
+    private async Task SaveProfile()
+    {
+        if (string.IsNullOrWhiteSpace(_firstName) || string.IsNullOrWhiteSpace(_lastName))
+        {
+            Snackbar.Add("First and last name are required.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await Http.PutAsJsonAsync("/api/v1/auth/profile", new
+            {
+                FirstName = _firstName,
+                LastName = _lastName
+            });
+            _originalFirstName = _firstName;
+            _originalLastName = _lastName;
+            _editing = false;
+            Snackbar.Add("Profile updated", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to update profile.", Severity.Error);
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task OnAvatarSelected(IBrowserFile file)
+    {
+        if (file.Size > 2 * 1024 * 1024)
+        {
+            Snackbar.Add("File size must be under 2MB.", Severity.Warning);
+            return;
+        }
+
+        _avatarFile = file;
+
+        // Generate local preview
+        try
+        {
+            var format = file.ContentType;
+            var resizedImage = await file.RequestImageFileAsync(format, 200, 200);
+            var buffer = new byte[resizedImage.Size];
+            await using var stream = resizedImage.OpenReadStream(2 * 1024 * 1024);
+            var bytesRead = await stream.ReadAsync(buffer);
+            _avatarPreviewUrl = $"data:{format};base64,{Convert.ToBase64String(buffer, 0, bytesRead)}";
+        }
+        catch
+        {
+            Snackbar.Add("Failed to preview image.", Severity.Warning);
+            _avatarPreviewUrl = null;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task UploadAvatar()
+    {
+        if (_avatarFile is null) return;
+
+        _uploadingAvatar = true;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var fileContent = new StreamContent(_avatarFile.OpenReadStream(2 * 1024 * 1024));
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(_avatarFile.ContentType);
+            content.Add(fileContent, "file", _avatarFile.Name);
+
+            await Http.PostAsync("/api/v1/auth/profile/avatar", content);
+
+            Snackbar.Add("Profile photo updated", Severity.Success);
+            _avatarFile = null;
+        }
+        catch
+        {
+            Snackbar.Add("Failed to upload photo.", Severity.Error);
+        }
+        finally { _uploadingAvatar = false; }
+    }
+
+    private async Task ChangePassword()
+    {
+        _passwordError = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(_currentPassword))
+        {
+            _passwordError = "Current password is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newPassword) || _newPassword.Length < 8)
+        {
+            _passwordError = "New password must be at least 8 characters.";
+            return;
+        }
+
+        if (_newPassword != _confirmPassword)
+        {
+            _passwordError = "New password and confirmation do not match.";
+            return;
+        }
+
+        _changingPassword = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/auth/change-password", new
+            {
+                CurrentPassword = _currentPassword,
+                NewPassword = _newPassword
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Password changed successfully", Severity.Success);
+                _currentPassword = string.Empty;
+                _newPassword = string.Empty;
+                _confirmPassword = string.Empty;
+                _passwordError = string.Empty;
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                _passwordError = string.IsNullOrWhiteSpace(error)
+                    ? "Failed to change password. Please verify your current password."
+                    : error;
+            }
+        }
+        catch
+        {
+            _passwordError = "Failed to change password. Please try again.";
+        }
+        finally { _changingPassword = false; }
+    }
+
+    private async Task SavePreferences()
+    {
+        _savingPreferences = true;
+        try
+        {
+            await Http.PostAsJsonAsync("/api/v1/auth/profile/preferences", new
+            {
+                EmailApprovalRequests = _notifyApprovalRequests,
+                EmailWorkflowCompletions = _notifyWorkflowCompletions,
+                EmailEscalations = _notifyEscalations,
+                EmailWorkflowFailures = _emailWorkflowFailures,
+                EmailDocumentProcessing = _emailDocumentProcessing,
+                EmailAnnouncements = _emailAnnouncements,
+                InAppDocumentProcessing = _notifyNewDocuments,
+                InAppWorkflowCompletions = _inAppWorkflowCompletions,
+                InAppWorkflowFailures = _inAppWorkflowFailures,
+                InAppAnnouncements = _inAppAnnouncements
+            });
+            Snackbar.Add("Preferences saved", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to save preferences.", Severity.Error);
+        }
+        finally { _savingPreferences = false; }
+    }
+}

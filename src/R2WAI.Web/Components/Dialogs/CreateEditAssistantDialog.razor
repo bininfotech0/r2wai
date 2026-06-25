@@ -1,0 +1,168 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Assistant" : "Create Assistant")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form">
+        <MudGrid>
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" RequiredError="Name is required"
+                              Validation="@(new Func<string, string>(ValidateName))" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="string" @bind-Value="_type" Label="Type" Variant="Variant.Outlined">
+                    <MudSelectItem T="string" Value="@("General")">General</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("HR")">HR</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("IT")">IT</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Procurement")">Procurement</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Finance")">Finance</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Legal")">Legal</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.body2" Class="mb-2" Style="font-weight: 600;">System Prompt</MudText>
+                <MarkdownEditor @bind-Value="_systemPrompt" Lines="6"
+                                Placeholder="Instructions that define the assistant's behavior and expertise..."
+                                HelperText="Use markdown to format instructions clearly" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?" @bind-Value="_knowledgeBaseId" Label="Knowledge Base" Clearable="true" Variant="Variant.Outlined">
+                    @foreach (var kb in _knowledgeBases)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)kb.Id)">@kb.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?" @bind-Value="_modelConfigurationId" Label="AI Model" Clearable="true" Variant="Variant.Outlined">
+                    @foreach (var model in _models)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)model.Id)">@model.Name (@model.Provider)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? EditId { get; set; }
+
+    private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private string _name = string.Empty;
+    private string _description = string.Empty;
+    private string _type = "General";
+    private string _systemPrompt = string.Empty;
+    private Guid? _knowledgeBaseId;
+    private Guid? _modelConfigurationId;
+    private bool _saving;
+    private MudForm _form = default!;
+    private List<KbOption> _knowledgeBases = new();
+    private List<ModelOption> _models = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var kbResult = await Http.GetFromJsonAsync<KbListResult>("/api/v1/knowledgebases");
+            _knowledgeBases = kbResult?.Items ?? new();
+            var modelResult = await Http.GetFromJsonAsync<ModelListResult>("/api/v1/admin/models");
+            _models = modelResult?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load form options.", Severity.Warning); }
+
+        if (_isEdit)
+        {
+            try
+            {
+                var assistant = await Http.GetFromJsonAsync<AssistantEditDto>($"/api/v1/assistants/{EditId}");
+                if (assistant is not null)
+                {
+                    _name = assistant.Name;
+                    _description = assistant.Description ?? string.Empty;
+                    _type = assistant.Type ?? "General";
+                    _systemPrompt = assistant.SystemPrompt ?? string.Empty;
+                    _knowledgeBaseId = assistant.KnowledgeBaseId;
+                    _modelConfigurationId = assistant.ModelConfigurationId;
+                }
+            }
+            catch { Snackbar.Add("Failed to load assistant", Severity.Error); }
+        }
+    }
+
+    private string ValidateName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "Name is required";
+        if (name.Trim().Length < 2)
+            return "Name must be at least 2 characters";
+        return null!;
+    }
+
+    private async Task Save()
+    {
+        await _form.Validate();
+        if (!_form.IsValid)
+            return;
+
+        _saving = true;
+        try
+        {
+            var payload = new
+            {
+                Name = _name,
+                Description = (string?)(string.IsNullOrWhiteSpace(_description) ? null : _description),
+                Type = _type,
+                SystemPrompt = (string?)(string.IsNullOrWhiteSpace(_systemPrompt) ? null : _systemPrompt),
+                KnowledgeBaseId = _knowledgeBaseId,
+                ModelConfigurationId = _modelConfigurationId
+            };
+
+            if (_isEdit)
+            {
+                await Http.PutAsJsonAsync($"/api/v1/assistants/{EditId}", payload);
+                Snackbar.Add("Assistant updated", Severity.Success);
+            }
+            else
+            {
+                await Http.PostAsJsonAsync("/api/v1/assistants", payload);
+                Snackbar.Add("Assistant created", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class AssistantEditDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Type { get; set; }
+        public string? SystemPrompt { get; set; }
+        public Guid? KnowledgeBaseId { get; set; }
+        public Guid? ModelConfigurationId { get; set; }
+    }
+
+    private class KbListResult { public List<KbOption> Items { get; set; } = new(); }
+    private class KbOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private class ModelListResult { public List<ModelOption> Items { get; set; } = new(); }
+    private class ModelOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string Provider { get; set; } = string.Empty; }
+}

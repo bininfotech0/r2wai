@@ -1,0 +1,77 @@
+@code {
+    [Parameter] public SkeletonVariant Variant { get; set; } = SkeletonVariant.Table;
+
+    public enum SkeletonVariant { Table, Cards, Detail, Chat, Timeline }
+}
+
+@switch (Variant)
+{
+    case SkeletonVariant.Table:
+        <MudPaper Elevation="0" Class="pa-4">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="30%" Height="24px" Class="mb-4" Animation="Animation.Wave" />
+            @for (var i = 0; i < 5; i++)
+            {
+                <div class="d-flex gap-4 mb-3">
+                    <MudSkeleton Width="25%" Height="16px" Animation="Animation.Wave" />
+                    <MudSkeleton Width="35%" Height="16px" Animation="Animation.Wave" />
+                    <MudSkeleton Width="15%" Height="16px" Animation="Animation.Wave" />
+                    <MudSkeleton Width="20%" Height="16px" Animation="Animation.Wave" />
+                </div>
+            }
+        </MudPaper>
+        break;
+
+    case SkeletonVariant.Cards:
+        <MudGrid>
+            @for (var i = 0; i < 4; i++)
+            {
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Elevation="2" Class="pa-4">
+                        <MudSkeleton SkeletonType="SkeletonType.Circle" Width="48px" Height="48px" Class="mb-3" Animation="Animation.Wave" />
+                        <MudSkeleton Width="60%" Height="20px" Class="mb-2" Animation="Animation.Wave" />
+                        <MudSkeleton Width="80%" Height="14px" Animation="Animation.Wave" />
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+        break;
+
+    case SkeletonVariant.Detail:
+        <MudPaper Elevation="0" Class="pa-4">
+            <MudSkeleton Width="40%" Height="28px" Class="mb-4" Animation="Animation.Wave" />
+            @for (var i = 0; i < 4; i++)
+            {
+                <MudSkeleton Width="20%" Height="14px" Class="mb-1" Animation="Animation.Wave" />
+                <MudSkeleton Width="70%" Height="36px" Class="mb-4" Animation="Animation.Wave" />
+            }
+        </MudPaper>
+        break;
+
+    case SkeletonVariant.Chat:
+        <div class="pa-4">
+            @for (var i = 0; i < 3; i++)
+            {
+                <div class="d-flex mb-3" style="@(i % 2 == 0 ? "justify-content: flex-end;" : "")">
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="60%" Height="48px"
+                                 Style="border-radius: 8px;" Animation="Animation.Wave" />
+                </div>
+            }
+        </div>
+        break;
+
+    case SkeletonVariant.Timeline:
+        <div class="pa-4">
+            @for (var i = 0; i < 3; i++)
+            {
+                <div class="d-flex gap-3 mb-4 align-center">
+                    <MudSkeleton SkeletonType="SkeletonType.Circle" Width="32px" Height="32px" Animation="Animation.Wave" />
+                    <div style="flex: 1;">
+                        <MudSkeleton Width="40%" Height="18px" Class="mb-2" Animation="Animation.Wave" />
+                        <MudSkeleton Width="60%" Height="14px" Animation="Animation.Wave" />
+                    </div>
+                    <MudSkeleton Width="60px" Height="24px" Style="border-radius: 12px;" Animation="Animation.Wave" />
+                </div>
+            }
+        </div>
+        break;
+}

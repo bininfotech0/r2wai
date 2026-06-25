@@ -1,0 +1,776 @@
+@page "/assistant-studio"
+@page "/assistants"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - AI Assistant Studio</PageTitle>
+
+<PageHeader Title="AI Assistant Studio" Subtitle="Create, configure, and deploy AI assistants" />
+
+@* AI Creation Panel *@
+@if (_showCreator)
+{
+    <MudPaper Elevation="0" Class="pa-4 mb-4 ai-command-bar">
+        <div class="d-flex justify-space-between align-center mb-3">
+            <div class="d-flex align-center gap-2">
+                <div class="icon-container icon-container--primary">
+                    <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Create New Assistant</MudText>
+            </div>
+            <MudIconButton Icon="@Icons.Material.Outlined.Close" Size="Size.Small" OnClick="CloseCreator" />
+        </div>
+
+        @if (!_generating)
+        {
+            <MudTextField @bind-Value="_creatorPrompt" Lines="3" Variant="Variant.Outlined"
+                          Placeholder="Describe the assistant you need... e.g. 'I need an HR assistant that helps employees with onboarding questions, benefits, and leave policies'"
+                          Class="mb-3" />
+            <div class="d-flex justify-space-between align-center">
+                <div class="d-flex gap-2 flex-wrap">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("HR"))">HR Assistant</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("IT"))">IT Helpdesk</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("Finance"))">Finance FAQ</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("Legal"))">Legal Advisor</MudChip>
+                </div>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.AutoAwesome"
+                           OnClick="GenerateAssistant"
+                           Disabled="@string.IsNullOrWhiteSpace(_creatorPrompt)">
+                    Create from Template
+                </MudButton>
+            </div>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-3 py-4">
+                <div class="d-flex align-center gap-3">
+                    @if (_genStep >= 1)
+                    {
+                        <div class="icon-container icon-container--success">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
+                        </div>
+                    }
+                    else
+                    {
+                        <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                    }
+                    <MudText Typo="Typo.body2" Color="@(_genStep >= 1 ? Color.Default : Color.Primary)">Analysing your description...</MudText>
+                </div>
+                <div class="d-flex align-center gap-3">
+                    @if (_genStep >= 2)
+                    {
+                        <div class="icon-container icon-container--success">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
+                        </div>
+                    }
+                    else if (_genStep == 1)
+                    {
+                        <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <div class="icon-container icon-container--secondary">
+                            <MudIcon Icon="@Icons.Material.Outlined.RadioButtonUnchecked" Size="Size.Small" />
+                        </div>
+                    }
+                    <MudText Typo="Typo.body2" Color="@(_genStep >= 2 ? Color.Default : _genStep == 1 ? Color.Primary : Color.Secondary)">Applying smart template...</MudText>
+                </div>
+                <div class="d-flex align-center gap-3">
+                    @if (_genStep >= 3)
+                    {
+                        <div class="icon-container icon-container--success">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
+                        </div>
+                    }
+                    else if (_genStep == 2)
+                    {
+                        <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <div class="icon-container icon-container--secondary">
+                            <MudIcon Icon="@Icons.Material.Outlined.RadioButtonUnchecked" Size="Size.Small" />
+                        </div>
+                    }
+                    <MudText Typo="Typo.body2" Color="@(_genStep >= 3 ? Color.Default : _genStep == 2 ? Color.Primary : Color.Secondary)">Creating assistant...</MudText>
+                </div>
+            </div>
+        }
+    </MudPaper>
+}
+
+<MudGrid>
+    @* Left Panel: Assistant List *@
+    <MudItem xs="12" md="4">
+        <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-divider);">
+            <div class="d-flex justify-space-between align-center mb-3">
+                <div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Assistants</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 800; letter-spacing: -0.03em;">@_assistants.Count total</MudText>
+                </div>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="ShowCreator">
+                    New
+                </MudButton>
+            </div>
+
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Search..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" DebounceInterval="300" Class="mb-2" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" />
+
+            <div class="d-flex gap-1 mb-3">
+                <MudChip T="string" Size="Size.Small" OnClick="@(() => _filter = "All")"
+                         Color="@(_filter == "All" ? Color.Primary : Color.Default)"
+                         Variant="@(_filter == "All" ? Variant.Filled : Variant.Outlined)">All</MudChip>
+                <MudChip T="string" Size="Size.Small" OnClick="@(() => _filter = "Published")"
+                         Color="@(_filter == "Published" ? Color.Success : Color.Default)"
+                         Variant="@(_filter == "Published" ? Variant.Filled : Variant.Outlined)">Published</MudChip>
+                <MudChip T="string" Size="Size.Small" OnClick="@(() => _filter = "Draft")"
+                         Color="@(_filter == "Draft" ? Color.Default : Color.Default)"
+                         Variant="@(_filter == "Draft" ? Variant.Filled : Variant.Outlined)">Draft</MudChip>
+            </div>
+
+            @if (_loading)
+            {
+                <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Detail" />
+            }
+            else if (_hasError)
+            {
+                <ErrorState ErrorMessage="@_error" OnRetry="LoadData" />
+            }
+            else if (FilteredAssistants.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Filled.SmartToy"
+                            Title="No assistants yet"
+                            Description="Create your first AI assistant to get started."
+                            ActionText="New Assistant"
+                            OnAction="ShowCreator"
+                            MinHeight="200px" />
+            }
+            else
+            {
+                <MudList T="AssistantDto" Dense="true" Class="overflow-y-auto stagger-in mobile-list-collapsed" Style="max-height: 60vh;">
+                    @foreach (var assistant in FilteredAssistants)
+                    {
+                        <MudListItem T="AssistantDto" OnClick="@(() => SelectAssistant(assistant))"
+                                     Style="@(_selectedAssistant?.Id == assistant.Id ? "background-color: var(--mud-palette-primary-lighten); border-radius: 8px;" : "border-radius: 8px;")">
+                            <div class="d-flex align-center gap-3" style="width:100%;">
+                                <div class="icon-container icon-container--primary" style="font-size: 0.7rem;">
+                                    @(assistant.Name.Length > 0 ? assistant.Name[0].ToString().ToUpper() : "A")
+                                </div>
+                                <div style="flex: 1; min-width: 0;">
+                                    <MudText Typo="Typo.subtitle2" Style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">@assistant.Name</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@assistant.Type</MudText>
+                                </div>
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(assistant.IsActive ? Color.Success : Color.Default)"
+                                         Style="font-size: 0.65rem;">
+                                    @(assistant.IsActive ? "Live" : "Draft")
+                                </MudChip>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    </MudItem>
+
+    @* Right Panel: Editor *@
+    <MudItem xs="12" md="8" Class="@(_selectedAssistant is not null ? "animate-slide-in" : "")">
+        @if (_selectedAssistant is null)
+        {
+            <MudPaper Elevation="0" Class="pa-8 text-center" Style="min-height: 400px; border: 1px solid var(--mud-palette-divider);">
+                <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Size="Size.Large" Color="Color.Secondary" Class="mb-4" Style="opacity: 0.3;" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary">Select an assistant to configure</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Tertiary" Class="mt-2">
+                    Or create a new one using natural language
+                </MudText>
+            </MudPaper>
+        }
+        else
+        {
+            @* Publish Banner *@
+            @if (_selectedAssistant.IsActive)
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                          Icon="@Icons.Material.Filled.CheckCircle">
+                    <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                        <span>This assistant is <strong>published</strong> and available to users.</span>
+                        <MudButton Variant="Variant.Text" Color="Color.Warning" Size="Size.Small" OnClick="UnpublishAssistant">
+                            Unpublish
+                        </MudButton>
+                    </div>
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-3"
+                          Icon="@Icons.Material.Filled.Info">
+                    <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                        <span>This assistant is in <strong>draft</strong> mode.</span>
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Publish" OnClick="PublishAssistant">
+                            Publish
+                        </MudButton>
+                    </div>
+                </MudAlert>
+            }
+
+            <MudPaper Elevation="0" Class="editor-panel" Style="border: 1px solid var(--mud-palette-divider);">
+                @* Header with actions *@
+                <div class="editor-header d-flex justify-space-between align-center pa-4" style="border-bottom: 1px solid var(--mud-palette-divider);">
+                    <div class="d-flex align-center gap-3">
+                        <MudAvatar Color="Color.Primary" Size="Size.Medium">
+                            @(_selectedAssistant.Name.Length > 0 ? _selectedAssistant.Name[0].ToString().ToUpper() : "A")
+                        </MudAvatar>
+                        <div>
+                            <MudText Typo="Typo.h6" Class="gradient-text" Style="font-weight: 600;">@_selectedAssistant.Name</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Created @_selectedAssistant.CreatedAt.ToString("MMM dd, yyyy")</MudText>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-1">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Chat" OnClick="OpenChat">
+                            Test
+                        </MudButton>
+                        <MudIconButton Icon="@Icons.Material.Filled.Science" Color="Color.Secondary" Size="Size.Small"
+                                       OnClick="@(() => Navigation.NavigateTo($"/assistant-studio/playground/{_selectedAssistant!.Id}"))"
+                                       aria-label="Playground" />
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" AnchorOrigin="Origin.BottomRight">
+                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" IconColor="Color.Error"
+                                         OnClick="DeleteAssistant">Delete Assistant</MudMenuItem>
+                        </MudMenu>
+                    </div>
+                </div>
+
+                <div class="pa-4">
+                    @* General Section *@
+                    <MudText Typo="Typo.subtitle2" Class="mb-3 editor-section-title" Style="font-weight: 600;">General</MudText>
+                    <MudGrid Class="mb-4" Spacing="3">
+                        <MudItem xs="12" sm="8">
+                            <MudTextField @bind-Value="_editName" Label="Name" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" Required="true" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudSelect T="string" @bind-Value="_editType" Label="Type" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense">
+                                <MudSelectItem T="string" Value="@("General")">General</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("HR")">HR</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("IT")">IT</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("Procurement")">Procurement</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("Finance")">Finance</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("Legal")">Legal</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_editDescription" Label="Description" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" Lines="2" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudSelect T="Guid?" @bind-Value="_editModelId" Label="AI Model" Clearable="true"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                                @foreach (var model in _models)
+                                {
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)model.Id)">@model.Name (@model.Provider)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudSelect T="Guid?" @bind-Value="_editWorkflowId" Label="Linked Workflow" Clearable="true"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                                @foreach (var wf in _workflows)
+                                {
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)wf.Id)">@wf.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2" Class="mb-2" Style="font-weight: 600;">System Prompt</MudText>
+                            <MarkdownEditor @bind-Value="_editSystemPrompt" Lines="8"
+                                            Placeholder="Define how the assistant should behave and respond..."
+                                            HelperText="Use markdown to format instructions. Bold for emphasis, code blocks for examples, lists for rules." />
+                        </MudItem>
+                    </MudGrid>
+
+                    <MudDivider Class="mb-4" />
+
+                    @* Knowledge Section *@
+                    <div class="d-flex justify-space-between align-center mb-3">
+                        <MudText Typo="Typo.subtitle2" Class="editor-section-title" Style="font-weight: 600;">Knowledge Base</MudText>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Upload" OnClick="UploadDocument">
+                            Upload
+                        </MudButton>
+                    </div>
+                    <MudGrid Class="mb-4" Spacing="3">
+                        <MudItem xs="12" sm="6">
+                            <MudSelect T="Guid?" @bind-Value="_editKnowledgeBaseId" Label="Knowledge Base" Clearable="true"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                                @foreach (var kb in _knowledgeBases)
+                                {
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)kb.Id)">@kb.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12">
+                            @if (_documents.Count > 0)
+                            {
+                                <MudDataGrid T="DocumentDto" Items="_documents" Dense="true" Hover="true" Elevation="0"
+                                             Style="border: 1px solid var(--mud-palette-divider);">
+                                    <Columns>
+                                        <PropertyColumn Property="x => x.Name" Title="Document" />
+                                        <PropertyColumn Property="x => x.FileType" Title="Type" />
+                                        <TemplateColumn Title="Status">
+                                            <CellTemplate>
+                                                <StatusBadge Status="@context.Item.Status" />
+                                            </CellTemplate>
+                                        </TemplateColumn>
+                                    </Columns>
+                                </MudDataGrid>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    No documents linked. Select a knowledge base and upload documents.
+                                </MudText>
+                            }
+                        </MudItem>
+                    </MudGrid>
+
+                    <MudDivider Class="mb-4" />
+
+                    @* Tools Section *@
+                    <MudText Typo="Typo.subtitle2" Class="mb-3 editor-section-title" Style="font-weight: 600;">Tools</MudText>
+                    <MudGrid Class="mb-4" Spacing="2">
+                        @foreach (var tool in _availableTools)
+                        {
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudPaper Class="pa-3" Elevation="0"
+                                          Style="@($"border: 1px solid {(tool.IsEnabled ? "var(--mud-palette-primary)" : "var(--mud-palette-divider)")}; border-radius: 8px;")">
+                                    <MudCheckBox T="bool" @bind-Value="tool.IsEnabled" Label="@tool.Name"
+                                                 Color="Color.Primary" Dense="true" />
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-8">@tool.Description</MudText>
+                                </MudPaper>
+                            </MudItem>
+                        }
+                    </MudGrid>
+
+                    @* Quick Test Section *@
+                    <MudDivider Class="mb-4" />
+                    <div class="d-flex justify-space-between align-center mb-3">
+                        <MudText Typo="Typo.subtitle2" Class="editor-section-title" Style="font-weight: 600;">Quick Test</MudText>
+                    </div>
+                    <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px; background: linear-gradient(135deg, rgba(124, 58, 237, 0.02) 0%, rgba(59, 130, 246, 0.02) 100%);">
+                        <div class="d-flex gap-2">
+                            <MudTextField @bind-Value="_testMessage" Placeholder="Type a test message..."
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex: 1;" />
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Send" OnClick="OpenChat">
+                                Send
+                            </MudButton>
+                        </div>
+                    </MudPaper>
+                </div>
+            </MudPaper>
+
+            @* Floating Save Button *@
+            <div style="position: fixed; bottom: 24px; right: 24px; z-index: 100;">
+                <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                        OnClick="SaveAll" Disabled="_saving" Label="@(_saving ? "Saving..." : "Save")" />
+            </div>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<AssistantDto> _assistants = new();
+    private AssistantDto? _selectedAssistant;
+    private string _searchTerm = string.Empty;
+    private string _filter = "All";
+    private bool _loading = true;
+    private bool _saving;
+    private bool _hasError;
+    private string _error = string.Empty;
+    private string _testMessage = string.Empty;
+
+    // Creator
+    private bool _showCreator;
+    private string _creatorPrompt = string.Empty;
+    private bool _generating;
+    private int _genStep;
+
+    // Edit fields
+    private string _editName = string.Empty;
+    private string _editDescription = string.Empty;
+    private string _editType = "General";
+    private string _editSystemPrompt = string.Empty;
+    private Guid? _editModelId;
+    private Guid? _editWorkflowId;
+    private Guid? _editKnowledgeBaseId;
+    private List<DocumentDto> _documents = new();
+
+    // Lookups
+    private List<KbOption> _knowledgeBases = new();
+    private List<ModelOption> _models = new();
+    private List<WorkflowOption> _workflows = new();
+    private List<ToolOption> _availableTools = new();
+
+    private List<AssistantDto> FilteredAssistants
+    {
+        get
+        {
+            var list = _assistants.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+                list = list.Where(a => a.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+            if (_filter == "Published")
+                list = list.Where(a => a.IsActive);
+            else if (_filter == "Draft")
+                list = list.Where(a => !a.IsActive);
+            return list.ToList();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        _hasError = false;
+        StateHasChanged();
+        try
+        {
+            var assistantsTask = Http.GetFromJsonAsync<ListResult<AssistantDto>>("/api/v1/assistants");
+            var kbTask = Http.GetFromJsonAsync<ListResult<KbOption>>("/api/v1/knowledgebases");
+            var modelsTask = Http.GetFromJsonAsync<ListResult<ModelOption>>("/api/v1/admin/models");
+            var workflowsTask = Http.GetFromJsonAsync<ListResult<WorkflowOption>>("/api/v1/workflows");
+
+            await Task.WhenAll(assistantsTask, kbTask, modelsTask, workflowsTask);
+
+            _assistants = assistantsTask.Result?.Items ?? new();
+            _knowledgeBases = kbTask.Result?.Items ?? new();
+            _models = modelsTask.Result?.Items ?? new();
+            _workflows = workflowsTask.Result?.Items ?? new();
+
+            _availableTools = new()
+            {
+                new() { Name = "REST API", Description = "Call external REST APIs", ToolType = "Http" },
+                new() { Name = "Email", Description = "Send emails via SMTP", ToolType = "Email" },
+                new() { Name = "Database", Description = "Query PostgreSQL databases", ToolType = "Database" },
+            };
+        }
+        catch (Exception ex)
+        {
+            _hasError = true;
+            _error = "Unable to load assistants. Please check your connection and try again.";
+            Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private void ShowCreator()
+    {
+        _showCreator = true;
+        _creatorPrompt = string.Empty;
+        _generating = false;
+        _genStep = 0;
+    }
+
+    private void CloseCreator()
+    {
+        _showCreator = false;
+        _generating = false;
+    }
+
+    private void ApplyTemplate(string type)
+    {
+        _creatorPrompt = type switch
+        {
+            "HR" => "I need an HR assistant that helps employees with onboarding, benefits enrollment, leave policies, and company handbook questions.",
+            "IT" => "I need an IT helpdesk assistant that helps employees troubleshoot common IT issues, reset passwords, and submit support tickets.",
+            "Finance" => "I need a Finance assistant that helps with expense report questions, invoice processing, budget inquiries, and financial policy questions.",
+            "Legal" => "I need a Legal assistant that helps with contract review questions, compliance policies, NDA templates, and legal process guidance.",
+            _ => _creatorPrompt
+        };
+    }
+
+    private async Task GenerateAssistant()
+    {
+        _generating = true;
+        _genStep = 0;
+        StateHasChanged();
+
+        await Task.Delay(400);
+        _genStep = 1;
+        StateHasChanged();
+
+        string name, type, systemPrompt, description;
+        bool isAiGenerated = false;
+
+        try
+        {
+            var configResponse = await Http.PostAsJsonAsync("/api/v1/assistants/generate-config",
+                new { Description = _creatorPrompt });
+
+            if (configResponse.IsSuccessStatusCode)
+            {
+                var cfg = await configResponse.Content.ReadFromJsonAsync<GeneratedConfigDto>();
+                if (cfg is not null)
+                {
+                    name = cfg.Name ?? "New Assistant";
+                    type = cfg.Type ?? "General";
+                    description = cfg.Description ?? _creatorPrompt;
+                    systemPrompt = cfg.SystemPrompt ?? $"You are a helpful {type} assistant.";
+                    isAiGenerated = cfg.IsAiGenerated;
+                }
+                else { (name, type, description, systemPrompt) = FallbackConfig(); }
+            }
+            else { (name, type, description, systemPrompt) = FallbackConfig(); }
+        }
+        catch
+        {
+            (name, type, description, systemPrompt) = FallbackConfig();
+        }
+
+        _genStep = 2;
+        StateHasChanged();
+        await Task.Delay(300);
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/assistants", new
+            {
+                Name = name,
+                Type = type,
+                Description = description.Length > 200 ? description[..200] : description,
+                SystemPrompt = systemPrompt,
+                ModelConfigurationId = _models.FirstOrDefault()?.Id,
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _genStep = 3;
+                StateHasChanged();
+                await Task.Delay(300);
+
+                var badge = isAiGenerated ? "✦ AI-powered" : "template-based";
+                Snackbar.Add($"Assistant '{name}' created ({badge}).", Severity.Success);
+                _showCreator = false;
+                _generating = false;
+                await LoadData();
+
+                var created = _assistants.FirstOrDefault(a => a.Name == name);
+                if (created is not null)
+                    await SelectAssistant(created);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to create: {error}", Severity.Error);
+                _generating = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to create: {ex.Message}", Severity.Error);
+            _generating = false;
+        }
+        StateHasChanged();
+    }
+
+    private (string name, string type, string description, string systemPrompt) FallbackConfig()
+    {
+        var prompt = _creatorPrompt.ToLowerInvariant();
+        var type = prompt.Contains("hr") || prompt.Contains("onboard") || prompt.Contains("employee") ? "HR"
+            : prompt.Contains("it ") || prompt.Contains("helpdesk") || prompt.Contains("support") ? "IT"
+            : prompt.Contains("finance") || prompt.Contains("expense") || prompt.Contains("invoice") ? "Finance"
+            : prompt.Contains("legal") || prompt.Contains("contract") ? "Legal"
+            : prompt.Contains("procure") || prompt.Contains("vendor") ? "Procurement"
+            : "General";
+        return ($"{type} Assistant", type, _creatorPrompt, $"You are a helpful {type} assistant. {_creatorPrompt.Trim('.')}.");
+    }
+
+    private async Task SelectAssistant(AssistantDto assistant)
+    {
+        _selectedAssistant = assistant;
+        try
+        {
+            var detail = await Http.GetFromJsonAsync<AssistantDetailDto>($"/api/v1/assistants/{assistant.Id}");
+            if (detail is not null)
+            {
+                _editName = detail.Name;
+                _editDescription = detail.Description ?? string.Empty;
+                _editType = detail.Type ?? "General";
+                _editSystemPrompt = detail.SystemPrompt ?? string.Empty;
+                _editModelId = detail.ModelConfigurationId;
+                _editKnowledgeBaseId = detail.KnowledgeBaseId;
+                _editWorkflowId = null;
+
+                if (detail.Tools is not null)
+                {
+                    foreach (var tool in _availableTools)
+                        tool.IsEnabled = detail.Tools.Contains(tool.ToolType, StringComparer.OrdinalIgnoreCase);
+                }
+            }
+            await LoadDocuments();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task LoadDocuments()
+    {
+        try
+        {
+            var url = "/api/v1/documents?pageSize=50";
+            if (_editKnowledgeBaseId.HasValue)
+                url += $"&knowledgeBaseId={_editKnowledgeBaseId}";
+            var result = await Http.GetFromJsonAsync<ListResult<DocumentDto>>(url);
+            _documents = result?.Items ?? new();
+        }
+        catch { _documents = new(); }
+    }
+
+    private async Task SaveAll()
+    {
+        if (string.IsNullOrWhiteSpace(_editName)) { Snackbar.Add("Name is required", Severity.Warning); return; }
+        _saving = true;
+        try
+        {
+            var enabledTools = _availableTools.Where(t => t.IsEnabled).Select(t => t.ToolType).ToList();
+            await Http.PutAsJsonAsync($"/api/v1/assistants/{_selectedAssistant!.Id}", new
+            {
+                Name = _editName,
+                Description = (string?)(string.IsNullOrWhiteSpace(_editDescription) ? null : _editDescription),
+                Type = _editType,
+                SystemPrompt = (string?)(string.IsNullOrWhiteSpace(_editSystemPrompt) ? null : _editSystemPrompt),
+                ModelConfigurationId = _editModelId,
+                KnowledgeBaseId = _editKnowledgeBaseId,
+                Tools = System.Text.Json.JsonSerializer.Serialize(enabledTools),
+            });
+            Snackbar.Add("Assistant saved", Severity.Success);
+            _selectedAssistant.Name = _editName;
+            _selectedAssistant.Type = _editType;
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task PublishAssistant()
+    {
+        try
+        {
+            await Http.PostAsync($"/api/v1/assistants/{_selectedAssistant!.Id}/publish", null);
+            _selectedAssistant.IsActive = true;
+            Snackbar.Add("Assistant published!", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Publish failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task UnpublishAssistant()
+    {
+        try
+        {
+            await Http.PostAsync($"/api/v1/assistants/{_selectedAssistant!.Id}/unpublish", null);
+            _selectedAssistant.IsActive = false;
+            Snackbar.Add("Assistant unpublished", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Unpublish failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteAssistant()
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, _selectedAssistant!.Name },
+            { x => x.Description, "This assistant and all its configuration will be permanently removed." }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == true) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/assistants/{_selectedAssistant!.Id}");
+            Snackbar.Add("Assistant deleted", Severity.Success);
+            _selectedAssistant = null;
+            await LoadData();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task OpenChat()
+    {
+        var parameters = new DialogParameters<ChatDialog>
+        {
+            { x => x.AssistantId, _selectedAssistant!.Id.ToString() },
+            { x => x.AssistantName, _selectedAssistant.Name },
+        };
+        await Dialog.ShowAsync<ChatDialog>($"Chat with {_selectedAssistant.Name}", parameters);
+    }
+
+    private async Task UploadDocument()
+    {
+        var dialog = await Dialog.ShowAsync<UploadDocumentDialog>("Upload Document");
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadDocuments();
+    }
+
+    // DTOs
+    private class ListResult<T> { public List<T> Items { get; set; } = new(); }
+    private class AssistantDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Type { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+    private class AssistantDetailDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Type { get; set; }
+        public string? SystemPrompt { get; set; }
+        public Guid? KnowledgeBaseId { get; set; }
+        public Guid? ModelConfigurationId { get; set; }
+        public List<string>? Tools { get; set; }
+    }
+    private class DocumentDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string FileType { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+    }
+    private class KbOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private class ModelOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string Provider { get; set; } = string.Empty; }
+    private class WorkflowOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private class ToolOption
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string ToolType { get; set; } = string.Empty;
+        public bool IsEnabled { get; set; }
+    }
+
+    private class GeneratedConfigDto
+    {
+        public string? Name { get; set; }
+        public string? Type { get; set; }
+        public string? Description { get; set; }
+        public string? SystemPrompt { get; set; }
+        public bool IsAiGenerated { get; set; }
+    }
+}

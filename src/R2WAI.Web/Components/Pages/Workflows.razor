@@ -1,0 +1,820 @@
+@page "/workflow-studio"
+@page "/workflows"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - Workflow Studio</PageTitle>
+
+<PageHeader Title="Workflow Studio" Subtitle="Design, execute, and monitor business workflows" />
+
+@* AI Workflow Generator *@
+@if (_showGenerator)
+{
+    <MudPaper Elevation="0" Class="pa-4 mb-4 ai-command-bar">
+        <div class="d-flex justify-space-between align-center mb-3">
+            <div class="d-flex align-center gap-2">
+                <div class="icon-container icon-container--primary">
+                    <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Color="Color.Primary" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">AI Workflow Generator</MudText>
+            </div>
+            <MudIconButton Icon="@Icons.Material.Outlined.Close" Size="Size.Small" OnClick="@(() => _showGenerator = false)" />
+        </div>
+
+        @if (!_generating)
+        {
+            <MudTextField @bind-Value="_generatorPrompt" Lines="3" Variant="Variant.Outlined"
+                          Placeholder="Describe your workflow... e.g. 'Create an invoice approval workflow above ₹100,000 requiring manager and finance approval'"
+                          Class="mb-3" />
+            <div class="d-flex justify-space-between align-center">
+                <div class="d-flex gap-2 flex-wrap">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("invoice"))">Invoice Approval</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("leave"))">Leave Request</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("expense"))">Expense Report</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("onboarding"))">Employee Onboarding</MudChip>
+                </div>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="GenerateWorkflow"
+                           Disabled="@string.IsNullOrWhiteSpace(_generatorPrompt)">
+                    Generate
+                </MudButton>
+            </div>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-3 py-4">
+                <div class="d-flex align-center gap-3">
+                    @if (_genStep >= 1)
+                    { <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" /> }
+                    else
+                    { <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" /> }
+                    <MudText Typo="Typo.body2" Color="@(_genStep >= 1 ? Color.Default : Color.Primary)">Analyzing requirements...</MudText>
+                </div>
+                <div class="d-flex align-center gap-3">
+                    @if (_genStep >= 2)
+                    { <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" /> }
+                    else if (_genStep == 1)
+                    { <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" /> }
+                    else
+                    { <MudIcon Icon="@Icons.Material.Outlined.RadioButtonUnchecked" Color="Color.Default" Size="Size.Small" /> }
+                    <MudText Typo="Typo.body2" Color="@(_genStep >= 2 ? Color.Default : _genStep == 1 ? Color.Primary : Color.Secondary)">Designing workflow steps...</MudText>
+                </div>
+                <div class="d-flex align-center gap-3">
+                    @if (_genStep >= 3)
+                    { <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" /> }
+                    else if (_genStep == 2)
+                    { <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" /> }
+                    else
+                    { <MudIcon Icon="@Icons.Material.Outlined.RadioButtonUnchecked" Color="Color.Default" Size="Size.Small" /> }
+                    <MudText Typo="Typo.body2" Color="@(_genStep >= 3 ? Color.Default : _genStep == 2 ? Color.Primary : Color.Secondary)">Creating workflow...</MudText>
+                </div>
+            </div>
+        }
+    </MudPaper>
+}
+
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" @bind-ActivePanelIndex="_activeTab"
+         Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px;">
+
+    @* Workflows Tab *@
+    <MudTabPanel Text="Workflows" Icon="@Icons.Material.Outlined.AccountTree">
+        <div class="d-flex justify-space-between align-center pa-4 animate-slide-in">
+            <div class="d-flex align-center gap-3">
+                <MudTextField @bind-Value="_workflowSearch" Placeholder="Search workflows..."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 300px;" />
+                <MudSelect T="string" @bind-Value="_statusFilter" Label="Status" Clearable="true"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 160px;">
+                    <MudSelectItem T="string" Value="@("All")">All</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Active")">Active</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Draft")">Draft</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Archived")">Archived</MudSelectItem>
+                </MudSelect>
+            </div>
+            <div class="d-flex gap-2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.AutoAwesome"
+                           OnClick="@(() => _showGenerator = true)">
+                    AI Generate
+                </MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateWorkflowDialog">
+                    New Workflow
+                </MudButton>
+            </div>
+        </div>
+
+        @if (_loadingWorkflows)
+        {
+            <div class="pa-4"><LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Table" /></div>
+        }
+        else if (_hasError)
+        {
+            <div class="pa-4">
+                <ErrorState ErrorMessage="@_error" OnRetry="LoadWorkflows" />
+            </div>
+        }
+        else if (FilteredWorkflows.Count == 0)
+        {
+            <EmptyState Icon="@Icons.Material.Outlined.AccountTree"
+                        Title="No workflows yet"
+                        Description="Create your first workflow manually or use AI to generate one."
+                        ActionText="AI Generate"
+                        OnAction="@(() => _showGenerator = true)"
+                        MinHeight="300px" />
+        }
+        else
+        {
+            <MudGrid Class="pa-4 stagger-in" Spacing="3">
+                @foreach (var wf in FilteredWorkflows)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="0" Class="pa-4 workflow-card">
+                            <div class="d-flex justify-space-between align-center mb-2">
+                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@wf.Name</MudText>
+                                <div class="d-flex align-center gap-2">
+                                    <MudChip T="string" Size="Size.Small"
+                                             Color="@GetWorkflowStatusColor(wf)"
+                                             Variant="@(!wf.IsActive && !wf.IsArchived ? Variant.Outlined : Variant.Filled)">
+                                        @GetWorkflowStatusLabel(wf)
+                                    </MudChip>
+                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+                                             AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                                        @if (wf.IsArchived)
+                                        {
+                                            <MudMenuItem Icon="@Icons.Material.Outlined.Restore" IconColor="Color.Primary"
+                                                         OnClick="@(() => RestoreWorkflow(wf))">
+                                                Restore
+                                            </MudMenuItem>
+                                        }
+                                        else if (!wf.IsActive)
+                                        {
+                                            <MudMenuItem Icon="@Icons.Material.Outlined.Publish" IconColor="Color.Success"
+                                                         OnClick="@(() => PublishWorkflow(wf))">
+                                                Publish
+                                            </MudMenuItem>
+                                            <MudMenuItem Icon="@Icons.Material.Outlined.Archive" IconColor="Color.Default"
+                                                         OnClick="@(() => ArchiveWorkflow(wf))">
+                                                Archive
+                                            </MudMenuItem>
+                                        }
+                                        else
+                                        {
+                                            <MudMenuItem Icon="@Icons.Material.Outlined.Unpublished" IconColor="Color.Warning"
+                                                         OnClick="@(() => UnpublishWorkflow(wf))">
+                                                Unpublish
+                                            </MudMenuItem>
+                                            <MudMenuItem Icon="@Icons.Material.Outlined.Archive" IconColor="Color.Default"
+                                                         OnClick="@(() => ArchiveWorkflow(wf))">
+                                                Archive
+                                            </MudMenuItem>
+                                        }
+                                    </MudMenu>
+                                </div>
+                            </div>
+                            @if (!string.IsNullOrEmpty(wf.Description))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3"
+                                         Style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                    @wf.Description
+                                </MudText>
+                            }
+                            @if (!string.IsNullOrEmpty(wf.Type))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="mb-3">
+                                    @wf.Type
+                                </MudChip>
+                            }
+                            <div class="d-flex gap-1 mt-auto">
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.DesignServices"
+                                           OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/designer/{wf.Id}"))">
+                                    Design
+                                </MudButton>
+                                @if (!wf.IsArchived)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Success"
+                                                   OnClick="@(() => ExecuteWorkflow(wf))" aria-label="Execute" />
+                                }
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               OnClick="@(() => OpenEditWorkflowDialog(wf))" aria-label="Edit" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => DeleteWorkflow(wf))" aria-label="Delete" />
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudTabPanel>
+
+    @* Runs Tab *@
+    <MudTabPanel Text="Runs" Icon="@Icons.Material.Outlined.PlaylistPlay">
+        <div class="pa-4 animate-slide-in">
+            <MudDataGrid T="WorkflowInstanceDto" Items="_instances" Hover="true" Dense="true"
+                         Loading="_loadingInstances" Elevation="0"
+                         Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; overflow: hidden;">
+                <Columns>
+                    <PropertyColumn Property="x => x.WorkflowName" Title="Workflow" />
+                    <TemplateColumn Title="Status">
+                        <CellTemplate>
+                            <StatusBadge Status="@context.Item.Status" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn Property="x => x.CurrentStep" Title="Step" />
+                    <PropertyColumn Property="x => x.StartedAt" Title="Started" Format="MMM dd, HH:mm" />
+                    <TemplateColumn Title="Duration">
+                        <CellTemplate>
+                            <MudText Typo="Typo.body2">@FormatDuration(context.Item.StartedAt, context.Item.CompletedAt)</MudText>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="" Sortable="false" Filterable="false">
+                        <CellTemplate>
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary"
+                                           OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/runs/{context.Item.Id}"))"
+                                           aria-label="View Details" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <NoRecordsContent>
+                    <EmptyState Icon="@Icons.Material.Outlined.PlaylistPlay" Title="No workflow runs"
+                                Description="Execute a workflow to see runs here." MinHeight="200px" />
+                </NoRecordsContent>
+            </MudDataGrid>
+        </div>
+    </MudTabPanel>
+
+    @* Approvals Tab *@
+    <MudTabPanel Text="Approvals" Icon="@Icons.Material.Outlined.TaskAlt">
+        <div class="pa-4 animate-slide-in">
+            @if (_loadingApprovals)
+            {
+                <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Table" />
+            }
+            else if (_pendingApprovals.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.TaskAlt" Title="No pending approvals"
+                            Description="All approvals are processed." MinHeight="200px" />
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var approval in _pendingApprovals)
+                    {
+                        <MudPaper Elevation="0" Class="@($"pa-4 inbox-item {(approval.DueAt.HasValue && approval.DueAt < DateTime.UtcNow ? "inbox-item--urgent" : "inbox-item--normal")}")">
+                            <div class="d-flex justify-space-between align-start">
+                                <div>
+                                    <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@approval.WorkflowName</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">
+                                        Requested by @approval.RequesterFirstName @approval.RequesterLastName
+                                    </MudText>
+                                    <div class="d-flex gap-3 mt-1 align-center">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @approval.RequestedAt.ToString("MMM dd, HH:mm")
+                                        </MudText>
+                                        @if (approval.EscalationLevel > 0)
+                                        {
+                                            <MudChip T="string" Color="Color.Warning" Size="Size.Small">
+                                                Escalated L@(approval.EscalationLevel)
+                                            </MudChip>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.Check"
+                                               OnClick="@(() => OpenApprovalAction(approval, true))">
+                                        Approve
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.Close"
+                                               OnClick="@(() => OpenApprovalAction(approval, false))">
+                                        Reject
+                                    </MudButton>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    }
+                </div>
+            }
+        </div>
+    </MudTabPanel>
+
+    @* Integrations Tab *@
+    <MudTabPanel Text="Integrations" Icon="@Icons.Material.Outlined.Extension">
+        <div class="pa-4 animate-slide-in">
+            <div class="d-flex justify-end mb-3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateIntegrationDialog">
+                    New Connector
+                </MudButton>
+            </div>
+
+            <MudDataGrid T="IntegrationDto" Items="_integrations" Hover="true" Dense="true"
+                         Loading="_loadingIntegrations" Elevation="0">
+                <Columns>
+                    <PropertyColumn Property="x => x.Name" Title="Name" />
+                    <PropertyColumn Property="x => x.Type" Title="Type" />
+                    <TemplateColumn Title="Status">
+                        <CellTemplate>
+                            <MudChip T="string" Size="Size.Small"
+                                     Color="@(context.Item.IsActive ? Color.Success : Color.Default)">
+                                @(context.Item.IsActive ? "Active" : "Inactive")
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
+                        <CellTemplate>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Class="mr-1"
+                                       OnClick="@(() => TestIntegration(context.Item))">
+                                Test
+                            </MudButton>
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           OnClick="@(() => OpenEditIntegrationDialog(context.Item))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => DeleteIntegration(context.Item))" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+                <NoRecordsContent>
+                    <EmptyState Icon="@Icons.Material.Outlined.Extension" Title="No integrations"
+                                Description="Add connectors to integrate with external systems." MinHeight="200px" />
+                </NoRecordsContent>
+            </MudDataGrid>
+        </div>
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private int _activeTab;
+    private string _workflowSearch = string.Empty;
+    private string _statusFilter = "All";
+
+    // Generator
+    private bool _showGenerator;
+    private string _generatorPrompt = string.Empty;
+    private bool _generating;
+    private int _genStep;
+
+    // Workflows
+    private List<WorkflowDto> _workflows = new();
+    private bool _loadingWorkflows = true;
+    private bool _hasError;
+    private string _error = string.Empty;
+
+    // Runs
+    private List<WorkflowInstanceDto> _instances = new();
+    private bool _loadingInstances = true;
+
+    // Approvals
+    private List<PendingApprovalDto> _pendingApprovals = new();
+    private bool _loadingApprovals = true;
+
+    // Integrations
+    private List<IntegrationDto> _integrations = new();
+    private bool _loadingIntegrations = true;
+
+    private List<WorkflowDto> FilteredWorkflows
+    {
+        get
+        {
+            var result = _workflows.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(_workflowSearch))
+                result = result.Where(w => w.Name.Contains(_workflowSearch, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(_statusFilter) && _statusFilter != "All")
+            {
+                result = _statusFilter switch
+                {
+                    "Active" => result.Where(w => w.IsActive && !w.IsArchived),
+                    "Draft" => result.Where(w => !w.IsActive && !w.IsArchived),
+                    "Archived" => result.Where(w => w.IsArchived),
+                    _ => result
+                };
+            }
+
+            return result.ToList();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Task.WhenAll(LoadWorkflows(), LoadInstances(), LoadApprovals(), LoadIntegrations());
+            StateHasChanged();
+        }
+    }
+
+    // --- Generator ---
+    private void ApplyTemplate(string type)
+    {
+        _generatorPrompt = type switch
+        {
+            "invoice" => "Create an invoice approval workflow. Invoices under ₹50,000 auto-approve. ₹50,000 to ₹5,00,000 require manager approval. Above ₹5,00,000 require manager and finance director approval. Send email notification after each approval.",
+            "leave" => "Create a leave request workflow. Employee submits leave request, manager approves or rejects. If approved, HR is notified and calendar is updated. If rejected, employee is notified with reason.",
+            "expense" => "Create an expense report workflow. Employee submits expense with receipts. Under ₹10,000 auto-approved. Above ₹10,000 needs manager approval. Finance team processes reimbursement after approval.",
+            "onboarding" => "Create an employee onboarding workflow. HR initiates, IT provisions accounts, manager assigns buddy, employee completes training modules. Send welcome email on day 1.",
+            _ => _generatorPrompt
+        };
+    }
+
+    private async Task GenerateWorkflow()
+    {
+        _generating = true;
+        _genStep = 0;
+        StateHasChanged();
+
+        await Task.Delay(800);
+        _genStep = 1;
+        StateHasChanged();
+
+        var prompt = _generatorPrompt.ToLowerInvariant();
+        var type = "General";
+        if (prompt.Contains("invoice") || prompt.Contains("payment")) type = "Finance";
+        else if (prompt.Contains("leave") || prompt.Contains("vacation")) type = "HR";
+        else if (prompt.Contains("expense") || prompt.Contains("reimbursement")) type = "Finance";
+        else if (prompt.Contains("onboarding") || prompt.Contains("hiring")) type = "HR";
+
+        var name = "AI Generated Workflow";
+        if (prompt.Contains("invoice")) name = "Invoice Approval Flow";
+        else if (prompt.Contains("leave")) name = "Leave Request Flow";
+        else if (prompt.Contains("expense")) name = "Expense Report Flow";
+        else if (prompt.Contains("onboarding")) name = "Employee Onboarding Flow";
+
+        var steps = new List<object>();
+        if (prompt.Contains("approval") || prompt.Contains("approve"))
+        {
+            steps.Add(new { Name = "Submit Request", Action = "Action", Order = 0 });
+            steps.Add(new { Name = "Manager Review", Action = "Approval", AssignedRole = "Manager", Order = 1 });
+            if (prompt.Contains("finance") || prompt.Contains("director"))
+                steps.Add(new { Name = "Finance Approval", Action = "Approval", AssignedRole = "Finance", Order = 2 });
+            steps.Add(new { Name = "Send Notification", Action = "Email", Order = steps.Count });
+        }
+        else
+        {
+            steps.Add(new { Name = "Initiate", Action = "Action", Order = 0 });
+            steps.Add(new { Name = "Process", Action = "Action", Order = 1 });
+            steps.Add(new { Name = "Complete", Action = "Action", Order = 2 });
+        }
+
+        await Task.Delay(600);
+        _genStep = 2;
+        StateHasChanged();
+
+        try
+        {
+            var stepsJson = System.Text.Json.JsonSerializer.Serialize(steps);
+            var response = await Http.PostAsJsonAsync("/api/v1/workflows", new
+            {
+                Name = name,
+                Description = _generatorPrompt.Length > 300 ? _generatorPrompt[..300] : _generatorPrompt,
+                Type = type,
+                Steps = stepsJson
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _genStep = 3;
+                StateHasChanged();
+                await Task.Delay(500);
+
+                Snackbar.Add($"Workflow '{name}' created! Open the designer to customize.", Severity.Success);
+                _showGenerator = false;
+                _generating = false;
+                await LoadWorkflows();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed: {error}", Severity.Error);
+                _generating = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed: {ex.Message}", Severity.Error);
+            _generating = false;
+        }
+        StateHasChanged();
+    }
+
+    // --- Workflows ---
+    private async Task LoadWorkflows()
+    {
+        _loadingWorkflows = true;
+        _hasError = false;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ListResult<WorkflowDto>>("/api/v1/workflows");
+            _workflows = result?.Items ?? new();
+        }
+        catch (Exception ex)
+        {
+            _hasError = true;
+            _error = "Unable to load workflows. Please check your connection and try again.";
+            Snackbar.Add($"Failed to load workflows: {ex.Message}", Severity.Error);
+        }
+        finally { _loadingWorkflows = false; }
+    }
+
+    private async Task OpenCreateWorkflowDialog()
+    {
+        var dialog = await Dialog.ShowAsync<CreateEditWorkflowDialog>("New Workflow");
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadWorkflows();
+    }
+
+    private async Task OpenEditWorkflowDialog(WorkflowDto w)
+    {
+        var parameters = new DialogParameters<CreateEditWorkflowDialog> { { x => x.EditId, w.Id.ToString() } };
+        var dialog = await Dialog.ShowAsync<CreateEditWorkflowDialog>("Edit Workflow", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadWorkflows();
+    }
+
+    private async Task ExecuteWorkflow(WorkflowDto workflow)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/workflows/{workflow.Id}/execute", new { });
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Workflow started", Severity.Success);
+                _activeTab = 1;
+                await LoadInstances();
+                StateHasChanged();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Execute failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Execute failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteWorkflow(WorkflowDto workflow)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, workflow.Name } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == true) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/workflows/{workflow.Id}");
+            Snackbar.Add("Workflow deleted", Severity.Success);
+            await LoadWorkflows();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task PublishWorkflow(WorkflowDto workflow)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/workflows/{workflow.Id}/publish", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"'{workflow.Name}' published", Severity.Success);
+                await LoadWorkflows();
+                StateHasChanged();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Publish failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Publish failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task UnpublishWorkflow(WorkflowDto workflow)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/workflows/{workflow.Id}/unpublish", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"'{workflow.Name}' unpublished", Severity.Success);
+                await LoadWorkflows();
+                StateHasChanged();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Unpublish failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Unpublish failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ArchiveWorkflow(WorkflowDto workflow)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/workflows/{workflow.Id}/archive", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"'{workflow.Name}' archived", Severity.Success);
+                await LoadWorkflows();
+                StateHasChanged();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Archive failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Archive failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task RestoreWorkflow(WorkflowDto workflow)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/workflows/{workflow.Id}/restore", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"'{workflow.Name}' restored", Severity.Success);
+                await LoadWorkflows();
+                StateHasChanged();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Restore failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Restore failed: {ex.Message}", Severity.Error); }
+    }
+
+    private static string GetWorkflowStatusLabel(WorkflowDto wf)
+    {
+        if (wf.IsArchived) return "Archived";
+        return wf.IsActive ? "Active" : "Draft";
+    }
+
+    private static Color GetWorkflowStatusColor(WorkflowDto wf)
+    {
+        if (wf.IsArchived) return Color.Default;
+        return wf.IsActive ? Color.Success : Color.Warning;
+    }
+
+    // --- Runs ---
+    private async Task LoadInstances()
+    {
+        _loadingInstances = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ListResult<WorkflowInstanceDto>>("/api/v1/operations/workflow-instances?pageSize=50");
+            _instances = result?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load workflow runs.", Severity.Warning); }
+        finally { _loadingInstances = false; }
+    }
+
+    private static string FormatDuration(DateTime? start, DateTime? end)
+    {
+        if (start is null) return "—";
+        var diff = (end ?? DateTime.UtcNow) - start.Value;
+        if (diff.TotalMinutes < 1) return $"{diff.Seconds}s";
+        if (diff.TotalHours < 1) return $"{(int)diff.TotalMinutes}m";
+        return $"{(int)diff.TotalHours}h {diff.Minutes}m";
+    }
+
+    // --- Approvals ---
+    private async Task LoadApprovals()
+    {
+        _loadingApprovals = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ListResult<PendingApprovalDto>>("/api/v1/approvals/pending");
+            _pendingApprovals = result?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load approvals.", Severity.Warning); }
+        finally { _loadingApprovals = false; }
+    }
+
+    private async Task OpenApprovalAction(PendingApprovalDto approval, bool isApprove)
+    {
+        var parameters = new DialogParameters<ApprovalActionDialog>
+        {
+            { x => x.ApprovalId, approval.Id.ToString() },
+            { x => x.WorkflowName, approval.WorkflowName },
+            { x => x.IsApprove, isApprove }
+        };
+        var dialog = await Dialog.ShowAsync<ApprovalActionDialog>(
+            isApprove ? "Approve Request" : "Reject Request", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadApprovals();
+    }
+
+    // --- Integrations ---
+    private async Task LoadIntegrations()
+    {
+        _loadingIntegrations = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ListResult<IntegrationDto>>("/api/v1/integrations");
+            _integrations = result?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load integrations.", Severity.Warning); }
+        finally { _loadingIntegrations = false; }
+    }
+
+    private async Task OpenCreateIntegrationDialog()
+    {
+        var dialog = await Dialog.ShowAsync<CreateEditIntegrationDialog>("New Connector");
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadIntegrations();
+    }
+
+    private async Task OpenEditIntegrationDialog(IntegrationDto integration)
+    {
+        var parameters = new DialogParameters<CreateEditIntegrationDialog> { { x => x.EditId, integration.Id.ToString() } };
+        var dialog = await Dialog.ShowAsync<CreateEditIntegrationDialog>("Edit Connector", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadIntegrations();
+    }
+
+    private async Task TestIntegration(IntegrationDto integration)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/integrations/{integration.Id}/test", null);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<TestResult>();
+                Snackbar.Add(result?.Success == true ? $"'{integration.Name}' connected!" : $"Failed: {result?.Message}", result?.Success == true ? Severity.Success : Severity.Error);
+            }
+            else Snackbar.Add("Connection test failed", Severity.Error);
+        }
+        catch (Exception ex) { Snackbar.Add($"Test failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteIntegration(IntegrationDto integration)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, integration.Name } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/integrations/{integration.Id}");
+            Snackbar.Add("Integration deleted", Severity.Success);
+            await LoadIntegrations();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    // DTOs
+    private class ListResult<T> { public List<T> Items { get; set; } = new(); }
+    private class WorkflowDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Type { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsArchived { get; set; }
+    }
+    private class WorkflowInstanceDto
+    {
+        public Guid Id { get; set; }
+        public Guid WorkflowId { get; set; }
+        public string WorkflowName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public int CurrentStep { get; set; }
+        public DateTime? StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+    }
+    private class PendingApprovalDto
+    {
+        public Guid Id { get; set; }
+        public string WorkflowName { get; set; } = string.Empty;
+        public string RequesterFirstName { get; set; } = string.Empty;
+        public string RequesterLastName { get; set; } = string.Empty;
+        public DateTime RequestedAt { get; set; }
+        public DateTime? DueAt { get; set; }
+        public int EscalationLevel { get; set; }
+    }
+    private class IntegrationDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Type { get; set; }
+        public bool IsActive { get; set; }
+    }
+    private class TestResult { public bool Success { get; set; } public string? Message { get; set; } }
+}

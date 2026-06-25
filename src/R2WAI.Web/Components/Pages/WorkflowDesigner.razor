@@ -1,0 +1,958 @@
+@page "/workflow-studio/designer/{WorkflowId}"
+@attribute [Authorize]
+@implements IDisposable
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - Workflow Designer</PageTitle>
+
+<div class="d-flex justify-space-between align-center mb-4">
+    <div class="d-flex align-center gap-3">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Default"
+                       OnClick="@(() => Navigation.NavigateTo("/workflow-studio"))" aria-label="Back" />
+        <div>
+            <MudText Typo="Typo.h5" Style="font-weight: 700;">@(_workflow?.Name ?? "Workflow Designer")</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@(_workflow?.Description ?? "Design your workflow steps")</MudText>
+        </div>
+    </div>
+    <div class="d-flex gap-2 align-center">
+        @if (_executionMode)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
+                     Style="animation: pulse-chip 1.5s ease-in-out infinite;">
+                @_executionProgress
+            </MudChip>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Stop" OnClick="StopExecution">
+                Stop
+            </MudButton>
+        }
+        else
+        {
+            @if (_hasChanges)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Unsaved changes</MudChip>
+            }
+            @if (_executionCompleted)
+            {
+                <MudChip T="string" Size="Size.Small"
+                         Color="@(_executionFailed ? Color.Error : Color.Success)"
+                         Variant="Variant.Filled">
+                    @(_executionFailed ? "Execution Failed" : "Execution Completed")
+                </MudChip>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                               OnClick="ClearExecutionState" aria-label="Clear execution" />
+            }
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveWorkflow"
+                       Disabled="_saving" StartIcon="@Icons.Material.Filled.Save" Size="Size.Small">
+                @(_saving ? "Saving..." : "Save")
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="ExecuteWorkflow"
+                       Disabled="@(_saving || _steps.Count == 0 || _hasChanges)"
+                       StartIcon="@Icons.Material.Filled.PlayCircle" Size="Size.Small">
+                Execute
+            </MudButton>
+        }
+    </div>
+</div>
+
+@if (_executionMode || _executionCompleted)
+{
+    <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+        <div class="d-flex justify-space-between align-center mb-2">
+            <div class="d-flex align-center gap-2">
+                <MudIcon Icon="@(_executionMode ? Icons.Material.Filled.PlayCircle : (_executionFailed ? Icons.Material.Filled.ErrorOutline : Icons.Material.Filled.CheckCircle))"
+                         Color="@(_executionMode ? Color.Info : (_executionFailed ? Color.Error : Color.Success))" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">
+                    @(_executionMode ? "Executing Workflow..." : (_executionFailed ? "Execution Failed" : "Execution Complete"))
+                </MudText>
+            </div>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@_executionProgress</MudText>
+        </div>
+        <MudProgressLinear Value="@_executionPercent" Color="@(_executionFailed ? Color.Error : Color.Success)"
+                          Striped="@_executionMode" Size="Size.Medium" Rounded="true"
+                          Style="height: 8px;" />
+        @if (_executionCompleted && !_executionFailed)
+        {
+            <div class="d-flex justify-end mt-2">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.OpenInNew"
+                           OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/runs/{_instanceId}"))">
+                    View Full Details
+                </MudButton>
+            </div>
+        }
+        @if (_executionCompleted && _executionFailed && !string.IsNullOrEmpty(_executionError))
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@_executionError</MudAlert>
+        }
+    </MudPaper>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_workflow is null)
+{
+    <MudAlert Severity="Severity.Error">Workflow not found.</MudAlert>
+}
+else
+{
+    <MudGrid Spacing="3">
+        @* Left Panel: Steps & Controls *@
+        <MudItem xs="12" md="4">
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+                @if (_editingStep is not null)
+                {
+                    @* Step Inspector *@
+                    <div class="d-flex justify-space-between align-center mb-3">
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Edit Step</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                       OnClick="@(() => _editingStep = null)" />
+                    </div>
+                    <MudTextField @bind-Value="_editingStep.Name" Label="Step Name" Variant="Variant.Outlined"
+                                  Margin="Margin.Dense" Class="mb-3" />
+                    <MudSelect T="string" @bind-Value="_editingStep.Action" Label="Type" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" Class="mb-3">
+                        <MudSelectItem T="string" Value="@("Action")">Action</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Approval")">Approval</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("AI Generate")">AI Generate</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Email")">Email</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("API Call")">API Call</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Condition")">Condition</MudSelectItem>
+                    </MudSelect>
+                    <MudTextField @bind-Value="_editingStep.AssignedRole" Label="Assigned Role (optional)"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+                    <div class="d-flex gap-2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" FullWidth="true"
+                                   OnClick="@(() => { _editingStep = null; _hasChanges = true; })">
+                            Done
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                   OnClick="@(() => { _steps.Remove(_editingStep); _editingStep = null; _hasChanges = true; })">
+                            Delete
+                        </MudButton>
+                    </div>
+                }
+                else
+                {
+                    @* Step List *@
+                    <MudText Typo="Typo.subtitle1" Class="mb-2" Style="font-weight: 600;">
+                        Steps (@_steps.Count)
+                    </MudText>
+
+                    @for (var i = 0; i < _steps.Count; i++)
+                    {
+                        var step = _steps[i];
+                        var index = i;
+                        var isDragging = _dragFromIndex == index;
+                        var isDropTarget = _dropTargetIndex == index;
+                        var rowStyle = $"border: 1px solid var(--mud-palette-divider); border-left: 4px solid {GetStepColorValue(step.Action)}; border-radius: 8px; cursor: grab; transition: all 0.15s ease;"
+                            + (isDragging ? " opacity: 0.4;" : "")
+                            + (isDropTarget ? " border-top: 2px solid var(--mud-palette-primary); margin-top: 6px;" : "");
+
+                        <div draggable="true"
+                             @ondragstart="@(() => OnDragStart(index))"
+                             @ondragover="@(() => OnDragOver(index))"
+                             @ondragover:preventDefault="true"
+                             @ondragleave="OnDragLeave"
+                             @ondrop="@(() => OnDrop(index))"
+                             @ondragend="OnDragEnd">
+                            <MudPaper Class="pa-3 mb-2" Elevation="0"
+                                      Style="@rowStyle"
+                                      @onclick="@(() => _editingStep = step)">
+                                <div class="d-flex justify-space-between align-center">
+                                    <div class="d-flex align-center gap-2">
+                                        <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small"
+                                                 Color="Color.Secondary" Style="opacity: 0.5;" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="min-width: 18px; font-weight: 600;">@(index + 1)</MudText>
+                                        <div>
+                                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@step.Name</MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@step.Action</MudText>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex">
+                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small"
+                                                       Disabled="@(index == 0)" OnClick="@(() => MoveStep(index, -1))"
+                                                       aria-label="Move up" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small"
+                                                       Disabled="@(index == _steps.Count - 1)" OnClick="@(() => MoveStep(index, 1))"
+                                                       aria-label="Move down" />
+                                    </div>
+                                </div>
+                                @if (!string.IsNullOrEmpty(step.AssignedRole))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mt-1"
+                                             Style="font-size: 0.65rem;">@step.AssignedRole</MudChip>
+                                }
+                            </MudPaper>
+                        </div>
+                    }
+
+                    @* Quick Add Palette *@
+                    <MudDivider Class="my-3" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2" Style="font-weight: 600;">QUICK ADD</MudText>
+                    <div class="d-flex gap-1 flex-wrap mb-3">
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default"
+                                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                                   OnClick="@(() => QuickAddStep("Action", "New Action"))">Action</MudButton>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.Approval"
+                                   OnClick="@(() => QuickAddStep("Approval", "Approval Step"))">Approval</MudButton>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.SmartToy"
+                                   OnClick="@(() => QuickAddStep("AI Generate", "AI Processing"))">AI</MudButton>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Info"
+                                   StartIcon="@Icons.Material.Filled.Email"
+                                   OnClick="@(() => QuickAddStep("Email", "Send Notification"))">Email</MudButton>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Secondary"
+                                   StartIcon="@Icons.Material.Filled.Api"
+                                   OnClick="@(() => QuickAddStep("API Call", "API Integration"))">API</MudButton>
+                    </div>
+
+                    @* AI Step Suggestion *@
+                    <MudDivider Class="my-3" />
+                    <div class="d-flex align-center gap-2 mb-2">
+                        <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">AI SUGGEST</MudText>
+                    </div>
+                    <MudTextField @bind-Value="_aiStepPrompt" Placeholder="e.g. 'Send email when approved'"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                  Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Add"
+                                  AdornmentColor="Color.Primary" OnAdornmentClick="GenerateStep"
+                                  OnKeyUp="HandleAiStepKeyUp" />
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* Right Panel: SVG Visual Canvas *@
+        <MudItem xs="12" md="8">
+            <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); overflow: hidden;">
+                <div class="d-flex justify-space-between align-center pa-3" style="border-bottom: 1px solid var(--mud-palette-divider);">
+                    <div class="d-flex align-center gap-2">
+                        <MudIcon Icon="@Icons.Material.Outlined.AccountTree" Size="Size.Small" Color="Color.Primary" />
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">Visual Canvas</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.65rem; height: 20px;">
+                            @_steps.Count step@(_steps.Count != 1 ? "s" : "")
+                        </MudChip>
+                    </div>
+                    <div class="d-flex align-center gap-1">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="me-2 d-none d-md-inline">
+                            Click a node · Drag to reorder · <kbd style="background:#F3F4F6;padding:1px 4px;border-radius:3px;font-size:0.7rem;">Del</kbd> to remove
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small"
+                                       OnClick="ZoomOut" Disabled="@(_zoom <= MinZoom)" aria-label="Zoom out" />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="min-width: 38px; text-align: center; font-weight: 600;">
+                            @($"{(int)(_zoom * 100)}%")
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
+                                       OnClick="ZoomIn" Disabled="@(_zoom >= MaxZoom)" aria-label="Zoom in" />
+                        <MudIconButton Icon="@Icons.Material.Filled.CenterFocusStrong" Size="Size.Small"
+                                       OnClick="ZoomReset" Disabled="@(_zoom == 1.0)" aria-label="Reset zoom" />
+                    </div>
+                </div>
+
+                <div tabindex="0" @onkeydown="OnCanvasKeyDown"
+                     style="overflow: auto; max-height: 640px; background: var(--mud-palette-background); outline: none;">
+                    <svg viewBox="0 0 600 @CanvasHeight"
+                         xmlns="http://www.w3.org/2000/svg"
+                         style="@($"width: 100%; display: block; min-height: 400px; transform: scale({_zoom.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}); transform-origin: top center; transition: transform 0.15s ease;")">
+                        <defs>
+                            <marker id="wf-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                                <polygon points="0 0, 8 3, 0 6" fill="#9CA3AF" />
+                            </marker>
+                            <filter id="wf-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.07" />
+                            </filter>
+                            <filter id="wf-shadow-sel" x="-30%" y="-30%" width="160%" height="160%">
+                                <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#7C3AED" flood-opacity="0.25" />
+                            </filter>
+                            @* Execution mode filters *@
+                            <filter id="wf-glow-running" x="-40%" y="-40%" width="180%" height="180%">
+                                <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#3B82F6" flood-opacity="0.5">
+                                    <animate attributeName="stdDeviation" values="4;8;4" dur="1.5s" repeatCount="indefinite" />
+                                    <animate attributeName="flood-opacity" values="0.3;0.6;0.3" dur="1.5s" repeatCount="indefinite" />
+                                </feDropShadow>
+                            </filter>
+                            <filter id="wf-glow-completed" x="-30%" y="-30%" width="160%" height="160%">
+                                <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#10B981" flood-opacity="0.3" />
+                            </filter>
+                            <filter id="wf-glow-failed" x="-30%" y="-30%" width="160%" height="160%">
+                                <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#EF4444" flood-opacity="0.3" />
+                            </filter>
+                        </defs>
+
+                        @* — START NODE — *@
+                        <ellipse cx="300" cy="@StartCY" rx="56" ry="22" fill="#10B981" filter="url(#wf-shadow)" />
+                        @((MarkupString)$"<text x=\"300\" y=\"{StartCY + 5}\" text-anchor=\"middle\" fill=\"white\" font-size=\"12\" font-weight=\"700\" font-family=\"Inter,sans-serif\">START</text>")
+
+                        @for (int i = 0; i < _steps.Count; i++)
+                        {
+                            var step = _steps[i];
+                            var idx = i;
+                            var selected = _editingStep == step;
+                            var ny = NodeTop(i);
+                            var prevBottom = i == 0 ? StartCY + 22 : NodeTop(i - 1) + NodeH;
+                            var connMidY = (prevBottom + ny) / 2;
+
+                            @* Connector line *@
+                            <path d="M 300,@prevBottom C 300,@(prevBottom + 36) 300,@(ny - 36) 300,@ny"
+                                  stroke="#9CA3AF" stroke-width="1.5" fill="none" stroke-opacity="0.6"
+                                  marker-end="url(#wf-arrow)" />
+
+                            @* + Insert button on connector *@
+                            <g @onclick="@(() => InsertStep(idx))" style="cursor:pointer;" title="Insert step here">
+                                <circle cx="300" cy="@connMidY" r="12" fill="white"
+                                        stroke="#7C3AED" stroke-width="1.5" filter="url(#wf-shadow)" />
+                                @((MarkupString)$"<text x=\"300\" y=\"{connMidY + 5}\" text-anchor=\"middle\" fill=\"#7C3AED\" font-size=\"17\" font-weight=\"300\" font-family=\"Inter,sans-serif\">+</text>")
+                            </g>
+
+                            @* Step Node *@
+                            <g @onclick="@(() => SelectStep(step))" style="cursor:pointer;">
+                                <rect x="180" y="@ny" width="240" height="@NodeH" rx="10"
+                                      fill="white"
+                                      stroke="@NodeStroke(idx, selected)"
+                                      stroke-width="@NodeStrokeWidth(idx, selected)"
+                                      stroke-dasharray="@NodeDash(idx)"
+                                      filter="@NodeFilter(idx, selected)" />
+                                @if (GetStepExecutionStatus(idx) == "Running")
+                                {
+                                    @* Animated pulsing border for running step *@
+                                    <rect x="180" y="@ny" width="240" height="@NodeH" rx="10"
+                                          fill="none" stroke="#3B82F6" stroke-width="2">
+                                        <animate attributeName="stroke-opacity" values="1;0.3;1" dur="1.2s" repeatCount="indefinite" />
+                                    </rect>
+                                }
+                                <rect x="180" y="@ny" width="5" height="@NodeH" rx="2"
+                                      fill="@StepHexColor(step.Action)" />
+                                <circle cx="207" cy="@(ny + NodeH / 2)" r="15"
+                                        fill="@StepHexBg(step.Action)" />
+                                @((MarkupString)$"<text x=\"228\" y=\"{ny + 27}\" font-size=\"12\" font-weight=\"600\" fill=\"#111827\" font-family=\"Inter,sans-serif\">{System.Net.WebUtility.HtmlEncode(TruncateLabel(step.Name, 25))}</text>")
+                                @((MarkupString)$"<text x=\"228\" y=\"{ny + 45}\" font-size=\"10.5\" fill=\"#6B7280\" font-family=\"Inter,sans-serif\">{System.Net.WebUtility.HtmlEncode(step.Action + (!string.IsNullOrEmpty(step.AssignedRole) ? $" · {step.AssignedRole}" : ""))}</text>")
+
+                                @* Status overlay or step number *@
+                                @if (GetStepExecutionStatus(idx) == "Completed")
+                                {
+                                    @* Green checkmark circle *@
+                                    <circle cx="396" cy="@(ny + NodeH / 2)" r="13" fill="#10B981" />
+                                    @((MarkupString)$"<text x=\"396\" y=\"{ny + NodeH / 2 + 5}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"700\" fill=\"white\" font-family=\"Inter,sans-serif\">&#x2713;</text>")
+                                }
+                                else if (GetStepExecutionStatus(idx) == "Failed")
+                                {
+                                    @* Red X circle *@
+                                    <circle cx="396" cy="@(ny + NodeH / 2)" r="13" fill="#EF4444" />
+                                    @((MarkupString)$"<text x=\"396\" y=\"{ny + NodeH / 2 + 5}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"700\" fill=\"white\" font-family=\"Inter,sans-serif\">&#x2717;</text>")
+                                }
+                                else if (GetStepExecutionStatus(idx) == "Running")
+                                {
+                                    @* Animated spinner indicator *@
+                                    <circle cx="396" cy="@(ny + NodeH / 2)" r="13" fill="#3B82F6">
+                                        <animate attributeName="fill-opacity" values="1;0.5;1" dur="1s" repeatCount="indefinite" />
+                                    </circle>
+                                    @((MarkupString)$"<text x=\"396\" y=\"{ny + NodeH / 2 + 4}\" text-anchor=\"middle\" font-size=\"10\" font-weight=\"700\" fill=\"white\" font-family=\"Inter,sans-serif\">&#9654;</text>")
+                                }
+                                else
+                                {
+                                    <circle cx="396" cy="@(ny + NodeH / 2)" r="13" fill="@(selected ? "#7C3AED" : (IsExecPending(idx) ? "#E5E7EB" : "#F3F4F6"))" />
+                                    @((MarkupString)$"<text x=\"396\" y=\"{ny + NodeH / 2 + 4}\" text-anchor=\"middle\" font-size=\"10\" font-weight=\"700\" fill=\"{(selected ? "white" : (IsExecPending(idx) ? "#9CA3AF" : "#7C3AED"))}\" font-family=\"Inter,sans-serif\">{i + 1}</text>")
+                                }
+
+                                @* Status label below node in execution mode *@
+                                @if (_executionMode || _executionCompleted)
+                                {
+                                    @((MarkupString)$"<text x=\"300\" y=\"{ny + NodeH + 16}\" text-anchor=\"middle\" font-size=\"9\" font-weight=\"600\" fill=\"{ExecStatusColor(idx)}\" font-family=\"Inter,sans-serif\">{GetStepExecutionStatus(idx)}</text>")
+                                }
+                            </g>
+                        }
+
+                        @* — Connector to END — *@
+                        @{
+                            var lastBottom = _steps.Count == 0 ? StartCY + 22 : NodeTop(_steps.Count - 1) + NodeH;
+                            var endCY = EndCY;
+                            var endConnMidY = (lastBottom + endCY - 22) / 2;
+                        }
+                        <path d="M 300,@lastBottom C 300,@(lastBottom + 36) 300,@(endCY - 22 - 36) 300,@(endCY - 22)"
+                              stroke="#9CA3AF" stroke-width="1.5" fill="none" stroke-opacity="0.6"
+                              marker-end="url(#wf-arrow)" />
+
+                        @* + Append button before End *@
+                        <g @onclick="@(() => QuickAddStep("Action", "New Step"))" style="cursor:pointer;">
+                            <circle cx="300" cy="@endConnMidY" r="12" fill="white"
+                                    stroke="#7C3AED" stroke-width="1.5" filter="url(#wf-shadow)" />
+                            @((MarkupString)$"<text x=\"300\" y=\"{endConnMidY + 5}\" text-anchor=\"middle\" fill=\"#7C3AED\" font-size=\"17\" font-weight=\"300\" font-family=\"Inter,sans-serif\">+</text>")
+                        </g>
+
+                        @* — END NODE — *@
+                        <ellipse cx="300" cy="@endCY" rx="56" ry="22" fill="#EF4444" filter="url(#wf-shadow)" />
+                        @((MarkupString)$"<text x=\"300\" y=\"{endCY + 5}\" text-anchor=\"middle\" fill=\"white\" font-size=\"12\" font-weight=\"700\" font-family=\"Inter,sans-serif\">END</text>")
+
+                        @* Empty state *@
+                        @if (_steps.Count == 0)
+                        {
+                            <rect x="170" y="@(StartCY + 48)" width="260" height="72" rx="10"
+                                  fill="none" stroke="#D1D5DB" stroke-width="1.5" stroke-dasharray="6 4" />
+                            @((MarkupString)$"<text x=\"300\" y=\"{StartCY + 83}\" text-anchor=\"middle\" font-size=\"12\" fill=\"#9CA3AF\" font-family=\"Inter,sans-serif\">Click + to add your first step</text>")
+                            @((MarkupString)$"<text x=\"300\" y=\"{StartCY + 101}\" text-anchor=\"middle\" font-size=\"10\" fill=\"#D1D5DB\" font-family=\"Inter,sans-serif\">or use Quick Add on the left panel</text>")
+                        }
+                    </svg>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string WorkflowId { get; set; } = string.Empty;
+
+    private WorkflowDetailDto? _workflow;
+    private List<StepItem> _steps = new();
+    private StepItem? _editingStep;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _hasChanges;
+    private string _aiStepPrompt = string.Empty;
+
+    // Execution mode state
+    private bool _executionMode;
+    private bool _executionCompleted;
+    private bool _executionFailed;
+    private Guid? _instanceId;
+    private Dictionary<int, string> _stepStatuses = new();
+    private string _executionProgress = string.Empty;
+    private string? _executionError;
+    private double _executionPercent;
+    private System.Threading.Timer? _pollTimer;
+    private bool _isPolling;
+
+    // Drag-and-drop state for left panel
+    private int? _dragFromIndex;
+    private int? _dropTargetIndex;
+
+    // Canvas zoom (1.0 = 100%)
+    private double _zoom = 1.0;
+    private const double MinZoom = 0.5;
+    private const double MaxZoom = 1.5;
+
+    private void ZoomIn() { _zoom = Math.Min(MaxZoom, Math.Round(_zoom + 0.1, 2)); }
+    private void ZoomOut() { _zoom = Math.Max(MinZoom, Math.Round(_zoom - 0.1, 2)); }
+    private void ZoomReset() { _zoom = 1.0; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var raw = await Http.GetFromJsonAsync<WorkflowRawDto>($"/api/v1/workflows/{WorkflowId}");
+                if (raw is not null)
+                {
+                    _workflow = new WorkflowDetailDto { Id = raw.Id, Name = raw.Name, Description = raw.Description };
+
+                    if (!string.IsNullOrEmpty(raw.Steps))
+                    {
+                        var parsedSteps = System.Text.Json.JsonSerializer.Deserialize<List<StepDto>>(
+                            raw.Steps, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                        if (parsedSteps is not null)
+                            _steps = parsedSteps.OrderBy(s => s.Order).Select(s => new StepItem
+                            {
+                                Name = s.Name,
+                                Action = s.Action ?? "Action",
+                                AssignedRole = s.AssignedRole
+                            }).ToList();
+                    }
+                }
+            }
+            catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+            finally { _loading = false; StateHasChanged(); }
+        }
+    }
+
+    // ── Canvas layout constants ──────────────────────────────────────────────
+    private const int StartCY = 55;
+    private const int NodeH = 68;
+    private const int NodeSpacing = 140;
+
+    private static int NodeTop(int i) => StartCY + 22 + 60 + i * NodeSpacing;
+    private int EndCY => _steps.Count == 0
+        ? StartCY + 140
+        : NodeTop(_steps.Count - 1) + NodeH + 60 + 22;
+    private int CanvasHeight => EndCY + 55;
+
+    private static string StepHexColor(string? action) => (action ?? "").ToLowerInvariant() switch
+    {
+        "approval"    => "#D97706",
+        "ai generate" => "#7C3AED",
+        "email"       => "#3B82F6",
+        "api call"    => "#059669",
+        "condition"   => "#0EA5E9",
+        _             => "#6B7280",
+    };
+
+    private static string StepHexBg(string? action) => (action ?? "").ToLowerInvariant() switch
+    {
+        "approval"    => "#FEF3C7",
+        "ai generate" => "#EDE9FE",
+        "email"       => "#DBEAFE",
+        "api call"    => "#D1FAE5",
+        "condition"   => "#E0F2FE",
+        _             => "#F3F4F6",
+    };
+
+    private static string TruncateLabel(string s, int max) =>
+        s.Length <= max ? s : s[..(max - 1)] + "…";
+
+    // ── Step operations ──────────────────────────────────────────────────────
+
+    private void SelectStep(StepItem step)
+    {
+        _editingStep = _editingStep == step ? null : step;
+    }
+
+    private void QuickAddStep(string action, string name)
+    {
+        var step = new StepItem { Name = name, Action = action };
+        _steps.Add(step);
+        _editingStep = step;
+        _hasChanges = true;
+    }
+
+    private void InsertStep(int beforeIndex)
+    {
+        var step = new StepItem { Name = "New Step", Action = "Action" };
+        _steps.Insert(beforeIndex, step);
+        _editingStep = step;
+        _hasChanges = true;
+    }
+
+    private void MoveStep(int index, int direction)
+    {
+        var newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= _steps.Count) return;
+        (_steps[index], _steps[newIndex]) = (_steps[newIndex], _steps[index]);
+        _hasChanges = true;
+    }
+
+    // ── Drag-and-drop on the left step list ─────────────────────────────────
+    private void OnDragStart(int index)
+    {
+        _dragFromIndex = index;
+        _dropTargetIndex = null;
+    }
+
+    private void OnDragOver(int index)
+    {
+        if (_dragFromIndex is null || _dragFromIndex == index) return;
+        _dropTargetIndex = index;
+    }
+
+    private void OnDragLeave()
+    {
+        _dropTargetIndex = null;
+    }
+
+    private void OnDrop(int index)
+    {
+        if (_dragFromIndex is null) return;
+        var from = _dragFromIndex.Value;
+        if (from == index) { _dragFromIndex = null; _dropTargetIndex = null; return; }
+
+        var moving = _steps[from];
+        _steps.RemoveAt(from);
+        // After removal, target index shifts if from < index
+        var insertAt = from < index ? index - 1 : index;
+        if (insertAt < 0) insertAt = 0;
+        if (insertAt > _steps.Count) insertAt = _steps.Count;
+        _steps.Insert(insertAt, moving);
+
+        _hasChanges = true;
+        _dragFromIndex = null;
+        _dropTargetIndex = null;
+    }
+
+    private void OnDragEnd()
+    {
+        _dragFromIndex = null;
+        _dropTargetIndex = null;
+    }
+
+    // ── Keyboard delete on selected step ────────────────────────────────────
+    private void OnCanvasKeyDown(KeyboardEventArgs e)
+    {
+        if (_editingStep is null) return;
+        if (e.Key != "Delete" && e.Key != "Backspace") return;
+
+        var step = _editingStep;
+        _editingStep = null;
+        _steps.Remove(step);
+        _hasChanges = true;
+    }
+
+    private void HandleAiStepKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_aiStepPrompt))
+            GenerateStep();
+    }
+
+    private void GenerateStep()
+    {
+        if (string.IsNullOrWhiteSpace(_aiStepPrompt)) return;
+
+        var prompt = _aiStepPrompt.ToLowerInvariant();
+        string action = "Action";
+        string name = _aiStepPrompt;
+        string? role = null;
+
+        if (prompt.Contains("approv") || prompt.Contains("review") || prompt.Contains("sign off"))
+        {
+            action = "Approval";
+            name = prompt.Contains("manager") ? "Manager Approval" : prompt.Contains("finance") ? "Finance Approval" : "Approval Step";
+            if (prompt.Contains("manager")) role = "Manager";
+            else if (prompt.Contains("finance")) role = "Finance";
+            else if (prompt.Contains("director")) role = "Director";
+        }
+        else if (prompt.Contains("email") || prompt.Contains("notify") || prompt.Contains("send"))
+        {
+            action = "Email";
+            name = prompt.Contains("approv") ? "Approval Notification" : prompt.Contains("reject") ? "Rejection Notification" : "Send Notification";
+        }
+        else if (prompt.Contains("ai") || prompt.Contains("generate") || prompt.Contains("analyze") || prompt.Contains("summarize"))
+        {
+            action = "AI Generate";
+            name = prompt.Contains("summarize") ? "AI Summary" : prompt.Contains("analyze") ? "AI Analysis" : "AI Processing";
+        }
+        else if (prompt.Contains("api") || prompt.Contains("call") || prompt.Contains("webhook") || prompt.Contains("integrat"))
+        {
+            action = "API Call";
+            name = prompt.Contains("webhook") ? "Webhook Call" : "API Integration";
+        }
+        else if (prompt.Contains("condition") || prompt.Contains("check") || prompt.Contains("if"))
+        {
+            action = "Condition";
+            name = "Condition Check";
+        }
+
+        var step = new StepItem { Name = name, Action = action, AssignedRole = role };
+        _steps.Add(step);
+        _editingStep = step;
+        _aiStepPrompt = string.Empty;
+        _hasChanges = true;
+    }
+
+    // ── Execution mode ────────────────────────────────────────────────────
+
+    private async Task ExecuteWorkflow()
+    {
+        if (_steps.Count == 0 || _hasChanges) return;
+
+        _executionMode = true;
+        _executionCompleted = false;
+        _executionFailed = false;
+        _executionError = null;
+        _stepStatuses = new Dictionary<int, string>();
+
+        // Initialize all steps as Pending
+        for (int i = 0; i < _steps.Count; i++)
+            _stepStatuses[i] = "Pending";
+
+        _executionProgress = $"Starting execution... (0 of {_steps.Count})";
+        _executionPercent = 0;
+
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/workflows/{WorkflowId}/execute", null);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ExecuteResultDto>();
+                if (result is not null)
+                {
+                    _instanceId = result.InstanceId;
+                    Snackbar.Add("Workflow execution started", Severity.Info);
+                    StartPolling();
+                }
+                else
+                {
+                    FinishExecution(true, "No instance ID returned");
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                FinishExecution(true, $"Failed to start execution: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            FinishExecution(true, $"Execution error: {ex.Message}");
+        }
+    }
+
+    private void StartPolling()
+    {
+        _pollTimer?.Dispose();
+        _pollTimer = new System.Threading.Timer(
+            async _ => await PollStepStatuses(),
+            null,
+            TimeSpan.FromSeconds(1),   // Initial delay
+            TimeSpan.FromSeconds(3));  // Poll every 3 seconds
+    }
+
+    private async Task PollStepStatuses()
+    {
+        if (_isPolling || _instanceId is null) return;
+        _isPolling = true;
+
+        try
+        {
+            var stepsResult = await Http.GetFromJsonAsync<ExecutionStepsResult>(
+                $"/api/v1/workflows/instances/{_instanceId}/steps");
+
+            if (stepsResult?.Items is not null)
+            {
+                var completedCount = 0;
+                var hasFailure = false;
+                string? failureError = null;
+
+                foreach (var step in stepsResult.Items)
+                {
+                    _stepStatuses[step.StepIndex] = step.Status;
+                    if (step.Status == "Completed") completedCount++;
+                    if (step.Status == "Failed")
+                    {
+                        hasFailure = true;
+                        failureError = step.Error;
+                    }
+                }
+
+                var runningCount = stepsResult.Items.Count(s => s.Status == "Running");
+                var total = _steps.Count;
+                _executionPercent = total > 0 ? (double)completedCount / total * 100 : 0;
+                _executionProgress = $"Step {completedCount + runningCount} of {total}";
+
+                if (hasFailure)
+                {
+                    FinishExecution(true, failureError ?? "A step failed");
+                }
+                else if (completedCount == total)
+                {
+                    FinishExecution(false, null);
+                }
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Silently continue polling on transient errors
+        }
+        finally
+        {
+            _isPolling = false;
+        }
+    }
+
+    private void FinishExecution(bool failed, string? error)
+    {
+        _pollTimer?.Dispose();
+        _pollTimer = null;
+        _executionMode = false;
+        _executionCompleted = true;
+        _executionFailed = failed;
+        _executionError = error;
+        _executionPercent = failed ? _executionPercent : 100;
+        _executionProgress = failed
+            ? "Execution failed"
+            : $"All {_steps.Count} steps completed";
+
+        if (failed)
+            Snackbar.Add(error ?? "Execution failed", Severity.Error);
+        else
+            Snackbar.Add("Workflow execution completed successfully!", Severity.Success);
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void StopExecution()
+    {
+        _pollTimer?.Dispose();
+        _pollTimer = null;
+        _executionMode = false;
+        _executionCompleted = true;
+        _executionFailed = true;
+        _executionError = "Execution monitoring stopped by user";
+        Snackbar.Add("Execution monitoring stopped", Severity.Warning);
+    }
+
+    private void ClearExecutionState()
+    {
+        _executionCompleted = false;
+        _executionFailed = false;
+        _executionError = null;
+        _stepStatuses.Clear();
+        _instanceId = null;
+        _executionPercent = 0;
+        _executionProgress = string.Empty;
+    }
+
+    private string GetStepExecutionStatus(int index)
+    {
+        if (!_executionMode && !_executionCompleted) return string.Empty;
+        return _stepStatuses.TryGetValue(index, out var status) ? status : "Pending";
+    }
+
+    private bool IsExecPending(int index) => _executionMode && GetStepExecutionStatus(index) == "Pending";
+
+    private string NodeStroke(int index, bool selected)
+    {
+        var status = GetStepExecutionStatus(index);
+        return status switch
+        {
+            "Running" => "#3B82F6",
+            "Completed" => "#10B981",
+            "Failed" => "#EF4444",
+            "Pending" when _executionMode => "#9CA3AF",
+            _ => selected ? "#7C3AED" : "#E5E7EB"
+        };
+    }
+
+    private string NodeStrokeWidth(int index, bool selected)
+    {
+        var status = GetStepExecutionStatus(index);
+        if (status == "Running") return "2.5";
+        if (status is "Completed" or "Failed") return "2";
+        return selected ? "2.5" : "1";
+    }
+
+    private string NodeDash(int index) => IsExecPending(index) ? "6 3" : "none";
+
+    private string NodeFilter(int index, bool selected)
+    {
+        var status = GetStepExecutionStatus(index);
+        return status switch
+        {
+            "Running" => "url(#wf-glow-running)",
+            "Completed" => "url(#wf-glow-completed)",
+            "Failed" => "url(#wf-glow-failed)",
+            _ => selected ? "url(#wf-shadow-sel)" : "url(#wf-shadow)"
+        };
+    }
+
+    private string ExecStatusColor(int index)
+    {
+        var status = GetStepExecutionStatus(index);
+        return status switch
+        {
+            "Running" => "#3B82F6",
+            "Completed" => "#10B981",
+            "Failed" => "#EF4444",
+            _ => "#9CA3AF"
+        };
+    }
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+    }
+
+    private async Task SaveWorkflow()
+    {
+        _saving = true;
+        try
+        {
+            var stepsJson = System.Text.Json.JsonSerializer.Serialize(
+                _steps.Select((s, i) => new { Name = s.Name, Action = s.Action, AssignedRole = s.AssignedRole, Order = i }));
+
+            await Http.PutAsJsonAsync($"/api/v1/workflows/{WorkflowId}", new
+            {
+                Name = _workflow!.Name,
+                Description = _workflow.Description,
+                Steps = stepsJson
+            });
+            Snackbar.Add("Workflow saved", Severity.Success);
+            _hasChanges = false;
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private static string GetStepIcon(string? action) => (action ?? "").ToLowerInvariant() switch
+    {
+        "approval" => Icons.Material.Filled.Approval,
+        "ai generate" => Icons.Material.Filled.SmartToy,
+        "email" => Icons.Material.Filled.Email,
+        "api call" => Icons.Material.Filled.Api,
+        "condition" => Icons.Material.Filled.CallSplit,
+        _ => Icons.Material.Filled.PlayArrow,
+    };
+
+    private static Color GetStepColor(string? action) => (action ?? "").ToLowerInvariant() switch
+    {
+        "approval" => Color.Warning,
+        "ai generate" => Color.Primary,
+        "email" => Color.Info,
+        "api call" => Color.Secondary,
+        "condition" => Color.Tertiary,
+        _ => Color.Default,
+    };
+
+    private static string GetStepColorValue(string? action) => (action ?? "").ToLowerInvariant() switch
+    {
+        "approval" => "var(--mud-palette-warning)",
+        "ai generate" => "var(--mud-palette-primary)",
+        "email" => "var(--mud-palette-info)",
+        "api call" => "var(--mud-palette-secondary)",
+        "condition" => "var(--mud-palette-tertiary)",
+        _ => "var(--mud-palette-lines-default)",
+    };
+
+    private class StepItem
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Action { get; set; }
+        public string? AssignedRole { get; set; }
+    }
+
+    private class WorkflowRawDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Steps { get; set; }
+    }
+
+    private class WorkflowDetailDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+    }
+
+    private class StepDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Action { get; set; }
+        public string? AssignedRole { get; set; }
+        public int Order { get; set; }
+    }
+
+    private class ExecuteResultDto
+    {
+        public Guid InstanceId { get; set; }
+    }
+
+    private class ExecutionStepsResult
+    {
+        public List<ExecutionStepDto> Items { get; set; } = new();
+    }
+
+    private class ExecutionStepDto
+    {
+        public Guid Id { get; set; }
+        public int StepIndex { get; set; }
+        public string StepName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string? Error { get; set; }
+    }
+}

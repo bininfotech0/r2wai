@@ -1,0 +1,543 @@
+@page "/conversations"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>R2WAI - Conversations</PageTitle>
+
+<PageHeader Title="Conversations" Subtitle="Your chat history with AI assistants">
+    @if (_selectedConversation is not null && _conversationDetail is not null)
+    {
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" Class="mr-2"
+                   StartIcon="@Icons.Material.Filled.Download" OnClick="ExportConversation">
+            Export
+        </MudButton>
+    }
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Navigation.NavigateTo("/assistant-studio"))">
+        New Chat
+    </MudButton>
+</PageHeader>
+
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+    <MudTextField @bind-Value="_searchTerm" Placeholder="Search conversations by title or assistant..."
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                  Immediate="true" DebounceInterval="300" />
+</MudPaper>
+
+@if (_loading)
+{
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Chat" />
+}
+else if (_hasError)
+{
+    <ErrorState ErrorMessage="@_error" OnRetry="LoadConversations" />
+}
+else if (!FilteredConversations.Any())
+{
+    <EmptyState Icon="@Icons.Material.Outlined.ChatBubbleOutline"
+                Title="No conversations yet"
+                Description="Start chatting with an assistant to see your history here."
+                ActionText="Start a Chat"
+                ActionIcon="@Icons.Material.Filled.Chat"
+                OnAction="@(() => Navigation.NavigateTo("/assistant-studio"))"
+                MinHeight="300px" />
+}
+else
+{
+    <MudGrid Spacing="3">
+        @* Left Panel: Conversation List *@
+        <MudItem xs="12" md="4">
+            <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-divider);">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <div>
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Chats</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@FilteredConversations.Count conversations</MudText>
+                    </div>
+                </div>
+
+                <MudList T="ConversationListItem" Dense="true" Class="overflow-y-auto stagger-in mobile-list-collapsed" Style="max-height: 60vh;">
+                    @foreach (var conversation in FilteredConversations)
+                    {
+                        <MudListItem T="ConversationListItem" OnClick="@(() => SelectConversation(conversation))"
+                                     Style="@(_selectedConversation?.Id == conversation.Id ? "background: var(--r2-primary-subtle, rgba(124,58,237,0.08)); border-left: 3px solid #7C3AED; border-radius: 8px;" : "border-radius: 8px; border-left: 3px solid transparent;")">
+                            <div class="d-flex align-center gap-3" style="width: 100%;">
+                                <MudAvatar Size="Size.Small" Color="Color.Primary"
+                                           Style="width: 36px; height: 36px; font-size: 0.75rem; background: linear-gradient(135deg, #7C3AED, #6D28D9);">
+                                    @(conversation.AssistantName.Length > 0 ? conversation.AssistantName[0].ToString().ToUpper() : "A")
+                                </MudAvatar>
+                                <div style="flex: 1; min-width: 0;">
+                                    <MudText Typo="Typo.subtitle2" Style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-weight: 600;">
+                                        @conversation.Title
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap; display: block;">
+                                        @(conversation.LastMessagePreview.Length > 80
+                                            ? conversation.LastMessagePreview[..80] + "..."
+                                            : conversation.LastMessagePreview)
+                                    </MudText>
+                                    <div class="d-flex align-center gap-2 mt-1">
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                                 Style="font-size: 0.6rem; height: 16px;">
+                                            @conversation.AssistantName
+                                        </MudChip>
+                                        <MudText Typo="Typo.caption" Color="Color.Tertiary" Style="font-size: 0.6rem;">
+                                            @FormatRelativeTime(conversation.CreatedAt)
+                                        </MudText>
+                                    </div>
+                                </div>
+                                <div class="d-flex flex-column align-end gap-1">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                                             Style="font-size: 0.6rem; height: 18px;">
+                                        @conversation.MessageCount msgs
+                                    </MudChip>
+                                    <MudIconButton Icon="@Icons.Material.Outlined.DeleteOutline" Size="Size.Small"
+                                                   Color="Color.Error" Style="width: 24px; height: 24px; opacity: 0.5;"
+                                                   OnClick="@(() => DeleteConversation(conversation))"
+                                                   OnClickStopPropagation="true"
+                                                   aria-label="Delete conversation" />
+                                </div>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+
+                @if (_hasMore)
+                {
+                    <div class="d-flex justify-center mt-2">
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                   OnClick="LoadMore" StartIcon="@Icons.Material.Filled.ExpandMore">
+                            Load More (@(_totalCount - _conversations.Count) remaining)
+                        </MudButton>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* Right Panel: Messages *@
+        <MudItem xs="12" md="8">
+            @if (_selectedConversation is null)
+            {
+                <MudPaper Elevation="0" Class="pa-8 d-flex flex-column align-center justify-center" Style="min-height: 400px; border: 1px solid var(--mud-palette-divider);">
+                    <div class="empty-state-icon">
+                        <MudIcon Icon="@Icons.Material.Outlined.ChatBubbleOutline" Size="Size.Large" Color="Color.Primary" Style="opacity: 0.6;" />
+                    </div>
+                    <MudText Typo="Typo.h6" Color="Color.Secondary" Style="font-weight: 600;">Select a conversation</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Tertiary" Class="mt-2" Style="max-width: 300px; text-align: center; line-height: 1.5;">
+                        Choose a conversation from the list to see the full message history
+                    </MudText>
+                </MudPaper>
+            }
+            else if (_loadingMessages)
+            {
+                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); min-height: 400px;">
+                    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Chat" />
+                </MudPaper>
+            }
+            else
+            {
+                <MudPaper Elevation="0" Class="editor-panel animate-slide-in" Style="display: flex; flex-direction: column; min-height: 400px;">
+                    @* Header *@
+                    <div class="d-flex justify-space-between align-center pa-4 editor-header">
+                        <div class="d-flex align-center gap-3">
+                            <MudAvatar Color="Color.Primary" Size="Size.Medium"
+                                       Style="background: linear-gradient(135deg, #7C3AED, #6D28D9);">
+                                @(_selectedConversation.AssistantName.Length > 0 ? _selectedConversation.AssistantName[0].ToString().ToUpper() : "A")
+                            </MudAvatar>
+                            <div>
+                                <MudText Typo="Typo.h6" Style="font-weight: 700;">@_selectedConversation.Title</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @_selectedConversation.AssistantName &middot; @_selectedConversation.MessageCount messages &middot; @_selectedConversation.CreatedAt.ToString("MMM dd, yyyy h:mm tt")
+                                </MudText>
+                            </div>
+                        </div>
+                        <MudIconButton Icon="@Icons.Material.Outlined.DeleteOutline" Color="Color.Error" Size="Size.Small"
+                                       OnClick="@(() => DeleteConversation(_selectedConversation))"
+                                       aria-label="Delete conversation" />
+                    </div>
+
+                    @* Messages *@
+                    <div class="pa-4" style="flex: 1; overflow-y: auto; max-height: 55vh;">
+                        @if (_conversationDetail is not null && _conversationDetail.Messages.Any())
+                        {
+                            @foreach (var msg in _conversationDetail.Messages)
+                            {
+                                var isUser = msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase);
+                                <div class="d-flex @(isUser ? "justify-end" : "justify-start") mb-3">
+                                    <div class="chat-message @(isUser ? "chat-message--user" : "chat-message--assistant")">
+                                        <MudText Typo="Typo.caption" Style="@(isUser ? "color: rgba(255,255,255,0.7);" : "")" Color="@(isUser ? Color.Inherit : Color.Secondary)" Class="mb-1">
+                                            @(isUser ? "You" : "Assistant") &middot; @msg.CreatedAt.ToString("h:mm tt")
+                                        </MudText>
+                                        @if (isUser)
+                                        {
+                                            <MudText Typo="Typo.body2" Style="white-space: pre-wrap; line-height: 1.6;">@msg.Content</MudText>
+                                        }
+                                        else
+                                        {
+                                            <MarkdownRenderer Content="@msg.Content" Style="line-height: 1.6; font-size: 0.875rem;" />
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            @if (_streamingContent.Length > 0)
+                            {
+                                <div class="d-flex justify-start mb-3">
+                                    <div class="chat-message chat-message--assistant">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">
+                                            Assistant &middot; typing...
+                                        </MudText>
+                                        <MarkdownRenderer Content="@_streamingContent.ToString()" Style="line-height: 1.6; font-size: 0.875rem;" />
+                                    </div>
+                                </div>
+                            }
+                            else if (_sendingReply)
+                            {
+                                <div class="d-flex justify-start mb-3">
+                                    <div class="chat-message chat-message--assistant">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Assistant</MudText>
+                                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Size="Size.Small" />
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-column align-center justify-center pa-8">
+                                <div class="empty-state-icon" style="width: 56px; height: 56px;">
+                                    <MudIcon Icon="@Icons.Material.Outlined.SpeakerNotesOff" Size="Size.Medium" Color="Color.Primary" Style="opacity: 0.5;" />
+                                </div>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">No messages in this conversation</MudText>
+                            </div>
+                        }
+                    </div>
+
+                    @* Reply Input *@
+                    <div class="pa-3" style="border-top: 1px solid var(--mud-palette-divider);">
+                        <div class="d-flex gap-2 align-center">
+                            <MudTextField @bind-Value="_replyInput" Placeholder="Type a message..."
+                                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                                          OnKeyUp="HandleReplyKeyUp" Disabled="_sendingReply"
+                                          Immediate="true" Style="flex: 1;" aria-label="Reply input" />
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       OnClick="SendReply" Disabled="@(_sendingReply || string.IsNullOrWhiteSpace(_replyInput))"
+                                       Style="height: 40px; min-width: 80px;">
+                                @if (_sendingReply)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Surface" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Send" Size="Size.Small" />
+                                }
+                            </MudButton>
+                        </div>
+                    </div>
+                </MudPaper>
+            }
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private List<ConversationListItem> _conversations = new();
+    private ConversationListItem? _selectedConversation;
+    private ConversationDetail? _conversationDetail;
+    private string _searchTerm = string.Empty;
+    private bool _loading = true;
+    private bool _loadingMessages;
+    private bool _hasError;
+    private string _error = string.Empty;
+    private string _replyInput = string.Empty;
+    private bool _sendingReply;
+    private System.Text.StringBuilder _streamingContent = new();
+    private int _page = 1;
+    private int _pageSize = 20;
+    private int _totalCount;
+    private bool _hasMore;
+
+    private List<ConversationListItem> FilteredConversations =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _conversations
+            : _conversations.Where(c => c.Title.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                || c.AssistantName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+              .ToList();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadConversations();
+    }
+
+    private async Task LoadConversations()
+    {
+        _loading = true;
+        _hasError = false;
+        _page = 1;
+        _conversations.Clear();
+        StateHasChanged();
+        await LoadConversationPage();
+    }
+
+    private async Task LoadConversationPage()
+    {
+        try
+        {
+            PagedResult<ConversationListItem>? result = null;
+            try
+            {
+                result = await Http.GetFromJsonAsync<PagedResult<ConversationListItem>>(
+                    $"/api/v1/chat/conversations?page={_page}&pageSize={_pageSize}");
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                result = await Http.GetFromJsonAsync<PagedResult<ConversationListItem>>(
+                    $"/api/v1/conversations?page={_page}&pageSize={_pageSize}");
+            }
+
+            var items = result?.Items ?? new();
+            _conversations.AddRange(items);
+            _totalCount = result?.TotalCount ?? _conversations.Count;
+            _hasMore = _conversations.Count < _totalCount;
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _hasError = true;
+            _error = "Conversations API is not available. This feature requires backend endpoints to be configured.";
+        }
+        catch (Exception ex)
+        {
+            _hasError = true;
+            _error = "Unable to load conversations. Please check your connection and try again.";
+            Snackbar.Add($"Failed to load conversations: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task LoadMore()
+    {
+        _page++;
+        await LoadConversationPage();
+    }
+
+    private async Task SelectConversation(ConversationListItem conversation)
+    {
+        _selectedConversation = conversation;
+        _loadingMessages = true;
+        _conversationDetail = null;
+        StateHasChanged();
+
+        try
+        {
+            ConversationDetail? detail = null;
+            try
+            {
+                detail = await Http.GetFromJsonAsync<ConversationDetail>($"/api/v1/chat/conversations/{conversation.Id}");
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                detail = await Http.GetFromJsonAsync<ConversationDetail>($"/api/v1/conversations/{conversation.Id}");
+            }
+
+            _conversationDetail = detail;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load messages: {ex.Message}", Severity.Error);
+            _conversationDetail = new ConversationDetail { Id = conversation.Id, Title = conversation.Title, Messages = new() };
+        }
+        finally { _loadingMessages = false; StateHasChanged(); }
+    }
+
+    private async Task DeleteConversation(ConversationListItem conversation)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, conversation.Title },
+            { x => x.Description, "This conversation and all its messages will be permanently removed." }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == true) return;
+
+        try
+        {
+            try
+            {
+                await Http.DeleteAsync($"/api/v1/chat/conversations/{conversation.Id}");
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                await Http.DeleteAsync($"/api/v1/conversations/{conversation.Id}");
+            }
+
+            Snackbar.Add("Conversation deleted", Severity.Success);
+            _conversations.Remove(conversation);
+            if (_selectedConversation?.Id == conversation.Id)
+            {
+                _selectedConversation = null;
+                _conversationDetail = null;
+            }
+            StateHasChanged();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ExportConversation()
+    {
+        if (_conversationDetail is null || _selectedConversation is null) return;
+
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"# {_selectedConversation.Title}");
+            sb.AppendLine($"Assistant: {_selectedConversation.AssistantName}");
+            sb.AppendLine($"Date: {_selectedConversation.CreatedAt:yyyy-MM-dd HH:mm}");
+            sb.AppendLine($"Messages: {_conversationDetail.Messages.Count}");
+            sb.AppendLine(new string('-', 60));
+            sb.AppendLine();
+
+            foreach (var msg in _conversationDetail.Messages)
+            {
+                var role = msg.Role.Equals("user", StringComparison.OrdinalIgnoreCase) ? "You" : "Assistant";
+                sb.AppendLine($"**{role}** ({msg.CreatedAt:HH:mm}):");
+                sb.AppendLine(msg.Content);
+                sb.AppendLine();
+            }
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"conversation-{_selectedConversation.Title.Replace(' ', '-').ToLowerInvariant()}.md";
+
+            await JS.InvokeVoidAsync("eval",
+                $"var a=document.createElement('a');a.href='data:text/markdown;base64,{base64}';a.download='{fileName}';document.body.appendChild(a);a.click();a.remove();");
+
+            Snackbar.Add("Conversation exported", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Export failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task HandleReplyKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey && !_sendingReply && !string.IsNullOrWhiteSpace(_replyInput))
+            await SendReply();
+    }
+
+    private async Task SendReply()
+    {
+        if (_selectedConversation is null || string.IsNullOrWhiteSpace(_replyInput)) return;
+
+        var message = _replyInput.Trim();
+        _replyInput = string.Empty;
+        _sendingReply = true;
+        _streamingContent.Clear();
+
+        _conversationDetail?.Messages.Add(new MessageItem
+        {
+            Id = Guid.NewGuid(),
+            Role = "User",
+            Content = message,
+            CreatedAt = DateTime.Now
+        });
+        _selectedConversation.MessageCount++;
+        StateHasChanged();
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            content.Add(new StringContent(message), "content");
+
+            var response = await Http.PostAsync(
+                $"/api/v1/chat/conversations/{_selectedConversation.Id}/messages", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<MessageReplyResult>();
+                if (result is not null)
+                {
+                    _conversationDetail?.Messages.Add(new MessageItem
+                    {
+                        Id = result.Id,
+                        Role = "Assistant",
+                        Content = result.Content,
+                        CreatedAt = result.CreatedAt
+                    });
+                    _selectedConversation.MessageCount++;
+                    _selectedConversation.LastMessagePreview = result.Content.Length > 80
+                        ? result.Content[..80] + "..." : result.Content;
+                }
+            }
+            else
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to send: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to send message: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _sendingReply = false;
+            _streamingContent.Clear();
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatRelativeTime(DateTime dateTime)
+    {
+        var span = DateTime.UtcNow - dateTime.ToUniversalTime();
+
+        if (span.TotalMinutes < 1) return "just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
+        if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
+        if (span.TotalDays < 30) return $"{(int)(span.TotalDays / 7)}w ago";
+        if (span.TotalDays < 365) return $"{(int)(span.TotalDays / 30)}mo ago";
+        return $"{(int)(span.TotalDays / 365)}y ago";
+    }
+
+    private class PagedResult<T>
+    {
+        public List<T> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+    }
+
+    private class ConversationListItem
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string AssistantName { get; set; } = string.Empty;
+        public int MessageCount { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string LastMessagePreview { get; set; } = string.Empty;
+    }
+
+    private class ConversationDetail
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public List<MessageItem> Messages { get; set; } = new();
+    }
+
+    private class MessageItem
+    {
+        public Guid Id { get; set; }
+        public string Role { get; set; } = string.Empty;
+        public string Content { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class MessageReplyResult
+    {
+        public Guid Id { get; set; }
+        public string Content { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+    }
+}

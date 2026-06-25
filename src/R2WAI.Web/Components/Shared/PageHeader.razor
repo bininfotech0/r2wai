@@ -1,0 +1,22 @@
+<div class="d-flex justify-space-between align-center mb-5 flex-wrap gap-3">
+    <div>
+        <MudText Typo="Typo.h4" id="page-title" role="heading" aria-level="1"
+                 Style="font-weight: 800; letter-spacing: -0.03em;" Class="gradient-text">@Title</MudText>
+        @if (!string.IsNullOrEmpty(Subtitle))
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1" Style="line-height: 1.5;">@Subtitle</MudText>
+        }
+    </div>
+    @if (ChildContent is not null)
+    {
+        <div class="d-flex gap-2 align-center">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,197 @@
+@inject NavigationManager Navigation
+@inject AuthenticatedHttpClient Http
+
+@* Confetti burst on completion *@
+@if (_showConfetti)
+{
+    <div class="confetti-container" @ref="_confettiRef">
+        @for (var i = 0; i < 40; i++)
+        {
+            var left = Random.Shared.Next(5, 95);
+            var delay = Random.Shared.NextDouble() * 1.5;
+            var colorIndex = Random.Shared.Next(0, _confettiColors.Length);
+            var size = Random.Shared.Next(6, 14);
+            var rotation = Random.Shared.Next(0, 360);
+            <span class="confetti-piece" style="left: @(left)%; top: -10px; width: @(size)px; height: @(size)px; background: @(_confettiColors[colorIndex]); animation-delay: @(delay.ToString("F2"))s; transform: rotate(@(rotation)deg);"></span>
+        }
+    </div>
+}
+
+<MudPaper Elevation="0" Class="pa-5 mb-5" Style="border: 1.5px solid var(--mud-palette-primary); border-radius: 16px; background: linear-gradient(135deg, rgba(124, 58, 237, 0.04) 0%, rgba(59, 130, 246, 0.03) 50%, rgba(16, 185, 129, 0.02) 100%); position: relative; overflow: hidden;">
+    <div class="d-flex justify-space-between align-center mb-3">
+        <div>
+            <MudText Typo="Typo.h5" Style="font-weight: 800; letter-spacing: -0.03em;" Class="gradient-text">Get started with R2WAI</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">
+                @if (_completedCount == 3)
+                {
+                    <span style="color: var(--mud-palette-success); font-weight: 600;">All steps completed!</span>
+                }
+                else
+                {
+                    @($"{_completedCount} of 3 steps completed")
+                }
+            </MudText>
+        </div>
+        <MudIconButton Icon="@Icons.Material.Outlined.Close" Size="Size.Small" OnClick="Dismiss"
+                       aria-label="Dismiss getting started" Color="Color.Default" />
+    </div>
+
+    <MudProgressLinear Value="@(_completedCount / 3.0 * 100)" Color="Color.Primary" Rounded="true"
+                       Size="Size.Medium" Class="mb-4" Style="height: 6px;" />
+
+    <MudGrid Spacing="3" Class="stagger-in">
+        <MudItem xs="12" sm="4">
+            <MudPaper Elevation="0" Class="pa-4" Style="@($"height: 100%; border: 1.5px solid {(_hasAssistant ? "var(--mud-palette-success)" : "var(--mud-palette-divider)")}; border-radius: 12px; transition: all 0.25s ease; {(_hasAssistant ? "" : "")}")">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <div class="icon-container @(_hasAssistant ? "icon-container--success" : "icon-container--primary")" style="width: 36px; height: 36px; border-radius: 10px;">
+                        @if (_hasAssistant)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Size="Size.Small" Color="Color.Primary" />
+                        }
+                    </div>
+                    <MudChip T="string" Size="Size.Small" Color="@(_hasAssistant ? Color.Success : Color.Default)"
+                             Variant="@(_hasAssistant ? Variant.Filled : Variant.Outlined)"
+                             Style="font-size: 0.65rem; font-weight: 700;">
+                        @(_hasAssistant ? "Done" : "Step 1")
+                    </MudChip>
+                </div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1" Style="font-weight: 700;">Create an Assistant</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3" Style="line-height: 1.5;">
+                    @(_hasAssistant ? "You've created your first AI assistant!" : "Set up an AI assistant with custom instructions and knowledge.")
+                </MudText>
+                @if (!_hasAssistant)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
+                               OnClick="@(() => Navigation.NavigateTo("/assistant-studio"))"
+                               Style="border-radius: 8px;">
+                        Get Started
+                    </MudButton>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" sm="4">
+            <MudPaper Elevation="0" Class="pa-4" Style="@($"height: 100%; border: 1.5px solid {(_hasWorkflow ? "var(--mud-palette-success)" : "var(--mud-palette-divider)")}; border-radius: 12px; transition: all 0.25s ease;")">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <div class="icon-container @(_hasWorkflow ? "icon-container--success" : "icon-container--secondary")" style="width: 36px; height: 36px; border-radius: 10px;">
+                        @if (_hasWorkflow)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Outlined.AccountTree" Size="Size.Small" Color="Color.Secondary" />
+                        }
+                    </div>
+                    <MudChip T="string" Size="Size.Small" Color="@(_hasWorkflow ? Color.Success : Color.Default)"
+                             Variant="@(_hasWorkflow ? Variant.Filled : Variant.Outlined)"
+                             Style="font-size: 0.65rem; font-weight: 700;">
+                        @(_hasWorkflow ? "Done" : "Step 2")
+                    </MudChip>
+                </div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1" Style="font-weight: 700;">Build a Workflow</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3" Style="line-height: 1.5;">
+                    @(_hasWorkflow ? "Your first workflow is ready!" : "Design approval chains and automated business processes.")
+                </MudText>
+                @if (!_hasWorkflow)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small"
+                               OnClick="@(() => Navigation.NavigateTo("/workflow-studio"))"
+                               Style="border-radius: 8px;">
+                        Get Started
+                    </MudButton>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" sm="4">
+            <MudPaper Elevation="0" Class="pa-4" Style="@($"height: 100%; border: 1.5px solid {(_hasDocuments ? "var(--mud-palette-success)" : "var(--mud-palette-divider)")}; border-radius: 12px; transition: all 0.25s ease;")">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <div class="icon-container @(_hasDocuments ? "icon-container--success" : "icon-container--success")" style="width: 36px; height: 36px; border-radius: 10px; @(!_hasDocuments ? "background: rgba(16, 185, 129, 0.1);" : "")">
+                        @if (_hasDocuments)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Outlined.CloudUpload" Size="Size.Small" Color="Color.Tertiary" />
+                        }
+                    </div>
+                    <MudChip T="string" Size="Size.Small" Color="@(_hasDocuments ? Color.Success : Color.Default)"
+                             Variant="@(_hasDocuments ? Variant.Filled : Variant.Outlined)"
+                             Style="font-size: 0.65rem; font-weight: 700;">
+                        @(_hasDocuments ? "Done" : "Step 3")
+                    </MudChip>
+                </div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1" Style="font-weight: 700;">Upload Knowledge</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3" Style="line-height: 1.5;">
+                    @(_hasDocuments ? "Knowledge base is ready!" : "Add documents so your assistants can answer from your data.")
+                </MudText>
+                @if (!_hasDocuments)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" Size="Size.Small"
+                               OnClick="@(() => Navigation.NavigateTo("/assistant-studio/knowledge"))"
+                               Style="border-radius: 8px;">
+                        Get Started
+                    </MudButton>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-4" Icon="@Icons.Material.Outlined.Lightbulb"
+              Style="border-radius: 10px;">
+        Tip: Press <strong>Ctrl+K</strong> to quickly navigate anywhere, or <strong>?</strong> for keyboard shortcuts.
+    </MudAlert>
+</MudPaper>
+
+@code {
+    [Parameter] public EventCallback OnDismiss { get; set; }
+
+    private bool _hasAssistant;
+    private bool _hasWorkflow;
+    private bool _hasDocuments;
+    private bool _showConfetti;
+    private bool _confettiTriggered;
+    private ElementReference _confettiRef;
+    private int _completedCount => (_hasAssistant ? 1 : 0) + (_hasWorkflow ? 1 : 0) + (_hasDocuments ? 1 : 0);
+
+    private static readonly string[] _confettiColors = { "#7C3AED", "#3B82F6", "#10B981", "#A78BFA", "#F59E0B", "#EF4444", "#06B6D4" };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var assistantsTask = Http.GetFromJsonAsync<CountResult>("/api/v1/assistants?pageSize=1");
+            var workflowsTask = Http.GetFromJsonAsync<CountResult>("/api/v1/workflows?pageSize=1");
+            var documentsTask = Http.GetFromJsonAsync<CountResult>("/api/v1/documents?pageSize=1");
+
+            await Task.WhenAll(assistantsTask, workflowsTask, documentsTask);
+
+            _hasAssistant = (assistantsTask.Result?.Items?.Count ?? 0) > 0;
+            _hasWorkflow = (workflowsTask.Result?.Items?.Count ?? 0) > 0;
+            _hasDocuments = (documentsTask.Result?.Items?.Count ?? 0) > 0;
+
+            if (_completedCount == 3 && !_confettiTriggered)
+            {
+                _confettiTriggered = true;
+                _showConfetti = true;
+                StateHasChanged();
+                await Task.Delay(3000);
+                _showConfetti = false;
+            }
+
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    private async Task Dismiss() => await OnDismiss.InvokeAsync();
+
+    private class CountResult { public List<object>? Items { get; set; } }
+}

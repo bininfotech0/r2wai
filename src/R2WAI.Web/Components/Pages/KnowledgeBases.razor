@@ -1,0 +1,181 @@
+@page "/assistant-studio/knowledge"
+@page "/knowledgebases"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - Knowledge Bases</PageTitle>
+
+<PageHeader Title="Knowledge Bases" Subtitle="Manage RAG knowledge collections and documents">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+               Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        New Knowledge Base
+    </MudButton>
+</PageHeader>
+
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+    <MudTextField @bind-Value="_searchTerm" Placeholder="Search knowledge bases..."
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                  Immediate="true" DebounceInterval="300" />
+</MudPaper>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-4" />
+}
+else if (_hasError)
+{
+    <ErrorState ErrorMessage="@_error" OnRetry="LoadKnowledgeBases" />
+}
+else if (!_filteredKnowledgeBases.Any())
+{
+    <EmptyState Icon="@Icons.Material.Outlined.MenuBook"
+                Title="No knowledge bases found"
+                Description="Create your first knowledge base to start indexing documents for RAG."
+                ActionText="New Knowledge Base"
+                OnAction="OpenCreateDialog"
+                MinHeight="300px" />
+}
+else
+{
+    <MudGrid Spacing="3" Class="stagger-in">
+        @foreach (var kb in _filteredKnowledgeBases)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%;">
+                    <div class="d-flex justify-space-between align-center mb-3">
+                        <div class="d-flex align-center gap-2">
+                            <div class="icon-container icon-container--primary">
+                                <MudIcon Icon="@Icons.Material.Outlined.MenuBook" Color="Color.Primary" Size="Size.Small" />
+                            </div>
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@kb.Name</MudText>
+                        </div>
+                        <StatusBadge Status="@kb.Status" />
+                    </div>
+                    <div class="d-flex flex-column gap-1 mb-4">
+                        @if (!string.IsNullOrEmpty(kb.Description))
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@kb.Description</MudText>
+                        }
+                        <div class="d-flex justify-space-between">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Documents</MudText>
+                            <MudText Typo="Typo.body2" Style="font-weight: 800; letter-spacing: -0.03em;">@kb.DocumentCount</MudText>
+                        </div>
+                        <div class="d-flex justify-space-between">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Created</MudText>
+                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@kb.CreatedAt.ToString("yyyy-MM-dd")</MudText>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" FullWidth="true"
+                                   OnClick="@(() => OpenDetailDialog(kb))">
+                            View
+                        </MudButton>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => OpenEditDialog(kb))" aria-label="Edit" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteKnowledgeBase(kb))" aria-label="Delete" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<KnowledgeBaseDto> _knowledgeBases = new();
+    private string _searchTerm = string.Empty;
+    private bool _loading = true;
+    private bool _hasError;
+    private string _error = string.Empty;
+
+    private IEnumerable<KnowledgeBaseDto> _filteredKnowledgeBases =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _knowledgeBases
+            : _knowledgeBases.Where(kb => kb.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await LoadKnowledgeBases(); }
+
+    private async Task LoadKnowledgeBases()
+    {
+        _loading = true;
+        _hasError = false;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<KnowledgeBasesResult>("/api/v1/knowledgebases");
+            _knowledgeBases = result?.Items ?? new();
+        }
+        catch (Exception ex)
+        {
+            _hasError = true;
+            _error = "Unable to load knowledge bases. Please check your connection and try again.";
+            Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await Dialog.ShowAsync<CreateEditKnowledgeBaseDialog>("New Knowledge Base");
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+            await LoadKnowledgeBases();
+    }
+
+    private async Task OpenEditDialog(KnowledgeBaseDto kb)
+    {
+        var parameters = new DialogParameters<CreateEditKnowledgeBaseDialog>
+        {
+            { x => x.EditId, kb.Id.ToString() }
+        };
+        var dialog = await Dialog.ShowAsync<CreateEditKnowledgeBaseDialog>("Edit Knowledge Base", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+            await LoadKnowledgeBases();
+    }
+
+    private async Task OpenDetailDialog(KnowledgeBaseDto kb)
+    {
+        var parameters = new DialogParameters<KnowledgeBaseDetailDialog>
+        {
+            { x => x.KnowledgeBaseId, kb.Id.ToString() },
+            { x => x.KnowledgeBaseName, kb.Name }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
+        await Dialog.ShowAsync<KnowledgeBaseDetailDialog>(kb.Name, parameters, options);
+    }
+
+    private async Task DeleteKnowledgeBase(KnowledgeBaseDto kb)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, kb.Name }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/knowledgebases/{kb.Id}");
+            Snackbar.Add("Knowledge base deleted", Severity.Success);
+            await LoadKnowledgeBases();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+
+    private class KnowledgeBasesResult { public List<KnowledgeBaseDto> Items { get; set; } = new(); }
+    private class KnowledgeBaseDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public int DocumentCount { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+}

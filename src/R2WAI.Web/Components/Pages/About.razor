@@ -1,0 +1,283 @@
+@page "/about"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject IConfiguration Configuration
+
+<PageTitle>R2WAI - About</PageTitle>
+
+<PageHeader Title="About R2WAI" Subtitle="Platform information, health, and configuration" />
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Class="stagger-in">
+        <MudItem xs="12">
+            <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--primary">
+                <div class="d-flex align-center gap-2 mb-3">
+                    <div class="icon-container icon-container--primary">
+                        <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                    </div>
+                    <MudText Typo="Typo.h6" Class="section-title" Style="margin-bottom: 0;">Platform Overview</MudText>
+                </div>
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <tbody>
+                        <tr><td style="width:180px;"><strong>Platform</strong></td><td>R2WAI</td></tr>
+                        <tr><td><strong>Version</strong></td><td>1.0.0</td></tr>
+                        <tr><td><strong>Description</strong></td><td>Enterprise AI Work Execution Platform</td></tr>
+                        <tr><td><strong>.NET Runtime</strong></td><td>@_runtimeVersion</td></tr>
+                        <tr><td><strong>OS</strong></td><td>@_osDescription</td></tr>
+                        <tr><td><strong>Server Time</strong></td><td>@DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") UTC</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--secondary" Style="height: 100%;">
+                <div class="d-flex align-center gap-2 mb-3">
+                    <div class="icon-container icon-container--secondary">
+                        <MudIcon Icon="@Icons.Material.Filled.Widgets" Size="Size.Small" />
+                    </div>
+                    <MudText Typo="Typo.h6" Class="section-title" Style="margin-bottom: 0;">Feature Modules</MudText>
+                </div>
+                <div class="stagger-in">
+                    @foreach (var feature in _features)
+                    {
+                        <div class="d-flex align-center justify-space-between pa-2" style="border-radius: 8px; transition: background 0.2s;"
+                             onmouseover="this.style.background='rgba(124, 58, 237, 0.04)'" onmouseout="this.style.background='transparent'">
+                            <div class="d-flex align-center gap-2">
+                                <div class="icon-container icon-container--@GetIconVariant(feature.Color)">
+                                    <MudIcon Icon="@feature.Icon" Size="Size.Small" />
+                                </div>
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@feature.Name</MudText>
+                            </div>
+                            <StatusBadge Status="Enabled" OverrideColor="Color.Success" />
+                        </div>
+                    }
+                </div>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--tertiary" Style="height: 100%;">
+                <div class="d-flex align-center justify-space-between mb-3">
+                    <div class="d-flex align-center gap-2">
+                        <div class="icon-container icon-container--success">
+                            <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Size="Size.Small" />
+                        </div>
+                        <MudText Typo="Typo.h6" Class="section-title" Style="margin-bottom: 0;">System Health</MudText>
+                    </div>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="RefreshHealth"
+                               StartIcon="@Icons.Material.Filled.Refresh" Disabled="_refreshingHealth">
+                        Refresh
+                    </MudButton>
+                </div>
+
+                @if (_healthStatus is not null)
+                {
+                    <div class="d-flex align-center gap-2 mb-3 pa-2" style="border-radius: 8px; background: rgba(16, 185, 129, 0.06);">
+                        <span class="health-dot health-dot--@(_healthStatus == "Healthy" ? "healthy" : _healthStatus == "Degraded" ? "degraded" : "unhealthy")"></span>
+                        <MudText Typo="Typo.body2" Style="font-weight: 600;">Overall: @_healthStatus</MudText>
+                        @if (_healthDuration > 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">(@_healthDuration.ToString("F0") ms)</MudText>
+                        }
+                    </div>
+                }
+
+                <div class="d-flex flex-column gap-2 stagger-in">
+                    @foreach (var check in _healthChecks)
+                    {
+                        <div class="d-flex justify-space-between align-center pa-2" style="border-radius: 8px; border: 1px solid var(--mud-palette-divider);">
+                            <div class="d-flex align-center gap-2">
+                                <span class="health-dot health-dot--@(check.Status == "Healthy" ? "healthy" : check.Status == "Degraded" ? "degraded" : "unhealthy")"></span>
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@check.Name</MudText>
+                            </div>
+                            <div class="d-flex align-center gap-2">
+                                <MudText Typo="Typo.caption" Color="@(check.Status == "Healthy" ? Color.Success : check.Status == "Degraded" ? Color.Warning : Color.Error)">
+                                    @check.Status
+                                </MudText>
+                                @if (!string.IsNullOrEmpty(check.Description) && check.Description != "—")
+                                {
+                                    <MudTooltip Text="@check.Description">
+                                        <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Color="Color.Secondary" />
+                                    </MudTooltip>
+                                }
+                            </div>
+                        </div>
+                    }
+                    @if (_healthChecks.Count == 0)
+                    {
+                        <div class="d-flex align-center justify-center pa-4">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No health data available.</MudText>
+                        </div>
+                    }
+                </div>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--secondary" Style="height: 100%;">
+                <div class="d-flex align-center gap-2 mb-3">
+                    <div class="icon-container icon-container--primary">
+                        <MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Small" />
+                    </div>
+                    <MudText Typo="Typo.h6" Class="section-title" Style="margin-bottom: 0;">Technology Stack</MudText>
+                </div>
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <tbody>
+                        @foreach (var tech in _techStack)
+                        {
+                            <tr><td style="width:160px;"><strong>@tech.Category</strong></td><td>@tech.Technology</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4 studio-card studio-card--default" Style="height: 100%;">
+                <div class="d-flex align-center gap-2 mb-3">
+                    <div class="icon-container icon-container--warning">
+                        <MudIcon Icon="@Icons.Material.Filled.Tune" Size="Size.Small" />
+                    </div>
+                    <MudText Typo="Typo.h6" Class="section-title" Style="margin-bottom: 0;">Configuration</MudText>
+                </div>
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <tbody>
+                        <tr><td style="width:160px;"><strong>Database</strong></td><td>PostgreSQL + EF Core</td></tr>
+                        <tr><td><strong>Vector Store</strong></td><td>pgvector</td></tr>
+                        <tr><td><strong>Cache</strong></td><td>Redis</td></tr>
+                        <tr><td><strong>Storage</strong></td><td>@_storageProvider</td></tr>
+                        <tr><td><strong>Auth</strong></td><td>JWT @(_hasEntraId ? "+ Entra ID" : "")</td></tr>
+                        <tr><td><strong>Workflow Engine</strong></td><td>Elsa 3.x</td></tr>
+                        <tr><td><strong>AI Orchestration</strong></td><td>Semantic Kernel</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _refreshingHealth;
+    private string _runtimeVersion = string.Empty;
+    private string _osDescription = string.Empty;
+    private string _storageProvider = "Local";
+    private bool _hasEntraId;
+
+    private string? _healthStatus;
+    private double _healthDuration;
+    private List<HealthCheckEntry> _healthChecks = new();
+
+    private readonly List<FeatureModule> _features = new()
+    {
+        new("AI Assistant Studio", Icons.Material.Filled.SmartToy, Color.Primary),
+        new("Workflow Studio", Icons.Material.Filled.AccountTree, Color.Secondary),
+        new("Operations Center", Icons.Material.Filled.Monitor, Color.Tertiary),
+        new("Knowledge & RAG", Icons.Material.Filled.LibraryBooks, Color.Info),
+        new("Integrations", Icons.Material.Filled.Extension, Color.Info),
+        new("Settings & Admin", Icons.Material.Filled.Settings, Color.Default),
+    };
+
+    private readonly List<TechItem> _techStack = new()
+    {
+        new("Runtime", ".NET 10"),
+        new("Web Framework", "ASP.NET Core + Blazor Server"),
+        new("UI Components", "MudBlazor"),
+        new("Database", "PostgreSQL 16 + EF Core"),
+        new("Vector Store", "pgvector"),
+        new("Cache", "Redis"),
+        new("AI", "Semantic Kernel + OpenAI / Azure OpenAI"),
+        new("CQRS", "MediatR"),
+        new("Observability", "OpenTelemetry + Serilog"),
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _runtimeVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription;
+        _osDescription = System.Runtime.InteropServices.RuntimeInformation.OSDescription;
+        _storageProvider = Configuration["Storage:Provider"] ?? "Local";
+        _hasEntraId = !string.IsNullOrEmpty(Configuration["Authentication:EntraId:TenantId"]);
+
+        await LoadHealthAsync();
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadHealthAsync()
+    {
+        try
+        {
+            var response = await Http.GetAsync("/health");
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                var doc = System.Text.Json.JsonDocument.Parse(body);
+                var root = doc.RootElement;
+
+                _healthStatus = root.GetProperty("status").GetString() ?? "Unknown";
+                _healthDuration = root.TryGetProperty("duration", out var dur) ? dur.GetDouble() : 0;
+
+                _healthChecks.Clear();
+                if (root.TryGetProperty("checks", out var checks))
+                {
+                    foreach (var check in checks.EnumerateArray())
+                    {
+                        _healthChecks.Add(new HealthCheckEntry
+                        {
+                            Name = check.GetProperty("name").GetString() ?? "—",
+                            Status = check.GetProperty("status").GetString() ?? "Unknown",
+                            Description = check.TryGetProperty("description", out var desc) ? desc.GetString() : null,
+                        });
+                    }
+                }
+            }
+            else
+            {
+                _healthStatus = "Unhealthy";
+            }
+        }
+        catch
+        {
+            _healthStatus = "Unreachable";
+        }
+    }
+
+    private async Task RefreshHealth()
+    {
+        _refreshingHealth = true;
+        StateHasChanged();
+        await LoadHealthAsync();
+        _refreshingHealth = false;
+        StateHasChanged();
+    }
+
+    private static string GetIconVariant(Color color) => color switch
+    {
+        Color.Primary => "primary",
+        Color.Secondary => "secondary",
+        Color.Tertiary => "warning",
+        Color.Info => "primary",
+        Color.Success => "success",
+        Color.Error => "error",
+        Color.Warning => "warning",
+        _ => "secondary"
+    };
+
+    private record FeatureModule(string Name, string Icon, Color Color);
+    private record TechItem(string Category, string Technology);
+
+    private class HealthCheckEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string? Description { get; set; }
+    }
+}

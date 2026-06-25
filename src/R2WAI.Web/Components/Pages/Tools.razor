@@ -1,0 +1,272 @@
+@page "/assistant-studio/tools"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>R2WAI - Tools</PageTitle>
+
+<PageHeader Title="Tool Registry" Subtitle="Built-in tools available to AI assistants and workflows" />
+
+<MudGrid Spacing="3">
+    @foreach (var tool in _tools)
+    {
+        <MudItem xs="12" sm="6" md="4">
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+                <div class="d-flex align-center gap-3 mb-3">
+                    <MudAvatar Color="@tool.Color" Size="Size.Medium">
+                        <MudIcon Icon="@tool.Icon" />
+                    </MudAvatar>
+                    <div style="flex: 1;">
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@tool.Name</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@tool.Type</MudText>
+                    </div>
+                    <MudSwitch T="bool" @bind-Value="tool.IsActive" Color="Color.Primary"
+                               aria-label="@($"Toggle {tool.Name}")" />
+                </div>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">@tool.Description</MudText>
+
+                <div class="d-flex flex-wrap gap-1 mb-3">
+                    @foreach (var cap in tool.Capabilities)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default"
+                                 Style="font-size: 0.65rem; height: 22px;">@cap</MudChip>
+                    }
+                </div>
+
+                <div class="d-flex justify-space-between align-center">
+                    <MudChip T="string" Size="Size.Small" Color="@(tool.IsActive ? Color.Success : Color.Default)"
+                             Variant="Variant.Filled">
+                        @(tool.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                    @if (tool.RequiresConfig)
+                    {
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Settings"
+                                   OnClick="@(() => ToggleConfig(tool))">
+                            Configure
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Success">
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Style="vertical-align: middle;" />
+                            Built-in
+                        </MudText>
+                    }
+                </div>
+
+                @if (tool.ShowConfig)
+                {
+                    <MudDivider Class="my-3" />
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="tool.Endpoint" Label="Endpoint" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" Placeholder="@tool.EndpointPlaceholder" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudSelect T="string" @bind-Value="tool.AuthType" Label="Auth" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense" Dense="true">
+                                <MudSelectItem T="string" Value="@("None")">None</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("Bearer")">Bearer Token</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("Basic")">Basic Auth</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("ApiKey")">API Key</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudTextField @bind-Value="tool.ApiKey" Label="Credential" Variant="Variant.Outlined"
+                                          Margin="Margin.Dense" InputType="InputType.Password" />
+                        </MudItem>
+                        <MudItem xs="12" Class="d-flex gap-2 justify-end">
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.PlayArrow"
+                                       OnClick="@(() => TestTool(tool))" Disabled="tool.Testing">
+                                @(tool.Testing ? "Testing..." : "Test")
+                            </MudButton>
+                            <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Save"
+                                       OnClick="@(() => SaveToolConfig(tool))" Disabled="tool.Saving">
+                                @(tool.Saving ? "Saving..." : "Save")
+                            </MudButton>
+                        </MudItem>
+                        @if (!string.IsNullOrEmpty(tool.TestResult))
+                        {
+                            <MudItem xs="12">
+                                <MudAlert Severity="@(tool.TestSuccess ? Severity.Success : Severity.Error)" Dense="true">
+                                    @tool.TestResult
+                                </MudAlert>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+            </MudPaper>
+        </MudItem>
+    }
+</MudGrid>
+
+<MudText Typo="Typo.subtitle1" Class="mt-6 mb-2" Style="font-weight: 600;">How Tools Work</MudText>
+<MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <div class="d-flex align-center gap-2 mb-2">
+                <MudIcon Icon="@Icons.Material.Outlined.Extension" Color="Color.Primary" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">Register</MudText>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Enable tools and configure endpoints. Active tools are registered as Semantic Kernel plugins.
+            </MudText>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <div class="d-flex align-center gap-2 mb-2">
+                <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Color="Color.Secondary" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">Assign</MudText>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Link tools to assistants in the Tools tab of the Assistant Editor. Each assistant gets its own tool set.
+            </MudText>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <div class="d-flex align-center gap-2 mb-2">
+                <MudIcon Icon="@Icons.Material.Outlined.PlayCircle" Color="Color.Tertiary" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">Execute</MudText>
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                When users chat, the AI automatically selects and invokes the right tools to fulfill requests.
+            </MudText>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@code {
+    private List<ToolItem> _tools = new()
+    {
+        new() { Name = "REST API", Type = "HTTP Connector", Description = "Call external REST APIs with configurable authentication, headers, and response mapping.",
+            Icon = Icons.Material.Filled.Api, Color = Color.Primary, IsActive = true, RequiresConfig = true,
+            EndpointPlaceholder = "https://api.example.com/v1", AuthType = "Bearer",
+            Capabilities = ["GET/POST/PUT/DELETE", "JSON/XML", "Auth headers", "Retry policy"] },
+        new() { Name = "Email", Type = "SMTP Connector", Description = "Send transactional emails via SMTP with HTML templates and attachments.",
+            Icon = Icons.Material.Filled.Email, Color = Color.Info, IsActive = true, RequiresConfig = true,
+            EndpointPlaceholder = "smtp.gmail.com:587", AuthType = "Basic",
+            Capabilities = ["HTML templates", "Attachments", "CC/BCC", "TLS"] },
+        new() { Name = "Database", Type = "SQL Connector", Description = "Execute parameterized queries against PostgreSQL, SQL Server, or MySQL databases.",
+            Icon = Icons.Material.Filled.Storage, Color = Color.Secondary, IsActive = false, RequiresConfig = true,
+            EndpointPlaceholder = "Host=localhost;Database=mydb", AuthType = "Basic",
+            Capabilities = ["SELECT queries", "Parameterized", "Connection pool", "Read-only mode"] },
+        new() { Name = "Workflow Engine", Type = "Elsa Integration", Description = "Trigger, monitor, and manage Elsa workflows directly from assistant conversations.",
+            Icon = Icons.Material.Filled.AccountTree, Color = Color.Tertiary, IsActive = true, RequiresConfig = false,
+            Capabilities = ["Trigger workflows", "Check status", "Pass variables", "Resume on approval"] },
+        new() { Name = "Knowledge Search", Type = "RAG Pipeline", Description = "Search knowledge bases using hybrid vector + full-text search with source citations.",
+            Icon = Icons.Material.Filled.Search, Color = Color.Success, IsActive = true, RequiresConfig = false,
+            Capabilities = ["Semantic search", "Hybrid ranking", "Citations", "Metadata filters"] },
+        new() { Name = "Document Processing", Type = "AI Pipeline", Description = "Extract text, summarize, compare, and answer questions about uploaded documents.",
+            Icon = Icons.Material.Filled.Description, Color = Color.Warning, IsActive = true, RequiresConfig = false,
+            Capabilities = ["Text extraction", "Summarization", "Q&A", "Comparison"] },
+    };
+
+    private void ToggleConfig(ToolItem tool)
+    {
+        tool.ShowConfig = !tool.ShowConfig;
+        tool.TestResult = string.Empty;
+    }
+
+    private async Task TestTool(ToolItem tool)
+    {
+        if (string.IsNullOrWhiteSpace(tool.Endpoint))
+        {
+            Snackbar.Add("Enter an endpoint before testing.", Severity.Warning);
+            return;
+        }
+
+        tool.Testing = true;
+        tool.TestResult = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/integrations/test-connection", new
+            {
+                Name = tool.Name,
+                Type = tool.Type,
+                Endpoint = tool.Endpoint,
+                AuthType = tool.AuthType,
+                Credentials = tool.ApiKey
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                tool.TestSuccess = true;
+                tool.TestResult = $"Connected to {tool.Endpoint} successfully.";
+            }
+            else
+            {
+                tool.TestSuccess = false;
+                tool.TestResult = $"Connection failed ({(int)response.StatusCode}). Check endpoint and credentials.";
+            }
+        }
+        catch
+        {
+            tool.TestSuccess = false;
+            tool.TestResult = "Connection test failed. Verify the endpoint is reachable.";
+        }
+        finally { tool.Testing = false; StateHasChanged(); }
+    }
+
+    private async Task SaveToolConfig(ToolItem tool)
+    {
+        if (string.IsNullOrWhiteSpace(tool.Endpoint))
+        {
+            Snackbar.Add("Enter an endpoint before saving.", Severity.Warning);
+            return;
+        }
+
+        tool.Saving = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/integrations", new
+            {
+                Name = tool.Name,
+                Type = tool.Type == "HTTP Connector" ? "rest" : tool.Type == "SMTP Connector" ? "email" : "database",
+                Endpoint = tool.Endpoint,
+                AuthType = tool.AuthType,
+                Description = tool.Description
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"{tool.Name} configuration saved.", Severity.Success);
+                tool.ShowConfig = false;
+            }
+            else
+            {
+                Snackbar.Add($"Save failed ({(int)response.StatusCode}). Please try again.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Save failed: {ex.Message}", Severity.Error);
+        }
+        finally { tool.Saving = false; StateHasChanged(); }
+    }
+
+    private class ToolItem
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+        public Color Color { get; set; }
+        public bool IsActive { get; set; }
+        public bool RequiresConfig { get; set; }
+        public string[] Capabilities { get; set; } = [];
+        public bool ShowConfig { get; set; }
+        public string Endpoint { get; set; } = string.Empty;
+        public string EndpointPlaceholder { get; set; } = string.Empty;
+        public string AuthType { get; set; } = "None";
+        public string ApiKey { get; set; } = string.Empty;
+        public bool Testing { get; set; }
+        public bool Saving { get; set; }
+        public string TestResult { get; set; } = string.Empty;
+        public bool TestSuccess { get; set; }
+    }
+}

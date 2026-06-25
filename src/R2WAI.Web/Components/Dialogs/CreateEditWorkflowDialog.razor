@@ -1,0 +1,268 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Workflow" : "Create Workflow")</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (!_isEdit && !_templateApplied)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Start from a template (optional)</MudText>
+            <MudGrid Class="mb-4">
+                @foreach (var t in _templates)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudPaper Class="pa-3 cursor-pointer" Elevation="1" @onclick="@(() => ApplyTemplate(t))"
+                                  Style="border: 1px solid var(--mud-palette-lines-default);">
+                            <MudText Typo="Typo.subtitle2">@t.Name</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@t.Description</MudText>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+            <MudDivider Class="mb-4" />
+        }
+
+        <MudForm @ref="_form">
+        <MudGrid>
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" RequiredError="Name is required"
+                              Validation="@(new Func<string, string>(ValidateName))" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="string" @bind-Value="_type" Label="Type" Variant="Variant.Outlined">
+                    <MudSelectItem T="string" Value="@("sequential")">Sequential</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("parallel")">Parallel</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("conditional")">Conditional</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+        </MudForm>
+
+        <MudDivider Class="my-4" />
+
+        <MudGrid Class="mb-2">
+            <MudItem xs="8">
+                <MudText Typo="Typo.h6">Workflow Steps</MudText>
+            </MudItem>
+            <MudItem xs="4" Class="d-flex justify-end">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="AddStep">
+                    Add Step
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @for (int i = 0; i < _steps.Count; i++)
+        {
+            var index = i;
+            <MudPaper Class="pa-3 mb-2" Elevation="1">
+                <MudGrid>
+                    <MudItem xs="1" Class="d-flex align-center">
+                        <MudText Typo="Typo.caption" Color="Color.Primary">@(index + 1)</MudText>
+                    </MudItem>
+                    <MudItem xs="3">
+                        <MudTextField @bind-Value="_steps[index].Name" Label="Step Name" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudTextField @bind-Value="_steps[index].Action" Label="Action" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="3">
+                        <MudTextField @bind-Value="_steps[index].AssignedRole" Label="Role" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="1" Class="d-flex align-center">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => RemoveStep(index))" />
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        }
+
+        @if (_steps.Count == 0)
+        {
+            <MudText Align="Align.Center" Typo="Typo.body2" Class="pa-4" Color="Color.Tertiary">
+                No steps defined. Add steps to define the workflow sequence.
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? EditId { get; set; }
+
+    private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private string _name = string.Empty;
+    private string _description = string.Empty;
+    private string _type = "sequential";
+    private List<StepItem> _steps = new();
+    private bool _saving;
+    private bool _templateApplied;
+    private MudForm _form = default!;
+
+    private static readonly List<TemplateInfo> _templates = new()
+    {
+        new("Invoice Approval", "Three-level invoice approval with finance review", new[]
+        {
+            new StepItem { Order = 1, Name = "Submit Invoice", Action = "Action", AssignedRole = "Submitter" },
+            new StepItem { Order = 2, Name = "Manager Approval", Action = "Approval", AssignedRole = "Manager" },
+            new StepItem { Order = 3, Name = "Finance Review", Action = "Approval", AssignedRole = "Finance" },
+            new StepItem { Order = 4, Name = "Process Payment", Action = "API Call", AssignedRole = "System" },
+        }),
+        new("Purchase Request", "Purchase order with budget check", new[]
+        {
+            new StepItem { Order = 1, Name = "Submit Request", Action = "Action", AssignedRole = "Requester" },
+            new StepItem { Order = 2, Name = "Budget Check", Action = "AI Generate", AssignedRole = "System" },
+            new StepItem { Order = 3, Name = "Manager Approval", Action = "Approval", AssignedRole = "Manager" },
+            new StepItem { Order = 4, Name = "Create PO", Action = "API Call", AssignedRole = "System" },
+        }),
+        new("Employee Onboarding", "New hire onboarding with IT and HR", new[]
+        {
+            new StepItem { Order = 1, Name = "HR Intake", Action = "Action", AssignedRole = "HR" },
+            new StepItem { Order = 2, Name = "Welcome Pack", Action = "AI Generate", AssignedRole = "System" },
+            new StepItem { Order = 3, Name = "IT Setup", Action = "API Call", AssignedRole = "IT" },
+            new StepItem { Order = 4, Name = "HR Approval", Action = "Approval", AssignedRole = "HR" },
+        }),
+        new("Travel Request", "Travel approval with policy check", new[]
+        {
+            new StepItem { Order = 1, Name = "Submit Travel", Action = "Action", AssignedRole = "Employee" },
+            new StepItem { Order = 2, Name = "Policy Check", Action = "AI Generate", AssignedRole = "System" },
+            new StepItem { Order = 3, Name = "Manager Approval", Action = "Approval", AssignedRole = "Manager" },
+        }),
+    };
+
+    private void ApplyTemplate(TemplateInfo template)
+    {
+        _name = template.Name;
+        _description = template.Description;
+        _steps = template.Steps.Select(s => new StepItem
+        {
+            Order = s.Order, Name = s.Name, Action = s.Action, AssignedRole = s.AssignedRole
+        }).ToList();
+        _templateApplied = true;
+    }
+
+    private record TemplateInfo(string Name, string Description, StepItem[] Steps);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            try
+            {
+                var workflow = await Http.GetFromJsonAsync<WorkflowEditDto>($"/api/v1/workflows/{EditId}");
+                if (workflow is not null)
+                {
+                    _name = workflow.Name;
+                    _description = workflow.Description ?? string.Empty;
+                    _type = workflow.Type ?? "sequential";
+
+                    if (!string.IsNullOrEmpty(workflow.Steps))
+                    {
+                        try
+                        {
+                            var steps = System.Text.Json.JsonSerializer.Deserialize<List<StepItem>>(workflow.Steps,
+                                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            _steps = steps ?? new();
+                        }
+                        catch { Snackbar.Add("Could not parse workflow steps.", Severity.Warning); }
+                    }
+                }
+            }
+            catch { Snackbar.Add("Failed to load workflow", Severity.Error); }
+        }
+    }
+
+    private void AddStep()
+    {
+        _steps.Add(new StepItem { Order = _steps.Count + 1 });
+    }
+
+    private void RemoveStep(int index)
+    {
+        _steps.RemoveAt(index);
+        for (int i = 0; i < _steps.Count; i++)
+            _steps[i].Order = i + 1;
+    }
+
+    private string ValidateName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "Name is required";
+        if (name.Trim().Length < 2)
+            return "Name must be at least 2 characters";
+        return null!;
+    }
+
+    private async Task Save()
+    {
+        await _form.Validate();
+        if (!_form.IsValid)
+            return;
+
+        _saving = true;
+        try
+        {
+            for (int i = 0; i < _steps.Count; i++)
+                _steps[i].Order = i + 1;
+
+            var stepsJson = _steps.Count > 0
+                ? System.Text.Json.JsonSerializer.Serialize(_steps)
+                : null;
+
+            var payload = new
+            {
+                Name = _name,
+                Description = (string?)(string.IsNullOrWhiteSpace(_description) ? null : _description),
+                Type = _type,
+                Steps = stepsJson
+            };
+
+            if (_isEdit)
+            {
+                await Http.PutAsJsonAsync($"/api/v1/workflows/{EditId}", payload);
+                Snackbar.Add("Workflow updated", Severity.Success);
+            }
+            else
+            {
+                await Http.PostAsJsonAsync("/api/v1/workflows", payload);
+                Snackbar.Add("Workflow created", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class WorkflowEditDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Type { get; set; }
+        public string? Steps { get; set; }
+    }
+
+    private class StepItem
+    {
+        public int Order { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Action { get; set; }
+        public string? AssignedRole { get; set; }
+    }
+}

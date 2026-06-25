@@ -1,0 +1,107 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Integration" : "Add Integration")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" For="@(() => _name)" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Description" Lines="3" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="string" @bind-Value="_type" Label="Type" Variant="Variant.Outlined">
+                    <MudSelectItem T="string" Value="@("Http")">REST API / HTTP</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Database")">Database</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Email")">Email</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Script")">Script</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Custom")">Custom</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_endpointUrl" Label="Endpoint URL" Placeholder="https://..." Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? EditId { get; set; }
+
+    private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private string _name = string.Empty;
+    private string _description = string.Empty;
+    private string _type = "Http";
+    private string _endpointUrl = string.Empty;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            try
+            {
+                var integration = await Http.GetFromJsonAsync<IntegrationEditDto>($"/api/v1/integrations/{EditId}");
+                if (integration is not null)
+                {
+                    _name = integration.Name;
+                    _description = integration.Description ?? string.Empty;
+                    _type = integration.Type ?? "Http";
+                    _endpointUrl = integration.EndpointUrl ?? string.Empty;
+                }
+            }
+            catch { Snackbar.Add("Failed to load integration", Severity.Error); }
+        }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_isEdit)
+            {
+                await Http.PutAsJsonAsync($"/api/v1/integrations/{EditId}",
+                    new { Name = _name, Description = _description, Type = _type, EndpointUrl = _endpointUrl });
+                Snackbar.Add("Integration updated", Severity.Success);
+            }
+            else
+            {
+                await Http.PostAsJsonAsync("/api/v1/integrations",
+                    new { Name = _name, Description = _description, Type = _type, EndpointUrl = _endpointUrl });
+                Snackbar.Add("Integration created", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class IntegrationEditDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Type { get; set; }
+        public string? EndpointUrl { get; set; }
+    }
+}

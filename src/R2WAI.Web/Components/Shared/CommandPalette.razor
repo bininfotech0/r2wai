@@ -1,0 +1,228 @@
+@inject NavigationManager Navigation
+@inject AuthenticatedHttpClient Http
+
+<MudOverlay Visible="_visible" OnClick="Close" DarkBackground="true" ZIndex="9999" />
+
+@if (_visible)
+{
+    <div style="position: fixed; top: 12%; left: 50%; transform: translateX(-50%); z-index: 10000; width: 90%; max-width: 600px;">
+        <MudPaper Elevation="8" Class="pa-0" Style="border-radius: 14px; overflow: hidden;">
+            <div class="d-flex align-center px-3 pt-3 gap-2">
+                <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Color="Color.Primary" Size="Size.Small" />
+                <MudTextField @ref="_searchField" @bind-Value="_query" Placeholder="Search or type a command..."
+                              Variant="Variant.Filled" Margin="Margin.Dense" Class="flex-grow-1"
+                              Immediate="true" DebounceInterval="200" AutoFocus="true"
+                              OnKeyUp="HandleKeyUp" TextChanged="OnQueryChanged" aria-label="Command palette search" />
+            </div>
+
+            <MudList T="CommandItem" Dense="true" Class="pa-0" Style="max-height: 400px; overflow-y: auto;">
+                @{ var currentCategory = ""; }
+                @foreach (var item in FilteredItems)
+                {
+                    @if (item.Category != currentCategory)
+                    {
+                        currentCategory = item.Category;
+                        <MudListSubheader>
+                            <MudText Typo="Typo.caption" Style="font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;">
+                                @currentCategory
+                            </MudText>
+                        </MudListSubheader>
+                    }
+                    <MudListItem T="CommandItem" OnClick="@(() => Execute(item))"
+                                 Style="@(_selectedIndex == FilteredItems.IndexOf(item) ? "background-color: var(--mud-palette-primary-lighten);" : "")">
+                        <div class="d-flex align-center gap-3">
+                            <MudIcon Icon="@item.Icon" Size="Size.Small" Color="@item.Color" />
+                            <div style="flex: 1;">
+                                <MudText Typo="Typo.body2">@item.Label</MudText>
+                                @if (!string.IsNullOrEmpty(item.Description))
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@item.Description</MudText>
+                                }
+                            </div>
+                            @if (!string.IsNullOrEmpty(item.Shortcut))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Tertiary">@item.Shortcut</MudText>
+                            }
+                        </div>
+                    </MudListItem>
+                }
+                @if (FilteredItems.Count == 0 && !string.IsNullOrWhiteSpace(_query))
+                {
+                    <MudListItem T="CommandItem">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="pa-4">
+                            No results for "@_query"
+                        </MudText>
+                    </MudListItem>
+                }
+            </MudList>
+
+            <MudDivider />
+            <div class="d-flex justify-space-between align-center pa-2 px-3">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    <kbd>↑↓</kbd> navigate &nbsp; <kbd>Enter</kbd> select &nbsp; <kbd>Esc</kbd> close
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Tertiary">Ctrl+K</MudText>
+            </div>
+        </MudPaper>
+    </div>
+}
+
+@code {
+    private MudTextField<string>? _searchField;
+    private bool _visible;
+    private string _query = string.Empty;
+    private int _selectedIndex;
+    private List<CommandItem> _searchResults = new();
+
+    private static readonly List<CommandItem> QuickActions = new()
+    {
+        new("Create Assistant", "/assistant-studio", Icons.Material.Filled.Add, Color.Primary, "Quick Actions", "New AI assistant"),
+        new("Create Workflow", "/workflow-studio", Icons.Material.Filled.Add, Color.Secondary, "Quick Actions", "New workflow"),
+        new("Upload Document", "/documents", Icons.Material.Filled.CloudUpload, Color.Tertiary, "Quick Actions", "Add to knowledge base"),
+    };
+
+    private static readonly List<CommandItem> NavigationItems = new()
+    {
+        new("Home", "/", Icons.Material.Outlined.SpaceDashboard, Color.Default, "Navigate"),
+        new("Inbox", "/inbox", Icons.Material.Outlined.Inbox, Color.Default, "Navigate"),
+        new("Assistants", "/assistant-studio", Icons.Material.Outlined.SmartToy, Color.Primary, "Navigate"),
+        new("Knowledge Bases", "/assistant-studio/knowledge", Icons.Material.Outlined.MenuBook, Color.Primary, "Navigate"),
+        new("Documents", "/documents", Icons.Material.Outlined.Description, Color.Primary, "Navigate"),
+        new("Tools", "/assistant-studio/tools", Icons.Material.Outlined.Construction, Color.Primary, "Navigate"),
+        new("Chatbots", "/chatbots", Icons.Material.Outlined.Forum, Color.Primary, "Navigate"),
+        new("Workflows", "/workflow-studio", Icons.Material.Outlined.AccountTree, Color.Secondary, "Navigate"),
+        new("Approvals", "/workflow-studio/approvals", Icons.Material.Outlined.TaskAlt, Color.Secondary, "Navigate"),
+        new("Integrations", "/workflow-studio/integrations", Icons.Material.Outlined.Extension, Color.Secondary, "Navigate"),
+        new("Operations Overview", "/operations", Icons.Material.Outlined.MonitorHeart, Color.Tertiary, "Navigate"),
+        new("AI Operations", "/operations/ai", Icons.Material.Outlined.Psychology, Color.Tertiary, "Navigate"),
+        new("Audit Trail", "/operations/audit-logs", Icons.Material.Outlined.History, Color.Tertiary, "Navigate"),
+        new("Error Logs", "/operations/errors", Icons.Material.Outlined.BugReport, Color.Tertiary, "Navigate"),
+        new("Analytics", "/operations/analytics", Icons.Material.Outlined.BarChart, Color.Tertiary, "Navigate"),
+        new("Users", "/admin/users", Icons.Material.Outlined.PeopleAlt, Color.Default, "Admin"),
+        new("Roles", "/admin/roles", Icons.Material.Outlined.Shield, Color.Default, "Admin"),
+        new("AI Models", "/admin/models", Icons.Material.Outlined.ModelTraining, Color.Default, "Admin"),
+        new("Permissions", "/admin/permissions", Icons.Material.Outlined.VerifiedUser, Color.Default, "Admin"),
+        new("Security", "/admin/security", Icons.Material.Outlined.Lock, Color.Default, "Admin"),
+        new("Tenant Settings", "/settings/tenant", Icons.Material.Outlined.Domain, Color.Default, "Admin"),
+        new("Conversations", "/conversations", Icons.Material.Outlined.ChatBubbleOutline, Color.Primary, "Navigate"),
+        new("Templates", "/templates", Icons.Material.Outlined.Dashboard, Color.Primary, "Navigate"),
+        new("Content Moderation", "/admin/content-moderation", Icons.Material.Outlined.Security, Color.Default, "Admin"),
+        new("Profile", "/profile", Icons.Material.Outlined.Person, Color.Default, "Account"),
+    };
+
+    private List<CommandItem> FilteredItems
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_query))
+                return QuickActions.Concat(NavigationItems).ToList();
+
+            var matching = QuickActions.Concat(NavigationItems)
+                .Where(i =>
+                    i.Label.Contains(_query, StringComparison.OrdinalIgnoreCase) ||
+                    (i.Description?.Contains(_query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    i.Category.Contains(_query, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (_searchResults.Count > 0)
+                matching = matching.Concat(_searchResults).ToList();
+
+            return matching;
+        }
+    }
+
+    private async Task OnQueryChanged(string value)
+    {
+        _selectedIndex = 0;
+        if (!string.IsNullOrWhiteSpace(value) && value.Length >= 2)
+            await SearchEntities(value);
+        else
+            _searchResults.Clear();
+    }
+
+    private async Task SearchEntities(string term)
+    {
+        try
+        {
+            var results = new List<CommandItem>();
+            var encoded = Uri.EscapeDataString(term);
+
+            try
+            {
+                var assistants = await Http.GetFromJsonAsync<SearchResult>($"/api/v1/assistants?pageSize=5&search={encoded}");
+                if (assistants?.Items is not null)
+                {
+                    results.AddRange(assistants.Items.Select(a => new CommandItem(
+                        a.Name, "/assistant-studio", Icons.Material.Filled.SmartToy, Color.Primary, "Assistants", $"AI Assistant")));
+                }
+            }
+            catch { }
+
+            try
+            {
+                var workflows = await Http.GetFromJsonAsync<SearchResult>($"/api/v1/workflows?pageSize=5&search={encoded}");
+                if (workflows?.Items is not null)
+                {
+                    results.AddRange(workflows.Items.Select(w => new CommandItem(
+                        w.Name, $"/workflow-studio/designer/{w.Id}", Icons.Material.Filled.AccountTree, Color.Secondary, "Workflows", "Workflow")));
+                }
+            }
+            catch { }
+
+            _searchResults = results;
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    public void Open()
+    {
+        _visible = true;
+        _query = string.Empty;
+        _selectedIndex = 0;
+        _searchResults.Clear();
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        _visible = false;
+        StateHasChanged();
+    }
+
+    public void Toggle()
+    {
+        if (_visible) Close(); else Open();
+    }
+
+    private void HandleKeyUp(KeyboardEventArgs e)
+    {
+        var items = FilteredItems;
+        switch (e.Key)
+        {
+            case "Escape":
+                Close();
+                break;
+            case "ArrowDown":
+                _selectedIndex = Math.Min(_selectedIndex + 1, items.Count - 1);
+                break;
+            case "ArrowUp":
+                _selectedIndex = Math.Max(_selectedIndex - 1, 0);
+                break;
+            case "Enter":
+                if (_selectedIndex >= 0 && _selectedIndex < items.Count)
+                    Execute(items[_selectedIndex]);
+                break;
+        }
+    }
+
+    private void Execute(CommandItem item)
+    {
+        Close();
+        Navigation.NavigateTo(item.Href);
+    }
+
+    private record CommandItem(string Label, string Href, string Icon, Color Color, string Category, string? Description = null, string? Shortcut = null);
+    private class SearchResult { public List<SearchItem> Items { get; set; } = new(); }
+    private class SearchItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+}

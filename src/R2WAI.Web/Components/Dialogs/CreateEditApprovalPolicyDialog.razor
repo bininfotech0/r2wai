@@ -1,0 +1,137 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Approval Policy" : "Create Approval Policy")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_workflowType" Label="Workflow Type"
+                              HelperText="e.g. sequential, approval, purchase" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_approverRoles" Label="Approver Roles"
+                              HelperText="Comma-separated: Admin,Manager" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTooltip Text="Minimum number of approvers required before the request is considered approved.">
+                    <MudNumericField @bind-Value="_minApprovers" Label="Min Approvers" Min="1" Max="10"
+                                     HelperText="1–10" Variant="Variant.Outlined" />
+                </MudTooltip>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTooltip Text="Minutes before the request escalates to the escalation roles. Max 10,080 = 7 days. Set 0 to disable.">
+                    <MudNumericField @bind-Value="_escalationMinutes" Label="Escalation (minutes)"
+                                     Min="0" Max="10080" HelperText="0 = disabled, max 7 days" Variant="Variant.Outlined" />
+                </MudTooltip>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTextField @bind-Value="_escalationRoles" Label="Escalation Roles"
+                              HelperText="Comma-separated" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? EditId { get; set; }
+
+    private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private string _name = string.Empty;
+    private string _description = string.Empty;
+    private string _workflowType = string.Empty;
+    private string _approverRoles = string.Empty;
+    private int _minApprovers = 1;
+    private int? _escalationMinutes;
+    private string _escalationRoles = string.Empty;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            try
+            {
+                var policy = await Http.GetFromJsonAsync<PolicyEditDto>($"/api/v1/approvals/policies/{EditId}");
+                if (policy is not null)
+                {
+                    _name = policy.Name;
+                    _description = policy.Description ?? string.Empty;
+                    _workflowType = policy.WorkflowType ?? string.Empty;
+                    _approverRoles = policy.ApproverRoles ?? string.Empty;
+                    _minApprovers = policy.MinApprovers;
+                    _escalationMinutes = policy.EscalationMinutes;
+                    _escalationRoles = policy.EscalationRoles ?? string.Empty;
+                }
+            }
+            catch { Snackbar.Add("Failed to load policy", Severity.Error); }
+        }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var payload = new
+            {
+                Name = _name,
+                Description = (string?)(string.IsNullOrWhiteSpace(_description) ? null : _description),
+                WorkflowType = (string?)(string.IsNullOrWhiteSpace(_workflowType) ? null : _workflowType),
+                ApproverRoles = (string?)(string.IsNullOrWhiteSpace(_approverRoles) ? null : _approverRoles),
+                MinApprovers = _minApprovers,
+                EscalationMinutes = _escalationMinutes,
+                EscalationRoles = (string?)(string.IsNullOrWhiteSpace(_escalationRoles) ? null : _escalationRoles)
+            };
+
+            if (_isEdit)
+            {
+                await Http.PutAsJsonAsync($"/api/v1/approvals/policies/{EditId}", payload);
+                Snackbar.Add("Policy updated", Severity.Success);
+            }
+            else
+            {
+                await Http.PostAsJsonAsync("/api/v1/approvals/policies", payload);
+                Snackbar.Add("Policy created", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class PolicyEditDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? WorkflowType { get; set; }
+        public string? ApproverRoles { get; set; }
+        public int MinApprovers { get; set; }
+        public int? EscalationMinutes { get; set; }
+        public string? EscalationRoles { get; set; }
+    }
+}

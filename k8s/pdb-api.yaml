@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: r2wai
+      component: api

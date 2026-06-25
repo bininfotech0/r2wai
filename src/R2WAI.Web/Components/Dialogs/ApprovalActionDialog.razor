@@ -1,0 +1,53 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(IsApprove ? "Approve" : "Reject") Request</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Class="mb-4">
+            @(IsApprove ? "Approve" : "Reject") the approval request for workflow <strong>@WorkflowName</strong>?
+        </MudText>
+        <MudTextField @bind-Value="_comments" Label="Comments (optional)" Lines="3"
+                      Placeholder="Add any notes for this decision..." Variant="Variant.Outlined" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Submit" Variant="Variant.Filled"
+                   Color="@(IsApprove ? Color.Success : Color.Error)" Disabled="_submitting">
+            @(_submitting ? "Submitting..." : (IsApprove ? "Approve" : "Reject"))
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string ApprovalId { get; set; } = string.Empty;
+    [Parameter] public string WorkflowName { get; set; } = string.Empty;
+    [Parameter] public bool IsApprove { get; set; }
+
+    private string _comments = string.Empty;
+    private bool _submitting;
+
+    private async Task Submit()
+    {
+        _submitting = true;
+        try
+        {
+            var action = IsApprove ? "approve" : "reject";
+            var response = await Http.PostAsJsonAsync(
+                $"/api/v1/approvals/{ApprovalId}/{action}",
+                new { Comments = (string?)(string.IsNullOrWhiteSpace(_comments) ? null : _comments) });
+            response.EnsureSuccessStatusCode();
+
+            Snackbar.Add($"Request {(IsApprove ? "approved" : "rejected")}", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Action failed: {ex.Message}", Severity.Error); }
+        finally { _submitting = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

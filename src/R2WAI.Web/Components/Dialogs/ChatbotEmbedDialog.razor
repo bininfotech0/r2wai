@@ -1,0 +1,590 @@
+@inject ISnackbar Snackbar
+@inject IConfiguration Configuration
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.Code" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Embed @ChatbotName</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+            Add this chatbot to any website by copying one of the embed options below.
+        </MudText>
+
+        <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true">
+            <MudTabPanel Text="Script Tag" Icon="@Icons.Material.Filled.Code">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Floating Widget</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    Adds a chat bubble in the bottom-right corner of your website. Paste before &lt;/body&gt;.
+                </MudText>
+                <MudPaper Class="pa-3" Style="background: var(--mud-palette-background-gray); font-family: monospace; font-size: 13px; white-space: pre-wrap; overflow-x: auto; border-radius: 8px;">@_scriptEmbed</MudPaper>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Class="mt-2"
+                           StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyToClipboard(_scriptEmbed))">
+                    Copy Script
+                </MudButton>
+            </MudTabPanel>
+
+            <MudTabPanel Text="iFrame" Icon="@Icons.Material.Filled.WebAsset">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Inline Embed</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    Embeds the chatbot directly in your page layout. Adjust width and height as needed.
+                </MudText>
+                <MudPaper Class="pa-3" Style="background: var(--mud-palette-background-gray); font-family: monospace; font-size: 13px; white-space: pre-wrap; overflow-x: auto; border-radius: 8px;">@_iframeEmbed</MudPaper>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Class="mt-2"
+                           StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyToClipboard(_iframeEmbed))">
+                    Copy iFrame
+                </MudButton>
+            </MudTabPanel>
+
+            <MudTabPanel Text="Direct Link" Icon="@Icons.Material.Filled.Link">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Shareable URL</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    Share this link directly. Opens the chatbot in a full-page view.
+                </MudText>
+                <MudPaper Class="pa-3" Style="background: var(--mud-palette-background-gray); font-family: monospace; font-size: 13px; border-radius: 8px;">@_directLink</MudPaper>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Class="mt-2"
+                           StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyToClipboard(_directLink))">
+                    Copy Link
+                </MudButton>
+            </MudTabPanel>
+        </MudTabs>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.h6" Class="mb-2">Customization</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField T="string" @bind-Value="_widgetTitle" Label="Widget Title" Margin="Margin.Dense"
+                              Immediate="true" TextChanged="UpdateEmbedCodes" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField T="string" @bind-Value="_primaryColor" Label="Primary Color" Margin="Margin.Dense"
+                              Placeholder="#1565C0" Immediate="true" TextChanged="UpdateEmbedCodes" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="string" @bind-Value="_position" Label="Position" Margin="Margin.Dense">
+                    <MudSelectItem T="string" Value="@("bottom-right")">Bottom Right</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("bottom-left")">Bottom Left</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int" @bind-Value="_width" Label="Width (px)" Min="300" Max="600" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int" @bind-Value="_height" Label="Height (px)" Min="400" Max="800" Margin="Margin.Dense" />
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.h6" Class="mb-2">Preview</MudText>
+        <MudPaper Elevation="3" Class="pa-0" Style="@($"width: {_width}px; max-width: 100%; height: 400px; border-radius: 12px; overflow: hidden; margin: 0 auto;")">
+            <div style="@($"background: {_primaryColor}; color: white; padding: 16px; display: flex; align-items: center; gap: 8px;")">
+                <MudIcon Icon="@Icons.Material.Filled.ChatBubble" Style="color: white;" />
+                <MudText Typo="Typo.subtitle1" Style="color: white;">@_widgetTitle</MudText>
+            </div>
+            <div style="padding: 16px; background: var(--mud-palette-surface); height: calc(100% - 120px); overflow-y: auto;">
+                <MudPaper Class="pa-3 mb-2" Elevation="1" Style="max-width: 80%; border-radius: 12px;">
+                    <MudText Typo="Typo.body2">@(WelcomeMessage ?? "Hello! How can I help you today?")</MudText>
+                </MudPaper>
+            </div>
+            <div style="padding: 8px 16px; border-top: 1px solid var(--mud-palette-divider); display: flex; gap: 8px;">
+                <MudTextField T="string" Variant="Variant.Outlined" Placeholder="Type a message..." Margin="Margin.Dense"
+                              Disabled="true" Style="flex: 1;" />
+                <MudIconButton Icon="@Icons.Material.Filled.Send" Color="Color.Primary" Disabled="true" aria-label="Send" />
+            </div>
+        </MudPaper>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.h6" Class="mb-2">Deploy to Channels</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Connect this chatbot to messaging platforms and external services.
+        </MudText>
+
+        <MudGrid>
+            @* Microsoft Teams *@
+            <MudItem xs="12" sm="6">
+                <MudPaper Outlined="true" Class="pa-4" Style="border-radius: 12px; height: 100%;">
+                    <div class="d-flex align-center gap-2 mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Microsoft Teams</MudText>
+                        <MudSpacer />
+                        @if (_teamsConnected)
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small" Style="height: 24px;">Connected</MudChip>
+                        }
+                    </div>
+                    @if (_teamsConfigOpen)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                            Register a Bot in Azure Bot Framework, then paste your credentials here.
+                        </MudText>
+                        <MudTextField T="string" @bind-Value="_teamsBotAppId" Label="Bot App ID" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_teamsBotAppPassword" Label="Bot App Password" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_teamsTenantId" Label="Teams Tenant ID" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <div class="d-flex gap-2 mt-2">
+                            @if (_teamsConnected)
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                           OnClick="DisconnectTeams" Disabled="_channelConnecting">Disconnect</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                           OnClick="ConnectTeams" Disabled="_channelConnecting">
+                                    @if (_channelConnecting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" /> }
+                                    Connect
+                                </MudButton>
+                            }
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => _teamsConfigOpen = false)">Cancel</MudButton>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" FullWidth="true"
+                                   OnClick="@(() => _teamsConfigOpen = true)">
+                            @(_teamsConnected ? "Reconfigure" : "Configure")
+                        </MudButton>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            @* Slack *@
+            <MudItem xs="12" sm="6">
+                <MudPaper Outlined="true" Class="pa-4" Style="border-radius: 12px; height: 100%;">
+                    <div class="d-flex align-center gap-2 mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Message" Color="Color.Warning" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Slack</MudText>
+                        <MudSpacer />
+                        @if (_slackConnected)
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small" Style="height: 24px;">Connected</MudChip>
+                        }
+                    </div>
+                    @if (_slackConfigOpen)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                            Create a Slack App at api.slack.com, enable Socket Mode, paste credentials.
+                        </MudText>
+                        <MudTextField T="string" @bind-Value="_slackBotToken" Label="Bot Token" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_slackSigningSecret" Label="Signing Secret" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_slackAppId" Label="App ID" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <div class="d-flex gap-2 mt-2">
+                            @if (_slackConnected)
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                           OnClick="DisconnectSlack" Disabled="_channelConnecting">Disconnect</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                           OnClick="ConnectSlack" Disabled="_channelConnecting">
+                                    @if (_channelConnecting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" /> }
+                                    Connect
+                                </MudButton>
+                            }
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => _slackConfigOpen = false)">Cancel</MudButton>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" FullWidth="true"
+                                   OnClick="@(() => _slackConfigOpen = true)">
+                            @(_slackConnected ? "Reconfigure" : "Configure")
+                        </MudButton>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            @* WhatsApp (via Twilio) *@
+            <MudItem xs="12" sm="6">
+                <MudPaper Outlined="true" Class="pa-4" Style="border-radius: 12px; height: 100%;">
+                    <div class="d-flex align-center gap-2 mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Chat" Color="Color.Success" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">WhatsApp (Twilio)</MudText>
+                        <MudSpacer />
+                        @if (_whatsappConnected)
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small" Style="height: 24px;">Connected</MudChip>
+                        }
+                    </div>
+                    @if (_whatsappConfigOpen)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                            Set up a Twilio WhatsApp sandbox or production number.
+                        </MudText>
+                        <MudTextField T="string" @bind-Value="_whatsappAccountSid" Label="Twilio Account SID" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_whatsappAuthToken" Label="Auth Token" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_whatsappNumber" Label="WhatsApp Number" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <div class="d-flex gap-2 mt-2">
+                            @if (_whatsappConnected)
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                           OnClick="DisconnectWhatsApp" Disabled="_channelConnecting">Disconnect</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                           OnClick="ConnectWhatsApp" Disabled="_channelConnecting">
+                                    @if (_channelConnecting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" /> }
+                                    Connect
+                                </MudButton>
+                            }
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => _whatsappConfigOpen = false)">Cancel</MudButton>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" FullWidth="true"
+                                   OnClick="@(() => _whatsappConfigOpen = true)">
+                            @(_whatsappConnected ? "Reconfigure" : "Configure")
+                        </MudButton>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            @* SMS (via Twilio) *@
+            <MudItem xs="12" sm="6">
+                <MudPaper Outlined="true" Class="pa-4" Style="border-radius: 12px; height: 100%;">
+                    <div class="d-flex align-center gap-2 mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Sms" Color="Color.Info" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">SMS (Twilio)</MudText>
+                        <MudSpacer />
+                        @if (_smsConnected)
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small" Style="height: 24px;">Connected</MudChip>
+                        }
+                    </div>
+                    @if (_smsConfigOpen)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                            Configure your Twilio SMS number for chatbot messaging.
+                        </MudText>
+                        <MudTextField T="string" @bind-Value="_smsAccountSid" Label="Twilio Account SID" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_smsAuthToken" Label="Auth Token" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_smsPhoneNumber" Label="Phone Number" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Class="mb-2" />
+                        <div class="d-flex gap-2 mt-2">
+                            @if (_smsConnected)
+                            {
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                           OnClick="DisconnectSms" Disabled="_channelConnecting">Disconnect</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                           OnClick="ConnectSms" Disabled="_channelConnecting">
+                                    @if (_channelConnecting) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" /> }
+                                    Connect
+                                </MudButton>
+                            }
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => _smsConfigOpen = false)">Cancel</MudButton>
+                        </div>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" FullWidth="true"
+                                   OnClick="@(() => _smsConfigOpen = true)">
+                            @(_smsConnected ? "Reconfigure" : "Configure")
+                        </MudButton>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            @* REST API / Webhook *@
+            <MudItem xs="12">
+                <MudPaper Outlined="true" Class="pa-4" Style="border-radius: 12px;">
+                    <div class="d-flex align-center gap-2 mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Api" Color="Color.Secondary" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">REST API / Webhook</MudText>
+                    </div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                        Send POST requests with <code>@("{ \"message\": \"...\" }")</code> to this endpoint.
+                    </MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Webhook URL</MudText>
+                    <MudPaper Class="pa-2 mb-3" Style="background: var(--mud-palette-background-gray); font-family: monospace; font-size: 13px; border-radius: 8px;">
+                        @_webhookUrl
+                    </MudPaper>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Class="mb-3"
+                               StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="@(() => CopyToClipboard(_webhookUrl))">
+                        Copy Webhook URL
+                    </MudButton>
+
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">API Key</MudText>
+                    <div class="d-flex align-center gap-2">
+                        <MudTextField T="string" @bind-Value="_webhookApiKey" ReadOnly="true" Margin="Margin.Dense"
+                                      InputType="InputType.Password" Style="font-family: monospace;" />
+                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                       OnClick="@(() => CopyToClipboard(_webhookApiKey))" aria-label="Copy API Key" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small"
+                                       OnClick="RegenerateApiKey" aria-label="Regenerate API Key" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string ChatbotId { get; set; } = string.Empty;
+    [Parameter] public string ChatbotName { get; set; } = string.Empty;
+    [Parameter] public string? WelcomeMessage { get; set; }
+
+    private string _widgetTitle = string.Empty;
+    private string _primaryColor = "#1565C0";
+    private string _position = "bottom-right";
+    private int _width = 400;
+    private int _height = 600;
+
+    private string _scriptEmbed = string.Empty;
+    private string _iframeEmbed = string.Empty;
+    private string _directLink = string.Empty;
+
+    // Channel connection state
+    private bool _channelConnecting;
+
+    // Microsoft Teams
+    private bool _teamsConfigOpen;
+    private bool _teamsConnected;
+    private string _teamsBotAppId = string.Empty;
+    private string _teamsBotAppPassword = string.Empty;
+    private string _teamsTenantId = string.Empty;
+
+    // Slack
+    private bool _slackConfigOpen;
+    private bool _slackConnected;
+    private string _slackBotToken = string.Empty;
+    private string _slackSigningSecret = string.Empty;
+    private string _slackAppId = string.Empty;
+
+    // WhatsApp
+    private bool _whatsappConfigOpen;
+    private bool _whatsappConnected;
+    private string _whatsappAccountSid = string.Empty;
+    private string _whatsappAuthToken = string.Empty;
+    private string _whatsappNumber = string.Empty;
+
+    // SMS
+    private bool _smsConfigOpen;
+    private bool _smsConnected;
+    private string _smsAccountSid = string.Empty;
+    private string _smsAuthToken = string.Empty;
+    private string _smsPhoneNumber = string.Empty;
+
+    // Webhook
+    private string _webhookUrl = string.Empty;
+    private string _webhookApiKey = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        _widgetTitle = ChatbotName;
+        UpdateEmbedCodes();
+        GenerateWebhookInfo();
+    }
+
+    private void GenerateWebhookInfo()
+    {
+        var configuredHost = Configuration["ApiPublicUrl"] ?? Configuration["ApiBaseUrl"];
+        var baseUrl = !string.IsNullOrWhiteSpace(configuredHost)
+            ? configuredHost.TrimEnd('/')
+            : Navigation.BaseUri.TrimEnd('/');
+        _webhookUrl = $"{baseUrl}/api/v1/chatbots/{ChatbotId}/webhook";
+        _webhookApiKey = $"r2w_{Guid.NewGuid():N}";
+    }
+
+    private void UpdateEmbedCodes(string? _ = null)
+    {
+        var configuredHost = Configuration["WidgetPublicUrl"];
+        var webBase = !string.IsNullOrWhiteSpace(configuredHost)
+            ? configuredHost.TrimEnd('/')
+            : Navigation.BaseUri.TrimEnd('/');
+        var widgetUrl = $"{webBase}/chatbot/widget/{ChatbotId}";
+        var pos = _position == "bottom-right" ? "right:20px" : "left:20px";
+        var encodedColor = Uri.EscapeDataString(_primaryColor);
+        var encodedTitle = Uri.EscapeDataString(_widgetTitle);
+
+        _directLink = $"{webBase}/chatbot/{ChatbotId}";
+
+        _iframeEmbed = $"<iframe src=\"{widgetUrl}\" width=\"{_width}\" height=\"{_height}\" style=\"border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);\" allow=\"microphone\" title=\"{_widgetTitle}\"></iframe>";
+
+        _scriptEmbed = "<script>\n"
+            + "(function() {\n"
+            + "  var w = document.createElement('div');\n"
+            + "  w.id = 'r2wai-chatbot';\n"
+            + $"  w.innerHTML = '<iframe src=\"{widgetUrl}?position={_position}&color={encodedColor}&title={encodedTitle}\" "
+            + $"style=\"border:none;width:{_width}px;height:{_height}px;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.2);\" "
+            + $"allow=\"microphone\" title=\"{_widgetTitle}\"></iframe>';\n"
+            + $"  w.style.cssText = 'position:fixed;{pos};bottom:20px;z-index:99999;';\n"
+            + "  var btn = document.createElement('div');\n"
+            + $"  btn.style.cssText = 'position:fixed;{pos};bottom:20px;z-index:99998;width:56px;height:56px;border-radius:50%;"
+            + $"background:{_primaryColor};cursor:pointer;display:flex;align-items:center;justify-content:center;"
+            + "box-shadow:0 4px 12px rgba(0,0,0,0.2);';\n"
+            + "  btn.innerHTML = '<svg width=\"24\" height=\"24\" fill=\"white\" viewBox=\"0 0 24 24\"><path d=\"M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z\"/></svg>';\n"
+            + "  w.style.display = 'none';\n"
+            + "  document.body.appendChild(w);\n"
+            + "  document.body.appendChild(btn);\n"
+            + "  btn.onclick = function() {\n"
+            + "    var open = w.style.display !== 'none';\n"
+            + "    w.style.display = open ? 'none' : 'block';\n"
+            + "    btn.style.display = open ? 'flex' : 'none';\n"
+            + "  };\n"
+            + "})();\n"
+            + "</script>";
+
+        StateHasChanged();
+    }
+
+    // --- Channel connect/disconnect methods ---
+
+    private async Task ConnectTeams()
+    {
+        if (string.IsNullOrWhiteSpace(_teamsBotAppId) || string.IsNullOrWhiteSpace(_teamsBotAppPassword) || string.IsNullOrWhiteSpace(_teamsTenantId))
+        {
+            Snackbar.Add("Please fill in all Teams fields.", Severity.Warning);
+            return;
+        }
+        await ConnectChannel("teams", new { botAppId = _teamsBotAppId, botAppPassword = _teamsBotAppPassword, tenantId = _teamsTenantId },
+            () => { _teamsConnected = true; _teamsConfigOpen = false; });
+    }
+
+    private async Task DisconnectTeams()
+    {
+        await DisconnectChannel("teams", () => { _teamsConnected = false; _teamsConfigOpen = false; });
+    }
+
+    private async Task ConnectSlack()
+    {
+        if (string.IsNullOrWhiteSpace(_slackBotToken) || string.IsNullOrWhiteSpace(_slackSigningSecret) || string.IsNullOrWhiteSpace(_slackAppId))
+        {
+            Snackbar.Add("Please fill in all Slack fields.", Severity.Warning);
+            return;
+        }
+        await ConnectChannel("slack", new { botToken = _slackBotToken, signingSecret = _slackSigningSecret, appId = _slackAppId },
+            () => { _slackConnected = true; _slackConfigOpen = false; });
+    }
+
+    private async Task DisconnectSlack()
+    {
+        await DisconnectChannel("slack", () => { _slackConnected = false; _slackConfigOpen = false; });
+    }
+
+    private async Task ConnectWhatsApp()
+    {
+        if (string.IsNullOrWhiteSpace(_whatsappAccountSid) || string.IsNullOrWhiteSpace(_whatsappAuthToken) || string.IsNullOrWhiteSpace(_whatsappNumber))
+        {
+            Snackbar.Add("Please fill in all WhatsApp fields.", Severity.Warning);
+            return;
+        }
+        await ConnectChannel("whatsapp", new { accountSid = _whatsappAccountSid, authToken = _whatsappAuthToken, whatsappNumber = _whatsappNumber },
+            () => { _whatsappConnected = true; _whatsappConfigOpen = false; });
+    }
+
+    private async Task DisconnectWhatsApp()
+    {
+        await DisconnectChannel("whatsapp", () => { _whatsappConnected = false; _whatsappConfigOpen = false; });
+    }
+
+    private async Task ConnectSms()
+    {
+        if (string.IsNullOrWhiteSpace(_smsAccountSid) || string.IsNullOrWhiteSpace(_smsAuthToken) || string.IsNullOrWhiteSpace(_smsPhoneNumber))
+        {
+            Snackbar.Add("Please fill in all SMS fields.", Severity.Warning);
+            return;
+        }
+        await ConnectChannel("sms", new { accountSid = _smsAccountSid, authToken = _smsAuthToken, phoneNumber = _smsPhoneNumber },
+            () => { _smsConnected = true; _smsConfigOpen = false; });
+    }
+
+    private async Task DisconnectSms()
+    {
+        await DisconnectChannel("sms", () => { _smsConnected = false; _smsConfigOpen = false; });
+    }
+
+    private async Task ConnectChannel(string channel, object payload, Action onSuccess)
+    {
+        _channelConnecting = true;
+        StateHasChanged();
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/chatbots/{ChatbotId}/channels/{channel}", payload);
+            response.EnsureSuccessStatusCode();
+            onSuccess();
+            Snackbar.Add($"{channel} channel connected successfully!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to connect {channel}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _channelConnecting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DisconnectChannel(string channel, Action onSuccess)
+    {
+        _channelConnecting = true;
+        StateHasChanged();
+        try
+        {
+            var response = await Http.DeleteAsync($"/api/v1/chatbots/{ChatbotId}/channels/{channel}");
+            response.EnsureSuccessStatusCode();
+            onSuccess();
+            Snackbar.Add($"{channel} channel disconnected.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to disconnect {channel}: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _channelConnecting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void RegenerateApiKey()
+    {
+        _webhookApiKey = $"r2w_{Guid.NewGuid():N}";
+        Snackbar.Add("API key regenerated.", Severity.Success);
+        StateHasChanged();
+    }
+
+    private async Task CopyToClipboard(string text)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            Snackbar.Add("Copied to clipboard!", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Copy failed", Severity.Warning);
+        }
+    }
+
+    private void Close() => MudDialog.Close();
+}

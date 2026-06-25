@@ -1,0 +1,30 @@
+@using Markdig
+
+@if (!string.IsNullOrEmpty(Content))
+{
+    <div class="markdown-body" style="@Style">
+        @((MarkupString)RenderMarkdown(Content))
+    </div>
+}
+
+@code {
+    [Parameter] public string Content { get; set; } = string.Empty;
+    [Parameter] public string? Style { get; set; }
+
+    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .UseSoftlineBreakAsHardlineBreak()
+        .Build();
+
+    private static string RenderMarkdown(string markdown)
+    {
+        try
+        {
+            return Markdown.ToHtml(markdown, Pipeline);
+        }
+        catch
+        {
+            return System.Net.WebUtility.HtmlEncode(markdown);
+        }
+    }
+}

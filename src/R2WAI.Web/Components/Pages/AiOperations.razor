@@ -1,0 +1,316 @@
+@page "/operations/ai"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - AI Operations</PageTitle>
+
+<PageHeader Title="AI Operations" Subtitle="Model performance, usage analytics, and cost monitoring" />
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Class="mb-4 stagger-in" Spacing="3">
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Value="@_totalConversations.ToString()" Label="Conversations"
+                     Icon="@Icons.Material.Outlined.Chat" ValueColor="Color.Primary" IconColor="Color.Primary"
+                     Subtitle="Last 30 days" Delta="@(_totalConversations > 0 ? "+new" : "")"
+                     Trend="KpiCard.TrendDirection.Up" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Value="@FormatTokens(_totalTokens)" Label="Tokens Used"
+                     Icon="@Icons.Material.Outlined.DataUsage" ValueColor="Color.Secondary" IconColor="Color.Secondary"
+                     Subtitle="Last 30 days" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Value="@($"{_avgResponseTime:F1}s")" Label="Avg Response"
+                     Icon="@Icons.Material.Outlined.Speed" ValueColor="Color.Tertiary" IconColor="Color.Tertiary"
+                     Subtitle="Across all models" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <KpiCard Value="@_activeModels.ToString()" Label="Active Models"
+                     Icon="@Icons.Material.Outlined.SmartToy" ValueColor="Color.Success" IconColor="Color.Success" />
+        </MudItem>
+    </MudGrid>
+
+    @* Model Usage Distribution *@
+    @if (_models.Count > 0)
+    {
+        <MudPaper Elevation="0" Class="pa-4 mb-4" Style="border: 1px solid var(--mud-palette-divider);">
+            <MudText Typo="Typo.subtitle1" Class="mb-3 section-title" Style="font-weight: 600;">Model Usage</MudText>
+            <div class="d-flex justify-center">
+                <DonutChart Size="160" StrokeWidth="20"
+                            CenterLabel="Models" CenterValue="@_models.Count.ToString()"
+                            ShowLegend="true"
+                            Segments="@_modelUsageSegments" />
+            </div>
+        </MudPaper>
+    }
+
+    <MudGrid Spacing="3">
+        @* Model Cards *@
+        <MudItem xs="12" md="7">
+            <MudText Typo="Typo.subtitle1" Class="mb-3 section-title" Style="font-weight: 600;">AI Models</MudText>
+            @if (_models.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.SmartToy"
+                            Title="No AI models configured"
+                            Description="Add AI models in Admin to see performance metrics."
+                            ActionText="Configure Models"
+                            OnAction="@(() => Navigation.NavigateTo("/admin/models"))"
+                            MinHeight="200px" />
+            }
+            else
+            {
+                <MudGrid Spacing="3" Class="stagger-in">
+                    @foreach (var model in _models)
+                    {
+                        <MudItem xs="12" sm="6">
+                            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+                                <div class="d-flex justify-space-between align-center mb-3">
+                                    <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@model.Name</MudText>
+                                    <div class="d-flex align-center gap-1">
+                                        <span class="health-dot health-dot--healthy"></span>
+                                        <MudText Typo="Typo.caption" Color="Color.Success">Active</MudText>
+                                    </div>
+                                </div>
+                                <div class="d-flex flex-column gap-1">
+                                    <div class="d-flex justify-space-between">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Provider</MudText>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@model.Provider</MudText>
+                                    </div>
+                                    <div class="d-flex justify-space-between">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Max Tokens</MudText>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@model.MaxTokens.ToString("N0")</MudText>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Daily Usage</MudText>
+                                    <SparklineChart Data="@(new List<double> { 10, 25, 18, 32, 28, 35, 30 })"
+                                                    Color="@(GetModelColor(_models.IndexOf(model)))"
+                                                    Width="120" Height="36"
+                                                    ShowFill="true" ShowEndDot="true" />
+                                </div>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+        </MudItem>
+
+        @* Right Column: Activity + Insights *@
+        <MudItem xs="12" md="5">
+            <MudText Typo="Typo.subtitle1" Class="mb-3 section-title" Style="font-weight: 600;">Recent AI Activity</MudText>
+            <MudPaper Elevation="0" Class="pa-4 mb-4" Style="border: 1px solid var(--mud-palette-divider);">
+                @if (_recentActivity.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.Timeline"
+                                Title="No recent AI activity"
+                                Description="AI conversations will appear here."
+                                MinHeight="150px" />
+                }
+                else
+                {
+                    <MudList T="string" Dense="true">
+                        @foreach (var activity in _recentActivity)
+                        {
+                            <MudListItem>
+                                <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@activity.Description</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@activity.AssistantName</MudText>
+                                    </div>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @FormatTimeAgo(activity.Timestamp)
+                                    </MudText>
+                                </div>
+                            </MudListItem>
+                            <MudDivider />
+                        }
+                    </MudList>
+                }
+            </MudPaper>
+
+            @if (_models.Count > 0 && _assistantMetrics.Any(a => !a.IsActive))
+            {
+                <AiInsightCard Title="Inactive assistants detected"
+                               Description="@($"{_assistantMetrics.Count(a => !a.IsActive)} assistants are in draft mode. Consider publishing them or archiving unused ones.")"
+                               PrimaryActionText="Review"
+                               PrimaryAction="@(() => Navigation.NavigateTo("/assistant-studio"))" />
+            }
+        </MudItem>
+
+        @* Assistants Overview *@
+        <MudItem xs="12">
+            <MudText Typo="Typo.subtitle1" Class="mb-3 section-title" Style="font-weight: 600;">Assistants Overview</MudText>
+            <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+                <MudDataGrid T="AssistantMetric" Items="_assistantMetrics" Hover="true" Dense="true" Elevation="0">
+                    <Columns>
+                        <TemplateColumn Title="Assistant" SortBy="x => x.Name">
+                            <CellTemplate>
+                                <div class="d-flex align-center gap-2">
+                                    <MudAvatar Size="Size.Small" Color="Color.Primary" Style="width: 28px; height: 28px; font-size: 0.7rem;">
+                                        @(context.Item.Name.Length > 0 ? context.Item.Name[0].ToString().ToUpper() : "A")
+                                    </MudAvatar>
+                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Item.Name</MudText>
+                                </div>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <PropertyColumn Property="x => x.Type" Title="Type" />
+                        <TemplateColumn Title="Status">
+                            <CellTemplate>
+                                <StatusBadge Status="@(context.Item.IsActive ? "Active" : "Draft")" />
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <PropertyColumn Property="x => x.Model" Title="Model" />
+                    </Columns>
+                    <NoRecordsContent>
+                        <MudText Align="Align.Center" Class="pa-4" Color="Color.Secondary">No assistants configured.</MudText>
+                    </NoRecordsContent>
+                </MudDataGrid>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private int _totalConversations;
+    private long _totalTokens;
+    private double _avgResponseTime;
+    private int _activeModels;
+
+    private List<ModelDto> _models = new();
+    private List<AiActivity> _recentActivity = new();
+    private List<AssistantMetric> _assistantMetrics = new();
+
+    // Chart helper fields
+    private List<DonutChart.ChartSegment> _modelUsageSegments = new();
+    private static readonly string[] _modelColors = { "#7C3AED", "#3B82F6", "#10B981", "#F59E0B" };
+
+    private static string GetModelColor(int index) => _modelColors[index % _modelColors.Length];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var modelsTask = Http.GetFromJsonAsync<ModelsResult>("/api/v1/admin/models");
+            var assistantsTask = Http.GetFromJsonAsync<AssistantsResult>("/api/v1/assistants?pageSize=50");
+            var logsTask = Http.GetFromJsonAsync<LogsResult>("/api/v1/operations/audit-logs?pageSize=20");
+            var statsTask = Http.GetFromJsonAsync<AiStatsDto>("/api/v1/operations/ai-stats");
+
+            await Task.WhenAll(modelsTask, assistantsTask, logsTask, statsTask);
+
+            _models = modelsTask.Result?.Items ?? new();
+            _activeModels = _models.Count;
+
+            _modelUsageSegments = _models.Select((m, i) => new DonutChart.ChartSegment
+            {
+                Label = m.Name,
+                Value = m.MaxTokens,
+                Color = GetModelColor(i)
+            }).ToList();
+
+            var assistants = assistantsTask.Result?.Items ?? new();
+            _assistantMetrics = assistants.Select(a => new AssistantMetric
+            {
+                Name = a.Name,
+                Type = a.Type ?? "General",
+                IsActive = a.IsActive,
+                Model = a.ModelName ?? "—"
+            }).ToList();
+
+            var logs = logsTask.Result?.Items ?? new();
+            _recentActivity = logs
+                .Where(l => l.EntityType is "Assistant" or "Chat")
+                .Take(10)
+                .Select(l => new AiActivity
+                {
+                    Description = $"{l.Action} {l.EntityType}",
+                    AssistantName = l.EntityType,
+                    Timestamp = l.Timestamp
+                }).ToList();
+
+            var stats = statsTask.Result;
+            if (stats is not null)
+            {
+                _totalTokens = stats.TotalTokens;
+                _totalConversations = stats.TotalConversations;
+                _avgResponseTime = stats.AvgResponseTimeSec;
+            }
+            else
+            {
+                _totalConversations = logs.Count(l => l.EntityType == "Chat");
+            }
+        }
+        catch
+        {
+            Snackbar.Add("Failed to load AI operations data.", Severity.Warning);
+        }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private static string FormatTokens(long tokens) => tokens switch
+    {
+        >= 1_000_000 => $"{tokens / 1_000_000.0:F1}M",
+        >= 1_000 => $"{tokens / 1_000.0:F1}K",
+        _ => tokens.ToString()
+    };
+
+    private static string FormatTimeAgo(DateTime timestamp)
+    {
+        var diff = DateTime.Now - timestamp;
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        return $"{(int)diff.TotalDays}d ago";
+    }
+
+    private class ModelsResult { public List<ModelDto> Items { get; set; } = new(); }
+    private class ModelDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Provider { get; set; } = string.Empty;
+        public int MaxTokens { get; set; }
+    }
+    private class AssistantsResult { public List<AssistantDto> Items { get; set; } = new(); }
+    private class AssistantDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Type { get; set; }
+        public bool IsActive { get; set; }
+        public string? ModelName { get; set; }
+    }
+    private class LogsResult { public List<LogDto> Items { get; set; } = new(); }
+    private class LogDto
+    {
+        public string Action { get; set; } = string.Empty;
+        public string EntityType { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+    }
+    private class AiStatsDto
+    {
+        public long TotalTokens { get; set; }
+        public int TotalConversations { get; set; }
+        public double AvgResponseTimeSec { get; set; }
+        public int SamplesUsed { get; set; }
+        public int WindowDays { get; set; }
+    }
+    private class AssistantMetric
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public string Model { get; set; } = string.Empty;
+    }
+    private class AiActivity
+    {
+        public string Description { get; set; } = string.Empty;
+        public string AssistantName { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+    }
+}

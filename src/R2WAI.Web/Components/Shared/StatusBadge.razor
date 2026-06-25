@@ -1,0 +1,44 @@
+@{
+    var color = ResolveColor();
+    var icon = ResolveIcon();
+}
+
+<MudChip T="string" Size="Size.Small" Color="@color" Variant="Variant.Filled"
+         Style="font-weight: 600; letter-spacing: 0.02em;">
+    @if (!string.IsNullOrEmpty(icon))
+    {
+        <MudIcon Icon="@icon" Size="Size.Small" Style="font-size: 0.75rem; margin-right: 4px;" />
+    }
+    @Status
+</MudChip>
+
+@code {
+    [Parameter] public string Status { get; set; } = string.Empty;
+    [Parameter] public Color? OverrideColor { get; set; }
+
+    private Color ResolveColor()
+    {
+        if (OverrideColor.HasValue) return OverrideColor.Value;
+        return Status.ToLowerInvariant() switch
+        {
+            "active" or "published" or "healthy" or "completed" or "success" or "processed" => Color.Success,
+            "draft" or "creating" or "processing" or "running" or "info" => Color.Info,
+            "inactive" or "paused" or "suspended" or "degraded" or "warning" or "pending" => Color.Warning,
+            "error" or "failed" or "unhealthy" or "critical" or "rejected" => Color.Error,
+            "ready" => Color.Success,
+            _ => Color.Default,
+        };
+    }
+
+    private string ResolveIcon()
+    {
+        return Status.ToLowerInvariant() switch
+        {
+            "active" or "published" or "healthy" or "completed" or "success" or "ready" => Icons.Material.Filled.CheckCircle,
+            "running" or "processing" or "creating" => Icons.Material.Filled.PlayCircle,
+            "error" or "failed" or "unhealthy" or "critical" => Icons.Material.Filled.Error,
+            "pending" or "draft" => Icons.Material.Filled.Schedule,
+            _ => string.Empty,
+        };
+    }
+}

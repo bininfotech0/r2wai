@@ -1,0 +1,182 @@
+@page "/chatbot/{ChatbotId}"
+@page "/chatbot/widget/{ChatbotId}"
+@layout R2WAI.Web.Components.Layout.WidgetLayout
+@attribute [AllowAnonymous]
+@implements IDisposable
+@inject IConfiguration Configuration
+@inject ISnackbar Snackbar
+
+<PageTitle>R2WAI Chat</PageTitle>
+
+<div style="@GetContainerStyle()">
+    <div style="@GetHeaderStyle()">
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.ChatBubble" Style="color: white;" />
+            <MudText Typo="Typo.subtitle1" Style="color: white;">@_title</MudText>
+        </div>
+    </div>
+
+    <div style="flex: 1; overflow-y: auto; padding: 16px;" id="widget-chat-container">
+        @if (!string.IsNullOrEmpty(_welcomeMessage))
+        {
+            <MudPaper Class="pa-3 mb-2" Elevation="1" Style="max-width: 80%; border-radius: 12px;">
+                <MudText Typo="Typo.body2">@_welcomeMessage</MudText>
+            </MudPaper>
+        }
+
+        @foreach (var msg in _messages)
+        {
+            <div class="d-flex @(msg.IsUser ? "justify-end" : "justify-start") mb-2">
+                <MudPaper Class="pa-3" Elevation="@(msg.IsUser ? 0 : 1)"
+                          Style="@($"max-width: 80%; border-radius: 12px; {(msg.IsUser ? $"background: {_color}; color: white;" : "")}")">
+                    <MudText Typo="Typo.body2" Style="@(msg.IsUser ? "color: white;" : "")">@msg.Content</MudText>
+                </MudPaper>
+            </div>
+        }
+
+        @if (_sending)
+        {
+            <div class="d-flex justify-start mb-2">
+                <MudPaper Class="pa-3" Elevation="1" Style="max-width: 80%; border-radius: 12px;">
+                    <div class="d-flex align-center gap-2">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Thinking...</MudText>
+                    </div>
+                </MudPaper>
+            </div>
+        }
+    </div>
+
+    <div style="padding: 8px 16px; border-top: 1px solid var(--mud-palette-divider); display: flex; gap: 8px; align-items: center;">
+        <MudTextField T="string" @bind-Value="_input" Variant="Variant.Outlined" Placeholder="Type a message..."
+                      Margin="Margin.Dense" Style="flex: 1;" OnKeyUp="HandleKeyUp"
+                      Disabled="_sending" aria-label="Chat message" />
+        <MudIconButton Icon="@Icons.Material.Filled.Send" Color="Color.Primary"
+                       OnClick="SendMessage" Disabled="@(_sending || string.IsNullOrWhiteSpace(_input))"
+                       aria-label="Send message" />
+    </div>
+
+    <div style="padding: 4px; text-align: center; border-top: 1px solid var(--mud-palette-divider);">
+        <MudText Typo="Typo.caption" Color="Color.Tertiary">Powered by R2WAI</MudText>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string ChatbotId { get; set; } = string.Empty;
+
+    [SupplyParameterFromQuery] public string? Title { get; set; }
+    [SupplyParameterFromQuery(Name = "color")] public string? ThemeColor { get; set; }
+    [SupplyParameterFromQuery] public string? Position { get; set; }
+
+    private string _title = "R2WAI Chat";
+    private string _color = "#1565C0";
+    private string _welcomeMessage = "Hello! How can I help you today?";
+    private string _input = string.Empty;
+    private bool _sending;
+    private List<ChatMessage> _messages = new();
+    private HttpClient? _httpClient;
+
+    protected override void OnInitialized()
+    {
+        _title = Title ?? "R2WAI Chat";
+        _color = ThemeColor ?? "#1565C0";
+
+        // The widget's chat API lives on the API project. Order of preference:
+        //   1. ApiPublicUrl  — explicit public URL (set in deployed environments)
+        //   2. ApiBaseUrl    — internal/dev URL
+        //   3. fallback to the same origin (works when API is reverse-proxied behind the web host)
+        var apiBase = Configuration["ApiPublicUrl"]
+                      ?? Configuration["ApiBaseUrl"]
+                      ?? Navigation?.BaseUri
+                      ?? "http://localhost:5000";
+        _httpClient = new HttpClient { BaseAddress = new Uri(apiBase) };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var chatbot = await _httpClient!.GetFromJsonAsync<ChatbotInfo>($"/api/v1/chatbots/{ChatbotId}");
+            if (chatbot is not null)
+            {
+                _title = Title ?? chatbot.Name;
+                _welcomeMessage = chatbot.WelcomeMessage ?? _welcomeMessage;
+                StateHasChanged();
+            }
+        }
+        catch { }
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_sending && !string.IsNullOrWhiteSpace(_input))
+            await SendMessage();
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_input) || _httpClient is null) return;
+
+        var userMsg = _input;
+        _messages.Add(new ChatMessage { IsUser = true, Content = userMsg });
+        _input = string.Empty;
+        _sending = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"/api/v1/chatbots/{ChatbotId}/chat",
+                new { Message = userMsg });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ChatResponse>();
+                _messages.Add(new ChatMessage { IsUser = false, Content = result?.Reply ?? "I couldn't process that." });
+            }
+            else
+            {
+                _messages.Add(new ChatMessage { IsUser = false, Content = response.StatusCode == System.Net.HttpStatusCode.InternalServerError
+                    ? "The AI service is currently unavailable. Please contact an administrator to configure the AI provider."
+                    : "Sorry, I'm having trouble responding right now." });
+            }
+        }
+        catch
+        {
+            _messages.Add(new ChatMessage { IsUser = false, Content = "Connection error. Please try again." });
+        }
+        finally
+        {
+            _sending = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetContainerStyle()
+    {
+        var isWidget = Navigation?.Uri?.Contains("/widget/") == true;
+        if (isWidget)
+            return "display: flex; flex-direction: column; height: 100vh; background: var(--mud-palette-surface);";
+        return "display: flex; flex-direction: column; height: 100vh; max-width: 500px; margin: 0 auto; background: var(--mud-palette-surface); box-shadow: 0 0 24px rgba(0,0,0,0.1);";
+    }
+
+    private string GetHeaderStyle() =>
+        $"background: {_color}; padding: 16px; display: flex; align-items: center;";
+
+    [Inject] private NavigationManager? Navigation { get; set; }
+
+    public void Dispose() => _httpClient?.Dispose();
+
+    private class ChatMessage
+    {
+        public bool IsUser { get; set; }
+        public string Content { get; set; } = string.Empty;
+    }
+
+    private class ChatResponse { public string Reply { get; set; } = string.Empty; }
+    private class ChatbotInfo
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? WelcomeMessage { get; set; }
+    }
+}

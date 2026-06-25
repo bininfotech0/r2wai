@@ -1,0 +1,194 @@
+@page "/settings/tenant"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+
+<PageTitle>R2WAI - Tenant Configuration</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Tenant Configuration</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+                <MudText Typo="Typo.h6" Class="mb-3">Organization Details</MudText>
+                <MudTextField @bind-Value="_name" Label="Organization Name" Class="mb-3"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudTextField @bind-Value="_slug" Label="Slug (URL identifier)" Class="mb-3"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudTextField @bind-Value="_domain" Label="Domain" HelperText="e.g. yourcompany.com" Class="mb-3"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudSelect T="string" @bind-Value="_status" Label="Status" Class="mb-3"
+                           Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem T="string" Value="@("Active")">Active</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Suspended")">Suspended</MudSelectItem>
+                </MudSelect>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+                <MudText Typo="Typo.h6" Class="mb-3">Feature Flags</MudText>
+                <MudTooltip Text="Create and manage domain-specific AI assistants powered by Semantic Kernel.">
+                    <MudCheckBox @bind-Value="_featureAssistants" Label="AI Assistant Studio" Color="Color.Primary" />
+                </MudTooltip>
+                <MudTooltip Text="Visual workflow designer with approval chains and automated business processes.">
+                    <MudCheckBox @bind-Value="_featureWorkflows" Label="Workflow Studio" Color="Color.Primary" />
+                </MudTooltip>
+                <MudTooltip Text="Human-in-the-loop approval management with escalation policies.">
+                    <MudCheckBox @bind-Value="_featureApprovals" Label="Approval Engine" Color="Color.Primary" />
+                </MudTooltip>
+                <MudTooltip Text="Document ingestion, vector search, and retrieval-augmented generation.">
+                    <MudCheckBox @bind-Value="_featureKnowledge" Label="Knowledge & RAG" Color="Color.Primary" />
+                </MudTooltip>
+                <MudTooltip Text="Connect to external systems via REST APIs, databases, and email.">
+                    <MudCheckBox @bind-Value="_featureIntegrations" Label="Integrations" Color="Color.Primary" />
+                </MudTooltip>
+                <MudTooltip Text="Track platform usage metrics, active users, and resource consumption.">
+                    <MudCheckBox @bind-Value="_featureAnalytics" Label="Usage Analytics" Color="Color.Primary" />
+                </MudTooltip>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+                <MudText Typo="Typo.h6" Class="mb-3">Limits</MudText>
+                <MudNumericField @bind-Value="_maxUsers" Label="Max Users" Min="1" Max="10000" Class="mb-3"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudNumericField @bind-Value="_maxAssistants" Label="Max Assistants" Min="1" Max="100" Class="mb-3"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudNumericField @bind-Value="_maxWorkflows" Label="Max Workflows" Min="1" Max="500" Class="mb-3"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudNumericField @bind-Value="_maxDocuments" Label="Max Documents" Min="1" Max="10000" Class="mb-3"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+                <MudNumericField @bind-Value="_maxStorageMb" Label="Max Storage (MB)" Min="100" Max="100000" Class="mb-3"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+                <MudText Typo="Typo.h6" Class="mb-3">Tenant Info</MudText>
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <tbody>
+                        <tr><td><strong>Tenant ID</strong></td><td><CopyToClipboard Text="@_tenantId" Style="font-family:monospace; font-size:0.85rem;" /></td></tr>
+                        <tr><td><strong>Created</strong></td><td>@_createdAt</td></tr>
+                        <tr><td><strong>Users</strong></td><td>@_userCount</td></tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" Class="d-flex justify-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveTenant"
+                       Disabled="_saving" StartIcon="@Icons.Material.Filled.Save">
+                @(_saving ? "Saving..." : "Save Configuration")
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _saving;
+
+    private string _tenantId = string.Empty;
+    private string _name = string.Empty;
+    private string _slug = string.Empty;
+    private string _domain = string.Empty;
+    private string _status = "Active";
+    private string _createdAt = string.Empty;
+    private int _userCount;
+
+    private bool _featureAssistants = true;
+    private bool _featureWorkflows = true;
+    private bool _featureApprovals = true;
+    private bool _featureKnowledge = true;
+    private bool _featureIntegrations = true;
+    private bool _featureAnalytics;
+
+    private int _maxUsers = 50;
+    private int _maxAssistants = 10;
+    private int _maxWorkflows = 50;
+    private int _maxDocuments = 1000;
+    private int _maxStorageMb = 5000;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            var settings = await Http.GetFromJsonAsync<TenantDto>("/api/v1/admin/settings");
+            if (settings is not null)
+            {
+                _tenantId = settings.TenantId ?? string.Empty;
+                _name = settings.TenantName ?? string.Empty;
+                _slug = settings.TenantSlug ?? string.Empty;
+                _domain = settings.TenantDomain ?? string.Empty;
+                _createdAt = settings.CreatedAt?.ToString("yyyy-MM-dd") ?? string.Empty;
+            }
+
+            var users = await Http.GetFromJsonAsync<UsersResult>("/api/v1/admin/users");
+            _userCount = users?.Items?.Count ?? 0;
+        }
+        catch
+        {
+            Snackbar.Add("Failed to load tenant settings.", Severity.Error);
+        }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task SaveTenant()
+    {
+        _saving = true;
+        try
+        {
+            var features = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                Assistants = _featureAssistants,
+                Workflows = _featureWorkflows,
+                Approvals = _featureApprovals,
+                Knowledge = _featureKnowledge,
+                Integrations = _featureIntegrations,
+                Analytics = _featureAnalytics
+            });
+
+            var limits = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                MaxUsers = _maxUsers,
+                MaxAssistants = _maxAssistants,
+                MaxWorkflows = _maxWorkflows,
+                MaxDocuments = _maxDocuments,
+                MaxStorageMb = _maxStorageMb
+            });
+
+            await Http.PutAsJsonAsync("/api/v1/admin/settings", new
+            {
+                TenantName = _name,
+                TenantSlug = _slug,
+                TenantDomain = _domain,
+                Features = features,
+                Settings = limits
+            });
+            Snackbar.Add("Tenant configuration saved", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private class TenantDto
+    {
+        public string? TenantId { get; set; }
+        public string? TenantName { get; set; }
+        public string? TenantSlug { get; set; }
+        public string? TenantDomain { get; set; }
+        public DateTime? CreatedAt { get; set; }
+    }
+
+    private class UsersResult { public List<object> Items { get; set; } = new(); }
+}

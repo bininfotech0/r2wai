@@ -1,0 +1,162 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Chatbot" : "Create Chatbot")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_welcomeMessage" Label="Welcome Message"
+                              HelperText="Shown to users when they start a conversation" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.body2" Class="mb-2" Style="font-weight: 600;">Prompt Template</MudText>
+                <MarkdownEditor @bind-Value="_promptTemplate" Lines="5"
+                                Placeholder="System prompt that guides chatbot behavior..."
+                                HelperText="Use markdown to structure the chatbot's instructions" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?" @bind-Value="_knowledgeBaseId" Label="Knowledge Base" Clearable="true" Variant="Variant.Outlined">
+                    @foreach (var kb in _knowledgeBases)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)kb.Id)">@kb.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?" @bind-Value="_modelConfigurationId" Label="AI Model" Clearable="true" Variant="Variant.Outlined">
+                    @foreach (var model in _models)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)model.Id)">@model.Name (@model.Provider)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? EditId { get; set; }
+
+    private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private string _name = string.Empty;
+    private string _description = string.Empty;
+    private string _welcomeMessage = string.Empty;
+    private string _promptTemplate = string.Empty;
+    private Guid? _knowledgeBaseId;
+    private Guid? _modelConfigurationId;
+    private bool _saving;
+    private List<KbOption> _knowledgeBases = new();
+    private List<ModelOption> _models = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var kbResult = await Http.GetFromJsonAsync<KbListResult>("/api/v1/knowledgebases");
+            _knowledgeBases = kbResult?.Items ?? new();
+
+            var modelResult = await Http.GetFromJsonAsync<ModelListResult>("/api/v1/admin/models");
+            _models = modelResult?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load form options.", Severity.Warning); }
+
+        if (_isEdit)
+        {
+            try
+            {
+                var chatbot = await Http.GetFromJsonAsync<ChatbotEditDto>($"/api/v1/chatbots/{EditId}");
+                if (chatbot is not null)
+                {
+                    _name = chatbot.Name;
+                    _description = chatbot.Description ?? string.Empty;
+                    _welcomeMessage = chatbot.WelcomeMessage ?? string.Empty;
+                    _promptTemplate = chatbot.PromptTemplate ?? string.Empty;
+                    _knowledgeBaseId = chatbot.KnowledgeBaseId;
+                    _modelConfigurationId = chatbot.ModelConfigurationId;
+                }
+            }
+            catch { Snackbar.Add("Failed to load chatbot", Severity.Error); }
+        }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var payload = new
+            {
+                Name = _name,
+                Description = (string?)(_description == string.Empty ? null : _description),
+                WelcomeMessage = (string?)(_welcomeMessage == string.Empty ? null : _welcomeMessage),
+                PromptTemplate = (string?)(_promptTemplate == string.Empty ? null : _promptTemplate),
+                KnowledgeBaseId = _knowledgeBaseId,
+                ModelConfigurationId = _modelConfigurationId
+            };
+
+            if (_isEdit)
+            {
+                await Http.PutAsJsonAsync($"/api/v1/chatbots/{EditId}", payload);
+                Snackbar.Add("Chatbot updated", Severity.Success);
+            }
+            else
+            {
+                await Http.PostAsJsonAsync("/api/v1/chatbots", payload);
+                Snackbar.Add("Chatbot created", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class ChatbotEditDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? WelcomeMessage { get; set; }
+        public string? PromptTemplate { get; set; }
+        public Guid? KnowledgeBaseId { get; set; }
+        public Guid? ModelConfigurationId { get; set; }
+    }
+
+    private class KbListResult { public List<KbOption> Items { get; set; } = new(); }
+    private class KbOption
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private class ModelListResult { public List<ModelOption> Items { get; set; } = new(); }
+    private class ModelOption
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Provider { get; set; } = string.Empty;
+    }
+}

@@ -1,0 +1,256 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">@(_isEdit ? "Edit Model Configuration" : "Add AI Model")</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="2">
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">Basic Information</MudText>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_name" Label="Display Name" Required="true" Variant="Variant.Outlined"
+                              Placeholder="e.g. GPT-4o Production" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="string" Value="_provider" Label="Provider" Required="true" Variant="Variant.Outlined"
+                           ValueChanged="OnProviderChanged">
+                    <MudSelectItem T="string" Value="@("OpenAI")">OpenAI</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("AzureOpenAI")">Azure OpenAI</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Anthropic")">Anthropic</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Google")">Google AI</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Mistral")">Mistral AI</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Cohere")">Cohere</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("HuggingFace")">HuggingFace</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Ollama")">Ollama (Local)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_modelId" Label="Model ID" Required="true"
+                              HelperText="@GetModelIdHelperText()" Variant="Variant.Outlined"
+                              Placeholder="@GetModelIdPlaceholder()" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudDivider Class="my-1" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2 mt-2" Style="font-weight: 600;">Connection</MudText>
+            </MudItem>
+
+            @if (_provider != "Ollama")
+            {
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_apiKey" Label="API Key" Variant="Variant.Outlined"
+                                  InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
+                                  Placeholder="@(_isEdit && _existingHasKey ? "••••••••  (leave blank to keep current)" : "Enter API key")"
+                                  HelperText="@(_isEdit && _existingHasKey ? "Leave blank to keep the existing key" : "Required for cloud providers")"
+                                  Adornment="Adornment.End" AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  OnAdornmentClick="@(() => _showApiKey = !_showApiKey)" />
+                </MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_endpoint" Label="Endpoint" Variant="Variant.Outlined"
+                              Placeholder="@GetEndpointPlaceholder()"
+                              HelperText="@GetEndpointHelperText()" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudDivider Class="my-1" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2 mt-2" Style="font-weight: 600;">Model Parameters</MudText>
+            </MudItem>
+
+            <MudItem xs="12" sm="4">
+                <MudTooltip Text="Maximum number of tokens the model can generate per response.">
+                    <MudNumericField @bind-Value="_maxTokens" Label="Max Tokens" Min="1" Max="200000"
+                                     HelperText="1–200,000" Variant="Variant.Outlined" />
+                </MudTooltip>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTooltip Text="Controls randomness. 0 = deterministic, 1 = balanced, 2 = creative.">
+                    <MudNumericField @bind-Value="_temperature" Label="Temperature" Min="0.0" Max="2.0" Step="0.1"
+                                     HelperText="0.0–2.0" Variant="Variant.Outlined" />
+                </MudTooltip>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTooltip Text="Nucleus sampling. Controls diversity by limiting cumulative probability.">
+                    <MudNumericField @bind-Value="_topP" Label="Top P" Min="0.0" Max="1.0" Step="0.05"
+                                     HelperText="0.0–1.0" Variant="Variant.Outlined" />
+                </MudTooltip>
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudCheckBox @bind-Value="_isDefault" Label="Set as default model"
+                             Color="Color.Primary" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="ml-8">
+                    The default model is used when no specific model is selected for an assistant.
+                </MudText>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="width:16px;height:16px;" Class="me-2" />
+            }
+            @(_saving ? "Saving..." : _isEdit ? "Update Model" : "Add Model")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string? EditId { get; set; }
+
+    private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private string _name = string.Empty;
+    private string _provider = "OpenAI";
+    private string _modelId = string.Empty;
+    private string? _apiKey;
+    private bool _showApiKey;
+    private bool _existingHasKey;
+    private string? _endpoint;
+    private int? _maxTokens = 4096;
+    private double? _temperature = 0.7;
+    private double? _topP;
+    private bool _isDefault;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            try
+            {
+                var modelsResult = await Http.GetFromJsonAsync<ModelsListResult>("/api/v1/admin/models");
+                var match = modelsResult?.Items?.FirstOrDefault(m => m.Id.ToString() == EditId);
+                if (match is not null)
+                {
+                    _name = match.Name;
+                    _provider = match.Provider;
+                    _modelId = match.ModelId;
+                    _endpoint = match.Endpoint;
+                    _maxTokens = match.MaxTokens;
+                    _temperature = match.Temperature;
+                    _topP = match.TopP;
+                    _isDefault = match.IsDefault;
+                    _existingHasKey = match.HasApiKey;
+                }
+            }
+            catch { Snackbar.Add("Failed to load model", Severity.Error); }
+        }
+    }
+
+    private void OnProviderChanged(string provider)
+    {
+        _provider = provider;
+        if (provider == "Ollama" && string.IsNullOrEmpty(_endpoint))
+            _endpoint = "http://localhost:11434";
+    }
+
+    private string GetModelIdHelperText() => _provider switch
+    {
+        "OpenAI" => "e.g. gpt-4o, gpt-4o-mini, o1",
+        "AzureOpenAI" => "Your deployment name",
+        "Anthropic" => "e.g. claude-sonnet-4-6, claude-haiku-4-5-20251001",
+        "Google" => "e.g. gemini-2.5-pro, gemini-2.5-flash",
+        "Mistral" => "e.g. mistral-large-latest, codestral",
+        "Cohere" => "e.g. command-r-plus, command-r",
+        "HuggingFace" => "e.g. meta-llama/Llama-3-70b",
+        "Ollama" => "e.g. llama3, mistral, codellama",
+        _ => "Model identifier"
+    };
+
+    private string GetModelIdPlaceholder() => _provider switch
+    {
+        "OpenAI" => "gpt-4o",
+        "AzureOpenAI" => "my-gpt4-deployment",
+        "Anthropic" => "claude-sonnet-4-6",
+        "Google" => "gemini-2.5-pro",
+        "Mistral" => "mistral-large-latest",
+        "Cohere" => "command-r-plus",
+        "HuggingFace" => "meta-llama/Llama-3-70b",
+        "Ollama" => "llama3",
+        _ => ""
+    };
+
+    private string GetEndpointPlaceholder() => _provider switch
+    {
+        "AzureOpenAI" => "https://your-resource.openai.azure.com/",
+        "Ollama" => "http://localhost:11434",
+        "HuggingFace" => "https://api-inference.huggingface.co",
+        _ => "Leave blank for default endpoint"
+    };
+
+    private string GetEndpointHelperText() => _provider switch
+    {
+        "OpenAI" => "Optional. Leave blank for api.openai.com",
+        "AzureOpenAI" => "Required. Your Azure OpenAI resource URL",
+        "Ollama" => "Default: http://localhost:11434",
+        _ => "Optional custom endpoint"
+    };
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_provider) || string.IsNullOrWhiteSpace(_modelId))
+        {
+            Snackbar.Add("Name, Provider, and Model ID are required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var payload = new
+            {
+                Name = _name,
+                Provider = _provider,
+                ModelId = _modelId,
+                ApiKey = string.IsNullOrWhiteSpace(_apiKey) ? null : _apiKey,
+                Endpoint = _endpoint,
+                MaxTokens = _maxTokens,
+                Temperature = _temperature,
+                TopP = _topP,
+                IsDefault = _isDefault
+            };
+
+            if (_isEdit)
+            {
+                await Http.PutAsJsonAsync($"/api/v1/admin/models/{EditId}", payload);
+                Snackbar.Add("Model updated", Severity.Success);
+            }
+            else
+            {
+                await Http.PostAsJsonAsync("/api/v1/admin/models", payload);
+                Snackbar.Add("Model created", Severity.Success);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class ModelsListResult { public List<ModelEditDto> Items { get; set; } = new(); }
+    private class ModelEditDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Provider { get; set; } = string.Empty;
+        public string ModelId { get; set; } = string.Empty;
+        public string? Endpoint { get; set; }
+        public int? MaxTokens { get; set; }
+        public double? Temperature { get; set; }
+        public double? TopP { get; set; }
+        public bool IsDefault { get; set; }
+        public bool HasApiKey { get; set; }
+    }
+}

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: r2wai-config
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: config
+data:
+  ASPNETCORE_ENVIRONMENT: Production
+  ASPNETCORE_URLS: http://+:80
+  ConnectionStrings__Redis: redis:6379
+  Storage__Provider: MinIO
+  Storage__MinIO__Endpoint: minio:9000
+  Storage__MinIO__Bucket: r2wai-files
+  Qdrant__Host: qdrant
+  Qdrant__Port: "6333"
+  POSTGRES_DB: r2wai
+  POSTGRES_USER: r2wai

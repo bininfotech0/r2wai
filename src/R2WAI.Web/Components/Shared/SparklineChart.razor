@@ -1,0 +1,66 @@
+@* SVG Sparkline — inline mini chart *@
+
+@{
+    var width = Width;
+    var height = Height;
+    var max = Data.Count > 0 ? Math.Max(Data.Max(), 1) : 1;
+    var min = Data.Count > 0 ? Math.Min(Data.Min(), 0) : 0;
+    var range = max - min;
+    if (range == 0) range = 1;
+    var stepX = Data.Count > 1 ? (double)width / (Data.Count - 1) : width;
+}
+
+<svg viewBox="0 0 @width @height" style="width: @(width)px; height: @(height)px; display: block; overflow: visible;"
+     xmlns="http://www.w3.org/2000/svg">
+
+    @if (Data.Count > 1)
+    {
+        @* Gradient fill under the line *@
+        <defs>
+            <linearGradient id="@_gradientId" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="@Color" stop-opacity="0.2" />
+                <stop offset="100%" stop-color="@Color" stop-opacity="0" />
+            </linearGradient>
+        </defs>
+
+        @* Area fill *@
+        @if (ShowFill)
+        {
+            var areaPoints = string.Join(" ",
+                Data.Select((v, i) =>
+                    $"{(i * stepX).ToString("F1", System.Globalization.CultureInfo.InvariantCulture)},{(height - ((v - min) / range * (height - 4) + 2)).ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}"));
+            var areaPath = $"M0,{height} L{areaPoints} L{width},{height} Z";
+            <path d="@areaPath" fill="url(#@_gradientId)" />
+        }
+
+        @* Line *@
+        var linePoints = string.Join(" ",
+            Data.Select((v, i) =>
+                $"{(i * stepX).ToString("F1", System.Globalization.CultureInfo.InvariantCulture)},{(height - ((v - min) / range * (height - 4) + 2)).ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}"));
+        <polyline points="@linePoints" fill="none" stroke="@Color" stroke-width="@StrokeWidth"
+                  stroke-linecap="round" stroke-linejoin="round"
+                  style="filter: drop-shadow(0 1px 2px @(Color)40);" />
+
+        @* End dot *@
+        @if (ShowEndDot)
+        {
+            var lastX = (Data.Count - 1) * stepX;
+            var lastY = height - ((Data.Last() - min) / range * (height - 4) + 2);
+            <circle cx="@lastX.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)"
+                    cy="@lastY.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)"
+                    r="3" fill="@Color" stroke="white" stroke-width="1.5" />
+        }
+    }
+</svg>
+
+@code {
+    [Parameter] public List<double> Data { get; set; } = new();
+    [Parameter] public int Width { get; set; } = 120;
+    [Parameter] public int Height { get; set; } = 36;
+    [Parameter] public string Color { get; set; } = "#7C3AED";
+    [Parameter] public double StrokeWidth { get; set; } = 2;
+    [Parameter] public bool ShowFill { get; set; } = true;
+    [Parameter] public bool ShowEndDot { get; set; } = true;
+
+    private string _gradientId = $"sparkline-{Guid.NewGuid():N}";
+}

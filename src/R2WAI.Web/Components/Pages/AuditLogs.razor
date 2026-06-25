@@ -1,0 +1,173 @@
+@page "/operations/audit-logs"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - Audit Logs</PageTitle>
+
+<PageHeader Title="Audit Logs" Subtitle="View and export system audit trail" />
+
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+    <MudGrid>
+        <MudItem xs="12" sm="2">
+            <MudSelect T="string" @bind-Value="_filterAction" Label="Action" Clearable="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@("Create")">Create</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Update")">Update</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Delete")">Delete</MudSelectItem>
+                <MudSelectItem T="string" Value="@("View")">View</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="2">
+            <MudTextField @bind-Value="_filterEntityType" Label="Entity Type"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Placeholder="e.g. AssistantDefinition" />
+        </MudItem>
+        <MudItem xs="12" sm="2">
+            <MudTextField @bind-Value="_filterUser" Label="User"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Placeholder="Filter by username" />
+        </MudItem>
+        <MudItem xs="12" sm="3">
+            <MudDatePicker @bind-Date="_filterFrom" Label="From Date"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="3">
+            <MudDatePicker @bind-Date="_filterTo" Label="To Date"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+    </MudGrid>
+    <div class="d-flex justify-space-between align-center mt-3">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="ApplyFilters" Class="btn-gradient"
+                   StartIcon="@Icons.Material.Filled.Search">
+            Search
+        </MudButton>
+        <div>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" Class="mr-2"
+                       StartIcon="@Icons.Material.Filled.Download" OnClick="@(() => ExportLogs("csv"))">
+                Export CSV
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Download" OnClick="@(() => ExportLogs("json"))">
+                Export JSON
+            </MudButton>
+        </div>
+    </div>
+</MudPaper>
+
+<MudDataGrid T="AuditLogDto" Items="_logs" Hover="true" Dense="true"
+             Loading="_loading" Elevation="0"
+             Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+    <Columns>
+        <PropertyColumn Property="x => x.Timestamp" Title="Date/Time" Format="yyyy-MM-dd HH:mm:ss" />
+        <PropertyColumn Property="x => x.UserName" Title="User" />
+        <TemplateColumn Title="Action">
+            <CellTemplate>
+                <MudChip T="string" Size="Size.Small" Color="@GetActionColor(context.Item.Action)">
+                    @context.Item.Action
+                </MudChip>
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="x => x.EntityType" Title="Entity" />
+        <PropertyColumn Property="x => x.EntityId" Title="Entity ID" />
+    </Columns>
+    <NoRecordsContent>
+        <EmptyState Icon="@Icons.Material.Outlined.ManageSearch"
+                    Title="No audit logs found"
+                    Description="No audit records match the current filters." />
+    </NoRecordsContent>
+</MudDataGrid>
+
+@code {
+    private List<AuditLogDto> _logs = new();
+    private bool _loading = true;
+
+    private string _filterAction = string.Empty;
+    private string _filterEntityType = string.Empty;
+    private string _filterUser = string.Empty;
+    private DateTime? _filterFrom;
+    private DateTime? _filterTo;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadLogs();
+    }
+
+    private async Task LoadLogs()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var url = "/api/v1/operations/audit-logs?pageSize=200";
+            if (!string.IsNullOrEmpty(_filterEntityType))
+                url += $"&entityType={Uri.EscapeDataString(_filterEntityType)}";
+            if (!string.IsNullOrEmpty(_filterAction))
+                url += $"&action={_filterAction}";
+            if (!string.IsNullOrEmpty(_filterUser))
+                url += $"&user={Uri.EscapeDataString(_filterUser)}";
+            if (_filterFrom.HasValue)
+                url += $"&from={_filterFrom.Value:yyyy-MM-dd}";
+            if (_filterTo.HasValue)
+                url += $"&to={_filterTo.Value.AddDays(1):yyyy-MM-dd}";
+
+            var result = await Http.GetFromJsonAsync<LogsResult>(url);
+            _logs = result?.Items ?? new();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task ApplyFilters() => await LoadLogs();
+
+    private async Task ExportLogs(string format)
+    {
+        try
+        {
+            var url = $"/api/v1/operations/audit-logs/export?format={format}";
+            if (!string.IsNullOrEmpty(_filterAction)) url += $"&action={_filterAction}";
+            if (!string.IsNullOrEmpty(_filterEntityType)) url += $"&entityType={Uri.EscapeDataString(_filterEntityType)}";
+            if (!string.IsNullOrEmpty(_filterUser)) url += $"&user={Uri.EscapeDataString(_filterUser)}";
+            if (_filterFrom.HasValue) url += $"&from={_filterFrom.Value:yyyy-MM-dd}";
+            if (_filterTo.HasValue) url += $"&to={_filterTo.Value:yyyy-MM-dd}";
+
+            var response = await Http.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var bytes = await response.Content.ReadAsByteArrayAsync();
+                var base64 = Convert.ToBase64String(bytes);
+                var contentType = format.Equals("json", StringComparison.OrdinalIgnoreCase)
+                    ? "application/json" : "text/csv";
+                var fileName = $"audit-logs.{format.ToLowerInvariant()}";
+
+                await JS.InvokeVoidAsync("eval",
+                    $"var a=document.createElement('a');a.href='data:{contentType};base64,{base64}';a.download='{fileName}';document.body.appendChild(a);a.click();a.remove();");
+
+                Snackbar.Add($"Audit logs exported as {format.ToUpperInvariant()}", Severity.Success);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Export failed: {ex.Message}", Severity.Error); }
+    }
+
+    private static Color GetActionColor(string action) => action switch
+    {
+        "Create" => Color.Success,
+        "Update" => Color.Primary,
+        "Delete" => Color.Error,
+        _ => Color.Default,
+    };
+
+    private class LogsResult { public List<AuditLogDto> Items { get; set; } = new(); }
+    private class AuditLogDto
+    {
+        public Guid Id { get; set; }
+        public Guid? UserId { get; set; }
+        public string? UserName { get; set; }
+        public string Action { get; set; } = string.Empty;
+        public string EntityType { get; set; } = string.Empty;
+        public string EntityId { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+    }
+}

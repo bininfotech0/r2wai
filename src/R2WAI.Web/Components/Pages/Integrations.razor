@@ -1,0 +1,366 @@
+@page "/workflow-studio/integrations"
+@page "/integrations"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - Integrations</PageTitle>
+
+<PageHeader Title="Integrations" Subtitle="Connect to external systems and APIs" />
+
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+    <MudGrid>
+        <MudItem xs="12" sm="6">
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Search integrations..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+        </MudItem>
+        <MudItem xs="12" sm="6" Class="d-flex justify-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+                Add Integration
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@* ──────────────────── Connector Marketplace ──────────────────── *@
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px;">
+    <div class="d-flex justify-space-between align-center mb-2">
+        <div>
+            <MudText Typo="Typo.h6" Style="font-weight: 700;">Connector Marketplace</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Pre-built connectors — click to install</MudText>
+        </div>
+        <MudIcon Icon="@Icons.Material.Outlined.Store" Color="Color.Primary" />
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap mb-4">
+        @foreach (var cat in _allCategories)
+        {
+            <MudChip T="string" Size="Size.Small"
+                     Color="@(_categoryFilter == cat ? Color.Primary : Color.Default)"
+                     Variant="@(_categoryFilter == cat ? Variant.Filled : Variant.Outlined)"
+                     OnClick="@(() => _categoryFilter = cat)">
+                @cat
+            </MudChip>
+        }
+    </div>
+
+    <MudGrid Spacing="3">
+        @foreach (var connector in FilteredConnectors)
+        {
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px; height: 100%; display: flex; flex-direction: column;">
+                    <div class="d-flex align-center gap-3 mb-3">
+                        <MudAvatar Size="Size.Medium" Style="@($"background-color: {GetCategoryColor(connector.Category)}; color: white;")">
+                            <MudIcon Icon="@GetCategoryIcon(connector.Category)" Size="Size.Small" />
+                        </MudAvatar>
+                        <div style="flex: 1; min-width: 0;">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@connector.Name</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     Style="@($"color: {GetCategoryColor(connector.Category)}; border-color: {GetCategoryColor(connector.Category)}; font-size: 0.625rem; height: 20px;")">
+                                @connector.Category
+                            </MudChip>
+                        </div>
+                    </div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3"
+                             Style="flex: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                        @connector.Description
+                    </MudText>
+                    <div>
+                        @if (_installedConnectors.Contains(connector.Name))
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Check" Disabled="true" FullWidth="true">
+                                Installed
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Download"
+                                       OnClick="@(() => InstallConnector(connector))" FullWidth="true"
+                                       Disabled="@(_installingConnector == connector.Name)">
+                                @(_installingConnector == connector.Name ? "Installing..." : "Install")
+                            </MudButton>
+                        }
+                    </div>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+</MudPaper>
+
+@* ──────────────────── Existing DataGrid ──────────────────── *@
+<MudDataGrid T="IntegrationDto" Items="_integrations" Hover="true" Dense="true" Loading="_loading" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+    <Columns>
+        <PropertyColumn Property="x => x.Name" Title="Name" />
+        <PropertyColumn Property="x => x.Type" Title="Type" />
+        <TemplateColumn Title="Status">
+            <CellTemplate>
+                <MudChip T="string" Color="@(context.Item.IsActive ? Color.Success : Color.Default)" Size="Size.Small">
+                    @(context.Item.IsActive ? "Active" : "Inactive")
+                </MudChip>
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="x => x.CreatedAt" Title="Created" Format="yyyy-MM-dd" />
+        <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
+            <CellTemplate>
+                <MudIconButton Icon="@Icons.Material.Filled.ToggleOn" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => ToggleIntegration(context.Item))" aria-label="Toggle active" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                               OnClick="@(() => OpenEditDialog(context.Item))" aria-label="Edit" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteIntegration(context.Item))" aria-label="Delete" />
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <NoRecordsContent>
+        <MudText Align="Align.Center" Class="pa-4">No integrations found.</MudText>
+    </NoRecordsContent>
+</MudDataGrid>
+
+@code {
+    private List<IntegrationDto> _integrations = new();
+    private string _searchTerm = string.Empty;
+    private bool _loading = true;
+
+    // Marketplace
+    private string _categoryFilter = "All";
+    private HashSet<string> _installedConnectors = new();
+    private string? _installingConnector;
+
+    private static readonly string[] _allCategories = { "All", "CRM", "Communication", "Storage", "DevOps", "Finance", "HR" };
+
+    private static readonly List<ConnectorTemplate> _marketplaceConnectors = new()
+    {
+        // CRM
+        new() { Name = "Salesforce CRM", Category = "CRM", Endpoint = "https://login.salesforce.com", AuthType = "OAuth2",
+                 Description = "Connect to Salesforce for lead management, opportunity tracking, and customer data sync." },
+        new() { Name = "HubSpot", Category = "CRM", Endpoint = "https://api.hubapi.com", AuthType = "Bearer",
+                 Description = "Integrate with HubSpot for marketing automation, CRM, and sales pipeline management." },
+        new() { Name = "Zoho CRM", Category = "CRM", Endpoint = "https://www.zohoapis.com", AuthType = "OAuth2",
+                 Description = "Connect to Zoho CRM for contact management, deal tracking, and sales analytics." },
+
+        // Communication
+        new() { Name = "Slack", Category = "Communication", Endpoint = "https://slack.com/api", AuthType = "Bearer",
+                 Description = "Send messages, manage channels, and automate notifications via Slack." },
+        new() { Name = "Microsoft Teams", Category = "Communication", Endpoint = "https://graph.microsoft.com", AuthType = "Bearer",
+                 Description = "Integrate with Teams for messaging, meetings, and collaboration workflows." },
+        new() { Name = "Twilio SMS", Category = "Communication", Endpoint = "https://api.twilio.com", AuthType = "Basic",
+                 Description = "Send SMS, voice calls, and WhatsApp messages through Twilio." },
+        new() { Name = "SendGrid Email", Category = "Communication", Endpoint = "https://api.sendgrid.com/v3", AuthType = "Bearer",
+                 Description = "Send transactional and marketing emails via SendGrid." },
+
+        // Storage
+        new() { Name = "AWS S3", Category = "Storage", Endpoint = "https://s3.amazonaws.com", AuthType = "ApiKey",
+                 Description = "Store, retrieve, and manage files in Amazon S3 buckets." },
+        new() { Name = "Azure Blob", Category = "Storage", Endpoint = "https://{account}.blob.core.windows.net", AuthType = "ApiKey",
+                 Description = "Connect to Azure Blob Storage for scalable cloud file storage." },
+        new() { Name = "Google Drive", Category = "Storage", Endpoint = "https://www.googleapis.com/drive/v3", AuthType = "OAuth2",
+                 Description = "Access and manage files in Google Drive, including shared drives." },
+
+        // DevOps
+        new() { Name = "GitHub", Category = "DevOps", Endpoint = "https://api.github.com", AuthType = "Bearer",
+                 Description = "Manage repositories, issues, pull requests, and CI/CD via GitHub API." },
+        new() { Name = "Jira", Category = "DevOps", Endpoint = "https://{domain}.atlassian.net", AuthType = "Basic",
+                 Description = "Create and track issues, manage sprints, and automate project workflows." },
+        new() { Name = "Azure DevOps", Category = "DevOps", Endpoint = "https://dev.azure.com", AuthType = "Bearer",
+                 Description = "Integrate with Azure DevOps for pipelines, boards, and repo management." },
+
+        // Finance
+        new() { Name = "Stripe", Category = "Finance", Endpoint = "https://api.stripe.com/v1", AuthType = "Bearer",
+                 Description = "Process payments, manage subscriptions, and handle invoicing with Stripe." },
+        new() { Name = "QuickBooks", Category = "Finance", Endpoint = "https://quickbooks.api.intuit.com", AuthType = "OAuth2",
+                 Description = "Sync invoices, expenses, and financial data with QuickBooks Online." },
+        new() { Name = "SAP", Category = "Finance", Endpoint = "https://{host}/sap/opu/odata", AuthType = "Basic",
+                 Description = "Connect to SAP ERP for enterprise finance, procurement, and logistics." },
+
+        // HR
+        new() { Name = "BambooHR", Category = "HR", Endpoint = "https://api.bamboohr.com/api/gateway.php", AuthType = "ApiKey",
+                 Description = "Manage employee records, time-off requests, and HR reporting." },
+        new() { Name = "Workday", Category = "HR", Endpoint = "https://{tenant}.workday.com/api", AuthType = "OAuth2",
+                 Description = "Integrate with Workday for HR, payroll, and talent management." },
+    };
+
+    private List<ConnectorTemplate> FilteredConnectors
+    {
+        get
+        {
+            var list = _marketplaceConnectors.AsEnumerable();
+            if (_categoryFilter != "All")
+                list = list.Where(c => c.Category == _categoryFilter);
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+                list = list.Where(c => c.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                                    || c.Category.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                                    || c.Description.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+            return list.ToList();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await LoadIntegrations(); }
+
+    private async Task LoadIntegrations()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<IntegrationsResult>("/api/v1/integrations");
+            _integrations = result?.Items ?? new();
+
+            // Mark already-installed marketplace connectors
+            foreach (var integration in _integrations)
+            {
+                var match = _marketplaceConnectors.FirstOrDefault(c =>
+                    c.Name.Equals(integration.Name, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                    _installedConnectors.Add(match.Name);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task InstallConnector(ConnectorTemplate connector)
+    {
+        _installingConnector = connector.Name;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/integrations", new
+            {
+                Name = connector.Name,
+                Type = MapCategoryToToolType(connector.Category),
+                Description = connector.Description,
+                EndpointUrl = connector.Endpoint,
+                Configuration = System.Text.Json.JsonSerializer.Serialize(new { AuthType = connector.AuthType }),
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _installedConnectors.Add(connector.Name);
+                Snackbar.Add($"'{connector.Name}' installed successfully!", Severity.Success);
+                await LoadIntegrations();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Install failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Install failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _installingConnector = null;
+            StateHasChanged();
+        }
+    }
+
+    private static string MapCategoryToToolType(string category) => category switch
+    {
+        "Communication" => "Email",
+        "Storage" => "Custom",
+        "DevOps" => "Http",
+        "Finance" => "Http",
+        "HR" => "Http",
+        "CRM" => "Http",
+        _ => "Http"
+    };
+
+    private static string GetCategoryColor(string category) => category switch
+    {
+        "CRM" => "#7C3AED",
+        "Communication" => "#3B82F6",
+        "Storage" => "#10B981",
+        "DevOps" => "#F97316",
+        "Finance" => "#EAB308",
+        "HR" => "#EC4899",
+        _ => "#6B7280"
+    };
+
+    private static string GetCategoryIcon(string category) => category switch
+    {
+        "CRM" => Icons.Material.Filled.People,
+        "Communication" => Icons.Material.Filled.Chat,
+        "Storage" => Icons.Material.Filled.Cloud,
+        "DevOps" => Icons.Material.Filled.Code,
+        "Finance" => Icons.Material.Filled.AccountBalance,
+        "HR" => Icons.Material.Filled.Badge,
+        _ => Icons.Material.Filled.Extension
+    };
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await Dialog.ShowAsync<CreateEditIntegrationDialog>("New Integration");
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+            await LoadIntegrations();
+    }
+
+    private async Task OpenEditDialog(IntegrationDto i)
+    {
+        var parameters = new DialogParameters<CreateEditIntegrationDialog>
+        {
+            { x => x.EditId, i.Id.ToString() }
+        };
+        var dialog = await Dialog.ShowAsync<CreateEditIntegrationDialog>("Edit Integration", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+            await LoadIntegrations();
+    }
+
+    private async Task ToggleIntegration(IntegrationDto integration)
+    {
+        try
+        {
+            await Http.PostAsJsonAsync($"/api/v1/integrations/{integration.Id}/toggle", new { });
+            Snackbar.Add("Integration toggled", Severity.Success);
+            await LoadIntegrations();
+        }
+        catch (Exception ex) { Snackbar.Add($"Toggle failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteIntegration(IntegrationDto integration)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, integration.Name }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/integrations/{integration.Id}");
+            Snackbar.Add("Integration deleted", Severity.Success);
+            await LoadIntegrations();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    // DTOs
+    private class IntegrationsResult { public List<IntegrationDto> Items { get; set; } = new(); }
+    private class IntegrationDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string Type { get; set; } = string.Empty;
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+    private class ConnectorTemplate
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public string Endpoint { get; set; } = string.Empty;
+        public string AuthType { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
+}

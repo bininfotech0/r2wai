@@ -1,0 +1,244 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@KnowledgeBaseName</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (_kb is not null)
+        {
+            <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true">
+                <MudTabPanel Text="Sources" Icon="@Icons.Material.Filled.Source">
+                    <MudGrid Class="mb-4">
+                        <MudItem xs="12" Class="d-flex justify-end">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Add" OnClick="ToggleAddSource" Size="Size.Small">
+                                Add Source
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+
+                    @if (_showAddSource)
+                    {
+                        <MudPaper Class="pa-4 mb-4" Elevation="1">
+                            <MudGrid>
+                                <MudItem xs="12" sm="3">
+                                    <MudSelect T="string" @bind-Value="_newSourceType" Label="Type">
+                                        <MudSelectItem T="string" Value="@("Document")">Document</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("Url")">URL</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("Text")">Text</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="12" sm="7">
+                                    @if (_newSourceType == "Url")
+                                    {
+                                        <MudTextField @bind-Value="_newSourceUrl" Label="URL" />
+                                    }
+                                    else if (_newSourceType == "Text")
+                                    {
+                                        <MudTextField @bind-Value="_newSourceContent" Label="Content" Lines="3" />
+                                    }
+                                    else
+                                    {
+                                        <MudTextField @bind-Value="_newSourceContent" Label="Document reference or content" Lines="2" />
+                                    }
+                                </MudItem>
+                                <MudItem xs="12" sm="2" Class="d-flex align-center">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddSource"
+                                               Disabled="_addingSource" FullWidth="true" Size="Size.Small">
+                                        Add
+                                    </MudButton>
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+                    }
+
+                    <MudDataGrid T="SourceDto" Items="_kb.Sources" Hover="true" Dense="true">
+                        <Columns>
+                            <PropertyColumn Property="x => x.Type" Title="Type" />
+                            <TemplateColumn Title="Reference">
+                                <CellTemplate>
+                                    @(context.Item.Url ?? context.Item.Content?.Substring(0, Math.Min(100, context.Item.Content?.Length ?? 0)) ?? "—")
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <PropertyColumn Property="x => x.Status" Title="Status" />
+                            <PropertyColumn Property="x => x.CreatedAt" Title="Added" Format="yyyy-MM-dd" />
+                            <TemplateColumn Title="" Sortable="false">
+                                <CellTemplate>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => RemoveSource(context.Item))" />
+                                </CellTemplate>
+                            </TemplateColumn>
+                        </Columns>
+                        <NoRecordsContent>
+                            <MudText Align="Align.Center" Class="pa-4">No sources added yet.</MudText>
+                        </NoRecordsContent>
+                    </MudDataGrid>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Search" Icon="@Icons.Material.Filled.Search">
+                    <MudGrid Class="mb-4">
+                        <MudItem xs="9">
+                            <MudTextField @bind-Value="_searchQuery" Label="Search this knowledge base..."
+                                          Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="3" Class="d-flex align-center">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Search"
+                                       Disabled="@(string.IsNullOrWhiteSpace(_searchQuery) || _searching)" FullWidth="true">
+                                Search
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+
+                    @if (_searching)
+                    {
+                        <MudProgressLinear Indeterminate="true" />
+                    }
+
+                    @if (_searchResults.Count > 0)
+                    {
+                        @foreach (var result in _searchResults)
+                        {
+                            <MudPaper Class="pa-4 mb-2" Elevation="1">
+                                <MudGrid>
+                                    <MudItem xs="10">
+                                        <MudText Style="white-space: pre-wrap;">@result.Content</MudText>
+                                    </MudItem>
+                                    <MudItem xs="2">
+                                        <MudText Typo="Typo.caption">Score: @result.Score.ToString("F2")</MudText>
+                                        @if (!string.IsNullOrEmpty(result.SourceName))
+                                        {
+                                            <MudText Typo="Typo.caption">Source: @result.SourceName</MudText>
+                                        }
+                                    </MudItem>
+                                </MudGrid>
+                            </MudPaper>
+                        }
+                    }
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string KnowledgeBaseId { get; set; } = string.Empty;
+    [Parameter] public string KnowledgeBaseName { get; set; } = string.Empty;
+
+    private KbDetailDto? _kb;
+    private bool _loading = true;
+    private bool _showAddSource;
+    private bool _addingSource;
+    private string _newSourceType = "Text";
+    private string _newSourceUrl = string.Empty;
+    private string _newSourceContent = string.Empty;
+    private string _searchQuery = string.Empty;
+    private bool _searching;
+    private List<SearchResultItemDto> _searchResults = new();
+
+    protected override async Task OnInitializedAsync() => await LoadKnowledgeBase();
+
+    private async Task LoadKnowledgeBase()
+    {
+        _loading = true;
+        try
+        {
+            _kb = await Http.GetFromJsonAsync<KbDetailDto>($"/api/v1/knowledgebases/{KnowledgeBaseId}");
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private void ToggleAddSource() => _showAddSource = !_showAddSource;
+
+    private async Task AddSource()
+    {
+        _addingSource = true;
+        try
+        {
+            var payload = new
+            {
+                Type = _newSourceType,
+                Url = _newSourceType == "Url" ? _newSourceUrl : (string?)null,
+                Content = _newSourceType != "Url" ? _newSourceContent : (string?)null
+            };
+            var response = await Http.PostAsJsonAsync($"/api/v1/knowledgebases/{KnowledgeBaseId}/sources", payload);
+            response.EnsureSuccessStatusCode();
+            Snackbar.Add("Source added", Severity.Success);
+            _newSourceUrl = string.Empty;
+            _newSourceContent = string.Empty;
+            _showAddSource = false;
+            await LoadKnowledgeBase();
+        }
+        catch (Exception ex) { Snackbar.Add($"Add source failed: {ex.Message}", Severity.Error); }
+        finally { _addingSource = false; }
+    }
+
+    private async Task RemoveSource(SourceDto source)
+    {
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/knowledgebases/sources/{source.Id}");
+            Snackbar.Add("Source removed", Severity.Success);
+            await LoadKnowledgeBase();
+        }
+        catch (Exception ex) { Snackbar.Add($"Remove failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task Search()
+    {
+        if (string.IsNullOrWhiteSpace(_searchQuery)) return;
+        _searching = true;
+        _searchResults.Clear();
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/knowledgebases/{KnowledgeBaseId}/search",
+                new { Query = _searchQuery, TopN = 5 });
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<SearchResult>();
+            _searchResults = result?.Items ?? new();
+        }
+        catch (Exception ex) { Snackbar.Add($"Search failed: {ex.Message}", Severity.Error); }
+        finally { _searching = false; }
+    }
+
+    private void Close() => MudDialog.Close();
+
+    private class KbDetailDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public int DocumentCount { get; set; }
+        public List<SourceDto> Sources { get; set; } = new();
+    }
+
+    private class SourceDto
+    {
+        public Guid Id { get; set; }
+        public string Type { get; set; } = string.Empty;
+        public string? Url { get; set; }
+        public string? Content { get; set; }
+        public string? Status { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class SearchResult { public List<SearchResultItemDto> Items { get; set; } = new(); }
+    private class SearchResultItemDto
+    {
+        public string Content { get; set; } = string.Empty;
+        public string? SourceName { get; set; }
+        public double Score { get; set; }
+    }
+}

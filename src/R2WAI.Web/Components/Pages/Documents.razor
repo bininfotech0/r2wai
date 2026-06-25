@@ -1,0 +1,334 @@
+@page "/assistant-studio/documents"
+@page "/documents"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - Documents</PageTitle>
+
+<PageHeader Title="Document Management" Subtitle="Upload and manage documents for knowledge indexing">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+               Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Upload" OnClick="OpenUploadDialog">
+        Upload Document
+    </MudButton>
+</PageHeader>
+
+@* Inline Drop Zone *@
+<MudFileUpload T="IReadOnlyList<IBrowserFile>"
+               Accept=".pdf,.docx,.xlsx,.pptx,.txt,.csv,.md,.png,.jpg,.jpeg,.tiff,.bmp"
+               FilesChanged="OnInlineFilesDropped"
+               MaximumFileCount="20"
+               Hidden="false"
+               InputClass="absolute mud-width-full mud-height-full overflow-hidden z-20"
+               InputStyle="opacity:0"
+               @ondragenter="@(() => _isDragOver = true)"
+               @ondragleave="@(() => _isDragOver = false)"
+               @ondragend="@(() => _isDragOver = false)">
+    <ActivatorContent>
+        <div class="drop-zone @(_isDragOver ? "drop-zone--active" : "") mb-4">
+            <MudIcon Icon="@Icons.Material.Outlined.CloudUpload" Color="Color.Primary" Size="Size.Large" Style="opacity: 0.6;" />
+            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">
+                Drop files here to upload, or click to browse
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                PDF, DOCX, XLSX, PPTX, TXT, CSV, MD, PNG, JPG (max 50 MB each)
+            </MudText>
+        </div>
+    </ActivatorContent>
+</MudFileUpload>
+
+@if (_inlineUploading)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4" Dense="true">
+        <div class="d-flex align-center gap-2">
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+            <span>Uploading @_inlineUploadProgress of @_inlineUploadTotal files...</span>
+        </div>
+    </MudAlert>
+}
+
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+    <MudTextField @bind-Value="_searchTerm" Placeholder="Search documents..."
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                  Immediate="true" DebounceInterval="300" />
+</MudPaper>
+
+@* Bulk Action Bar *@
+@if (_selectedDocIds.Count > 0)
+{
+    <MudPaper Elevation="2" Class="pa-3 mb-3 d-flex align-center gap-3" Style="border-radius: var(--r2-radius-md); background: var(--r2-primary-subtle);">
+        <MudCheckBox T="bool" Value="@(_selectedDocIds.Count == _filteredDocuments.Count())"
+                     ValueChanged="@(v => ToggleSelectAll(v))" Color="Color.Primary" Dense="true" />
+        <MudText Typo="Typo.body2" Style="font-weight: 600;">
+            @_selectedDocIds.Count selected
+        </MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Delete" OnClick="BulkDelete">
+            Delete Selected
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                   OnClick="@(() => _selectedDocIds.Clear())">
+            Clear
+        </MudButton>
+    </MudPaper>
+}
+
+@if (_hasError)
+{
+    <ErrorState ErrorMessage="@_error" OnRetry="LoadDocuments" />
+}
+else
+{
+<MudDataGrid T="DocumentDto" Items="_filteredDocuments" Hover="true" Dense="true" Loading="_loading" Elevation="0"
+             Class="animate-slide-in"
+             Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+
+    <Columns>
+        <TemplateColumn Title="" Sortable="false" Filterable="false" CellStyle="width: 50px;">
+            <CellTemplate>
+                <MudCheckBox T="bool" Value="@(_selectedDocIds.Contains(context.Item.Id))"
+                             ValueChanged="@(v => ToggleDocSelection(context.Item.Id, v))"
+                             Color="Color.Primary" Dense="true" />
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="x => x.Name" Title="Name" />
+        <TemplateColumn Title="Type">
+            <CellTemplate>
+                <MudChip T="string" Size="Size.Small">@context.Item.FileType</MudChip>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Size">
+            <CellTemplate>
+                @FormatUtils.FileSize(context.Item.FileSize)
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Title="Status">
+            <CellTemplate>
+                <StatusBadge Status="@context.Item.Status" />
+            </CellTemplate>
+        </TemplateColumn>
+        <PropertyColumn Property="x => x.PageCount" Title="Pages" />
+        <PropertyColumn Property="x => x.CreatedAt" Title="Uploaded" Format="yyyy-MM-dd" />
+        <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
+            <CellTemplate>
+                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary"
+                               OnClick="@(() => OpenDetailDialog(context.Item))" aria-label="View" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteDocument(context.Item))" aria-label="Delete" />
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <NoRecordsContent>
+        <EmptyState Icon="@Icons.Material.Outlined.Description"
+                    Title="No documents found"
+                    Description="Upload your first document to start building knowledge."
+                    ActionText="Upload Document"
+                    OnAction="OpenUploadDialog"
+                    MinHeight="300px" />
+    </NoRecordsContent>
+</MudDataGrid>
+}
+
+@code {
+    private List<DocumentDto> _documents = new();
+    private string _searchTerm = string.Empty;
+    private bool _loading = true;
+    private bool _hasError;
+    private string _error = string.Empty;
+    private bool _isDragOver;
+    private bool _inlineUploading;
+    private int _inlineUploadProgress;
+    private int _inlineUploadTotal;
+    private int _page = 1;
+    private int _pageSize = 20;
+    private int _totalCount;
+    private HashSet<Guid> _selectedDocIds = new();
+
+    private IEnumerable<DocumentDto> _filteredDocuments =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _documents
+            : _documents.Where(d => d.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await LoadDocuments(); }
+
+    private async Task LoadDocuments()
+    {
+        _loading = true;
+        _hasError = false;
+        _page = 1;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<DocumentsResult>(
+                $"/api/v1/documents?page={_page}&pageSize={_pageSize}");
+            _documents = result?.Items ?? new();
+            _totalCount = result?.TotalCount ?? _documents.Count;
+        }
+        catch (Exception ex)
+        {
+            _hasError = true;
+            _error = "Unable to load documents. Please check your connection and try again.";
+            Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task OpenUploadDialog()
+    {
+        var dialog = await Dialog.ShowAsync<UploadDocumentDialog>("Upload Document");
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+            await LoadDocuments();
+    }
+
+    private async Task OpenDetailDialog(DocumentDto doc)
+    {
+        var parameters = new DialogParameters<DocumentDetailDialog>
+        {
+            { x => x.DocumentId, doc.Id.ToString() },
+            { x => x.DocumentName, doc.Name }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await Dialog.ShowAsync<DocumentDetailDialog>(doc.Name, parameters, options);
+    }
+
+    private async Task DeleteDocument(DocumentDto doc)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, doc.Name }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/documents/{doc.Id}");
+            Snackbar.Add("Document deleted", Severity.Success);
+            await LoadDocuments();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+
+    private void ToggleDocSelection(Guid id, bool selected)
+    {
+        if (selected) _selectedDocIds.Add(id);
+        else _selectedDocIds.Remove(id);
+    }
+
+    private void ToggleSelectAll(bool selectAll)
+    {
+        if (selectAll)
+            _selectedDocIds = _filteredDocuments.Select(d => d.Id).ToHashSet();
+        else
+            _selectedDocIds.Clear();
+    }
+
+    private async Task BulkDelete()
+    {
+        if (_selectedDocIds.Count == 0) return;
+
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, $"{_selectedDocIds.Count} documents" },
+            { x => x.Description, "All selected documents will be permanently removed." }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Bulk Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        var deleted = 0;
+        var failed = 0;
+
+        foreach (var id in _selectedDocIds.ToList())
+        {
+            try
+            {
+                await Http.DeleteAsync($"/api/v1/documents/{id}");
+                deleted++;
+            }
+            catch { failed++; }
+        }
+
+        _selectedDocIds.Clear();
+
+        if (failed == 0)
+            Snackbar.Add($"{deleted} documents deleted", Severity.Success);
+        else
+            Snackbar.Add($"{deleted} deleted, {failed} failed", Severity.Warning);
+
+        await LoadDocuments();
+    }
+
+    private async Task OnInlineFilesDropped(IReadOnlyList<IBrowserFile> files)
+    {
+        _isDragOver = false;
+        if (files is null || files.Count == 0) return;
+
+        _inlineUploading = true;
+        _inlineUploadTotal = files.Count;
+        _inlineUploadProgress = 0;
+        StateHasChanged();
+
+        var succeeded = 0;
+        var failed = 0;
+
+        foreach (var file in files)
+        {
+            _inlineUploadProgress++;
+            StateHasChanged();
+
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                var stream = file.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024);
+                var fileContent = new StreamContent(stream);
+                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
+                    string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType);
+                content.Add(fileContent, "file", file.Name);
+
+                var response = await Http.PostAsync("/api/v1/documents/upload", content);
+                response.EnsureSuccessStatusCode();
+                succeeded++;
+            }
+            catch
+            {
+                failed++;
+            }
+        }
+
+        _inlineUploading = false;
+
+        if (failed == 0)
+            Snackbar.Add($"{succeeded} document(s) uploaded successfully", Severity.Success);
+        else
+            Snackbar.Add($"{succeeded} uploaded, {failed} failed", Severity.Warning);
+
+        await LoadDocuments();
+    }
+
+    private class DocumentsResult
+    {
+        public List<DocumentDto> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+    }
+    private class DocumentDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string FileType { get; set; } = string.Empty;
+        public long FileSize { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public int? PageCount { get; set; }
+        public Guid? KnowledgeBaseId { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+}

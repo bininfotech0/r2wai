@@ -1,0 +1,40 @@
+<MudPaper Elevation="0" Class="pa-4 ai-insight-card"
+         Style="border: 1px solid var(--mud-palette-divider);">
+    <div class="d-flex gap-3">
+        <div class="icon-container icon-container--primary" style="width: 36px; height: 36px; border-radius: 12px; flex-shrink: 0;">
+            <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Color="Color.Primary" Size="Size.Small" />
+        </div>
+        <div style="flex: 1; min-width: 0;">
+            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">@Title</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1" Style="line-height: 1.5;">@Description</MudText>
+            @if (PrimaryAction.HasDelegate || SecondaryAction.HasDelegate)
+            {
+                <div class="d-flex gap-2 mt-3">
+                    @if (PrimaryAction.HasDelegate)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                   OnClick="PrimaryAction" Style="border-radius: 8px;">
+                            @PrimaryActionText
+                        </MudButton>
+                    }
+                    @if (SecondaryAction.HasDelegate)
+                    {
+                        <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                   OnClick="SecondaryAction">
+                            @SecondaryActionText
+                        </MudButton>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Description { get; set; } = string.Empty;
+    [Parameter] public string PrimaryActionText { get; set; } = "Apply";
+    [Parameter] public string SecondaryActionText { get; set; } = "Dismiss";
+    [Parameter] public EventCallback PrimaryAction { get; set; }
+    [Parameter] public EventCallback SecondaryAction { get; set; }
+}

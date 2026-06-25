@@ -1,0 +1,402 @@
+@page "/workflow-studio/runs/{InstanceId}"
+@attribute [Authorize]
+@implements IDisposable
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>R2WAI - Workflow Execution</PageTitle>
+
+
+<div class="d-flex justify-space-between align-center mb-2">
+    <MudText Typo="Typo.h4">Workflow Execution</MudText>
+    <div class="d-flex align-center gap-2">
+        @if (_autoRefresh)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
+                     Style="animation: pulse-chip 1.5s ease-in-out infinite;">
+                Auto-refreshing
+            </MudChip>
+            <MudIconButton Icon="@Icons.Material.Filled.PauseCircle" Color="Color.Warning" Size="Size.Small"
+                           OnClick="StopAutoRefresh" aria-label="Pause auto-refresh" />
+        }
+        else
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Refresh" OnClick="ManualRefresh">
+                Refresh
+            </MudButton>
+        }
+    </div>
+</div>
+
+@* Progress bar *@
+@if (_instance is not null && _steps.Count > 0)
+{
+    var completedCount = _steps.Count(s => s.Status == "Completed");
+    var totalCount = _steps.Count;
+    var percent = totalCount > 0 ? (double)completedCount / totalCount * 100 : 0;
+    var hasFailure = _steps.Any(s => s.Status == "Failed");
+    var isRunning = _instance.Status == "Running";
+
+    <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+        <div class="d-flex justify-space-between align-center mb-2">
+            <div class="d-flex align-center gap-2">
+                <MudIcon Icon="@(isRunning ? Icons.Material.Filled.PlayCircle : (hasFailure ? Icons.Material.Filled.ErrorOutline : Icons.Material.Filled.CheckCircle))"
+                         Color="@(isRunning ? Color.Info : (hasFailure ? Color.Error : Color.Success))" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">
+                    @(isRunning ? "In Progress" : (hasFailure ? "Failed" : "Completed"))
+                </MudText>
+            </div>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                @completedCount of @totalCount steps completed (@($"{percent:F0}")%)
+            </MudText>
+        </div>
+        <MudProgressLinear Value="@percent"
+                          Color="@(hasFailure ? Color.Error : Color.Success)"
+                          Striped="@isRunning"
+                          Size="Size.Medium" Rounded="true"
+                          Style="height: 8px;" />
+    </MudPaper>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_instance is null)
+{
+    <MudAlert Severity="Severity.Error">Workflow instance not found.</MudAlert>
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+                <MudText Typo="Typo.h6" Class="mb-3">@_instance.WorkflowName</MudText>
+                <MudSimpleTable Dense="true" Elevation="0">
+                    <tbody>
+                        <tr>
+                            <td><strong>Status</strong></td>
+                            <td>
+                                <StatusBadge Status="@_instance.Status" />
+                            </td>
+                        </tr>
+                        <tr><td><strong>Started</strong></td><td>@_instance.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss")</td></tr>
+                        <tr><td><strong>Completed</strong></td><td>@(_instance.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</td></tr>
+                        @if (_instance.StartedAt.HasValue && _instance.CompletedAt.HasValue)
+                        {
+                            <tr><td><strong>Duration</strong></td><td>@((_instance.CompletedAt.Value - _instance.StartedAt.Value).ToString(@"hh\:mm\:ss"))</td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+
+                @if (_steps.Any(s => s.Status == "Failed"))
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning" Class="mt-3" FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.Replay" OnClick="RetryFailedStep"
+                               Disabled="_retrying">
+                        @(_retrying ? "Retrying..." : "Retry Failed Step")
+                    </MudButton>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="8">
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+                <MudText Typo="Typo.h6" Class="mb-4">Step Timeline</MudText>
+
+                @if (_steps.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.Timeline"
+                                Title="No step data available"
+                                Description="Step execution details will appear here once the workflow starts processing." />
+                }
+                else
+                {
+                    <MudTimeline TimelinePosition="TimelinePosition.Start">
+                        @for (int i = 0; i < _steps.Count; i++)
+                        {
+                            var step = _steps[i];
+                            var isCurrentStep = step.Status == "Running";
+                            var stepElementId = $"step-{step.StepIndex}";
+                            <MudTimelineItem Color="@GetStepStatusColor(step.Status)" Size="Size.Medium"
+                                             Variant="Variant.Filled">
+                                <ItemDot>
+                                    <MudIcon Icon="@GetStepStatusIcon(step.Status)" Size="Size.Small" />
+                                </ItemDot>
+                                <ItemContent>
+                                    <div id="@stepElementId">
+                                        <MudPaper Class="pa-3" Elevation="0"
+                                                  Style="@($"border: 1px solid var(--mud-palette-divider);{(isCurrentStep ? " border-left: 4px solid var(--mud-palette-primary); background: rgba(59,130,246,0.04);" : "")}")">
+                                            <div class="d-flex justify-space-between align-center">
+                                                <MudText Typo="Typo.subtitle2">@step.StepName</MudText>
+                                                <MudChip T="string" Size="Size.Small" Color="@GetStepStatusColor(step.Status)">
+                                                    @step.Status
+                                                </MudChip>
+                                            </div>
+                                            @if (!string.IsNullOrEmpty(step.StepType))
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">Type: @step.StepType</MudText>
+                                            }
+                                            @if (step.StartedAt.HasValue)
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    Started: @step.StartedAt.Value.ToString("HH:mm:ss")
+                                                    @if (step.CompletedAt.HasValue)
+                                                    {
+                                                        <text> | Completed: @step.CompletedAt.Value.ToString("HH:mm:ss")</text>
+                                                    }
+                                                </MudText>
+                                            }
+                                            @if (step.StartedAt.HasValue && step.CompletedAt.HasValue)
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    Duration: @((step.CompletedAt.Value - step.StartedAt.Value).ToString(@"mm\:ss\.fff"))
+                                                </MudText>
+                                            }
+                                            @if (!string.IsNullOrEmpty(step.Output))
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Success" Class="mt-1">
+                                                    Output: @step.Output[..Math.Min(200, step.Output.Length)]
+                                                </MudText>
+                                            }
+                                            @if (!string.IsNullOrEmpty(step.Error))
+                                            {
+                                                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-1">
+                                                    @step.Error
+                                                </MudAlert>
+                                            }
+                                        </MudPaper>
+                                    </div>
+                                </ItemContent>
+                            </MudTimelineItem>
+                        }
+                    </MudTimeline>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter] public string InstanceId { get; set; } = string.Empty;
+
+    private InstanceDto? _instance;
+    private List<StepDto> _steps = new();
+    private bool _retrying;
+    private bool _loading = true;
+    private bool _autoRefresh;
+    private System.Threading.Timer? _refreshTimer;
+    private bool _isRefreshing;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var instanceTask = Http.GetFromJsonAsync<InstanceDto>($"/api/v1/workflows/instances/{InstanceId}");
+                var stepsTask = Http.GetFromJsonAsync<StepsResult>($"/api/v1/workflows/instances/{InstanceId}/steps");
+
+                await Task.WhenAll(instanceTask, stepsTask);
+
+                _instance = instanceTask.Result;
+                _steps = stepsTask.Result?.Items ?? new();
+
+                // Start auto-refresh if the workflow is still running
+                if (_instance?.Status == "Running")
+                {
+                    StartAutoRefresh();
+                }
+            }
+            catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+            finally { _loading = false; StateHasChanged(); }
+
+            // Auto-scroll to the current running step
+            await ScrollToCurrentStep();
+        }
+    }
+
+    private void StartAutoRefresh()
+    {
+        _autoRefresh = true;
+        _refreshTimer?.Dispose();
+        _refreshTimer = new System.Threading.Timer(
+            async _ => await AutoRefreshCallback(),
+            null,
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(5));
+    }
+
+    private void StopAutoRefresh()
+    {
+        _autoRefresh = false;
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+    }
+
+    private async Task AutoRefreshCallback()
+    {
+        if (_isRefreshing) return;
+        _isRefreshing = true;
+
+        try
+        {
+            var instanceTask = Http.GetFromJsonAsync<InstanceDto>($"/api/v1/workflows/instances/{InstanceId}");
+            var stepsTask = Http.GetFromJsonAsync<StepsResult>($"/api/v1/workflows/instances/{InstanceId}/steps");
+
+            await Task.WhenAll(instanceTask, stepsTask);
+
+            _instance = instanceTask.Result;
+            _steps = stepsTask.Result?.Items ?? new();
+
+            // Stop auto-refresh if no longer running
+            if (_instance?.Status != "Running")
+            {
+                StopAutoRefresh();
+                if (_instance?.Status == "Completed")
+                    Snackbar.Add("Workflow execution completed!", Severity.Success);
+                else if (_instance?.Status == "Failed")
+                    Snackbar.Add("Workflow execution failed", Severity.Error);
+            }
+
+            await InvokeAsync(StateHasChanged);
+
+            // Auto-scroll to the current step
+            await ScrollToCurrentStep();
+        }
+        catch
+        {
+            // Silently continue on transient errors
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
+    private async Task ManualRefresh()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var instanceTask = Http.GetFromJsonAsync<InstanceDto>($"/api/v1/workflows/instances/{InstanceId}");
+            var stepsTask = Http.GetFromJsonAsync<StepsResult>($"/api/v1/workflows/instances/{InstanceId}/steps");
+
+            await Task.WhenAll(instanceTask, stepsTask);
+
+            _instance = instanceTask.Result;
+            _steps = stepsTask.Result?.Items ?? new();
+
+            // Re-enable auto-refresh if running
+            if (_instance?.Status == "Running" && !_autoRefresh)
+                StartAutoRefresh();
+
+            Snackbar.Add("Refreshed", Severity.Info);
+        }
+        catch (Exception ex) { Snackbar.Add($"Refresh failed: {ex.Message}", Severity.Error); }
+        finally { _loading = false; StateHasChanged(); }
+
+        await ScrollToCurrentStep();
+    }
+
+    private async Task ScrollToCurrentStep()
+    {
+        try
+        {
+            var runningStep = _steps.FirstOrDefault(s => s.Status == "Running");
+            if (runningStep is not null)
+            {
+                await JS.InvokeVoidAsync("eval",
+                    $"document.getElementById('step-{runningStep.StepIndex}')?.scrollIntoView({{ behavior: 'smooth', block: 'center' }})");
+            }
+        }
+        catch
+        {
+            // Scroll is best-effort; ignore errors (e.g., prerendering)
+        }
+    }
+
+    private async Task RetryFailedStep()
+    {
+        _retrying = true;
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/workflows/instances/{InstanceId}/retry", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Step retried successfully", Severity.Success);
+                _loading = true;
+                StateHasChanged();
+                var stepsResult = await Http.GetFromJsonAsync<StepsResult>($"/api/v1/workflows/instances/{InstanceId}/steps");
+                _steps = stepsResult?.Items ?? new();
+
+                // Refresh instance status and restart auto-refresh
+                _instance = await Http.GetFromJsonAsync<InstanceDto>($"/api/v1/workflows/instances/{InstanceId}");
+                if (_instance?.Status == "Running" && !_autoRefresh)
+                    StartAutoRefresh();
+            }
+            else
+            {
+                Snackbar.Add("Retry failed", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Retry failed: {ex.Message}", Severity.Error); }
+        finally { _retrying = false; _loading = false; StateHasChanged(); }
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+
+
+    private static Color GetStepStatusColor(string status) => status switch
+    {
+        "Running" => Color.Primary,
+        "Completed" => Color.Success,
+        "Failed" => Color.Error,
+        "Pending" => Color.Default,
+        "Skipped" => Color.Default,
+        _ => Color.Default,
+    };
+
+    private static string GetStepStatusIcon(string status) => status switch
+    {
+        "Running" => Icons.Material.Filled.PlayArrow,
+        "Completed" => Icons.Material.Filled.Check,
+        "Failed" => Icons.Material.Filled.Error,
+        "Pending" => Icons.Material.Filled.Schedule,
+        "Skipped" => Icons.Material.Filled.SkipNext,
+        _ => Icons.Material.Filled.Circle,
+    };
+
+    private class InstanceDto
+    {
+        public Guid Id { get; set; }
+        public string WorkflowName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public int CurrentStep { get; set; }
+        public DateTime? StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+    }
+
+    private class StepsResult { public List<StepDto> Items { get; set; } = new(); }
+
+    private class StepDto
+    {
+        public Guid Id { get; set; }
+        public int StepIndex { get; set; }
+        public string StepName { get; set; } = string.Empty;
+        public string? StepType { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime? StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public string? Output { get; set; }
+        public string? Error { get; set; }
+    }
+}

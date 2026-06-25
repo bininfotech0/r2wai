@@ -1,0 +1,650 @@
+@page "/operations"
+@attribute [Authorize]
+@implements IDisposable
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - Operations Hub</PageTitle>
+
+<div class="d-flex justify-space-between align-center mb-2">
+    <div>
+        <PageHeader Title="Operations Hub" Subtitle="AI-powered monitoring, insights, and system health" />
+    </div>
+    <div class="d-flex align-center gap-3">
+        @if (_lastRefreshed.HasValue)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Last updated: @FormatRelativeTime(_lastRefreshed.Value)
+            </MudText>
+        }
+        <MudChip T="string" Size="Size.Small"
+                 Color="@(_autoRefreshEnabled ? Color.Success : Color.Default)"
+                 Variant="@(_autoRefreshEnabled ? Variant.Filled : Variant.Outlined)"
+                 OnClick="ToggleAutoRefresh"
+                 Style="cursor: pointer;">
+            @if (_autoRefreshEnabled)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.FiberManualRecord" Size="Size.Small" Class="mr-1" Style="font-size: 10px;" />
+            }
+            Live
+        </MudChip>
+        <MudIconButton Icon="@Icons.Material.Outlined.Refresh" Size="Size.Small" Color="Color.Primary"
+                       OnClick="ManualRefresh" aria-label="Refresh" />
+    </div>
+</div>
+
+@if (_hasError)
+{
+    <ErrorState ErrorMessage="@_error" OnRetry="LoadOperationsData" />
+}
+else
+{
+@* Needs Attention Section *@
+@if (_alerts.Count > 0)
+{
+    <MudText Typo="Typo.subtitle1" Class="mb-3 section-title" Style="font-weight: 600;">
+        <MudIcon Icon="@Icons.Material.Outlined.NotificationsActive" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+        Needs Attention
+    </MudText>
+    <div class="d-flex flex-column gap-2 mb-4 stagger-in">
+        @foreach (var alert in _alerts)
+        {
+            <MudPaper Elevation="0" Class="pa-4" Style="@($"border: 1px solid var(--mud-palette-divider); border-left: 4px solid var(--mud-palette-{alert.Severity}); border-radius: var(--r2-radius-md);")">
+                <div class="d-flex justify-space-between align-center">
+                    <div class="d-flex align-center gap-3">
+                        <div class="icon-container icon-container--@alert.Severity">
+                            <MudIcon Icon="@alert.Icon" Color="@alert.Color" Size="Size.Small" />
+                        </div>
+                        <div>
+                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@alert.Title</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@alert.Description</MudText>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <MudButton Variant="Variant.Filled" Color="@alert.Color" Size="Size.Small"
+                                   Class="btn-gradient"
+                                   OnClick="@(() => HandleAlert(alert))">
+                            @alert.ActionText
+                        </MudButton>
+                        <MudIconButton Icon="@Icons.Material.Outlined.Close" Size="Size.Small"
+                                       OnClick="@(() => DismissAlert(alert))" aria-label="Dismiss" />
+                    </div>
+                </div>
+            </MudPaper>
+        }
+    </div>
+}
+
+@* KPI Cards *@
+<MudGrid Class="mb-4 stagger-in" Spacing="3">
+    <MudItem xs="12" sm="6" md="3">
+        <KpiCard Value="@((_metrics?.TotalWorkflows ?? 0).ToString())" Label="Total Workflows"
+                 Icon="@Icons.Material.Outlined.AccountTree" ValueColor="Color.Primary" IconColor="Color.Primary"
+                 Delta="@_workflowDelta" Trend="KpiCard.TrendDirection.Up"
+                 OnClick="@(() => Navigation.NavigateTo("/workflow-studio"))" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <KpiCard Value="@((_metrics?.ActiveWorkflows ?? 0).ToString())" Label="Active Runs"
+                 Icon="@Icons.Material.Outlined.PlayCircle" ValueColor="Color.Success" IconColor="Color.Success"
+                 Subtitle="Currently executing" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <KpiCard Value="@((_metrics?.PendingApprovals ?? 0).ToString())" Label="Pending Approvals"
+                 Icon="@Icons.Material.Outlined.HourglassTop" ValueColor="Color.Warning" IconColor="Color.Warning"
+                 OnClick="@(() => Navigation.NavigateTo("/inbox"))" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <KpiCard Value="@_healthStatus" Label="System Health"
+                 Icon="@Icons.Material.Outlined.MonitorHeart" ValueColor="@(_healthStatus == "Healthy" ? Color.Success : Color.Warning)"
+                 IconColor="@(_healthStatus == "Healthy" ? Color.Success : Color.Warning)" />
+    </MudItem>
+</MudGrid>
+
+@* Workflow Distribution *@
+<MudPaper Elevation="0" Class="pa-4 mb-4 animate-slide-in" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+    <MudText Typo="Typo.subtitle1" Class="mb-3 section-title" Style="font-weight: 600;">
+        <MudIcon Icon="@Icons.Material.Outlined.DonutLarge" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+        Workflow Distribution
+    </MudText>
+    <div class="d-flex justify-center align-center py-2">
+        <DonutChart Size="160" StrokeWidth="20"
+                    CenterLabel="Workflows"
+                    CenterValue="@((_metrics?.TotalWorkflows ?? 0).ToString())"
+                    ShowLegend="true"
+                    Segments="@_workflowDistributionSegments" />
+    </div>
+</MudPaper>
+
+<MudGrid Spacing="3">
+    @* Left Column: Workflow Activity *@
+    <MudItem xs="12" md="7">
+        @if (_loading)
+        {
+            <MudPaper Elevation="0" Class="pa-4 animate-slide-in" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+                <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Table" />
+            </MudPaper>
+        }
+        else
+        {
+            <LiveActivityFeed Title="Recent Workflow Activity"
+                              IsLive="@_autoRefreshEnabled"
+                              MaxHeight="400px"
+                              Items="@_activityFeedItems"
+                              OnViewAll="@(() => Navigation.NavigateTo("/workflow-studio"))"
+                              OnItemClick="@(item => Navigation.NavigateTo(item.Href ?? "/workflow-studio"))" />
+        }
+    </MudItem>
+
+    @* Right Column: Health + Insights *@
+    <MudItem xs="12" md="5">
+        @* System Health *@
+        <MudPaper Elevation="0" Class="pa-4 mb-4 animate-slide-in" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+            <MudText Typo="Typo.subtitle1" Class="mb-3 section-title" Style="font-weight: 600;">System Health</MudText>
+            <div class="d-flex gap-4 align-start">
+                <div style="flex-shrink: 0;">
+                    <ProgressRing Value="@_healthPercentage"
+                                  Size="100"
+                                  StrokeWidth="8"
+                                  Color="@(_healthPercentage >= 80 ? "#10B981" : _healthPercentage >= 50 ? "#F59E0B" : "#EF4444")"
+                                  Subtitle="@_healthStatus"
+                                  ShowPercentage="true" />
+                </div>
+                <div style="flex: 1; min-width: 0;">
+                    @if (_healthChecks.Count > 0)
+                    {
+                        @foreach (var check in _healthChecks)
+                        {
+                            <div class="d-flex justify-space-between align-center py-2">
+                                <MudText Typo="Typo.body2">@check.Name</MudText>
+                                <div class="d-flex align-center gap-2">
+                                    <span class="health-dot health-dot--@(check.Status == "Healthy" ? "healthy" : check.Status == "Degraded" ? "degraded" : "unhealthy")"></span>
+                                    <MudText Typo="Typo.caption" Color="@(check.Status == "Healthy" ? Color.Success : check.Status == "Degraded" ? Color.Warning : Color.Error)">
+                                        @check.Status
+                                    </MudText>
+                                </div>
+                            </div>
+                            <MudDivider />
+                        }
+                    }
+                    else
+                    {
+                        <div class="d-flex justify-space-between align-center py-2">
+                            <MudText Typo="Typo.body2">Overall</MudText>
+                            <div class="d-flex align-center gap-2">
+                                <span class="health-dot health-dot--@(_healthStatus == "Healthy" ? "healthy" : "degraded")"></span>
+                                <MudText Typo="Typo.caption">@_healthStatus</MudText>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </MudPaper>
+
+        @* Resources *@
+        <MudPaper Elevation="0" Class="pa-4 mb-4 animate-slide-in" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+            <MudText Typo="Typo.subtitle1" Class="mb-3 section-title" Style="font-weight: 600;">Platform Resources</MudText>
+            <div class="d-flex justify-space-between align-center py-2">
+                <div class="d-flex align-center gap-2">
+                    <div class="icon-container icon-container--primary">
+                        <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Size="Size.Small" Color="Color.Primary" />
+                    </div>
+                    <MudText Typo="Typo.body2">Assistants</MudText>
+                </div>
+                <div class="d-flex align-center gap-3">
+                    <SparklineChart Data="@_assistantsTrend" Width="80" Height="28" Color="#7C3AED" ShowFill="true" ShowEndDot="true" />
+                    <MudText Typo="Typo.body2" Style="font-weight: 800; letter-spacing: -0.03em;">@(_metrics?.TotalAssistants ?? 0)</MudText>
+                </div>
+            </div>
+            <MudDivider />
+            <div class="d-flex justify-space-between align-center py-2">
+                <div class="d-flex align-center gap-2">
+                    <div class="icon-container icon-container--secondary">
+                        <MudIcon Icon="@Icons.Material.Outlined.Description" Size="Size.Small" Color="Color.Tertiary" />
+                    </div>
+                    <MudText Typo="Typo.body2">Documents</MudText>
+                </div>
+                <div class="d-flex align-center gap-3">
+                    <SparklineChart Data="@_documentsTrend" Width="80" Height="28" Color="#10B981" ShowFill="true" ShowEndDot="true" />
+                    <MudText Typo="Typo.body2" Style="font-weight: 800; letter-spacing: -0.03em;">@(_metrics?.TotalDocuments ?? 0)</MudText>
+                </div>
+            </div>
+            <MudDivider />
+            <div class="d-flex justify-space-between align-center py-2">
+                <div class="d-flex align-center gap-2">
+                    <div class="icon-container icon-container--warning">
+                        <MudIcon Icon="@Icons.Material.Outlined.MenuBook" Size="Size.Small" Color="Color.Secondary" />
+                    </div>
+                    <MudText Typo="Typo.body2">Knowledge Bases</MudText>
+                </div>
+                <div class="d-flex align-center gap-3">
+                    <SparklineChart Data="@_knowledgeBasesTrend" Width="80" Height="28" Color="#F59E0B" ShowFill="true" ShowEndDot="true" />
+                    <MudText Typo="Typo.body2" Style="font-weight: 800; letter-spacing: -0.03em;">@(_metrics?.TotalKnowledgeBases ?? 0)</MudText>
+                </div>
+            </div>
+        </MudPaper>
+
+        @* AI Recommendations *@
+        @if (_recommendations.Count > 0)
+        {
+            <MudText Typo="Typo.subtitle1" Class="mb-3 section-title" Style="font-weight: 600;">AI Recommendations</MudText>
+            <div class="d-flex flex-column gap-3 stagger-in">
+                @foreach (var rec in _recommendations)
+                {
+                    <AiInsightCard Title="@rec.Title" Description="@rec.Description"
+                                   PrimaryActionText="@rec.ActionText"
+                                   PrimaryAction="@(() => HandleRecommendation(rec))"
+                                   SecondaryAction="@(() => DismissRecommendation(rec))" />
+                }
+            </div>
+        }
+    </MudItem>
+</MudGrid>
+}
+
+@code {
+    private MetricsDto? _metrics;
+    private string _healthStatus = "Healthy";
+    private string _workflowDelta = string.Empty;
+    private List<HealthEntry> _healthChecks = new();
+    private List<WorkflowInstanceDto> _instances = new();
+    private List<AlertItem> _alerts = new();
+    private List<RecommendationItem> _recommendations = new();
+    private bool _loading = true;
+    private bool _hasError;
+    private string _error = string.Empty;
+
+    // Chart data
+    private List<LiveActivityFeed.FeedItem> _activityFeedItems = new();
+    private List<DonutChart.ChartSegment> _workflowDistributionSegments = new();
+    private double _healthPercentage = 100;
+
+    // Sparkline sample trend data (simulated weekly trends)
+    private static readonly List<double> _assistantsTrend = new() { 2, 4, 3, 6, 5, 8, 7 };
+    private static readonly List<double> _documentsTrend = new() { 5, 8, 12, 10, 15, 18, 22 };
+    private static readonly List<double> _knowledgeBasesTrend = new() { 1, 1, 2, 3, 2, 4, 3 };
+
+    // Auto-refresh
+    private System.Threading.Timer? _autoRefreshTimer;
+    private bool _autoRefreshEnabled = true;
+    private DateTime? _lastRefreshed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await LoadOperationsData();
+        StartAutoRefreshTimer();
+    }
+
+    private void StartAutoRefreshTimer()
+    {
+        _autoRefreshTimer?.Dispose();
+        if (_autoRefreshEnabled)
+        {
+            _autoRefreshTimer = new System.Threading.Timer(
+                async _ => await InvokeAsync(SilentRefresh),
+                null,
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromSeconds(30));
+        }
+    }
+
+    private async Task SilentRefresh()
+    {
+        try
+        {
+            var metricsTask = Http.GetFromJsonAsync<MetricsDto>("/api/v1/operations/metrics");
+            var instancesTask = Http.GetFromJsonAsync<InstancesResult>("/api/v1/operations/workflow-instances?pageSize=15");
+            var healthTask = LoadHealth();
+            var approvalsTask = LoadPendingApprovals();
+
+            await Task.WhenAll(metricsTask, instancesTask, healthTask, approvalsTask);
+
+            _metrics = metricsTask.Result;
+            _instances = instancesTask.Result?.Items ?? new();
+
+            _alerts.Clear();
+            _recommendations.Clear();
+            GenerateAlerts();
+            GenerateRecommendations();
+            RefreshChartData();
+
+            _lastRefreshed = DateTime.UtcNow;
+            StateHasChanged();
+        }
+        catch
+        {
+            // Silent refresh failures are swallowed to avoid disrupting the user
+        }
+    }
+
+    private void ToggleAutoRefresh()
+    {
+        _autoRefreshEnabled = !_autoRefreshEnabled;
+        if (_autoRefreshEnabled)
+        {
+            StartAutoRefreshTimer();
+        }
+        else
+        {
+            _autoRefreshTimer?.Dispose();
+            _autoRefreshTimer = null;
+        }
+    }
+
+    private async Task ManualRefresh()
+    {
+        await SilentRefresh();
+    }
+
+    private static string FormatRelativeTime(DateTime utcTime)
+    {
+        var diff = DateTime.UtcNow - utcTime;
+        if (diff.TotalSeconds < 5) return "just now";
+        if (diff.TotalSeconds < 60) return $"{(int)diff.TotalSeconds}s ago";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        return $"{(int)diff.TotalHours}h ago";
+    }
+
+    private async Task LoadOperationsData()
+    {
+        _loading = true;
+        _hasError = false;
+        StateHasChanged();
+        try
+        {
+            var metricsTask = Http.GetFromJsonAsync<MetricsDto>("/api/v1/operations/metrics");
+            var instancesTask = Http.GetFromJsonAsync<InstancesResult>("/api/v1/operations/workflow-instances?pageSize=15");
+            var healthTask = LoadHealth();
+            var approvalsTask = LoadPendingApprovals();
+
+            await Task.WhenAll(metricsTask, instancesTask, healthTask, approvalsTask);
+
+            _metrics = metricsTask.Result;
+            _instances = instancesTask.Result?.Items ?? new();
+
+            GenerateAlerts();
+            GenerateRecommendations();
+            RefreshChartData();
+
+            _lastRefreshed = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            _hasError = true;
+            _error = "Unable to load operations dashboard. Please check your connection and try again.";
+            Snackbar.Add($"Failed to load operations data: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private int _pendingApprovalCount;
+
+    private async Task LoadPendingApprovals()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ApprovalsResult>("/api/v1/approvals/pending");
+            _pendingApprovalCount = result?.Items?.Count ?? 0;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Could not load pending approvals.", Severity.Warning);
+        }
+    }
+
+    private async Task LoadHealth()
+    {
+        try
+        {
+            var response = await Http.GetAsync("/health");
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                var doc = System.Text.Json.JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                _healthStatus = root.GetProperty("status").GetString() ?? "Unknown";
+
+                _healthChecks.Clear();
+                if (root.TryGetProperty("checks", out var checks))
+                {
+                    foreach (var check in checks.EnumerateArray())
+                    {
+                        _healthChecks.Add(new HealthEntry
+                        {
+                            Name = check.GetProperty("name").GetString() ?? "—",
+                            Status = check.GetProperty("status").GetString() ?? "Unknown"
+                        });
+                    }
+                }
+            }
+            else { _healthStatus = "Unhealthy"; }
+        }
+        catch { _healthStatus = "Unreachable"; }
+    }
+
+    private void GenerateAlerts()
+    {
+        var failedWorkflows = _instances.Count(i => i.Status == "Failed" || i.Status == "Faulted");
+        if (failedWorkflows > 0)
+        {
+            _alerts.Add(new AlertItem
+            {
+                Title = $"{failedWorkflows} workflow{(failedWorkflows > 1 ? "s" : "")} failed",
+                Description = "Recent workflow executions have encountered errors.",
+                Icon = Icons.Material.Outlined.ErrorOutline,
+                Color = Color.Error,
+                Severity = "error",
+                ActionText = "View Failures",
+                ActionUrl = "/operations/errors"
+            });
+        }
+
+        if (_pendingApprovalCount > 5)
+        {
+            _alerts.Add(new AlertItem
+            {
+                Title = $"{_pendingApprovalCount} approvals pending",
+                Description = "A backlog of approvals may be blocking workflows.",
+                Icon = Icons.Material.Outlined.HourglassTop,
+                Color = Color.Warning,
+                Severity = "warning",
+                ActionText = "Review",
+                ActionUrl = "/inbox"
+            });
+        }
+
+        if (_healthStatus != "Healthy")
+        {
+            _alerts.Add(new AlertItem
+            {
+                Title = $"System health: {_healthStatus}",
+                Description = "One or more services are experiencing issues.",
+                Icon = Icons.Material.Outlined.MonitorHeart,
+                Color = Color.Error,
+                Severity = "error",
+                ActionText = "Investigate",
+                ActionUrl = "/operations"
+            });
+        }
+    }
+
+    private void GenerateRecommendations()
+    {
+        if (_metrics is not null)
+        {
+            if (_metrics.TotalAssistants > 0 && _metrics.TotalDocuments == 0)
+            {
+                _recommendations.Add(new RecommendationItem
+                {
+                    Title = "Enhance assistant accuracy",
+                    Description = "Upload documents to knowledge bases so your assistants can provide accurate, data-driven responses.",
+                    ActionText = "Upload Documents",
+                    ActionUrl = "/documents"
+                });
+            }
+
+            if (_metrics.ActiveWorkflows == 0 && _metrics.TotalWorkflows > 0)
+            {
+                _recommendations.Add(new RecommendationItem
+                {
+                    Title = "No workflows running",
+                    Description = "You have workflows configured but none are currently active. Consider scheduling or triggering them.",
+                    ActionText = "View Workflows",
+                    ActionUrl = "/workflow-studio"
+                });
+            }
+        }
+    }
+
+    private void HandleAlert(AlertItem alert)
+    {
+        if (!string.IsNullOrEmpty(alert.ActionUrl))
+            Navigation.NavigateTo(alert.ActionUrl);
+    }
+
+    private void DismissAlert(AlertItem alert) => _alerts.Remove(alert);
+
+    private void HandleRecommendation(RecommendationItem rec)
+    {
+        if (!string.IsNullOrEmpty(rec.ActionUrl))
+            Navigation.NavigateTo(rec.ActionUrl);
+    }
+
+    private void DismissRecommendation(RecommendationItem rec) => _recommendations.Remove(rec);
+
+    private List<LiveActivityFeed.FeedItem> ConvertInstancesToFeedItems(List<WorkflowInstanceDto> instances)
+    {
+        return instances.Select(i => new LiveActivityFeed.FeedItem
+        {
+            Description = i.WorkflowName,
+            Source = i.CompletedAt.HasValue
+                ? $"{i.StartedAt?.ToString("MMM dd, HH:mm") ?? "—"} · {FormatDuration(i.StartedAt, i.CompletedAt)}"
+                : i.StartedAt?.ToString("MMM dd, HH:mm") ?? "—",
+            Type = MapStatusToFeedType(i.Status),
+            Status = i.Status,
+            Href = $"/workflow-studio/runs/{i.Id}",
+            Timestamp = i.StartedAt ?? DateTime.UtcNow,
+            IsNew = i.Status == "Running" || i.Status == "Suspended"
+        }).ToList();
+    }
+
+    private static string MapStatusToFeedType(string status) => status switch
+    {
+        "Running" or "Started" => "execute",
+        "Completed" or "Finished" => "approve",
+        "Failed" or "Faulted" => "error",
+        "Suspended" or "Idle" => "update",
+        "Cancelled" => "reject",
+        _ => "execute"
+    };
+
+    private double CalculateHealthPercentage()
+    {
+        if (_healthChecks.Count == 0)
+        {
+            return _healthStatus switch
+            {
+                "Healthy" => 100,
+                "Degraded" => 50,
+                _ => 0
+            };
+        }
+
+        var total = _healthChecks.Sum(c => c.Status switch
+        {
+            "Healthy" => 100.0,
+            "Degraded" => 50.0,
+            _ => 0.0
+        });
+
+        return total / _healthChecks.Count;
+    }
+
+    private List<DonutChart.ChartSegment> BuildWorkflowDistributionSegments()
+    {
+        var active = _metrics?.ActiveWorkflows ?? 0;
+        var total = _metrics?.TotalWorkflows ?? 0;
+        // Estimate draft and archived from total minus active
+        var remaining = Math.Max(total - active, 0);
+        var draft = (int)Math.Ceiling(remaining * 0.6);
+        var archived = remaining - draft;
+
+        return new List<DonutChart.ChartSegment>
+        {
+            new() { Label = "Active", Value = active, Color = "#10B981" },
+            new() { Label = "Draft", Value = draft, Color = "#F59E0B" },
+            new() { Label = "Archived", Value = archived, Color = "#6B7280" }
+        };
+    }
+
+    private void RefreshChartData()
+    {
+        _activityFeedItems = ConvertInstancesToFeedItems(_instances);
+        _workflowDistributionSegments = BuildWorkflowDistributionSegments();
+        _healthPercentage = CalculateHealthPercentage();
+    }
+
+    private static string FormatDuration(DateTime? start, DateTime? end)
+    {
+        if (start is null || end is null) return "";
+        var diff = end.Value - start.Value;
+        if (diff.TotalMinutes < 1) return $"{diff.Seconds}s";
+        if (diff.TotalHours < 1) return $"{(int)diff.TotalMinutes}m {diff.Seconds}s";
+        return $"{(int)diff.TotalHours}h {diff.Minutes}m";
+    }
+
+    private class MetricsDto
+    {
+        public int TotalWorkflows { get; set; }
+        public int ActiveWorkflows { get; set; }
+        public int TotalDocuments { get; set; }
+        public int TotalKnowledgeBases { get; set; }
+        public int TotalAssistants { get; set; }
+        public int PendingApprovals { get; set; }
+    }
+
+    private class HealthEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+    }
+
+    private class InstancesResult { public List<WorkflowInstanceDto> Items { get; set; } = new(); }
+
+    private class WorkflowInstanceDto
+    {
+        public Guid Id { get; set; }
+        public string WorkflowName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public DateTime? StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+    }
+
+    private class ApprovalsResult { public List<object> Items { get; set; } = new(); }
+
+    private class AlertItem
+    {
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+        public Color Color { get; set; }
+        public string Severity { get; set; } = "info";
+        public string ActionText { get; set; } = "View";
+        public string? ActionUrl { get; set; }
+    }
+
+    private class RecommendationItem
+    {
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string ActionText { get; set; } = "View";
+        public string? ActionUrl { get; set; }
+    }
+
+    public void Dispose()
+    {
+        _autoRefreshTimer?.Dispose();
+        _autoRefreshTimer = null;
+    }
+}

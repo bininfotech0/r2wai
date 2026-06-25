@@ -1,0 +1,140 @@
+@page "/operations/errors"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>R2WAI - Error Logs</PageTitle>
+
+<PageHeader Title="Error Logs" Subtitle="View application errors and exceptions" />
+
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+    <MudGrid>
+        <MudItem xs="12" sm="4">
+            <MudSelect T="string" @bind-Value="_filterLevel" Label="Severity" Clearable="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@("Error")">Error</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Warning")">Warning</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudTextField @bind-Value="_filterCorrelationId" Label="Correlation ID"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Placeholder="Search by correlation ID" />
+        </MudItem>
+        <MudItem xs="12" sm="4" Class="d-flex align-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                       OnClick="LoadErrors" StartIcon="@Icons.Material.Filled.Search">
+                Search
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+    Error logs are sourced from application log files. In production, configure OpenTelemetry export for centralized log management.
+</MudText>
+
+<MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_errors.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.CheckCircle"
+                    Title="No errors found"
+                    Description="The system is healthy. No errors have been recorded." />
+    }
+    else
+    {
+        @foreach (var error in _errors)
+        {
+            <MudExpansionPanels Class="mb-2">
+                <MudExpansionPanel>
+                    <TitleContent>
+                        <div class="d-flex justify-space-between align-center" style="width:100%;">
+                            <div class="d-flex align-center gap-2">
+                                <StatusBadge Status="@error.Level" />
+                                <MudText Typo="Typo.body2">@error.Message</MudText>
+                            </div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @error.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")
+                            </MudText>
+                        </div>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudSimpleTable Dense="true" Elevation="0">
+                            <tbody>
+                                @if (!string.IsNullOrEmpty(error.CorrelationId))
+                                {
+                                    <tr><td style="width:120px;"><strong>Correlation ID</strong></td>
+                                        <td style="font-family:monospace;">@error.CorrelationId</td></tr>
+                                }
+                                @if (!string.IsNullOrEmpty(error.Source))
+                                {
+                                    <tr><td><strong>Source</strong></td><td>@error.Source</td></tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                        @if (!string.IsNullOrEmpty(error.StackTrace))
+                        {
+                            <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">Stack Trace</MudText>
+                            <MudPaper Class="pa-2" Style="background: var(--mud-palette-background-gray); font-family: monospace; font-size: 12px; white-space: pre-wrap; overflow-x: auto; max-height: 300px;">
+                                @error.StackTrace
+                            </MudPaper>
+                        }
+                    </ChildContent>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+    }
+</MudPaper>
+
+@code {
+    private List<ErrorEntry> _errors = new();
+    private bool _loading = true;
+    private string _filterLevel = "Error";
+    private string _filterCorrelationId = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadErrors();
+    }
+
+    private async Task LoadErrors()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ErrorLogsResult>("/api/v1/operations/errors?pageSize=50");
+            _errors = result?.Items ?? new();
+
+            if (!string.IsNullOrWhiteSpace(_filterLevel))
+                _errors = _errors.Where(e => e.Level.Equals(_filterLevel, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (!string.IsNullOrWhiteSpace(_filterCorrelationId))
+                _errors = _errors.Where(e => (e.CorrelationId ?? "").Contains(_filterCorrelationId, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+        catch
+        {
+            _errors = new();
+            Snackbar.Add("Error log endpoint not available. Configure structured logging to enable error collection.", Severity.Warning);
+        }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+
+    private class ErrorLogsResult { public List<ErrorEntry> Items { get; set; } = new(); }
+
+    private class ErrorEntry
+    {
+        public string Level { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+        public string? Source { get; set; }
+        public string? CorrelationId { get; set; }
+        public string? StackTrace { get; set; }
+    }
+}

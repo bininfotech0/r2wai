@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/R2WAI.Api/R2WAI.Api.csproj" />
+    <Project Path="src/R2WAI.Application/R2WAI.Application.csproj" />
+    <Project Path="src/R2WAI.Domain/R2WAI.Domain.csproj" />
+    <Project Path="src/R2WAI.Infrastructure/R2WAI.Infrastructure.csproj" />
+    <Project Path="src/R2WAI.Web/R2WAI.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/R2WAI.Api.Tests/R2WAI.Api.Tests.csproj" />
+    <Project Path="tests/R2WAI.Application.Tests/R2WAI.Application.Tests.csproj" />
+    <Project Path="tests/R2WAI.Domain.Tests/R2WAI.Domain.Tests.csproj" />
+    <Project Path="tests/R2WAI.Infrastructure.Tests/R2WAI.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

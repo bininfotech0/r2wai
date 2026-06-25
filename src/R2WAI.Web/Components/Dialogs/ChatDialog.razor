@@ -1,0 +1,427 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+@inject IJSRuntime JS
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2" style="position: relative;">
+            <div class="icon-container icon-container--primary" style="width: 32px; height: 32px; border-radius: 8px;">
+                <MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Primary" Size="Size.Small" />
+            </div>
+            <div>
+                <MudText Typo="Typo.h6" Style="font-weight: 700;">Chat with @_assistantName</MudText>
+            </div>
+            @if (_streaming)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
+                         Style="font-size: 0.6rem; height: 18px; animation: pulse-soft 1.5s infinite;">streaming</MudChip>
+            }
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudPaper @ref="_chatContainer" Class="pa-3 mb-3 chat-scroll-mobile" Style="max-height: min(480px, 55vh); overflow-y: auto; scroll-behavior: smooth;" Elevation="0" id="chat-scroll-container">
+            @foreach (var msg in _messages)
+            {
+                <div class="d-flex @(msg.IsUser ? "justify-end" : "justify-start") mb-3">
+                    <div class="@(msg.IsUser ? "chat-message chat-message--user" : "chat-message chat-message--assistant")">
+                        <MudText Typo="Typo.caption" Style="@(msg.IsUser ? "color: rgba(255,255,255,0.6);" : "")" Color="@(msg.IsUser ? Color.Inherit : Color.Secondary)" Class="mb-1">
+                            @(msg.IsUser ? "You" : "Assistant")
+                        </MudText>
+                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; line-height: 1.6;">@msg.Content</MudText>
+
+                        @if (!msg.IsUser && msg.Citations.Count > 0)
+                        {
+                            <MudDivider Class="my-2" />
+                            <div class="d-flex align-center gap-1 mb-1">
+                                <MudIcon Icon="@Icons.Material.Outlined.MenuBook" Size="Size.Small" Color="Color.Info" />
+                                <MudText Typo="Typo.caption" Style="font-weight: 700;" Color="Color.Info">Sources</MudText>
+                            </div>
+                            @foreach (var citation in msg.Citations)
+                            {
+                                <MudPaper Class="pa-2 mb-1" Elevation="0"
+                                          Style="border: 1px solid var(--mud-palette-info); border-left: 3px solid var(--mud-palette-info); border-radius: 6px; font-size: 0.75rem;">
+                                    <div class="d-flex justify-space-between align-center">
+                                        <MudText Typo="Typo.caption" Style="font-weight: 600;">
+                                            [@citation.Index] @citation.SourceName
+                                        </MudText>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default"
+                                                 Style="font-size: 0.6rem; height: 16px;">
+                                            @citation.Score.ToString("P0") match
+                                        </MudChip>
+                                    </div>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.7rem;">
+                                        @citation.Preview
+                                    </MudText>
+                                </MudPaper>
+                            }
+                        }
+
+                        @if (!msg.IsUser && msg.SuggestsWorkflow)
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.PlayArrow" Class="mt-2"
+                                       OnClick="@(() => ExecuteWorkflow(msg.Content))"
+                                       Style="border-radius: 8px;">
+                                Execute Workflow
+                            </MudButton>
+                        }
+                    </div>
+                </div>
+            }
+
+            @* Typing Indicator *@
+            @if (_streaming && string.IsNullOrEmpty(_streamBuffer))
+            {
+                <div class="d-flex justify-start mb-3">
+                    <div class="chat-message chat-message--assistant">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">Assistant</MudText>
+                        <div class="typing-indicator">
+                            <span class="typing-dot"></span>
+                            <span class="typing-dot"></span>
+                            <span class="typing-dot"></span>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (_streaming && !string.IsNullOrEmpty(_streamBuffer))
+            {
+                <div class="d-flex justify-start mb-3">
+                    <div class="chat-message chat-message--assistant">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Assistant</MudText>
+                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; line-height: 1.6;">@_streamBuffer<span class="typing-cursor">|</span></MudText>
+                    </div>
+                </div>
+            }
+            else if (_sending)
+            {
+                <div class="d-flex justify-start mb-3">
+                    <div class="chat-message chat-message--assistant">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">Assistant</MudText>
+                        <div class="typing-indicator">
+                            <span class="typing-dot"></span>
+                            <span class="typing-dot"></span>
+                            <span class="typing-dot"></span>
+                        </div>
+                    </div>
+                </div>
+            }
+        </MudPaper>
+
+        @* Input Area *@
+        <div style="border: 1.5px solid var(--mud-palette-divider); border-radius: 12px; padding: 8px 12px; background: var(--r2-glass-bg, rgba(255,255,255,0.7)); backdrop-filter: blur(8px);">
+            <div class="d-flex align-center gap-2">
+                <MudTextField @bind-Value="_input" Placeholder="Type your message..." Variant="Variant.Text"
+                              OnKeyUp="HandleKeyUp" Disabled="@(_sending || _streaming)"
+                              Margin="Margin.Dense" Style="flex: 1;" DisableUnderLine="true" />
+                <MudIconButton Icon="@Icons.Material.Filled.Send" Color="Color.Primary"
+                               OnClick="SendMessage" Disabled="@(_sending || _streaming || string.IsNullOrWhiteSpace(_input))"
+                               Size="Size.Small" Style="background: var(--r2-gradient-primary, linear-gradient(135deg, #7C3AED, #6D28D9)); color: white; border-radius: 8px; width: 36px; height: 36px;"
+                               aria-label="Send message" />
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close" Color="Color.Default">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .typing-indicator {
+        display: flex;
+        gap: 5px;
+        padding: 4px 0;
+        align-items: center;
+    }
+    .typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--r2-primary-light, #A78BFA);
+        animation: typingBounce 1.4s ease-in-out infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @@keyframes typingBounce {
+        0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+        40% { transform: scale(1.2); opacity: 1; }
+    }
+    .typing-cursor {
+        animation: cursorBlink 1s infinite;
+        color: var(--mud-palette-primary);
+        font-weight: 300;
+    }
+    @@keyframes cursorBlink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+    }
+</style>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string AssistantId { get; set; } = string.Empty;
+    [Parameter] public string AssistantName { get; set; } = string.Empty;
+
+    private MudPaper? _chatContainer;
+    private string _assistantName => AssistantName;
+    private string _input = string.Empty;
+    private bool _sending;
+    private bool _streaming;
+    private string _streamBuffer = string.Empty;
+    private Guid? _conversationId;
+    private List<ChatMessage> _messages = new();
+
+    private static readonly string[] WorkflowKeywords = ["workflow", "onboard", "approve", "request", "process", "submit"];
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_sending && !_streaming)
+            await SendMessage();
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_input)) return;
+
+        var userMsg = _input;
+        _messages.Add(new ChatMessage { IsUser = true, Content = userMsg });
+        _input = string.Empty;
+        _streaming = true;
+        _streamBuffer = string.Empty;
+        StateHasChanged();
+        await ScrollToBottom();
+
+        try
+        {
+            await StreamResponseAsync(userMsg);
+        }
+        catch (Exception ex)
+        {
+            _streaming = false;
+            _sending = false;
+
+            if (!string.IsNullOrEmpty(_streamBuffer))
+            {
+                _messages.Add(new ChatMessage { IsUser = false, Content = _streamBuffer });
+                _streamBuffer = string.Empty;
+            }
+            else
+            {
+                await FallbackToNonStreamingAsync(userMsg);
+            }
+
+            Snackbar.Add($"Streaming failed, used fallback: {ex.Message}", Severity.Warning);
+        }
+        finally
+        {
+            _streaming = false;
+            _sending = false;
+            StateHasChanged();
+            await ScrollToBottom();
+        }
+    }
+
+    private async Task StreamResponseAsync(string userMsg)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/assistants/{AssistantId}/chat/stream");
+        request.Content = JsonContent.Create(new
+        {
+            Message = userMsg,
+            ConversationId = _conversationId
+        });
+
+        using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"Status {(int)response.StatusCode}");
+        }
+
+        using var stream = await response.Content.ReadAsStreamAsync();
+        using var reader = new System.IO.StreamReader(stream);
+
+        var citations = new List<CitationItem>();
+        string? currentEventType = null;
+
+        while (!reader.EndOfStream)
+        {
+            var line = await reader.ReadLineAsync();
+            if (line is null) continue;
+
+            if (line.StartsWith("event: "))
+            {
+                currentEventType = line[7..].Trim();
+                continue;
+            }
+
+            if (!line.StartsWith("data: ")) continue;
+
+            var data = line[6..];
+            if (data == "[DONE]") break;
+
+            var eventType = currentEventType ?? "chunk";
+            currentEventType = null;
+
+            try
+            {
+                if (eventType == "chunk")
+                {
+                    var parsed = System.Text.Json.JsonSerializer.Deserialize<StreamChunkData>(data,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (parsed?.Content is not null)
+                    {
+                        _streamBuffer += parsed.Content;
+                        StateHasChanged();
+                        await ScrollToBottom();
+                    }
+                }
+                else if (eventType == "citations")
+                {
+                    var parsed = System.Text.Json.JsonSerializer.Deserialize<StreamCitationsData>(data,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (parsed?.Citations is not null)
+                        citations = parsed.Citations;
+                }
+                else if (eventType == "done")
+                {
+                    break;
+                }
+                else if (eventType == "error")
+                {
+                    var parsed = System.Text.Json.JsonSerializer.Deserialize<StreamErrorData>(data,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    throw new Exception(parsed?.Message ?? "Stream error");
+                }
+            }
+            catch (System.Text.Json.JsonException) { }
+        }
+
+        var assistantMsg = new ChatMessage
+        {
+            IsUser = false,
+            Content = _streamBuffer,
+            Citations = citations,
+            SuggestsWorkflow = WorkflowKeywords.Any(kw =>
+                _streamBuffer.Contains(kw, StringComparison.OrdinalIgnoreCase))
+        };
+        _messages.Add(assistantMsg);
+        _streamBuffer = string.Empty;
+    }
+
+    private async Task FallbackToNonStreamingAsync(string userMsg)
+    {
+        _sending = true;
+        _streaming = false;
+        StateHasChanged();
+
+        var assistantMsg = new ChatMessage { IsUser = false, Content = string.Empty };
+        _messages.Add(assistantMsg);
+
+        try
+        {
+            var result = await Http.PostAsJsonAsync($"/api/v1/assistants/{AssistantId}/chat",
+                new { Message = userMsg, ConversationId = _conversationId });
+
+            if (result.IsSuccessStatusCode)
+            {
+                var chatResponse = await result.Content.ReadFromJsonAsync<ChatResponse>();
+                if (chatResponse is not null)
+                {
+                    assistantMsg.Content = chatResponse.Reply;
+                    assistantMsg.SuggestsWorkflow = WorkflowKeywords.Any(kw =>
+                        chatResponse.Reply.Contains(kw, StringComparison.OrdinalIgnoreCase));
+
+                    if (chatResponse.ConversationId != Guid.Empty)
+                        _conversationId = chatResponse.ConversationId;
+
+                    if (chatResponse.Citations is not null)
+                        assistantMsg.Citations = chatResponse.Citations;
+                }
+            }
+            else
+            {
+                var errorBody = await result.Content.ReadAsStringAsync();
+                assistantMsg.Content = result.StatusCode == System.Net.HttpStatusCode.InternalServerError
+                    ? "The AI service is currently unavailable. Please check that an AI provider (OpenAI or Ollama) is configured in Settings > Models."
+                    : $"Request failed ({(int)result.StatusCode}). {errorBody}";
+            }
+        }
+        catch (Exception ex)
+        {
+            assistantMsg.Content = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task ScrollToBottom()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("eval",
+                "document.getElementById('chat-scroll-container')?.scrollTo({top: 999999, behavior: 'smooth'})");
+        }
+        catch { }
+    }
+
+    private async Task ExecuteWorkflow(string context)
+    {
+        try
+        {
+            var workflows = await Http.GetFromJsonAsync<WorkflowsResult>("/api/v1/workflows");
+            var first = workflows?.Items?.FirstOrDefault();
+            if (first is not null)
+            {
+                await Http.PostAsJsonAsync($"/api/v1/workflows/{first.Id}/execute", new { Context = context });
+                Snackbar.Add($"Workflow '{first.Name}' started", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("No workflows available to execute", Severity.Warning);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Workflow execution failed: {ex.Message}", Severity.Error); }
+    }
+
+    private void Close() => MudDialog.Close();
+
+    private class ChatMessage
+    {
+        public bool IsUser { get; set; }
+        public string Content { get; set; } = string.Empty;
+        public bool SuggestsWorkflow { get; set; }
+        public List<CitationItem> Citations { get; set; } = new();
+    }
+
+    private class CitationItem
+    {
+        public string SourceName { get; set; } = string.Empty;
+        public string Preview { get; set; } = string.Empty;
+        public float Score { get; set; }
+        public int Index { get; set; }
+    }
+
+    private class StreamChunkData
+    {
+        public string? Content { get; set; }
+    }
+
+    private class StreamCitationsData
+    {
+        public List<CitationItem>? Citations { get; set; }
+    }
+
+    private class StreamErrorData
+    {
+        public string? Message { get; set; }
+    }
+
+    private class ChatResponse
+    {
+        public string Reply { get; set; } = string.Empty;
+        public Guid ConversationId { get; set; }
+        public int TokensUsed { get; set; }
+        public List<CitationItem>? Citations { get; set; }
+    }
+
+    private class WorkflowsResult { public List<WorkflowItem> Items { get; set; } = new(); }
+    private class WorkflowItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+}
