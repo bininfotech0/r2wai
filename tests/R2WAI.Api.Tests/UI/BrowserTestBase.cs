@@ -46,7 +46,7 @@ public class BrowserFixture : IAsyncLifetime
 
         _appProcess.Start();
 
-        var ready = await WaitForServerAsync(BaseUrl, TimeSpan.FromSeconds(30));
+        var ready = await WaitForServerAsync(BaseUrl, TimeSpan.FromSeconds(60));
         if (!ready)
         {
             var stderr = await _appProcess.StandardError.ReadToEndAsync();
@@ -112,7 +112,11 @@ public class BrowserFixture : IAsyncLifetime
     }
 }
 
-public class BrowserTestBase : IClassFixture<BrowserFixture>, IAsyncLifetime
+[CollectionDefinition("Browser")]
+public class BrowserCollection : ICollectionFixture<BrowserFixture> { }
+
+[Collection("Browser")]
+public abstract class BrowserTestBase : IAsyncLifetime
 {
     private readonly BrowserFixture _fixture;
 
@@ -129,7 +133,7 @@ public class BrowserTestBase : IClassFixture<BrowserFixture>, IAsyncLifetime
     private string _testName = null!;
     private int _screenshotCounter;
 
-    public BrowserTestBase(BrowserFixture fixture)
+    protected BrowserTestBase(BrowserFixture fixture)
     {
         _fixture = fixture;
     }
@@ -183,13 +187,24 @@ public class BrowserTestBase : IClassFixture<BrowserFixture>, IAsyncLifetime
         return path;
     }
 
-    protected async Task NavigateAndWait(string path, int waitMs = 2000)
+    protected async Task NavigateAndWait(string path, int waitMs = 1000)
     {
-        await Page.GotoAsync($"{BaseUrl}{path}", new PageGotoOptions
+        try
         {
-            WaitUntil = WaitUntilState.Commit,
-            Timeout = 30000
-        });
+            await Page.GotoAsync($"{BaseUrl}{path}", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.Load,
+                Timeout = 30000
+            });
+        }
+        catch (TimeoutException)
+        {
+            await Page.GotoAsync($"{BaseUrl}{path}", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.Commit,
+                Timeout = 30000
+            });
+        }
         await Page.WaitForTimeoutAsync(waitMs);
     }
 

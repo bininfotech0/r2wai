@@ -2,13 +2,11 @@ using Microsoft.Playwright;
 
 namespace R2WAI.Api.Tests.UI;
 
-/// <summary>
-/// Real browser UI tests for the Login page.
-/// Launches the Blazor Server app, opens headless Chromium, and interacts with the rendered page.
-/// </summary>
+[Collection("Browser")]
 public class LoginPageTests : BrowserTestBase
 {
     public LoginPageTests(BrowserFixture fixture) : base(fixture) { }
+
     [Fact]
     public async Task LoginPage_Renders_WithR2WAITitle()
     {
@@ -81,7 +79,6 @@ public class LoginPageTests : BrowserTestBase
 
         await Page.WaitForTimeoutAsync(3000);
 
-        // Should either show error snackbar or stay on login page
         var url = Page.Url;
         var content = await Page.ContentAsync();
         Assert.True(
@@ -97,7 +94,6 @@ public class LoginPageTests : BrowserTestBase
     {
         await NavigateAndWait("/login");
 
-        // MudBlazor renders with specific CSS classes
         var mudPaper = Page.Locator(".mud-paper").First;
         await mudPaper.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await mudPaper.IsVisibleAsync(), "MudBlazor paper component should be rendered");

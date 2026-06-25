@@ -2,13 +2,11 @@ using Microsoft.Playwright;
 
 namespace R2WAI.Api.Tests.UI;
 
-/// <summary>
-/// Real browser UI tests for portal navigation.
-/// Verifies that protected pages redirect to login and the login page has proper structure.
-/// </summary>
+[Collection("Browser")]
 public class PortalPageTests : BrowserTestBase
 {
     public PortalPageTests(BrowserFixture fixture) : base(fixture) { }
+
     [Theory]
     [InlineData("/")]
     [InlineData("/assistant-studio")]
@@ -24,7 +22,6 @@ public class PortalPageTests : BrowserTestBase
     {
         await NavigateAndWait(path);
 
-        // Blazor Server [Authorize] redirects unauthenticated users to /login
         var url = Page.Url;
         var content = await Page.ContentAsync();
 
@@ -40,11 +37,9 @@ public class PortalPageTests : BrowserTestBase
     {
         await NavigateAndWait("/login");
 
-        // Title
         var title = await Page.TitleAsync();
         Assert.Contains("R2WAI", title);
 
-        // Form elements
         var inputs = await Page.Locator("input").CountAsync();
         Assert.True(inputs >= 2, $"Login page should have at least 2 inputs, found {inputs}");
 
@@ -57,11 +52,9 @@ public class PortalPageTests : BrowserTestBase
     {
         await NavigateAndWait("/login");
 
-        // MudBlazor framework loaded
         var content = await Page.ContentAsync();
         Assert.Contains("mud", content.ToLowerInvariant());
 
-        // MudBlazor CSS is loaded
         var mudCssLoaded = await Page.Locator("link[href*='MudBlazor']").CountAsync();
         Assert.True(mudCssLoaded >= 1, "MudBlazor CSS should be loaded");
     }
@@ -80,7 +73,6 @@ public class PortalPageTests : BrowserTestBase
     {
         await NavigateAndWait("/login");
 
-        // Wait for Blazor to render the R2WAI text
         var r2waiText = Page.Locator("text=R2WAI").First;
         await r2waiText.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await r2waiText.IsVisibleAsync(), "R2WAI branding should be visible");
