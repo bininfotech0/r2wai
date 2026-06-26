@@ -1,0 +1,151 @@
+@page "/proposals"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - Proposals</PageTitle>
+
+<PageHeader Title="Proposals & RFP" Subtitle="Generate AI-powered proposal responses from RFP requirements and company knowledge" />
+
+<div class="d-flex justify-end mb-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => _showCreator = true)">
+        New Proposal
+    </MudButton>
+</div>
+
+@if (_showCreator)
+{
+    <MudPaper Class="pa-5 mb-4 animate-slide-in" Elevation="0"
+              Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+        <div class="d-flex justify-space-between align-center mb-4">
+            <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                <MudIcon Icon="@Icons.Material.Filled.Description" Class="mr-2" Size="Size.Small" />
+                Generate Proposal
+            </MudText>
+            <MudIconButton Icon="@Icons.Material.Outlined.Close" Size="Size.Small"
+                           OnClick="@(() => _showCreator = false)" aria-label="Close" />
+        </div>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_title" Label="Proposal Title" Variant="Variant.Outlined"
+                              Required="true" MaxLength="200" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_clientName" Label="Client Name" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined"
+                              Lines="2" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_rfpContent" Label="RFP Requirements (paste or type)"
+                              Variant="Variant.Outlined" Lines="6"
+                              HelperText="Paste the RFP requirements here for AI-powered response generation" />
+            </MudItem>
+            <MudItem xs="12" Class="d-flex justify-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
+                           OnClick="GenerateProposal" Disabled="@(_generating || string.IsNullOrWhiteSpace(_title))"
+                           StartIcon="@Icons.Material.Filled.AutoAwesome">
+                    @if (_generating)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
+                        <span>Generating...</span>
+                    }
+                    else
+                    {
+                        <span>Generate with AI</span>
+                    }
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@if (_generatedProposal is not null)
+{
+    <MudPaper Class="pa-5 mb-4 animate-slide-in" Elevation="0"
+              Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+        <div class="d-flex justify-space-between align-center mb-3">
+            <div>
+                <MudText Typo="Typo.h6" Style="font-weight: 600;">@_generatedProposal.Title</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @(_generatedProposal.WordCount ?? 0) words &middot; Generated @_generatedProposal.CreatedAt.ToString("MMM dd, yyyy h:mm tt")
+                </MudText>
+            </div>
+            <MudChip T="string" Color="Color.Info" Size="Size.Small">@_generatedProposal.Status</MudChip>
+        </div>
+        <MudDivider Class="mb-3" />
+        <MarkdownRenderer Content="@_generatedProposal.GeneratedContent" />
+    </MudPaper>
+}
+else if (!_showCreator)
+{
+    <EmptyState Icon="@Icons.Material.Outlined.Description"
+                Title="No proposals yet"
+                Description="Create your first AI-powered proposal to respond to RFPs with company knowledge."
+                ActionText="Create Proposal"
+                OnAction="@(() => _showCreator = true)" />
+}
+
+@code {
+    private bool _showCreator;
+    private bool _generating;
+    private string _title = string.Empty;
+    private string? _clientName;
+    private string? _description;
+    private string? _rfpContent;
+    private ProposalResult? _generatedProposal;
+
+    private async Task GenerateProposal()
+    {
+        if (string.IsNullOrWhiteSpace(_title)) return;
+        _generating = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/proposals", new
+            {
+                title = _title,
+                description = _description,
+                clientName = _clientName,
+                rfpContent = _rfpContent,
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _generatedProposal = await response.Content.ReadFromJsonAsync<ProposalResult>();
+                _showCreator = false;
+                Snackbar.Add("Proposal generated successfully!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to generate proposal.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _generating = false;
+            StateHasChanged();
+        }
+    }
+
+    private class ProposalResult
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string Status { get; set; } = "Draft";
+        public string? ClientName { get; set; }
+        public string? GeneratedContent { get; set; }
+        public int? WordCount { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+}

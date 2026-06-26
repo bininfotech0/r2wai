@@ -15,11 +15,12 @@ namespace R2WAI.Api.Controllers;
 public class AuthController(
     JwtService jwtService,
     EntraIdAuthService entraIdAuthService,
+    TotpService totpService,
     ApplicationDbContext dbContext,
     IPasswordHasher passwordHasher,
     ILogger<AuthController> logger) : ControllerBase
 {
-    public record LoginRequest(string Email, string Password);
+    public record LoginRequest(string Email, string Password, string? MfaCode = null);
 
     public record LoginResponse(string Token, string RefreshToken, DateTime ExpiresAt, UserInfo User);
 
@@ -65,6 +66,15 @@ public class AuthController(
         {
             logger.LogWarning("Failed login attempt for: {Email}", request.Email);
             return Unauthorized(new { error = "Invalid email or password" });
+        }
+
+        if (user.MfaEnabled)
+        {
+            if (string.IsNullOrWhiteSpace(request.MfaCode))
+                return Unauthorized(new { error = "MFA code required", mfaRequired = true });
+
+            if (!totpService.ValidateCode(user.MfaSecret!, request.MfaCode))
+                return Unauthorized(new { error = "Invalid MFA code", mfaRequired = true });
         }
 
         var roles = user.UserRoles?
@@ -264,6 +274,89 @@ public class AuthController(
 
         logger.LogInformation("Password reset completed for {Email}", request.Email);
         return Ok(new { message = "Password has been reset successfully." });
+    }
+
+    [HttpPost("mfa/setup")]
+    [Authorize]
+    public async Task<IActionResult> SetupMfa(CancellationToken ct)
+    {
+        var userIdClaim = HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var user = await dbContext.Users.FindAsync([userId], ct);
+        if (user is null) return NotFound();
+
+        if (user.MfaEnabled)
+            return BadRequest(new { error = "MFA is already enabled." });
+
+        var secret = totpService.GenerateSecret();
+        var setupUri = totpService.GenerateSetupUri(secret, user.Email);
+
+        return Ok(new { secret, setupUri });
+    }
+
+    public record MfaVerifyRequest(string Secret, string Code);
+
+    [HttpPost("mfa/enable")]
+    [Authorize]
+    public async Task<IActionResult> EnableMfa([FromBody] MfaVerifyRequest request, CancellationToken ct)
+    {
+        var userIdClaim = HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var user = await dbContext.Users.FindAsync([userId], ct);
+        if (user is null) return NotFound();
+
+        if (!totpService.ValidateCode(request.Secret, request.Code))
+            return BadRequest(new { error = "Invalid verification code. Please try again." });
+
+        user.EnableMfa(request.Secret);
+        await dbContext.SaveChangesAsync(ct);
+
+        logger.LogInformation("MFA enabled for user {UserId}", userId);
+        return Ok(new { message = "MFA enabled successfully." });
+    }
+
+    public record MfaDisableRequest(string Code);
+
+    [HttpPost("mfa/disable")]
+    [Authorize]
+    public async Task<IActionResult> DisableMfa([FromBody] MfaDisableRequest request, CancellationToken ct)
+    {
+        var userIdClaim = HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var user = await dbContext.Users.FindAsync([userId], ct);
+        if (user is null) return NotFound();
+
+        if (!user.MfaEnabled)
+            return BadRequest(new { error = "MFA is not enabled." });
+
+        if (!totpService.ValidateCode(user.MfaSecret!, request.Code))
+            return BadRequest(new { error = "Invalid verification code." });
+
+        user.DisableMfa();
+        await dbContext.SaveChangesAsync(ct);
+
+        logger.LogInformation("MFA disabled for user {UserId}", userId);
+        return Ok(new { message = "MFA disabled successfully." });
+    }
+
+    [HttpGet("mfa/status")]
+    [Authorize]
+    public async Task<IActionResult> GetMfaStatus(CancellationToken ct)
+    {
+        var userIdClaim = HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var user = await dbContext.Users.FindAsync([userId], ct);
+        if (user is null) return NotFound();
+
+        return Ok(new { mfaEnabled = user.MfaEnabled });
     }
 
     [HttpPost("entra-id")]

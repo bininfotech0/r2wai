@@ -21,6 +21,7 @@ public class CreateChatbotCommandHandler(
     IRepository<Chatbot> chatbotRepo,
     IUnitOfWork unitOfWork,
     ICurrentUserService currentUser,
+    ICacheService cacheService,
     IMapper mapper) : IRequestHandler<CreateChatbotCommand, ChatbotDto>
 {
     public async Task<ChatbotDto> Handle(CreateChatbotCommand command, CancellationToken cancellationToken)
@@ -34,6 +35,9 @@ public class CreateChatbotCommandHandler(
 
         await chatbotRepo.AddAsync(chatbot, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        for (var p = 1; p <= 5; p++)
+            await cacheService.RemoveAsync($"chatbots:{tenantId}:p{p}:s20", cancellationToken);
 
         return mapper.Map<ChatbotDto>(chatbot);
     }

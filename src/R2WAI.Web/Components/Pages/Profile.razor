@@ -210,6 +210,62 @@
     </div>
 </MudPaper>
 
+@* MFA Section *@
+<MudPaper Class="pa-6 mt-4 animate-slide-in" Elevation="0" MaxWidth="600px" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+    <div class="d-flex align-center gap-2 mb-4">
+        <div class="icon-container icon-container--warning">
+            <MudIcon Icon="@Icons.Material.Outlined.Security" Size="Size.Small" />
+        </div>
+        <MudText Typo="Typo.h6" Style="font-weight: 600;">Two-Factor Authentication</MudText>
+    </div>
+
+    @if (_mfaEnabled)
+    {
+        <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">
+            MFA is enabled on your account.
+        </MudAlert>
+        <div class="d-flex gap-2">
+            <MudTextField @bind-Value="_mfaDisableCode" Label="Enter authenticator code to disable"
+                          Variant="Variant.Outlined" MaxLength="6" Style="max-width: 250px;" />
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="DisableMfa"
+                       Disabled="@(string.IsNullOrWhiteSpace(_mfaDisableCode) || _mfaProcessing)">
+                Disable MFA
+            </MudButton>
+        </div>
+    }
+    else if (_mfaSetupSecret is not null)
+    {
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Scan this URI with your authenticator app (Google Authenticator, Authy, etc.):
+        </MudText>
+        <MudTextField Value="@_mfaSetupUri" ReadOnly="true" Variant="Variant.Outlined" Class="mb-3"
+                      Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+            Manual entry key: <code>@_mfaSetupSecret</code>
+        </MudText>
+        <div class="d-flex gap-2">
+            <MudTextField @bind-Value="_mfaVerifyCode" Label="Enter code from app"
+                          Variant="Variant.Outlined" MaxLength="6" Style="max-width: 200px;" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
+                       OnClick="VerifyAndEnableMfa"
+                       Disabled="@(string.IsNullOrWhiteSpace(_mfaVerifyCode) || _mfaProcessing)">
+                Verify & Enable
+            </MudButton>
+        </div>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Add an extra layer of security to your account with a time-based one-time password (TOTP).
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
+                   OnClick="SetupMfa" Disabled="_mfaProcessing"
+                   StartIcon="@Icons.Material.Filled.Security">
+            Set Up MFA
+        </MudButton>
+    }
+</MudPaper>
+
 @code {
     [CascadingParameter]
     private Task<AuthenticationState>? AuthState { get; set; }
@@ -228,6 +284,14 @@
     private IBrowserFile? _avatarFile;
     private string? _avatarPreviewUrl;
     private bool _uploadingAvatar;
+
+    // MFA
+    private bool _mfaEnabled;
+    private bool _mfaProcessing;
+    private string? _mfaSetupSecret;
+    private string? _mfaSetupUri;
+    private string _mfaVerifyCode = string.Empty;
+    private string _mfaDisableCode = string.Empty;
 
     // Password
     private string _currentPassword = string.Empty;
@@ -271,7 +335,77 @@
             _originalFirstName = _firstName;
             _originalLastName = _lastName;
         }
+
+        try
+        {
+            var mfaStatus = await Http.GetFromJsonAsync<MfaStatusResult>("/api/v1/auth/mfa/status");
+            _mfaEnabled = mfaStatus?.MfaEnabled ?? false;
+        }
+        catch { }
     }
+
+    private async Task SetupMfa()
+    {
+        _mfaProcessing = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<MfaSetupResult>("/api/v1/auth/mfa/setup");
+            if (result is not null)
+            {
+                _mfaSetupSecret = result.Secret;
+                _mfaSetupUri = result.SetupUri;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to set up MFA: {ex.Message}", Severity.Error);
+        }
+        finally { _mfaProcessing = false; }
+    }
+
+    private async Task VerifyAndEnableMfa()
+    {
+        _mfaProcessing = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/auth/mfa/enable", new { secret = _mfaSetupSecret, code = _mfaVerifyCode });
+            if (response.IsSuccessStatusCode)
+            {
+                _mfaEnabled = true;
+                _mfaSetupSecret = null;
+                _mfaSetupUri = null;
+                _mfaVerifyCode = string.Empty;
+                Snackbar.Add("MFA enabled successfully!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Invalid code. Please try again.", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _mfaProcessing = false; }
+    }
+
+    private async Task DisableMfa()
+    {
+        _mfaProcessing = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/auth/mfa/disable", new { code = _mfaDisableCode });
+            if (response.IsSuccessStatusCode)
+            {
+                _mfaEnabled = false;
+                _mfaDisableCode = string.Empty;
+                Snackbar.Add("MFA disabled.", Severity.Info);
+            }
+            else { Snackbar.Add("Invalid code.", Severity.Error); }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _mfaProcessing = false; }
+    }
+
+    private class MfaStatusResult { public bool MfaEnabled { get; set; } }
+    private class MfaSetupResult { public string Secret { get; set; } = ""; public string SetupUri { get; set; } = ""; }
 
     private void StartEdit() => _editing = true;
 

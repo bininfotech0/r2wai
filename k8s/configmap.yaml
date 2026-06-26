@@ -18,3 +18,4 @@ data:
   Qdrant__Port: "6333"
   POSTGRES_DB: r2wai
   POSTGRES_USER: r2wai
+  Webhooks__Secret: "REPLACE_VIA_EXTERNAL_SECRET_MANAGER"

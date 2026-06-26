@@ -73,6 +73,9 @@ public sealed class User : BaseEntity<Guid>
     public string? PasswordResetToken { get; private set; }
     public DateTime? PasswordResetExpiresAt { get; private set; }
 
+    public bool MfaEnabled { get; private set; }
+    public string? MfaSecret { get; private set; }
+
     public void SetPasswordResetToken(string token, DateTime expiresAt)
     {
         PasswordResetToken = token;
@@ -84,6 +87,20 @@ public sealed class User : BaseEntity<Guid>
     {
         PasswordResetToken = null;
         PasswordResetExpiresAt = null;
+        MarkAsModified();
+    }
+
+    public void EnableMfa(string secret)
+    {
+        MfaSecret = secret;
+        MfaEnabled = true;
+        MarkAsModified();
+    }
+
+    public void DisableMfa()
+    {
+        MfaSecret = null;
+        MfaEnabled = false;
         MarkAsModified();
     }
 

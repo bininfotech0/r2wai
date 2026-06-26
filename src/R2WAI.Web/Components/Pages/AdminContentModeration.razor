@@ -400,6 +400,54 @@
         Snackbar.Add("Settings reset to defaults.", Severity.Info);
     }
 
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var settings = await Http.GetFromJsonAsync<ModerationSettingsResponse>("/api/v1/admin/content-moderation");
+            if (settings is not null)
+            {
+                _moderationLevel = settings.ModerationLevel ?? "Medium";
+                _blockHateSpeech = settings.Rules?.BlockHateSpeech ?? true;
+                _blockPersonalData = settings.Rules?.BlockPersonalData ?? true;
+                _blockCodeExecution = settings.Rules?.BlockCodeExecution ?? false;
+                _requireCitations = settings.Rules?.RequireCitations ?? false;
+                _blockCompetitorMentions = settings.Rules?.BlockCompetitorMentions ?? false;
+                _flagFinancialAdvice = settings.Rules?.FlagFinancialAdvice ?? true;
+                _flagMedicalLegalAdvice = settings.Rules?.FlagMedicalLegalAdvice ?? true;
+                _blockedKeywords = settings.BlockedKeywords ?? new() { "password", "social security", "credit card number" };
+                _blockedResponseTemplate = settings.Templates?.BlockedResponse ?? _blockedResponseTemplate;
+                _flaggedWarningTemplate = settings.Templates?.FlaggedWarning ?? _flaggedWarningTemplate;
+            }
+        }
+        catch { }
+    }
+
+    private class ModerationSettingsResponse
+    {
+        public string? ModerationLevel { get; set; }
+        public ModerationRulesResponse? Rules { get; set; }
+        public List<string>? BlockedKeywords { get; set; }
+        public ModerationTemplatesResponse? Templates { get; set; }
+    }
+
+    private class ModerationRulesResponse
+    {
+        public bool BlockHateSpeech { get; set; }
+        public bool BlockPersonalData { get; set; }
+        public bool BlockCodeExecution { get; set; }
+        public bool RequireCitations { get; set; }
+        public bool BlockCompetitorMentions { get; set; }
+        public bool FlagFinancialAdvice { get; set; }
+        public bool FlagMedicalLegalAdvice { get; set; }
+    }
+
+    private class ModerationTemplatesResponse
+    {
+        public string? BlockedResponse { get; set; }
+        public string? FlaggedWarning { get; set; }
+    }
+
     private class TestResult
     {
         public string Rule { get; set; } = string.Empty;

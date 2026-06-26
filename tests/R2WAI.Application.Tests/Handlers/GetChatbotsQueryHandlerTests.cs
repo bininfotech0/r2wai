@@ -26,8 +26,9 @@ public class GetChatbotsQueryHandlerTests
         mapperMock.Setup(m => m.Map<ChatbotDto>(It.IsAny<Chatbot>()))
             .Returns((Chatbot c) => new ChatbotDto { Id = c.Id, Name = c.Name });
 
+        var cacheMock = new Mock<ICacheService>();
         var handler = new GetChatbotsQueryHandler(
-            repoMock.Object, currentUserMock.Object, mapperMock.Object);
+            repoMock.Object, currentUserMock.Object, cacheMock.Object, mapperMock.Object);
 
         var query = new GetChatbotsQuery { Page = 1, PageSize = 20 };
         var result = await handler.Handle(query, CancellationToken.None);

@@ -120,6 +120,7 @@ public static class DependencyInjection
 
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<JwtService>();
+        services.AddSingleton<TotpService>();
         services.AddScoped<EntraIdAuthService>();
         services.AddScoped<AuthorizationService>();
 

@@ -8,6 +8,7 @@ public class CreateChatbotCommandHandlerTests
     private readonly Mock<IRepository<Chatbot>> _repoMock = new();
     private readonly Mock<IUnitOfWork> _uowMock = new();
     private readonly Mock<ICurrentUserService> _currentUserMock = new();
+    private readonly Mock<ICacheService> _cacheMock = new();
     private readonly Mock<IMapper> _mapperMock = new();
 
     public CreateChatbotCommandHandlerTests()
@@ -20,7 +21,7 @@ public class CreateChatbotCommandHandlerTests
     public async Task Handle_ValidCommand_CreatesChatbot()
     {
         var handler = new CreateChatbotCommandHandler(
-            _repoMock.Object, _uowMock.Object, _currentUserMock.Object, _mapperMock.Object);
+            _repoMock.Object, _uowMock.Object, _currentUserMock.Object, _cacheMock.Object, _mapperMock.Object);
 
         var command = new CreateChatbotCommand
         {
@@ -40,7 +41,7 @@ public class CreateChatbotCommandHandlerTests
         _currentUserMock.Setup(x => x.UserId).Returns((Guid?)null);
 
         var handler = new CreateChatbotCommandHandler(
-            _repoMock.Object, _uowMock.Object, _currentUserMock.Object, _mapperMock.Object);
+            _repoMock.Object, _uowMock.Object, _currentUserMock.Object, _cacheMock.Object, _mapperMock.Object);
 
         var command = new CreateChatbotCommand { Name = "Test" };
 

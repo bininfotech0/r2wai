@@ -85,7 +85,27 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
             dbStatus = "unhealthy";
         }
 
-        var overallStatus = dbStatus == "healthy" ? "healthy" : "degraded";
+        var cacheStatus = "healthy";
+        try
+        {
+            var cache = HttpContext.RequestServices.GetService<R2WAI.Application.Common.Interfaces.ICacheService>();
+            if (cache is not null)
+            {
+                await cache.SetAsync("health_check", "ok", TimeSpan.FromSeconds(5), ct);
+                var result = await cache.GetAsync<string>("health_check", ct);
+                if (result is null) cacheStatus = "degraded";
+            }
+            else
+            {
+                cacheStatus = "not_configured";
+            }
+        }
+        catch
+        {
+            cacheStatus = "unhealthy";
+        }
+
+        var overallStatus = (dbStatus == "healthy" && cacheStatus is "healthy" or "not_configured") ? "healthy" : "degraded";
 
         return Ok(new
         {
@@ -95,8 +115,23 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
             {
                 api = "healthy",
                 database = dbStatus,
+                cache = cacheStatus,
             },
         });
+    }
+
+    [HttpGet("metrics/prometheus")]
+    [AllowAnonymous]
+    public IActionResult GetPrometheusMetrics()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# HELP r2wai_up Whether the R2WAI API is up");
+        sb.AppendLine("# TYPE r2wai_up gauge");
+        sb.AppendLine("r2wai_up 1");
+        sb.AppendLine("# HELP r2wai_info R2WAI build info");
+        sb.AppendLine("# TYPE r2wai_info gauge");
+        sb.AppendLine("r2wai_info{version=\"2.0\"} 1");
+        return Content(sb.ToString(), "text/plain; version=0.0.4; charset=utf-8");
     }
 
     [HttpGet("metrics")]

@@ -17,7 +17,9 @@ public class DeleteAssistantCommandValidator : AbstractValidator<DeleteAssistant
 
 public class DeleteAssistantCommandHandler(
     IRepository<AssistantDefinition> assistantRepo,
-    IUnitOfWork unitOfWork) : IRequestHandler<DeleteAssistantCommand, Unit>
+    IUnitOfWork unitOfWork,
+    ICurrentUserService currentUser,
+    ICacheService cacheService) : IRequestHandler<DeleteAssistantCommand, Unit>
 {
     public async Task<Unit> Handle(DeleteAssistantCommand command, CancellationToken cancellationToken)
     {
@@ -26,6 +28,13 @@ public class DeleteAssistantCommandHandler(
 
         assistant.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var tenantId = currentUser.TenantId;
+        if (tenantId.HasValue)
+        {
+            for (var p = 1; p <= 5; p++)
+                await cacheService.RemoveAsync($"assistants:{tenantId}:p{p}:s20", cancellationToken);
+        }
 
         return Unit.Value;
     }

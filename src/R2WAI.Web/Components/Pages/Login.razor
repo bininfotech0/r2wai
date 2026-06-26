@@ -43,6 +43,19 @@
                           RequiredError="Password is required."
                           aria-label="Password" />
 
+            @if (_mfaRequired)
+            {
+                <MudTextField @bind-Value="_loginModel.MfaCode"
+                              Label="Authenticator Code"
+                              Variant="Variant.Outlined"
+                              InputType="InputType.Text"
+                              Class="mb-4"
+                              MaxLength="6"
+                              Placeholder="Enter 6-digit code"
+                              Immediate="true"
+                              aria-label="MFA authenticator code" />
+            }
+
             <div class="d-flex justify-space-between align-center mb-5">
                 <MudCheckBox T="bool" @bind-Value="_rememberMe" Label="Remember me"
                              Color="Color.Primary" Dense="true"
@@ -180,6 +193,8 @@
         }
     }
 
+    private bool _mfaRequired;
+
     private async Task HandleLogin()
     {
         _isLoading = true;
@@ -195,13 +210,23 @@
                 {
                     var userJson = System.Text.Json.JsonSerializer.Serialize(loginResponse.User);
                     await AuthStateProvider.LoginAsync(loginResponse.Token, loginResponse.RefreshToken, userJson);
+                    _mfaRequired = false;
                     Snackbar.Add("Login successful!", Severity.Success);
                     Navigation.NavigateTo(ReturnUrl ?? "/");
                 }
             }
             else
             {
-                Snackbar.Add("Invalid email or password.", Severity.Error);
+                var errorBody = await response.Content.ReadAsStringAsync();
+                if (errorBody.Contains("mfaRequired", StringComparison.OrdinalIgnoreCase))
+                {
+                    _mfaRequired = true;
+                    Snackbar.Add("Enter your authenticator code to continue.", Severity.Info);
+                }
+                else
+                {
+                    Snackbar.Add("Invalid email or password.", Severity.Error);
+                }
             }
         }
         catch (Exception ex)
@@ -218,6 +243,7 @@
     {
         public string Email { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
+        public string? MfaCode { get; set; }
     }
 
     public class LoginResponse

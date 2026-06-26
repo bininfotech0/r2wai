@@ -277,6 +277,85 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
         }
     }
 
+    public record ContentModerationSettings
+    {
+        public string ModerationLevel { get; init; } = "Medium";
+        public ContentModerationRules Rules { get; init; } = new();
+        public List<string> BlockedKeywords { get; init; } = [];
+        public ContentModerationTemplates Templates { get; init; } = new();
+    }
+
+    public record ContentModerationRules
+    {
+        public bool BlockHateSpeech { get; init; } = true;
+        public bool BlockPersonalData { get; init; } = true;
+        public bool BlockCodeExecution { get; init; }
+        public bool RequireCitations { get; init; }
+        public bool BlockCompetitorMentions { get; init; }
+        public bool FlagFinancialAdvice { get; init; } = true;
+        public bool FlagMedicalLegalAdvice { get; init; } = true;
+    }
+
+    public record ContentModerationTemplates
+    {
+        public string BlockedResponse { get; init; } = "I'm unable to provide that information. Please contact your administrator.";
+        public string FlaggedWarning { get; init; } = "This response may contain sensitive information. Please verify before sharing.";
+    }
+
+    [HttpGet("content-moderation")]
+    public async Task<IActionResult> GetContentModeration(CancellationToken ct = default)
+    {
+        var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+
+        var tenant = await dbContext.Tenants.FindAsync([tenantId], ct);
+        if (tenant is null) return NotFound();
+
+        ContentModerationSettings? settings = null;
+        if (!string.IsNullOrEmpty(tenant.Settings))
+        {
+            try
+            {
+                var doc = System.Text.Json.JsonDocument.Parse(tenant.Settings);
+                if (doc.RootElement.TryGetProperty("contentModeration", out var cm))
+                    settings = System.Text.Json.JsonSerializer.Deserialize<ContentModerationSettings>(cm.GetRawText(),
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch { }
+        }
+
+        return Ok(settings ?? new ContentModerationSettings());
+    }
+
+    [HttpPost("content-moderation")]
+    public async Task<IActionResult> SaveContentModeration([FromBody] ContentModerationSettings settings, CancellationToken ct = default)
+    {
+        var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+
+        var tenant = await dbContext.Tenants.FindAsync([tenantId], ct);
+        if (tenant is null) return NotFound();
+
+        var existingSettings = new Dictionary<string, object>();
+        if (!string.IsNullOrEmpty(tenant.Settings))
+        {
+            try
+            {
+                existingSettings = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(tenant.Settings) ?? new();
+            }
+            catch { }
+        }
+
+        existingSettings["contentModeration"] = settings;
+        var newSettings = System.Text.Json.JsonSerializer.Serialize(existingSettings,
+            new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+        tenant.UpdateSettings(newSettings);
+        await dbContext.SaveChangesAsync(ct);
+
+        logger.LogInformation("Content moderation settings updated for tenant {TenantId}", tenantId);
+        return Ok(settings);
+    }
+
     [HttpGet("analytics")]
     public async Task<IActionResult> GetAnalytics(CancellationToken ct = default)
     {

@@ -24,6 +24,8 @@ public class UpdateChatbotCommandValidator : AbstractValidator<UpdateChatbotComm
 public class UpdateChatbotCommandHandler(
     IRepository<Chatbot> chatbotRepo,
     IUnitOfWork unitOfWork,
+    ICurrentUserService currentUser,
+    ICacheService cacheService,
     IMapper mapper) : IRequestHandler<UpdateChatbotCommand, ChatbotDto>
 {
     public async Task<ChatbotDto> Handle(UpdateChatbotCommand command, CancellationToken cancellationToken)
@@ -35,6 +37,13 @@ public class UpdateChatbotCommandHandler(
             command.SuggestedQuestions, command.PromptTemplate);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var tenantId = currentUser.TenantId;
+        if (tenantId.HasValue)
+        {
+            for (var p = 1; p <= 5; p++)
+                await cacheService.RemoveAsync($"chatbots:{tenantId}:p{p}:s20", cancellationToken);
+        }
 
         return mapper.Map<ChatbotDto>(chatbot);
     }

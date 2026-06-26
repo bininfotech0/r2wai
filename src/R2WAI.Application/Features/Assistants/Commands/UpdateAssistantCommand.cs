@@ -30,6 +30,8 @@ public class UpdateAssistantCommandValidator : AbstractValidator<UpdateAssistant
 public class UpdateAssistantCommandHandler(
     IRepository<AssistantDefinition> assistantRepo,
     IUnitOfWork unitOfWork,
+    ICurrentUserService currentUser,
+    ICacheService cacheService,
     IMapper mapper) : IRequestHandler<UpdateAssistantCommand, AssistantDto>
 {
     public async Task<AssistantDto> Handle(UpdateAssistantCommand command, CancellationToken cancellationToken)
@@ -53,6 +55,13 @@ public class UpdateAssistantCommandHandler(
             assistant.Unpublish();
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var tenantId = currentUser.TenantId;
+        if (tenantId.HasValue)
+        {
+            for (var p = 1; p <= 5; p++)
+                await cacheService.RemoveAsync($"assistants:{tenantId}:p{p}:s20", cancellationToken);
+        }
 
         return mapper.Map<AssistantDto>(assistant);
     }

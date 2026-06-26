@@ -22,6 +22,7 @@ public class CreateAssistantCommandHandler(
     IRepository<AssistantDefinition> assistantRepo,
     IUnitOfWork unitOfWork,
     ICurrentUserService currentUser,
+    ICacheService cacheService,
     IMapper mapper) : IRequestHandler<CreateAssistantCommand, AssistantDto>
 {
     public async Task<AssistantDto> Handle(CreateAssistantCommand command, CancellationToken cancellationToken)
@@ -34,6 +35,9 @@ public class CreateAssistantCommandHandler(
 
         await assistantRepo.AddAsync(assistant, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        for (var p = 1; p <= 5; p++)
+            await cacheService.RemoveAsync($"assistants:{tenantId}:p{p}:s20", cancellationToken);
 
         return mapper.Map<AssistantDto>(assistant);
     }

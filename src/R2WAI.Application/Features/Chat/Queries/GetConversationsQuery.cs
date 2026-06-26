@@ -18,19 +18,18 @@ public class GetConversationsQueryHandler(
         var userId = currentUser.UserId ?? throw new UnauthorizedException();
 
         // Filter at DB level: only the requesting user's non-deleted, non-archived conversations
-        var conversations = await conversationRepo.FindAsync(
+        System.Linq.Expressions.Expression<Func<Conversation, bool>> filter =
             c => c.TenantId == tenantId
               && c.UserId == userId
               && !c.IsDeleted
               && !c.IsArchived
-              && (query.Module == null || c.Module == query.Module),
-            cancellationToken);
+              && (query.Module == null || c.Module == query.Module);
 
-        var ordered = conversations
-            .OrderByDescending(c => c.ModifiedAt ?? c.CreatedAt);
+        var total = await conversationRepo.CountAsync(filter, cancellationToken);
 
-        var total = ordered.Count();
-        var items = ordered
+        var allMatching = await conversationRepo.FindAsync(filter, cancellationToken);
+        var items = allMatching
+            .OrderByDescending(c => c.ModifiedAt ?? c.CreatedAt)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToList();

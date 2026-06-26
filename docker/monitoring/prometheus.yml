@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'r2wai-api'
+    metrics_path: '/api/v1/operations/metrics/prometheus'
+    static_configs:
+      - targets: ['r2wai-api:8080']
+        labels:
+          service: 'r2wai-api'
+
+  - job_name: 'r2wai-api-health'
+    metrics_path: '/health'
+    static_configs:
+      - targets: ['r2wai-api:8080']
+        labels:
+          service: 'r2wai-api'

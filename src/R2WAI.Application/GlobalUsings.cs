@@ -23,3 +23,4 @@ global using R2WAI.Application.Features.Assistants.DTOs;
 global using R2WAI.Application.Features.Admin.DTOs;
 global using R2WAI.Application.Features.Integrations.DTOs;
 global using R2WAI.Application.Features.Operations.DTOs;
+global using R2WAI.Application.Features.Proposals.DTOs;

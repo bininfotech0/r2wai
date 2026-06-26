@@ -44,6 +44,9 @@ spec:
         - name: web
           image: ghcr.io/r2wai/r2wai-web:latest
           imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: r2wai-config
           ports:
             - containerPort: 8080
               name: http

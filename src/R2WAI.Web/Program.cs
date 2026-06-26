@@ -23,6 +23,7 @@ builder.Services.AddMudServices(config =>
     config.SnackbarConfiguration.SnackbarVariant = MudBlazor.Variant.Filled;
 });
 builder.Services.AddSingleton<ThemeService>();
+builder.Services.AddSingleton<LocalizationService>();
 
 builder.Services.AddScoped<TokenStorageService>();
 builder.Services.AddScoped<CircuitTokenProvider>();

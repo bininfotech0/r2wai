@@ -17,7 +17,9 @@ public class DeleteChatbotCommandValidator : AbstractValidator<DeleteChatbotComm
 
 public class DeleteChatbotCommandHandler(
     IRepository<Chatbot> chatbotRepo,
-    IUnitOfWork unitOfWork) : IRequestHandler<DeleteChatbotCommand, Unit>
+    IUnitOfWork unitOfWork,
+    ICurrentUserService currentUser,
+    ICacheService cacheService) : IRequestHandler<DeleteChatbotCommand, Unit>
 {
     public async Task<Unit> Handle(DeleteChatbotCommand command, CancellationToken cancellationToken)
     {
@@ -26,6 +28,13 @@ public class DeleteChatbotCommandHandler(
 
         chatbot.SoftDelete();
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var tenantId = currentUser.TenantId;
+        if (tenantId.HasValue)
+        {
+            for (var p = 1; p <= 5; p++)
+                await cacheService.RemoveAsync($"chatbots:{tenantId}:p{p}:s20", cancellationToken);
+        }
 
         return Unit.Value;
     }
