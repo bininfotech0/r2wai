@@ -20,6 +20,7 @@ resources:
   - ingress.yaml
   - hpa-api.yaml
   - pdb-api.yaml
+  - network-policy.yaml
 
 commonLabels:
   app: r2wai
@@ -27,9 +28,9 @@ commonLabels:
   managed-by: kustomize
 
 images:
-  - name: r2wai-api
-    newName: r2wai-api
+  - name: ghcr.io/r2wai/r2wai-api
+    newName: ghcr.io/r2wai/r2wai-api
     newTag: latest
-  - name: r2wai-web
-    newName: r2wai-web
+  - name: ghcr.io/r2wai/r2wai-web
+    newName: ghcr.io/r2wai/r2wai-web
     newTag: latest

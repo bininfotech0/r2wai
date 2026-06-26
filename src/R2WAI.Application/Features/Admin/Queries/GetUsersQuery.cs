@@ -1,9 +1,10 @@
 namespace R2WAI.Application.Features.Admin.Queries;
 
-public record GetUsersQuery : IRequest<PagedResult<UserDto>>
+public record GetUsersQuery : IRequest<PagedResult<UserDto>>, IAuthorizedRequest
 {
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
+    public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
 }
 
 public class GetUsersQueryHandler(

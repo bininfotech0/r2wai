@@ -140,6 +140,9 @@ public class EndToEndBrowserTests : BrowserTestBase
     {
         await NavigateAndWait("/login");
 
+        var mudPaper = Page.Locator(".mud-paper").First;
+        await mudPaper.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
+
         var emailInput = Page.Locator("input[type='email']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         await emailInput.ClickAsync();

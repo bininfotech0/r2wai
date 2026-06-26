@@ -26,8 +26,47 @@ jobs:
       - name: Build
         run: dotnet build src/R2WAI.slnx -c Release --no-restore
 
-      - name: Test
-        run: dotnet test src/R2WAI.slnx -c Release --no-build --verbosity normal
+      - name: Test with coverage
+        run: dotnet test src/R2WAI.slnx -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/**/coverage.cobertura.xml
+          retention-days: 14
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore src/R2WAI.slnx
+
+      - name: Check for vulnerable packages
+        run: dotnet list src/R2WAI.slnx package --vulnerable --include-transitive 2>&1 | tee vulnerability-report.txt
+
+      - name: Fail on critical vulnerabilities
+        run: |
+          if grep -qi "Critical" vulnerability-report.txt; then
+            echo "::error::Critical vulnerabilities found in dependencies"
+            exit 1
+          fi
+
+      - name: Upload vulnerability report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerability-report
+          path: vulnerability-report.txt
+          retention-days: 30
 
   docker:
     name: Docker Build
@@ -41,3 +80,19 @@ jobs:
 
       - name: Build Blazor web image
         run: docker build -f docker/Dockerfile.web -t r2wai-web:ci .
+
+      - name: Scan API image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: r2wai-api:ci
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH
+
+      - name: Scan Web image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: r2wai-web:ci
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH

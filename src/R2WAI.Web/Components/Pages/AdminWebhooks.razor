@@ -53,7 +53,7 @@ else
                             @context.EndpointUrl
                         </code>
                         <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Size="Size.Small"
-                                       OnClick="@(() => CopyEndpoint(context))" />
+                                       OnClick="@(() => CopyEndpoint(context))" aria-label="Copy endpoint URL" />
                     </div>
                 </MudTd>
                 <MudTd DataLabel="Trigger">
@@ -75,11 +75,11 @@ else
                 </MudTd>
                 <MudTd>
                     <MudIconButton Icon="@Icons.Material.Outlined.History" Size="Size.Small"
-                                   OnClick="@(() => ViewHistory(context))" />
+                                   OnClick="@(() => ViewHistory(context))" aria-label="View history" />
                     <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
-                                   OnClick="@(() => EditWebhook(context))" />
+                                   OnClick="@(() => EditWebhook(context))" aria-label="Edit webhook" />
                     <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
-                                   OnClick="@(() => DeleteWebhook(context))" />
+                                   OnClick="@(() => DeleteWebhook(context))" aria-label="Delete webhook" />
                 </MudTd>
             </RowTemplate>
         </MudTable>

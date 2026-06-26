@@ -163,11 +163,11 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
 
         var auditEntries = OnBeforeSaveAudit();
 
+        OnAfterSaveAudit(auditEntries);
+
         var result = await base.SaveChangesAsync(cancellationToken);
 
         await DispatchDomainEventsAsync(domainEvents, cancellationToken);
-
-        await OnAfterSaveAudit(auditEntries, cancellationToken);
 
         return result;
     }
@@ -207,7 +207,7 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
         return entries;
     }
 
-    private async Task OnAfterSaveAudit(List<AuditEntry> auditEntries, CancellationToken cancellationToken)
+    private void OnAfterSaveAudit(List<AuditEntry> auditEntries)
     {
         foreach (var auditEntry in auditEntries)
         {
@@ -226,11 +226,6 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
                 _currentUserService.IpAddress);
 
             AuditLogs.Add(auditLog);
-        }
-
-        if (auditEntries.Count > 0)
-        {
-            await base.SaveChangesAsync(cancellationToken);
         }
     }
 

@@ -1,4 +1,5 @@
 @using Markdig
+@using System.Text.RegularExpressions
 
 @if (!string.IsNullOrEmpty(Content))
 {
@@ -16,11 +17,22 @@
         .UseSoftlineBreakAsHardlineBreak()
         .Build();
 
+    private static readonly Regex ScriptTagRegex = new(
+        @"<script[\s>].*?</script>|<script[^>]*/>|javascript:|on\w+\s*=",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+    private static readonly Regex DangerousTagRegex = new(
+        @"<(iframe|object|embed|form|input|textarea|button|select|meta|link|base)\b[^>]*>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static string RenderMarkdown(string markdown)
     {
         try
         {
-            return Markdown.ToHtml(markdown, Pipeline);
+            var html = Markdown.ToHtml(markdown, Pipeline);
+            html = ScriptTagRegex.Replace(html, string.Empty);
+            html = DangerousTagRegex.Replace(html, string.Empty);
+            return html;
         }
         catch
         {

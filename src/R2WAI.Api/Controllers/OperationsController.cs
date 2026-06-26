@@ -62,7 +62,18 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     }
 
     [HttpGet("health")]
-    public async Task<IActionResult> GetHealth(CancellationToken ct = default)
+    public IActionResult GetHealth()
+    {
+        return Ok(new
+        {
+            status = "healthy",
+            timestamp = DateTime.UtcNow,
+        });
+    }
+
+    [HttpGet("health/detailed")]
+    [Authorize(Roles = "Admin,SystemAdmin")]
+    public async Task<IActionResult> GetDetailedHealth(CancellationToken ct = default)
     {
         var dbStatus = "healthy";
         try
@@ -146,6 +157,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     }
 
     [HttpGet("errors")]
+    [Authorize(Roles = "Admin,SystemAdmin")]
     public IActionResult GetErrorLogs(
         [FromQuery] int pageSize = 50,
         [FromQuery] string? level = null,
@@ -356,6 +368,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     public record GenerateReportRequest(string Type, string? Period = "last30days");
 
     [HttpGet("audit-logs/export")]
+    [Authorize(Roles = "Admin,SystemAdmin")]
     public async Task<IActionResult> ExportAuditLogs(
         [FromQuery] string format = "csv",
         [FromQuery] Guid? userId = null,
@@ -372,7 +385,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
         var query = new GetAuditLogsQuery
         {
             Page = 1,
-            PageSize = 5000,
+            PageSize = Math.Clamp(1000, 1, 1000),
             UserId = userId,
             EntityType = entityType,
             Action = parsedAction,

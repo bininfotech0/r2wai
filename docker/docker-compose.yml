@@ -4,10 +4,10 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.web
     ports:
-      - "8080:80"
+      - "8080:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ApiBaseUrl=http://r2wai-api
+      - ApiBaseUrl=http://r2wai-api:8080
     depends_on:
       r2wai-api:
         condition: service_started
@@ -20,7 +20,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.api
     ports:
-      - "5000:80"
+      - "5000:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=r2wai;Username=r2wai;Password=${DB_PASSWORD}
@@ -36,7 +36,7 @@ services:
       - Storage__Provider=${STORAGE_PROVIDER:-Local}
       - ConnectionStrings__Redis=
       - Cache__Redis__ConnectionString=
-      - Authentication__ApiKeys__0__Key=${API_KEY_0:-r2w_dev_test_key_do_not_use_in_production}
+      - Authentication__ApiKeys__0__Key=${API_KEY_0}
       - Authentication__ApiKeys__0__Name=Docker Dev Key
       - Authentication__ApiKeys__0__UserId=00000000-0000-0000-0000-000000000001
       - Authentication__ApiKeys__0__TenantId=00000000-0000-0000-0000-000000000001
@@ -48,7 +48,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -x dotnet > /dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10

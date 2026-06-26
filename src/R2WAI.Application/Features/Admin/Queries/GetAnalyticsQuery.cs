@@ -1,6 +1,9 @@
 namespace R2WAI.Application.Features.Admin.Queries;
 
-public record GetAnalyticsQuery : IRequest<AnalyticsDto> { }
+public record GetAnalyticsQuery : IRequest<AnalyticsDto>, IAuthorizedRequest
+{
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
+}
 
 public class GetAnalyticsQueryHandler(
     IRepository<User> userRepo,
@@ -9,42 +12,47 @@ public class GetAnalyticsQueryHandler(
     IRepository<Chatbot> chatbotRepo,
     IRepository<KnowledgeBase> kbRepo,
     IRepository<Workflow> workflowRepo,
+    IRepository<Message> messageRepo,
     ICurrentUserService currentUser) : IRequestHandler<GetAnalyticsQuery, AnalyticsDto>
 {
     public async Task<AnalyticsDto> Handle(GetAnalyticsQuery query, CancellationToken cancellationToken)
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
+        var today = DateTime.UtcNow.Date;
 
-        var users = await userRepo.FindAsync(
+        var totalUsers = await userRepo.CountAsync(
             u => u.TenantId == tenantId && !u.IsDeleted, cancellationToken);
-        var conversations = await conversationRepo.FindAsync(
+        var totalConversations = await conversationRepo.CountAsync(
             c => c.TenantId == tenantId && !c.IsDeleted, cancellationToken);
-        var documents = await documentRepo.FindAsync(
+        var totalDocuments = await documentRepo.CountAsync(
             d => d.TenantId == tenantId && !d.IsDeleted, cancellationToken);
-        var chatbots = await chatbotRepo.FindAsync(
+        var totalChatbots = await chatbotRepo.CountAsync(
             c => c.TenantId == tenantId && !c.IsDeleted, cancellationToken);
-        var knowledgeBases = await kbRepo.FindAsync(
+        var totalKnowledgeBases = await kbRepo.CountAsync(
             k => k.TenantId == tenantId && !k.IsDeleted, cancellationToken);
-        var workflows = await workflowRepo.FindAsync(
+        var totalWorkflows = await workflowRepo.CountAsync(
             w => w.TenantId == tenantId && !w.IsDeleted, cancellationToken);
 
-        // Messages nav property not eagerly loaded; count in-memory from what EF returns
-        var today = DateTime.UtcNow.Date;
-        var activeConversations = conversations.Where(c => c.Messages != null && c.Messages.Any(m => m.CreatedAt >= today)).ToList();
+        var todayMessages = await messageRepo.FindAsync(
+            m => m.TenantId == tenantId && m.CreatedAt >= today && !m.IsDeleted, cancellationToken);
+        var activeConversationIds = todayMessages.Select(m => m.ConversationId).Distinct().Count();
+
+        var chatConversations = await conversationRepo.CountAsync(
+            c => c.TenantId == tenantId && !c.IsDeleted && (c.Module == "chat" || c.Module == null), cancellationToken);
 
         return new AnalyticsDto
         {
-            TotalUsers = users.Count,
-            ActiveConversations = activeConversations.Count,
-            TotalDocuments = documents.Count,
-            TotalChatbots = chatbots.Count,
-            TotalKnowledgeBases = knowledgeBases.Count,
-            TotalWorkflows = workflows.Count,
-            AiRequestsToday = activeConversations.Sum(c => c.Messages?.Count ?? 0),
+            TotalUsers = totalUsers,
+            ActiveConversations = activeConversationIds,
+            TotalDocuments = totalDocuments,
+            TotalChatbots = totalChatbots,
+            TotalKnowledgeBases = totalKnowledgeBases,
+            TotalWorkflows = totalWorkflows,
+            AiRequestsToday = todayMessages.Count,
             RequestsByModule = new Dictionary<string, int>
             {
-                ["chat"] = conversations.Count(c => c.Module == "chat" || c.Module == null),
-                ["document"] = documents.Count,
+                ["chat"] = chatConversations,
+                ["document"] = totalDocuments,
             },
         };
     }

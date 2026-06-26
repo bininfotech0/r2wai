@@ -107,7 +107,7 @@ else
                 <MudTd>
                     <MudIconButton Icon="@Icons.Material.Outlined.Download" Size="Size.Small"
                                    OnClick="@(() => DownloadReport(context))"
-                                   Disabled="@(context.Status != "Completed")" />
+                                   Disabled="@(context.Status != "Completed")" aria-label="Download report" />
                 </MudTd>
             </RowTemplate>
         </MudTable>

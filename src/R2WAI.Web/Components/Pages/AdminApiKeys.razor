@@ -94,9 +94,9 @@ else
                 </MudTd>
                 <MudTd>
                     <MudIconButton Icon="@Icons.Material.Outlined.Refresh" Size="Size.Small"
-                                   OnClick="@(() => RegenerateKey(context))" />
+                                   OnClick="@(() => RegenerateKey(context))" aria-label="Regenerate key" />
                     <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
-                                   OnClick="@(() => RevokeKey(context))" />
+                                   OnClick="@(() => RevokeKey(context))" aria-label="Revoke key" />
                 </MudTd>
             </RowTemplate>
         </MudTable>

@@ -87,8 +87,8 @@
         //   3. fallback to the same origin (works when API is reverse-proxied behind the web host)
         var apiBase = Configuration["ApiPublicUrl"]
                       ?? Configuration["ApiBaseUrl"]
-                      ?? Navigation?.BaseUri
-                      ?? "http://localhost:5000";
+                      ?? Navigation?.BaseUri?.TrimEnd('/')
+                      ?? throw new InvalidOperationException("ApiBaseUrl must be configured.");
         _httpClient = new HttpClient { BaseAddress = new Uri(apiBase) };
     }
 

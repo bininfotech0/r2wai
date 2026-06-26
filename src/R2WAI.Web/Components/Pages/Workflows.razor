@@ -21,7 +21,7 @@
                 </div>
                 <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">AI Workflow Generator</MudText>
             </div>
-            <MudIconButton Icon="@Icons.Material.Outlined.Close" Size="Size.Small" OnClick="@(() => _showGenerator = false)" />
+            <MudIconButton Icon="@Icons.Material.Outlined.Close" Size="Size.Small" OnClick="@(() => _showGenerator = false)" aria-label="Close generator" />
         </div>
 
         @if (!_generating)

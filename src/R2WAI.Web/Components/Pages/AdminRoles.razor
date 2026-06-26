@@ -47,7 +47,7 @@
                                     @if (!role.IsSystem)
                                     {
                                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                                       OnClick="@(() => OpenEditRoleDialog(role))" />
+                                                       OnClick="@(() => OpenEditRoleDialog(role))" aria-label="Edit role" />
                                     }
                                 </div>
                             </div>

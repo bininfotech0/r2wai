@@ -2,9 +2,10 @@ using FluentValidation;
 
 namespace R2WAI.Application.Features.Admin.Commands;
 
-public record DeleteUserCommand : IRequest<Unit>
+public record DeleteUserCommand : IRequest<Unit>, IAuthorizedRequest
 {
     public Guid Id { get; init; }
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
 }
 
 public class DeleteUserCommandValidator : AbstractValidator<DeleteUserCommand>

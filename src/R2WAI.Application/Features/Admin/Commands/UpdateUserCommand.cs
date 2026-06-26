@@ -2,12 +2,13 @@ using FluentValidation;
 
 namespace R2WAI.Application.Features.Admin.Commands;
 
-public record UpdateUserCommand : IRequest<UserDto>
+public record UpdateUserCommand : IRequest<UserDto>, IAuthorizedRequest
 {
     public Guid Id { get; init; }
     public string FirstName { get; init; } = string.Empty;
     public string LastName { get; init; } = string.Empty;
     public string? AvatarUrl { get; init; }
+    public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
 }
 
 public class UpdateUserCommandValidator : AbstractValidator<UpdateUserCommand>

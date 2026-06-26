@@ -61,7 +61,6 @@ public class ChatbotsController(
 
     public record ChatbotChatRequest(string Message);
 
-    [AllowAnonymous]
     [HttpPost("{id:guid}/chat")]
     public async Task<IActionResult> Chat(Guid id, [FromBody] ChatbotChatRequest request, CancellationToken ct = default)
     {

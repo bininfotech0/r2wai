@@ -1,9 +1,10 @@
 namespace R2WAI.Application.Features.Admin.Commands;
 
-public record UpdateSettingsCommand : IRequest<SettingsDto>
+public record UpdateSettingsCommand : IRequest<SettingsDto>, IAuthorizedRequest
 {
     public string? TenantSettings { get; init; }
     public string? Features { get; init; }
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
 }
 
 public class UpdateSettingsCommandHandler(

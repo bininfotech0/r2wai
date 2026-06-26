@@ -71,7 +71,7 @@ public class IntegrationsController(IMediator mediator, IHttpClientFactory httpC
             var integration = await mediator.Send(query, ct);
 
             if (string.IsNullOrEmpty(integration.EndpointUrl))
-                return Ok(new { success = false, message = "No endpoint URL configured for this integration." });
+                return UnprocessableEntity(new { success = false, message = "No endpoint URL configured for this integration." });
 
             var client = httpClientFactory.CreateClient();
             client.Timeout = TimeSpan.FromSeconds(10);
@@ -88,22 +88,24 @@ public class IntegrationsController(IMediator mediator, IHttpClientFactory httpC
                 if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
                     return Ok(new { success = true, message = $"Connection to '{integration.Name}' is reachable (HTTP {(int)response.StatusCode})." });
 
-                return Ok(new { success = false, message = $"Endpoint returned HTTP {(int)response.StatusCode} {response.ReasonPhrase}." });
+                return UnprocessableEntity(new { success = false, message = $"Endpoint returned HTTP {(int)response.StatusCode} {response.ReasonPhrase}." });
             }
 
             return Ok(new { success = true, message = $"Connection to '{integration.Name}' validated (type: {integration.Type})." });
         }
         catch (TaskCanceledException)
         {
-            return Ok(new { success = false, message = "Connection test timed out after 10 seconds." });
+            return UnprocessableEntity(new { success = false, message = "Connection test timed out after 10 seconds." });
         }
         catch (HttpRequestException ex)
         {
-            return Ok(new { success = false, message = $"Connection failed: {ex.Message}" });
+            logger.LogWarning(ex, "Integration connection test failed for {IntegrationId}", id);
+            return UnprocessableEntity(new { success = false, message = $"Connection failed: {ex.Message}" });
         }
         catch (Exception ex)
         {
-            return Ok(new { success = false, message = $"Connection test failed: {ex.Message}" });
+            logger.LogWarning(ex, "Integration connection test failed for {IntegrationId}", id);
+            return UnprocessableEntity(new { success = false, message = $"Connection test failed: {ex.Message}" });
         }
     }
 

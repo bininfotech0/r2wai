@@ -1,6 +1,9 @@
 namespace R2WAI.Application.Features.Admin.Queries;
 
-public record GetSettingsQuery : IRequest<SettingsDto> { }
+public record GetSettingsQuery : IRequest<SettingsDto>, IAuthorizedRequest
+{
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
+}
 
 public class GetSettingsQueryHandler(
     IRepository<Tenant> tenantRepo,

@@ -38,18 +38,18 @@ spec:
               service:
                 name: r2wai-api
                 port:
-                  number: 80
+                  number: 8080
           - path: /hubs
             pathType: Prefix
             backend:
               service:
                 name: r2wai-api
                 port:
-                  number: 80
+                  number: 8080
           - path: /
             pathType: Prefix
             backend:
               service:
                 name: r2wai-web
                 port:
-                  number: 80
+                  number: 8080

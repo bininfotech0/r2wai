@@ -59,8 +59,43 @@ jobs:
 
       - name: Deploy to Kubernetes
         if: github.ref == 'refs/heads/main' && vars.KUBECONFIG != ''
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
         run: |
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
+          echo "$KUBECONFIG_DATA" | base64 -d > kubeconfig
+
+          # Record current revision for rollback
+          CURRENT_API_REV=$(kubectl --kubeconfig kubeconfig rollout history deployment/r2wai-api -n r2wai 2>/dev/null | tail -2 | head -1 | awk '{print $1}' || echo "0")
+          echo "Current API revision: $CURRENT_API_REV"
+
+          # Apply manifests
           kubectl --kubeconfig kubeconfig apply -k k8s/
-          kubectl --kubeconfig kubeconfig rollout status deployment/r2wai-api -n r2wai
-          kubectl --kubeconfig kubeconfig rollout status deployment/r2wai-web -n r2wai
+
+          # Wait for rollout with timeout
+          if ! kubectl --kubeconfig kubeconfig rollout status deployment/r2wai-api -n r2wai --timeout=300s; then
+            echo "::error::API deployment rollout failed — initiating rollback"
+            kubectl --kubeconfig kubeconfig rollout undo deployment/r2wai-api -n r2wai
+            kubectl --kubeconfig kubeconfig rollout status deployment/r2wai-api -n r2wai --timeout=120s
+            exit 1
+          fi
+
+          if ! kubectl --kubeconfig kubeconfig rollout status deployment/r2wai-web -n r2wai --timeout=300s; then
+            echo "::error::Web deployment rollout failed — initiating rollback"
+            kubectl --kubeconfig kubeconfig rollout undo deployment/r2wai-web -n r2wai
+            kubectl --kubeconfig kubeconfig rollout status deployment/r2wai-web -n r2wai --timeout=120s
+            exit 1
+          fi
+
+          # Post-deployment smoke test
+          API_POD=$(kubectl --kubeconfig kubeconfig get pods -n r2wai -l component=api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          if [ -n "$API_POD" ]; then
+            echo "Running post-deployment smoke test..."
+            HEALTH=$(kubectl --kubeconfig kubeconfig exec -n r2wai "$API_POD" -- curl -sf http://localhost:8080/health 2>/dev/null || echo "FAILED")
+            if echo "$HEALTH" | grep -q "healthy"; then
+              echo "Smoke test passed: API is healthy"
+            else
+              echo "::warning::Smoke test returned unexpected response: $HEALTH"
+            fi
+          fi
+
+          rm -f kubeconfig

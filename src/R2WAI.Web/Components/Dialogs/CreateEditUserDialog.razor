@@ -91,13 +91,15 @@
         }
     }
 
+    private static readonly System.Text.RegularExpressions.Regex EmailRegex = new(
+        @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
     private string ValidateEmail(string email)
     {
         if (string.IsNullOrWhiteSpace(email))
             return "Email is required";
-        if (!email.Contains('@'))
-            return "Email must contain @";
-        if (email.Length < 5 || !email.Contains('.'))
+        if (!EmailRegex.IsMatch(email))
             return "Please enter a valid email address";
         return null!;
     }

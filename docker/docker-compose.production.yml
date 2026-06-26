@@ -4,10 +4,10 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.web
     ports:
-      - "8080:80"
+      - "8080:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ApiBaseUrl=http://r2wai-api
+      - ApiBaseUrl=http://r2wai-api:8080
     depends_on:
       r2wai-api:
         condition: service_healthy
@@ -24,7 +24,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.api
     ports:
-      - "5000:80"
+      - "5000:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=r2wai;Username=r2wai;Password=${DB_PASSWORD}
@@ -44,7 +44,7 @@ services:
       - CORS__AllowedOrigins__1=${CORS_ORIGIN_1:-}
       - CORS__AllowedOrigins__2=${CORS_ORIGIN_2:-}
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:80/health/ready || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

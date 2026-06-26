@@ -8,7 +8,7 @@ metadata:
     component: web
 spec:
   ports:
-    - port: 80
+    - port: 8080
       targetPort: 80
       protocol: TCP
       name: http
@@ -42,10 +42,10 @@ spec:
         fsGroup: 101
       containers:
         - name: web
-          image: r2wai-web:latest
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/r2wai/r2wai-web:latest
+          imagePullPolicy: Always
           ports:
-            - containerPort: 80
+            - containerPort: 8080
               name: http
           resources:
             requests:
@@ -57,7 +57,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 80
+              port: 8080
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 3
@@ -65,8 +65,16 @@ spec:
           readinessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12

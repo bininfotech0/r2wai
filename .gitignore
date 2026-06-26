@@ -26,6 +26,19 @@ dist/
 
 # Docker
 docker/.env
+docker/.env.production
+
+# Secrets & credentials
+*.pem
+*.key
+*.pfx
+*.p12
+credentials.json
+secrets.json
+appsettings.*.local.json
+
+# Backups
+docker/backups/
 
 # Build
 packages/

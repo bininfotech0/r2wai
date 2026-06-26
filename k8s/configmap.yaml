@@ -8,7 +8,8 @@ metadata:
     component: config
 data:
   ASPNETCORE_ENVIRONMENT: Production
-  ASPNETCORE_URLS: http://+:80
+  ASPNETCORE_URLS: http://+:8080
+  ApiBaseUrl: http://r2wai-api:8080
   ConnectionStrings__Redis: redis:6379
   Storage__Provider: MinIO
   Storage__MinIO__Endpoint: minio:9000

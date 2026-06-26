@@ -236,7 +236,9 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
             var provider = (model.Provider ?? "").ToLowerInvariant();
             if (provider == "ollama")
             {
-                var endpoint = model.Endpoint ?? "http://localhost:11434";
+                if (string.IsNullOrEmpty(model.Endpoint))
+                    return UnprocessableEntity(new { success = false, message = "Ollama endpoint not configured for this model." });
+                var endpoint = model.Endpoint;
                 var ollamaUri = new Uri($"{endpoint.TrimEnd('/')}/v1");
                 var ollamaClient = new OpenAIClient(new ApiKeyCredential("ollama"), new OpenAIClientOptions { Endpoint = ollamaUri });
                 builder.AddOpenAIChatCompletion(model.ModelId, ollamaClient);
@@ -244,7 +246,7 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
             else if (provider is "openai" or "azureopenai")
             {
                 if (string.IsNullOrEmpty(apiKey))
-                    return Ok(new { success = false, message = "No API key configured for this model." });
+                    return UnprocessableEntity(new { success = false, message = "No API key configured for this model." });
 
                 if (!string.IsNullOrEmpty(model.Endpoint))
                 {
@@ -256,7 +258,7 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
             }
             else
             {
-                return Ok(new { success = false, message = $"Unsupported provider: {model.Provider}" });
+                return UnprocessableEntity(new { success = false, message = $"Unsupported provider: {model.Provider}" });
             }
 
             var kernel = builder.Build();
@@ -270,7 +272,8 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
         }
         catch (Exception ex)
         {
-            return Ok(new { success = false, message = $"Connection failed: {ex.Message}" });
+            logger.LogWarning(ex, "Model connection test failed for {ModelId}", id);
+            return UnprocessableEntity(new { success = false, message = $"Connection failed: {ex.Message}" });
         }
     }
 

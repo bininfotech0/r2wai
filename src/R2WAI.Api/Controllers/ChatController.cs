@@ -115,6 +115,10 @@ public class ChatController(IMediator mediator, IAIService aiService, ILogger<Ch
     {
         logger.LogInformation("Streaming chat response");
 
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        var streamCt = linkedCts.Token;
+
         Response.ContentType = "text/event-stream";
         Response.Headers["Cache-Control"] = "no-cache";
         Response.Headers["Connection"] = "keep-alive";
@@ -123,15 +127,15 @@ public class ChatController(IMediator mediator, IAIService aiService, ILogger<Ch
         var encoding = Encoding.UTF8;
 
         await foreach (var chunk in aiService.StreamChatAsync(
-            request.Message, request.ConversationHistory, request.SystemPrompt, ct))
+            request.Message, request.ConversationHistory, request.SystemPrompt, streamCt))
         {
             var sseData = $"data: {System.Text.Json.JsonSerializer.Serialize(new { content = chunk })}\n\n";
-            await writer.WriteAsync(encoding.GetBytes(sseData), ct);
-            await writer.FlushAsync(ct);
+            await writer.WriteAsync(encoding.GetBytes(sseData), streamCt);
+            await writer.FlushAsync(streamCt);
         }
 
-        await writer.WriteAsync(encoding.GetBytes("data: [DONE]\n\n"), ct);
-        await writer.FlushAsync(ct);
+        await writer.WriteAsync(encoding.GetBytes("data: [DONE]\n\n"), streamCt);
+        await writer.FlushAsync(streamCt);
     }
 
     [HttpGet("suggested-actions")]

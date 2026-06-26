@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace R2WAI.Application.Features.Admin.Commands;
 
-public record CreateUserCommand : IRequest<UserDto>
+public record CreateUserCommand : IRequest<UserDto>, IAuthorizedRequest
 {
     public string ExternalId { get; init; } = string.Empty;
     public string Email { get; init; } = string.Empty;
@@ -10,6 +10,7 @@ public record CreateUserCommand : IRequest<UserDto>
     public string LastName { get; init; } = string.Empty;
     public string? AvatarUrl { get; init; }
     public string? Password { get; init; }
+    public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
 }
 
 public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>

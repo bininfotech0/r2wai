@@ -232,7 +232,8 @@ public class AuthController(
 
         var tokenBytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
         var token = Convert.ToBase64String(tokenBytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
-        user.SetPasswordResetToken(token, DateTime.UtcNow.AddHours(1));
+        var tokenHash = jwtService.HashRefreshToken(token);
+        user.SetPasswordResetToken(tokenHash, DateTime.UtcNow.AddHours(1));
         await dbContext.SaveChangesAsync(ct);
 
         var emailService = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.IEmailService>();
@@ -249,7 +250,8 @@ public class AuthController(
         if (user is null)
             return BadRequest(new { error = "Invalid reset request." });
 
-        if (user.PasswordResetToken != request.Token || user.PasswordResetExpiresAt < DateTime.UtcNow)
+        var incomingTokenHash = jwtService.HashRefreshToken(request.Token);
+        if (user.PasswordResetToken != incomingTokenHash || user.PasswordResetExpiresAt < DateTime.UtcNow)
             return BadRequest(new { error = "Invalid or expired reset token." });
 
         if (request.NewPassword.Length < 8)
@@ -309,28 +311,8 @@ public class AuthController(
             return Ok(new LoginResponse(token, refreshToken, expiresAt, userInfo));
         }
 
-        tenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        roles = ["User"];
-        userInfo = new UserInfo(
-            entraUser.Id,
-            entraUser.Email,
-            entraUser.FirstName,
-            entraUser.LastName,
-            $"{entraUser.FirstName} {entraUser.LastName}".Trim(),
-            null,
-            "User",
-            roles,
-            tenantId,
-            true,
-            DateTime.UtcNow,
-            DateTime.UtcNow,
-            null);
-
-        var (entraToken, entraExpiresAt) = await jwtService.GenerateTokenAsync(
-            userInfo.Id, tenantId, userInfo.Email, roles, null, ct);
-
-        var entraRefreshToken = jwtService.GenerateRefreshToken();
-        return Ok(new LoginResponse(entraToken, entraRefreshToken, entraExpiresAt, userInfo));
+        logger.LogWarning("Entra ID login rejected: no pre-provisioned user for {Email}", entraUser.Email);
+        return Unauthorized(new { error = "User account not provisioned. Contact your administrator." });
     }
 
     private static UserInfo BuildUserInfo(User user, string[] roles)

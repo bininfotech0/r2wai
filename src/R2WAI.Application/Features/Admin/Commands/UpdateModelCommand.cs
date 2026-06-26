@@ -2,8 +2,9 @@ using FluentValidation;
 
 namespace R2WAI.Application.Features.Admin.Commands;
 
-public record UpdateModelCommand : IRequest<ModelConfigDto>
+public record UpdateModelCommand : IRequest<ModelConfigDto>, IAuthorizedRequest
 {
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
     public Guid Id { get; init; }
     public string Name { get; init; } = string.Empty;
     public string Provider { get; init; } = string.Empty;

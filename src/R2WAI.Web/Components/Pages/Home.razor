@@ -53,7 +53,7 @@
                     <MudIcon Icon="@Icons.Material.Outlined.Search" Size="Size.Small" Style="vertical-align: middle;" />
                     Search Results
                 </MudText>
-                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="ClearSearchResults" />
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="ClearSearchResults" aria-label="Clear search results" />
             </div>
             @foreach (var group in _searchResults.GroupBy(r => r.KnowledgeBaseName))
             {

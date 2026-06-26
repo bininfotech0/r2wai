@@ -31,7 +31,9 @@ builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredServ
 
 builder.Services.AddHttpClient("R2WAI", client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5000");
+    var apiUrl = builder.Configuration["ApiBaseUrl"]
+        ?? throw new InvalidOperationException("ApiBaseUrl must be configured in appsettings.json or environment variables.");
+    client.BaseAddress = new Uri(apiUrl);
 });
 
 builder.Services.AddScoped<AuthenticatedHttpClient>();

@@ -286,7 +286,8 @@ public class SemanticKernelService : IAIService
 
             if (provider == "ollama")
             {
-                var ollamaEndpoint = _configuration["AI:Ollama:Endpoint"] ?? "http://localhost:11434";
+                var ollamaEndpoint = _configuration["AI:Ollama:Endpoint"]
+                    ?? throw new InvalidOperationException("AI:Ollama:Endpoint must be configured when using Ollama provider.");
                 var ollamaModel = _configuration["AI:Ollama:ModelId"] ?? "qwen2.5-coder:7b";
                 var embeddingModel = _configuration["AI:Ollama:EmbeddingModel"] ?? ollamaModel;
                 var ollamaV1 = new Uri($"{ollamaEndpoint.TrimEnd('/')}/v1");

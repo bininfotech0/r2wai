@@ -14,7 +14,21 @@ public class TransactionBehavior<TRequest, TResponse>(IUnitOfWork unitOfWork, IL
             return await next();
 
         var requestName = typeof(TRequest).Name;
-        logger.LogInformation("Executing {RequestName} with transactional guarantee", requestName);
-        return await next();
+        logger.LogInformation("Beginning transaction for {RequestName}", requestName);
+
+        await unitOfWork.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var response = await next();
+            await unitOfWork.CommitTransactionAsync(cancellationToken);
+            logger.LogInformation("Committed transaction for {RequestName}", requestName);
+            return response;
+        }
+        catch
+        {
+            await unitOfWork.RollbackTransactionAsync(cancellationToken);
+            logger.LogWarning("Rolled back transaction for {RequestName}", requestName);
+            throw;
+        }
     }
 }

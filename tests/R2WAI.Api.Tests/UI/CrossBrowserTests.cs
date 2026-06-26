@@ -20,7 +20,10 @@ public class CrossBrowserTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", "0");
+        var defaultPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ms-playwright");
+        Environment.SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", defaultPath);
 
         var webProjectDir = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "R2WAI.Web"));

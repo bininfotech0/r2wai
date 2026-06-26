@@ -9,6 +9,7 @@
 @inject IJSRuntime JS
 @inject AuthenticatedHttpClient Http
 @inject IDialogService Dialog
+@inject ILogger<MainLayout> Logger
 @attribute [Authorize]
 
 <MudThemeProvider Theme="ThemeService.CurrentTheme" IsDarkMode="ThemeService.IsDarkMode" />
@@ -178,7 +179,7 @@
         <div class="pa-4 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
             <MudText Typo="Typo.caption" Align="Align.Center"
                      Style="color: rgba(255,255,255,0.2); font-size: 0.625rem; letter-spacing: 0.05em;">
-                R2WAI v2.0
+                R2WAI @(Configuration["App:Version"] ?? "v2.0")
             </MudText>
         </div>
     </MudDrawer>
@@ -268,24 +269,20 @@
                     StateHasChanged();
                 }
             }
-            catch { _userEmail = "User"; }
+            catch (Exception ex) { Logger.LogDebug(ex, "Failed to load user email"); _userEmail = "User"; }
 
-            try { await LoadThemePreference(); } catch { }
-            try { await RegisterKeyboardShortcuts(); } catch { }
-            try { await ConnectToNotificationHub(); } catch { }
-            try { await LoadPendingApprovalCount(); } catch { }
+            try { await LoadThemePreference(); } catch (Exception ex) { Logger.LogDebug(ex, "Theme preference load failed"); }
+            try { await RegisterKeyboardShortcuts(); } catch (Exception ex) { Logger.LogDebug(ex, "Keyboard shortcuts registration failed"); }
+            try { await ConnectToNotificationHub(); } catch (Exception ex) { Logger.LogWarning(ex, "Notification hub connection failed"); }
+            try { await LoadPendingApprovalCount(); } catch (Exception ex) { Logger.LogDebug(ex, "Pending approval count load failed"); }
         }
     }
 
     private async Task LoadPendingApprovalCount()
     {
-        try
-        {
-            var result = await Http.GetFromJsonAsync<ApprovalCountResult>("/api/v1/approvals/pending");
-            _pendingApprovalCount = result?.Items?.Count ?? 0;
-            StateHasChanged();
-        }
-        catch { }
+        var result = await Http.GetFromJsonAsync<ApprovalCountResult>("/api/v1/approvals/pending");
+        _pendingApprovalCount = result?.Items?.Count ?? 0;
+        StateHasChanged();
     }
 
     private async Task LoadThemePreference()
@@ -297,6 +294,12 @@
                 ThemeService.SetDarkMode(true);
             else if (saved is "false" && ThemeService.IsDarkMode)
                 ThemeService.SetDarkMode(false);
+            else if (saved is null)
+            {
+                var prefersDark = await JS.InvokeAsync<bool>("eval", "window.matchMedia('(prefers-color-scheme: dark)').matches");
+                if (prefersDark && !ThemeService.IsDarkMode)
+                    ThemeService.SetDarkMode(true);
+            }
         }
         catch { }
     }
@@ -454,7 +457,7 @@
             var apiBase = Configuration["ApiPublicUrl"]
                 ?? Configuration["ApiBaseUrl"]
                 ?? Configuration["SignalR:HubUrl"]
-                ?? "http://localhost:5000";
+                ?? Navigation.BaseUri.TrimEnd('/');
             var token = await TokenStorage.GetTokenAsync();
 
             _hubConnection = new Microsoft.AspNetCore.SignalR.Client.HubConnectionBuilder()
@@ -487,6 +490,36 @@
                     StateHasChanged();
                 });
             });
+
+            _hubConnection.Reconnecting += _ =>
+            {
+                InvokeAsync(() =>
+                {
+                    Snackbar.Add("Connection lost. Reconnecting...", Severity.Warning);
+                    StateHasChanged();
+                });
+                return Task.CompletedTask;
+            };
+
+            _hubConnection.Reconnected += _ =>
+            {
+                InvokeAsync(() =>
+                {
+                    Snackbar.Add("Connection restored.", Severity.Success);
+                    StateHasChanged();
+                });
+                return Task.CompletedTask;
+            };
+
+            _hubConnection.Closed += _ =>
+            {
+                InvokeAsync(() =>
+                {
+                    Snackbar.Add("Connection lost. Please refresh the page.", Severity.Error);
+                    StateHasChanged();
+                });
+                return Task.CompletedTask;
+            };
 
             await _hubConnection.StartAsync();
         }

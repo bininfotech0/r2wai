@@ -17,10 +17,14 @@ RUN dotnet publish "R2WAI.Api.csproj" -c Release -o /app/publish
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+RUN groupadd -r appuser && useradd -r -g appuser -s /sbin/nologin appuser
 WORKDIR /app
-EXPOSE 80
-EXPOSE 443
+EXPOSE 8080
 ENV ASPNETCORE_ENVIRONMENT=Production
-ENV ASPNETCORE_URLS=http://+:80
+ENV ASPNETCORE_URLS=http://+:8080
 COPY --from=publish /app/publish .
+USER appuser
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 ENTRYPOINT ["dotnet", "R2WAI.Api.dll"]

@@ -110,7 +110,7 @@ else
                     <div class="d-flex justify-space-between align-center mb-3">
                         <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Edit Step</MudText>
                         <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                                       OnClick="@(() => _editingStep = null)" />
+                                       OnClick="@(() => _editingStep = null)" aria-label="Close step editor" />
                     </div>
                     <MudTextField @bind-Value="_editingStep.Name" Label="Step Name" Variant="Variant.Outlined"
                                   Margin="Margin.Dense" Class="mb-3" />

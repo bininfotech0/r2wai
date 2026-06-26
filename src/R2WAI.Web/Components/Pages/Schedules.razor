@@ -87,9 +87,9 @@ else
                         </MudButton>
                         <MudSpacer />
                         <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
-                                       OnClick="@(() => EditSchedule(schedule))" />
+                                       OnClick="@(() => EditSchedule(schedule))" aria-label="Edit schedule" />
                         <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
-                                       OnClick="@(() => DeleteSchedule(schedule))" />
+                                       OnClick="@(() => DeleteSchedule(schedule))" aria-label="Delete schedule" />
                     </MudCardActions>
                 </MudCard>
             </MudItem>

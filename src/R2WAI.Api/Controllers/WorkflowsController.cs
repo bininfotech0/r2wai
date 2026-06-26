@@ -212,38 +212,41 @@ public class WorkflowsController(
         CancellationToken ct = default)
     {
         var configuredSecret = configuration["Webhooks:Secret"];
-        if (!string.IsNullOrEmpty(configuredSecret))
+        if (string.IsNullOrEmpty(configuredSecret))
         {
-            if (!string.IsNullOrEmpty(webhookSignature) && !string.IsNullOrEmpty(webhookTimestamp))
-            {
-                if (!long.TryParse(webhookTimestamp, out var ts)
-                    || Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - ts) > 300)
-                {
-                    logger.LogWarning("Webhook rejected: timestamp too old or invalid for slug {Slug}", slug);
-                    return Unauthorized(new { error = "Webhook timestamp expired or invalid" });
-                }
+            logger.LogError("Webhook rejected: no webhook secret configured — all webhooks blocked until Webhooks:Secret is set");
+            return StatusCode(503, new { error = "Webhook endpoint not configured. Contact administrator." });
+        }
 
-                var body = payload is not null ? System.Text.Json.JsonSerializer.Serialize(payload) : "";
-                var signPayload = $"{webhookTimestamp}.{body}";
-                using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(configuredSecret));
-                var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(signPayload));
-                var expected = Convert.ToHexStringLower(hash);
-
-                if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-                    System.Text.Encoding.UTF8.GetBytes(expected),
-                    System.Text.Encoding.UTF8.GetBytes(webhookSignature)))
-                {
-                    logger.LogWarning("Webhook rejected: HMAC signature mismatch for slug {Slug}", slug);
-                    return Unauthorized(new { error = "Invalid webhook signature" });
-                }
-            }
-            else if (string.IsNullOrEmpty(webhookSecret) || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-                System.Text.Encoding.UTF8.GetBytes(configuredSecret),
-                System.Text.Encoding.UTF8.GetBytes(webhookSecret)))
+        if (!string.IsNullOrEmpty(webhookSignature) && !string.IsNullOrEmpty(webhookTimestamp))
+        {
+            if (!long.TryParse(webhookTimestamp, out var ts)
+                || Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - ts) > 300)
             {
-                logger.LogWarning("Webhook rejected: invalid or missing secret for slug {Slug}", slug);
-                return Unauthorized(new { error = "Invalid or missing webhook secret" });
+                logger.LogWarning("Webhook rejected: timestamp too old or invalid for slug {Slug}", slug);
+                return Unauthorized(new { error = "Webhook timestamp expired or invalid" });
             }
+
+            var body = payload is not null ? System.Text.Json.JsonSerializer.Serialize(payload) : "";
+            var signPayload = $"{webhookTimestamp}.{body}";
+            using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(configuredSecret));
+            var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(signPayload));
+            var expected = Convert.ToHexStringLower(hash);
+
+            if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                System.Text.Encoding.UTF8.GetBytes(expected),
+                System.Text.Encoding.UTF8.GetBytes(webhookSignature)))
+            {
+                logger.LogWarning("Webhook rejected: HMAC signature mismatch for slug {Slug}", slug);
+                return Unauthorized(new { error = "Invalid webhook signature" });
+            }
+        }
+        else if (string.IsNullOrEmpty(webhookSecret) || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(configuredSecret),
+            System.Text.Encoding.UTF8.GetBytes(webhookSecret)))
+        {
+            logger.LogWarning("Webhook rejected: invalid or missing secret for slug {Slug}", slug);
+            return Unauthorized(new { error = "Invalid or missing webhook secret" });
         }
 
         var workflow = await dbContext.Workflows

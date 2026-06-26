@@ -21,6 +21,7 @@ public class AuthenticatedHttpClient
     public AuthenticatedHttpClient(IHttpClientFactory factory, CircuitTokenProvider tokenProvider, TokenStorageService tokenStorage)
     {
         _http = factory.CreateClient("R2WAI");
+        _http.Timeout = TimeSpan.FromSeconds(30);
         _tokenProvider = tokenProvider;
         _tokenStorage = tokenStorage;
     }
@@ -141,6 +142,14 @@ public class AuthenticatedHttpClient
                 catch { }
             }
             NotifySessionExpired();
+            return default;
+        }
+        catch (HttpRequestException) when (typeof(T).IsClass)
+        {
+            return default;
+        }
+        catch (TaskCanceledException)
+        {
             return default;
         }
     }

@@ -1,6 +1,6 @@
 namespace R2WAI.Application.Features.Admin.Queries;
 
-public record GetAuditLogsQuery : IRequest<PagedResult<AuditLogDto>>
+public record GetAuditLogsQuery : IRequest<PagedResult<AuditLogDto>>, IAuthorizedRequest
 {
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 50;
@@ -9,6 +9,7 @@ public record GetAuditLogsQuery : IRequest<PagedResult<AuditLogDto>>
     public string? EntityType { get; init; }
     public DateTime? From { get; init; }
     public DateTime? To { get; init; }
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
 }
 
 public class GetAuditLogsQueryHandler(

@@ -10,7 +10,7 @@ public class SecurityHeadersMiddleware
         _next = next;
 
         _csp = configuration["Security:ContentSecurityPolicy"]
-            ?? "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' ws://localhost:* wss://localhost:* ws://127.0.0.1:* wss://127.0.0.1:*; frame-ancestors 'none'; form-action 'self'; base-uri 'self'";
+            ?? "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' ws://localhost:* wss://localhost:* ws://127.0.0.1:* wss://127.0.0.1:*; frame-ancestors 'none'; form-action 'self'; base-uri 'self'";
     }
 
     public async Task InvokeAsync(HttpContext context)

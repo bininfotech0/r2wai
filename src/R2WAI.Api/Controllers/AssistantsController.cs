@@ -117,17 +117,21 @@ public class AssistantsController(
     [HttpPost("{id:guid}/chat/stream")]
     public async Task StreamChat(Guid id, [FromBody] ChatWithAssistantCommand command, CancellationToken ct = default)
     {
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        var streamCt = linkedCts.Token;
+
         Response.ContentType = "text/event-stream";
         Response.Headers.CacheControl = "no-cache";
         Response.Headers.Connection = "keep-alive";
 
         var assistant = await dbContext.AssistantDefinitions
             .Include(a => a.KnowledgeBase)
-            .FirstOrDefaultAsync(a => a.Id == id, ct);
+            .FirstOrDefaultAsync(a => a.Id == id, streamCt);
 
         if (assistant is null)
         {
-            await WriteSseEventAsync("error", new { message = "Assistant not found" }, ct);
+            await WriteSseEventAsync("error", new { message = "Assistant not found" }, streamCt);
             return;
         }
 
@@ -139,7 +143,7 @@ public class AssistantsController(
             try
             {
                 var searchResult = await knowledgeBaseService.SearchKnowledgeBaseAsync(
-                    assistant.KnowledgeBaseId.Value, command.Message, 1, 5, ct);
+                    assistant.KnowledgeBaseId.Value, command.Message, 1, 5, streamCt);
 
                 if (searchResult.Items.Count > 0)
                 {
@@ -161,17 +165,17 @@ public class AssistantsController(
 
         var systemPrompt = assistant.SystemPrompt ?? "You are a helpful AI assistant.";
 
-        await foreach (var chunk in aiService.StreamChatAsync(command.Message, context, systemPrompt, ct))
+        await foreach (var chunk in aiService.StreamChatAsync(command.Message, context, systemPrompt, streamCt))
         {
-            await WriteSseEventAsync("chunk", new { content = chunk }, ct);
+            await WriteSseEventAsync("chunk", new { content = chunk }, streamCt);
         }
 
         if (citations is { Count: > 0 })
         {
-            await WriteSseEventAsync("citations", new { citations }, ct);
+            await WriteSseEventAsync("citations", new { citations }, streamCt);
         }
 
-        await WriteSseEventAsync("done", new { message = "Stream complete" }, ct);
+        await WriteSseEventAsync("done", new { message = "Stream complete" }, streamCt);
     }
 
     private async Task WriteSseEventAsync(string eventType, object data, CancellationToken ct)

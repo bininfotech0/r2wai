@@ -199,11 +199,18 @@ public abstract class BrowserTestBase : IAsyncLifetime
         }
         catch (TimeoutException)
         {
-            await Page.GotoAsync($"{BaseUrl}{path}", new PageGotoOptions
+            try
             {
-                WaitUntil = WaitUntilState.Commit,
-                Timeout = 30000
-            });
+                await Page.GotoAsync($"{BaseUrl}{path}", new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.Commit,
+                    Timeout = 30000
+                });
+            }
+            catch (TimeoutException)
+            {
+                await Page.ReloadAsync(new PageReloadOptions { Timeout = 30000 });
+            }
         }
         await Page.WaitForTimeoutAsync(waitMs);
     }

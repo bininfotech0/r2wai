@@ -1,13 +1,16 @@
 using System.Collections.Concurrent;
+using R2WAI.Application.Common.Interfaces;
 
 namespace R2WAI.Api.Middleware;
 
 public class RateLimitingMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly ConcurrentDictionary<string, RateLimitEntry> _clients = new();
     private readonly int _maxRequests;
     private readonly TimeSpan _window;
+
+    // In-memory fallback — used only when Redis is unavailable
+    private readonly ConcurrentDictionary<string, RateLimitEntry> _fallbackClients = new();
 
     public RateLimitingMiddleware(RequestDelegate next, int maxRequests = 100, int windowSeconds = 60)
     {
@@ -19,30 +22,70 @@ public class RateLimitingMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var clientKey = GetClientKey(context);
-        var now = DateTime.UtcNow;
+        var cache = context.RequestServices.GetService<ICacheService>();
 
-        var entry = _clients.GetOrAdd(clientKey, _ => new RateLimitEntry(now));
+        int count;
+        DateTime windowStart;
 
-        if (now - entry.WindowStart > _window)
+        if (cache is not null)
         {
-            entry.Reset(now);
+            (count, windowStart) = await GetOrIncrementDistributed(cache, clientKey);
         }
-
-        var count = entry.Increment();
+        else
+        {
+            (count, windowStart) = GetOrIncrementLocal(clientKey);
+        }
 
         context.Response.Headers["X-RateLimit-Limit"] = _maxRequests.ToString();
         context.Response.Headers["X-RateLimit-Remaining"] = Math.Max(0, _maxRequests - count).ToString();
-        context.Response.Headers["X-RateLimit-Reset"] = new DateTimeOffset(entry.WindowStart + _window).ToUnixTimeSeconds().ToString();
+        context.Response.Headers["X-RateLimit-Reset"] = new DateTimeOffset(windowStart + _window).ToUnixTimeSeconds().ToString();
 
         if (count > _maxRequests)
         {
             context.Response.StatusCode = 429;
-            context.Response.Headers["Retry-After"] = ((int)(_window - (now - entry.WindowStart)).TotalSeconds + 1).ToString();
+            context.Response.Headers["Retry-After"] = ((int)(_window - (DateTime.UtcNow - windowStart)).TotalSeconds + 1).ToString();
             await context.Response.WriteAsJsonAsync(new { error = "Rate limit exceeded. Please try again later." });
             return;
         }
 
         await _next(context);
+    }
+
+    private async Task<(int count, DateTime windowStart)> GetOrIncrementDistributed(ICacheService cache, string clientKey)
+    {
+        var cacheKey = $"ratelimit:{clientKey}";
+        try
+        {
+            var entry = await cache.GetAsync<RateLimitData>(cacheKey);
+            var now = DateTime.UtcNow;
+
+            if (entry is null || now - entry.WindowStart > _window)
+            {
+                entry = new RateLimitData { WindowStart = now, Count = 1 };
+                await cache.SetAsync(cacheKey, entry, _window);
+                return (1, now);
+            }
+
+            entry.Count++;
+            var remaining = _window - (now - entry.WindowStart);
+            await cache.SetAsync(cacheKey, entry, remaining > TimeSpan.Zero ? remaining : _window);
+            return (entry.Count, entry.WindowStart);
+        }
+        catch
+        {
+            return GetOrIncrementLocal(clientKey);
+        }
+    }
+
+    private (int count, DateTime windowStart) GetOrIncrementLocal(string clientKey)
+    {
+        var now = DateTime.UtcNow;
+        var entry = _fallbackClients.GetOrAdd(clientKey, _ => new RateLimitEntry(now));
+
+        if (now - entry.WindowStart > _window)
+            entry.Reset(now);
+
+        return (entry.Increment(), entry.WindowStart);
     }
 
     private static string GetClientKey(HttpContext context)
@@ -52,6 +95,12 @@ public class RateLimitingMiddleware
             return $"user:{userId}";
 
         return $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+    }
+
+    private class RateLimitData
+    {
+        public DateTime WindowStart { get; set; }
+        public int Count { get; set; }
     }
 
     private class RateLimitEntry

@@ -2,8 +2,9 @@ using FluentValidation;
 
 namespace R2WAI.Application.Features.Admin.Commands;
 
-public record CreateModelCommand : IRequest<ModelConfigDto>
+public record CreateModelCommand : IRequest<ModelConfigDto>, IAuthorizedRequest
 {
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
     public string Name { get; init; } = string.Empty;
     public string Provider { get; init; } = string.Empty;
     public string ModelId { get; init; } = string.Empty;

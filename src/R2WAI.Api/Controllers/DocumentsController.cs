@@ -109,9 +109,14 @@ public class DocumentsController(IMediator mediator, ILogger<DocumentsController
             var content = await reader.ReadToEndAsync(ct);
             return Ok(new { content });
         }
-        catch
+        catch (FileNotFoundException)
         {
-            return Ok(new { content = (string?)null });
+            return NotFound(new { error = "Document content not found in storage." });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to retrieve content for document {DocumentId}", id);
+            return StatusCode(500, new { error = "Failed to retrieve document content." });
         }
     }
 

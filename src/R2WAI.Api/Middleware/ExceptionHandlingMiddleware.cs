@@ -69,12 +69,29 @@ public class ExceptionHandlingMiddleware
             _logger.LogWarning(exception, "Handled exception: {ExceptionType}", exception.GetType().Name);
         }
 
+        var correlationId = context.Items.TryGetValue("CorrelationId", out var cid) ? cid?.ToString() : null;
+        correlationId ??= context.TraceIdentifier;
+
         context.Response.ContentType = "application/problem+json";
         context.Response.StatusCode = (int)statusCode;
+        context.Response.Headers["X-Correlation-Id"] = correlationId;
 
-        var json = JsonSerializer.Serialize(problemDetails, new JsonSerializerOptions
+        var enriched = new Dictionary<string, object?>
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            ["status"] = (int)statusCode,
+            ["title"] = problemDetails.GetType().GetProperty("Title")?.GetValue(problemDetails),
+            ["detail"] = problemDetails.GetType().GetProperty("Detail")?.GetValue(problemDetails),
+            ["type"] = problemDetails.GetType().GetProperty("Type")?.GetValue(problemDetails),
+            ["correlationId"] = correlationId,
+        };
+
+        if (problemDetails.GetType().GetProperty("Errors")?.GetValue(problemDetails) is { } errors)
+            enriched["errors"] = errors;
+
+        var json = JsonSerializer.Serialize(enriched, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
         });
 
         await context.Response.WriteAsync(json);
