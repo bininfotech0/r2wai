@@ -445,12 +445,11 @@ static void ValidateProductionConfig(WebApplication app)
     else if (jwtSecret.Length < 32)
         warnings.Add("JWT secret key is shorter than 32 characters — use a longer key in production");
 
-    var encryptionKeyFromEnv = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
-    var encryptionKeyFromConfig = config["Security:EncryptionKey"];
-    if (string.IsNullOrEmpty(encryptionKeyFromEnv) && string.IsNullOrEmpty(encryptionKeyFromConfig))
-        errors.Add("Encryption key is not configured. Set ENCRYPTION_KEY environment variable");
-    else if (!app.Environment.IsDevelopment() && string.IsNullOrEmpty(encryptionKeyFromEnv))
-        errors.Add("In non-development environments the ENCRYPTION_KEY environment variable is required; appsettings.json must not be the sole source");
+    var encryptionKey = config["Security:EncryptionKey"];
+    if (string.IsNullOrEmpty(encryptionKey))
+        errors.Add("Encryption key is not configured. Set Security__EncryptionKey environment variable");
+    else if (encryptionKey.Contains("CHANGE_ME") || encryptionKey.StartsWith("${"))
+        errors.Add("Encryption key contains a placeholder value. Override via Security__EncryptionKey env var");
 
     var aiProvider = (config["AI:Provider"] ?? "openai").ToLowerInvariant();
     if (aiProvider == "openai")

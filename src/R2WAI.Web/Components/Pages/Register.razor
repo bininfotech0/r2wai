@@ -8,7 +8,10 @@
 <PageTitle>R2WAI - Request Access</PageTitle>
 
 <div class="login-container">
-    <MudPaper Class="pa-10 login-card" Elevation="0">
+    <div class="auth-content">
+        <AuthShowcase />
+
+        <MudPaper Class="pa-10 login-card" Elevation="0">
         <div class="d-flex flex-column align-center mb-6">
             <div style="width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, #7C3AED, #6D28D9); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);">
                 <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color: white; font-size: 1.5rem;" />
@@ -49,6 +52,7 @@
                               Class="mb-3"
                               Required="true"
                               RequiredError="Full name is required."
+                              AutoFocus="true"
                               aria-label="Full name" />
 
                 <MudTextField @bind-Value="_model.Email"
@@ -121,7 +125,8 @@
             Already have an account?&nbsp;
             <MudLink Href="/login" Color="Color.Primary" Style="font-weight: 600;">Sign in</MudLink>
         </MudText>
-    </MudPaper>
+        </MudPaper>
+    </div>
 </div>
 
 @code {

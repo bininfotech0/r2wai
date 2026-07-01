@@ -78,6 +78,7 @@ public class WorkflowBridge : IWorkflowBridge
         var client = await _workflowRuntime.CreateClientAsync(definitionId);
         var result = await client.CreateAndRunInstanceAsync(new CreateAndRunWorkflowInstanceRequest
         {
+            WorkflowDefinitionHandle = WorkflowDefinitionHandle.ByDefinitionId(definitionId, VersionOptions.Published),
             Input = new Dictionary<string, object>
             {
                 ["WorkflowId"] = workflowEntity.Id.ToString(),

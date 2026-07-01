@@ -16,17 +16,18 @@ public class TransactionBehavior<TRequest, TResponse>(IUnitOfWork unitOfWork, IL
         var requestName = typeof(TRequest).Name;
         logger.LogInformation("Beginning transaction for {RequestName}", requestName);
 
-        await unitOfWork.BeginTransactionAsync(cancellationToken);
+        TResponse response = default!;
         try
         {
-            var response = await next();
-            await unitOfWork.CommitTransactionAsync(cancellationToken);
+            await unitOfWork.ExecuteInTransactionAsync(async () =>
+            {
+                response = await next();
+            }, cancellationToken);
             logger.LogInformation("Committed transaction for {RequestName}", requestName);
             return response;
         }
         catch
         {
-            await unitOfWork.RollbackTransactionAsync(cancellationToken);
             logger.LogWarning("Rolled back transaction for {RequestName}", requestName);
             throw;
         }

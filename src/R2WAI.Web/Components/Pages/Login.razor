@@ -11,7 +11,10 @@
 <PageTitle>R2WAI - Login</PageTitle>
 
 <div class="login-container">
-    <MudPaper Class="pa-6 pa-sm-10 login-card" Elevation="0">
+    <div class="auth-content">
+        <AuthShowcase />
+
+        <MudPaper Class="pa-6 pa-sm-10 login-card" Elevation="0">
         <div class="d-flex flex-column align-center mb-8">
             <div style="width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, #7C3AED, #6D28D9); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);">
                 <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color: white; font-size: 1.5rem;" />
@@ -32,12 +35,16 @@
                           Class="mb-4"
                           Required="true"
                           RequiredError="Email is required."
+                          AutoFocus="true"
                           aria-label="Email address" />
 
             <MudTextField @bind-Value="_loginModel.Password"
                           Label="Password"
                           Variant="Variant.Outlined"
-                          InputType="InputType.Password"
+                          InputType="@(_showPassword ? InputType.Text : InputType.Password)"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                          OnAdornmentClick="@(() => _showPassword = !_showPassword)"
                           Class="mb-2"
                           Required="true"
                           RequiredError="Password is required."
@@ -121,13 +128,15 @@
         <MudText Typo="Typo.caption" Align="Align.Center" Class="mt-3" Style="color: rgba(255,255,255,0.3); font-size: 0.7rem; letter-spacing: 0.03em;">
             Secured by enterprise-grade encryption
         </MudText>
-    </MudPaper>
+        </MudPaper>
+    </div>
 </div>
 
 @code {
     private LoginModel _loginModel = new();
     private bool _isLoading;
     private bool _rememberMe;
+    private bool _showPassword;
     private bool _msalConfigured;
     private bool _isMsalLoading;
     private IJSObjectReference? _authModule;
