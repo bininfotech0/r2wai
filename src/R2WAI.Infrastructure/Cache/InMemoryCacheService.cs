@@ -3,10 +3,18 @@ using Microsoft.Extensions.Logging;
 
 namespace R2WAI.Infrastructure.Cache;
 
-public class InMemoryCacheService(ILogger<InMemoryCacheService> logger) : ICacheService
+public class InMemoryCacheService : ICacheService, IDisposable
 {
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new();
     private static readonly TimeSpan DefaultExpiration = TimeSpan.FromMinutes(30);
+    private readonly ILogger<InMemoryCacheService> _logger;
+    private readonly Timer _evictionTimer;
+
+    public InMemoryCacheService(ILogger<InMemoryCacheService> logger)
+    {
+        _logger = logger;
+        _evictionTimer = new Timer(_ => EvictExpired(), null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+    }
 
     public Task<T?> GetAsync<T>(string key, CancellationToken ct = default) where T : class
     {
@@ -14,7 +22,7 @@ public class InMemoryCacheService(ILogger<InMemoryCacheService> logger) : ICache
 
         if (_cache.TryGetValue(key, out var entry) && !entry.IsExpired)
         {
-            logger.LogTrace("Cache hit for key: {Key}", key);
+            _logger.LogTrace("Cache hit for key: {Key}", key);
             return Task.FromResult(entry.Value as T);
         }
 
@@ -28,7 +36,7 @@ public class InMemoryCacheService(ILogger<InMemoryCacheService> logger) : ICache
     {
         ct.ThrowIfCancellationRequested();
         _cache[key] = new CacheEntry(value, expiration ?? DefaultExpiration);
-        logger.LogTrace("Cache set for key: {Key}", key);
+        _logger.LogTrace("Cache set for key: {Key}", key);
         return Task.CompletedTask;
     }
 
@@ -50,6 +58,24 @@ public class InMemoryCacheService(ILogger<InMemoryCacheService> logger) : ICache
             _cache.TryRemove(key, out _);
 
         return Task.FromResult(false);
+    }
+
+    private void EvictExpired()
+    {
+        var count = 0;
+        foreach (var kvp in _cache)
+        {
+            if (kvp.Value.IsExpired && _cache.TryRemove(kvp.Key, out _))
+                count++;
+        }
+        if (count > 0)
+            _logger.LogDebug("Evicted {Count} expired cache entries", count);
+    }
+
+    public void Dispose()
+    {
+        _evictionTimer.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private sealed class CacheEntry

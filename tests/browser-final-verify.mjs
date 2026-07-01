@@ -17,7 +17,7 @@ async function main() {
   await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 15000 });
   await sleep(3000);
   await page.locator("input[type='email']").first().fill('admin@r2wai.io');
-  await page.locator("input[type='password']").first().fill('admin123');
+  await page.locator("input[type='password']").first().fill('R2wai_Admin!2026');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await sleep(5000);
   check('Login', !page.url().includes('/login'));

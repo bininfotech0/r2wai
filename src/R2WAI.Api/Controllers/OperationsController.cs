@@ -121,7 +121,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     }
 
     [HttpGet("metrics/prometheus")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin,SystemAdmin")]
     public IActionResult GetPrometheusMetrics()
     {
         var sb = new StringBuilder();
@@ -420,7 +420,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
         var query = new GetAuditLogsQuery
         {
             Page = 1,
-            PageSize = Math.Clamp(1000, 1, 1000),
+            PageSize = 1000,
             UserId = userId,
             EntityType = entityType,
             Action = parsedAction,

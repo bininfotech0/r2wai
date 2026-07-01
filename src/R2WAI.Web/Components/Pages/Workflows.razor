@@ -10,6 +10,65 @@
 
 <PageHeader Title="Workflow Studio" Subtitle="Design, execute, and monitor business workflows" />
 
+@* ── Analytics Summary Bar ── *@
+@if (!_loadingWorkflows && _workflows.Count > 0)
+{
+    <MudGrid Class="mb-4 stagger-in" Spacing="3">
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="0" Class="pa-3 wf-stat-card">
+                <div class="d-flex align-center gap-2">
+                    <div class="wf-stat-icon wf-stat-icon--primary">
+                        <MudIcon Icon="@Icons.Material.Outlined.AccountTree" Size="Size.Small" />
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.h5" Style="font-weight: 700; line-height: 1;">@_workflows.Count</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Workflows</MudText>
+                    </div>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="0" Class="pa-3 wf-stat-card">
+                <div class="d-flex align-center gap-2">
+                    <div class="wf-stat-icon wf-stat-icon--success">
+                        <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Size="Size.Small" />
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.h5" Style="font-weight: 700; line-height: 1;">@_workflows.Count(w => w.IsActive && !w.IsArchived)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Active</MudText>
+                    </div>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="0" Class="pa-3 wf-stat-card">
+                <div class="d-flex align-center gap-2">
+                    <div class="wf-stat-icon wf-stat-icon--info">
+                        <MudIcon Icon="@Icons.Material.Outlined.PlaylistPlay" Size="Size.Small" />
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.h5" Style="font-weight: 700; line-height: 1;">@_instances.Count</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Runs</MudText>
+                    </div>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="0" Class="pa-3 wf-stat-card">
+                <div class="d-flex align-center gap-2">
+                    <div class="wf-stat-icon wf-stat-icon--warning">
+                        <MudIcon Icon="@Icons.Material.Outlined.PendingActions" Size="Size.Small" />
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.h5" Style="font-weight: 700; line-height: 1;">@_pendingApprovals.Count</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Pending Approvals</MudText>
+                    </div>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
 @* AI Workflow Generator *@
 @if (_showGenerator)
 {
@@ -84,19 +143,34 @@
          Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px;">
 
     @* Workflows Tab *@
-    <MudTabPanel Text="Workflows" Icon="@Icons.Material.Outlined.AccountTree">
-        <div class="d-flex justify-space-between align-center pa-4 animate-slide-in">
-            <div class="d-flex align-center gap-3">
+    <MudTabPanel Text="Workflows" Icon="@Icons.Material.Outlined.AccountTree"
+                 BadgeData="@(_workflows.Count > 0 ? _workflows.Count.ToString() : null)" BadgeColor="Color.Primary">
+        <div class="d-flex justify-space-between align-center pa-4 animate-slide-in flex-wrap gap-2">
+            <div class="d-flex align-center gap-3 flex-wrap">
                 <MudTextField @bind-Value="_workflowSearch" Placeholder="Search workflows..."
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                              Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 300px;" />
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 240px; max-width: 300px;"
+                              Immediate="true" DebounceInterval="300" />
                 <MudSelect T="string" @bind-Value="_statusFilter" Label="Status" Clearable="true"
-                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 160px;">
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 140px; max-width: 160px;">
                     <MudSelectItem T="string" Value="@("All")">All</MudSelectItem>
                     <MudSelectItem T="string" Value="@("Active")">Active</MudSelectItem>
                     <MudSelectItem T="string" Value="@("Draft")">Draft</MudSelectItem>
                     <MudSelectItem T="string" Value="@("Archived")">Archived</MudSelectItem>
                 </MudSelect>
+                <MudSelect T="string" @bind-Value="_typeFilter" Label="Type" Clearable="true"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 140px; max-width: 160px;">
+                    <MudSelectItem T="string" Value="@("All")">All Types</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("sequential")">Sequential</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("parallel")">Parallel</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("conditional")">Conditional</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Finance")">Finance</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("HR")">HR</MudSelectItem>
+                </MudSelect>
+                <MudToggleIconButton @bind-Toggled="_viewAsList"
+                                     Icon="@Icons.Material.Outlined.ViewModule"
+                                     ToggledIcon="@Icons.Material.Outlined.ViewList"
+                                     Size="Size.Small" aria-label="Toggle view" />
             </div>
             <div class="d-flex gap-2">
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
@@ -130,83 +204,263 @@
                         OnAction="@(() => _showGenerator = true)"
                         MinHeight="300px" />
         }
+        else if (_viewAsList)
+        {
+            @* ── List View ── *@
+            <div class="pa-4 animate-slide-in">
+                <MudDataGrid T="WorkflowDto" Items="FilteredWorkflows" Hover="true" Dense="true" Elevation="0"
+                             Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; overflow: hidden;"
+                             RowClick="@((DataGridRowClickEventArgs<WorkflowDto> args) => Navigation.NavigateTo($"/workflow-studio/designer/{args.Item.Id}"))">
+                    <Columns>
+                        <TemplateColumn Title="Workflow" SortBy="x => x.Name">
+                            <CellTemplate>
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@GetWorkflowTypeIcon(context.Item.Type)" Size="Size.Small"
+                                             Color="@GetWorkflowTypeColor(context.Item.Type)" />
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.Item.Name</MudText>
+                                        @if (!string.IsNullOrEmpty(context.Item.Description))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary"
+                                                     Style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
+                                                @context.Item.Description
+                                            </MudText>
+                                        }
+                                    </div>
+                                </div>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Status">
+                            <CellTemplate>
+                                <MudChip T="string" Size="Size.Small" Color="@GetWorkflowStatusColor(context.Item)"
+                                         Variant="@(!context.Item.IsActive && !context.Item.IsArchived ? Variant.Outlined : Variant.Filled)">
+                                    @GetWorkflowStatusLabel(context.Item)
+                                </MudChip>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Type">
+                            <CellTemplate>
+                                @if (!string.IsNullOrEmpty(context.Item.Type))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@context.Item.Type</MudChip>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Steps">
+                            <CellTemplate>
+                                <MudText Typo="Typo.body2">@context.Item.StepCount steps</MudText>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Last Run">
+                            <CellTemplate>
+                                @{ var stats = GetWorkflowStats(context.Item.Id); }
+                                @if (stats.LastRun.HasValue)
+                                {
+                                    <MudTooltip Text="@stats.LastRun.Value.ToString("yyyy-MM-dd HH:mm:ss")">
+                                        <MudText Typo="Typo.caption">@FormatRelativeTime(stats.LastRun.Value)</MudText>
+                                    </MudTooltip>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Success Rate">
+                            <CellTemplate>
+                                @{ var s = GetWorkflowStats(context.Item.Id); }
+                                @if (s.TotalRuns > 0)
+                                {
+                                    <div class="d-flex align-center gap-2">
+                                        <MudProgressLinear Value="@s.SuccessRate" Color="@(s.SuccessRate >= 80 ? Color.Success : s.SuccessRate >= 50 ? Color.Warning : Color.Error)"
+                                                          Size="Size.Small" Rounded="true" Style="width: 60px; height: 6px;" />
+                                        <MudText Typo="Typo.caption">@($"{s.SuccessRate:F0}%")</MudText>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">--</MudText>
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="" Sortable="false" Filterable="false">
+                            <CellTemplate>
+                                <div class="d-flex gap-1" @onclick:stopPropagation="true">
+                                    @if (!context.Item.IsArchived)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Success"
+                                                       OnClick="@(() => ExecuteWorkflow(context.Item))" aria-label="Execute" />
+                                    }
+                                    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                                   OnClick="@(() => CloneWorkflow(context.Item))" aria-label="Clone" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => DeleteWorkflow(context.Item))" aria-label="Delete" />
+                                </div>
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                </MudDataGrid>
+            </div>
+        }
         else
         {
+            @* ── Card Grid View ── *@
             <MudGrid Class="pa-4 stagger-in" Spacing="3">
                 @foreach (var wf in FilteredWorkflows)
                 {
+                    var wfStats = GetWorkflowStats(wf.Id);
                     <MudItem xs="12" sm="6" md="4">
-                        <MudPaper Elevation="0" Class="pa-4 workflow-card">
-                            <div class="d-flex justify-space-between align-center mb-2">
-                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@wf.Name</MudText>
-                                <div class="d-flex align-center gap-2">
-                                    <MudChip T="string" Size="Size.Small"
-                                             Color="@GetWorkflowStatusColor(wf)"
-                                             Variant="@(!wf.IsActive && !wf.IsArchived ? Variant.Outlined : Variant.Filled)">
-                                        @GetWorkflowStatusLabel(wf)
-                                    </MudChip>
-                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
-                                             AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
-                                        @if (wf.IsArchived)
-                                        {
-                                            <MudMenuItem Icon="@Icons.Material.Outlined.Restore" IconColor="Color.Primary"
-                                                         OnClick="@(() => RestoreWorkflow(wf))">
-                                                Restore
+                        <MudPaper Elevation="0" Class="pa-0 workflow-card" Style="display: flex; flex-direction: column; height: 100%;">
+                            @* Card Header with gradient accent *@
+                            <div class="wf-card-header" style="@($"border-left: 4px solid {GetWorkflowTypeHex(wf.Type)};")">
+                                <div class="d-flex justify-space-between align-center">
+                                    <div class="d-flex align-center gap-2" style="min-width: 0; flex: 1;">
+                                        <MudIcon Icon="@GetWorkflowTypeIcon(wf.Type)" Size="Size.Small"
+                                                 Style="@($"color: {GetWorkflowTypeHex(wf.Type)}; flex-shrink: 0;")" />
+                                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                            @wf.Name
+                                        </MudText>
+                                    </div>
+                                    <div class="d-flex align-center gap-1 flex-shrink-0">
+                                        <MudChip T="string" Size="Size.Small"
+                                                 Color="@GetWorkflowStatusColor(wf)"
+                                                 Variant="@(!wf.IsActive && !wf.IsArchived ? Variant.Outlined : Variant.Filled)">
+                                            @GetWorkflowStatusLabel(wf)
+                                        </MudChip>
+                                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+                                                 AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                                            <MudMenuItem Icon="@Icons.Material.Outlined.ContentCopy" IconColor="Color.Primary"
+                                                         OnClick="@(() => CloneWorkflow(wf))">
+                                                Clone
                                             </MudMenuItem>
-                                        }
-                                        else if (!wf.IsActive)
-                                        {
-                                            <MudMenuItem Icon="@Icons.Material.Outlined.Publish" IconColor="Color.Success"
-                                                         OnClick="@(() => PublishWorkflow(wf))">
-                                                Publish
+                                            @if (wf.IsArchived)
+                                            {
+                                                <MudMenuItem Icon="@Icons.Material.Outlined.Restore" IconColor="Color.Primary"
+                                                             OnClick="@(() => RestoreWorkflow(wf))">
+                                                    Restore
+                                                </MudMenuItem>
+                                            }
+                                            else if (!wf.IsActive)
+                                            {
+                                                <MudMenuItem Icon="@Icons.Material.Outlined.Publish" IconColor="Color.Success"
+                                                             OnClick="@(() => PublishWorkflow(wf))">
+                                                    Publish
+                                                </MudMenuItem>
+                                                <MudMenuItem Icon="@Icons.Material.Outlined.Archive" IconColor="Color.Default"
+                                                             OnClick="@(() => ArchiveWorkflow(wf))">
+                                                    Archive
+                                                </MudMenuItem>
+                                            }
+                                            else
+                                            {
+                                                <MudMenuItem Icon="@Icons.Material.Outlined.Unpublished" IconColor="Color.Warning"
+                                                             OnClick="@(() => UnpublishWorkflow(wf))">
+                                                    Unpublish
+                                                </MudMenuItem>
+                                                <MudMenuItem Icon="@Icons.Material.Outlined.Archive" IconColor="Color.Default"
+                                                             OnClick="@(() => ArchiveWorkflow(wf))">
+                                                    Archive
+                                                </MudMenuItem>
+                                            }
+                                            <MudDivider />
+                                            <MudMenuItem Icon="@Icons.Material.Outlined.Delete" IconColor="Color.Error"
+                                                         OnClick="@(() => DeleteWorkflow(wf))">
+                                                Delete
                                             </MudMenuItem>
-                                            <MudMenuItem Icon="@Icons.Material.Outlined.Archive" IconColor="Color.Default"
-                                                         OnClick="@(() => ArchiveWorkflow(wf))">
-                                                Archive
-                                            </MudMenuItem>
-                                        }
-                                        else
-                                        {
-                                            <MudMenuItem Icon="@Icons.Material.Outlined.Unpublished" IconColor="Color.Warning"
-                                                         OnClick="@(() => UnpublishWorkflow(wf))">
-                                                Unpublish
-                                            </MudMenuItem>
-                                            <MudMenuItem Icon="@Icons.Material.Outlined.Archive" IconColor="Color.Default"
-                                                         OnClick="@(() => ArchiveWorkflow(wf))">
-                                                Archive
-                                            </MudMenuItem>
-                                        }
-                                    </MudMenu>
+                                        </MudMenu>
+                                    </div>
                                 </div>
                             </div>
-                            @if (!string.IsNullOrEmpty(wf.Description))
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3"
-                                         Style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                                    @wf.Description
-                                </MudText>
-                            }
-                            @if (!string.IsNullOrEmpty(wf.Type))
-                            {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="mb-3">
-                                    @wf.Type
-                                </MudChip>
-                            }
-                            <div class="d-flex gap-1 mt-auto">
-                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                                           StartIcon="@Icons.Material.Filled.DesignServices"
-                                           OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/designer/{wf.Id}"))">
-                                    Design
-                                </MudButton>
-                                @if (!wf.IsArchived)
+
+                            @* Card Body *@
+                            <div class="pa-4 pt-0" style="flex: 1; display: flex; flex-direction: column;">
+                                @if (!string.IsNullOrEmpty(wf.Description))
                                 {
-                                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Success"
-                                                   OnClick="@(() => ExecuteWorkflow(wf))" aria-label="Execute" />
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2"
+                                             Style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                        @wf.Description
+                                    </MudText>
                                 }
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                               OnClick="@(() => OpenEditWorkflowDialog(wf))" aria-label="Edit" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                               OnClick="@(() => DeleteWorkflow(wf))" aria-label="Delete" />
+
+                                @* Tags Row *@
+                                <div class="d-flex gap-1 flex-wrap mb-3">
+                                    @if (!string.IsNullOrEmpty(wf.Type))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                                                 Style="font-size: 0.65rem; height: 22px;">
+                                            @wf.Type
+                                        </MudChip>
+                                    }
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                                             Style="font-size: 0.65rem; height: 22px;">
+                                        @wf.StepCount step@(wf.StepCount != 1 ? "s" : "")
+                                    </MudChip>
+                                </div>
+
+                                @* Run Stats Mini Row *@
+                                <div class="wf-card-stats">
+                                    <div class="d-flex justify-space-between align-center">
+                                        <div class="d-flex align-center gap-3">
+                                            <MudTooltip Text="Total Runs">
+                                                <div class="d-flex align-center gap-1">
+                                                    <MudIcon Icon="@Icons.Material.Outlined.PlayCircle" Size="Size.Small" Color="Color.Secondary" />
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">@wfStats.TotalRuns</MudText>
+                                                </div>
+                                            </MudTooltip>
+                                            @if (wfStats.TotalRuns > 0)
+                                            {
+                                                <MudTooltip Text="@($"Success: {wfStats.SuccessRate:F0}%")">
+                                                    <div class="d-flex align-center gap-1">
+                                                        <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Size="Size.Small"
+                                                                 Color="@(wfStats.SuccessRate >= 80 ? Color.Success : wfStats.SuccessRate >= 50 ? Color.Warning : Color.Error)" />
+                                                        <MudText Typo="Typo.caption" Style="font-weight: 600;"
+                                                                 Color="@(wfStats.SuccessRate >= 80 ? Color.Success : wfStats.SuccessRate >= 50 ? Color.Warning : Color.Error)">
+                                                            @($"{wfStats.SuccessRate:F0}%")
+                                                        </MudText>
+                                                    </div>
+                                                </MudTooltip>
+                                            }
+                                        </div>
+                                        @if (wfStats.LastRun.HasValue)
+                                        {
+                                            <MudTooltip Text="@($"Last run: {wfStats.LastRun.Value:yyyy-MM-dd HH:mm}")">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    @FormatRelativeTime(wfStats.LastRun.Value)
+                                                </MudText>
+                                            </MudTooltip>
+                                        }
+                                    </div>
+                                    @if (wfStats.TotalRuns > 0)
+                                    {
+                                        <MudProgressLinear Value="@wfStats.SuccessRate"
+                                                          Color="@(wfStats.SuccessRate >= 80 ? Color.Success : wfStats.SuccessRate >= 50 ? Color.Warning : Color.Error)"
+                                                          Size="Size.Small" Rounded="true" Class="mt-1"
+                                                          Style="height: 4px; opacity: 0.6;" />
+                                    }
+                                </div>
+
+                                @* Action Bar *@
+                                <div class="d-flex gap-1 mt-3">
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.DesignServices"
+                                               OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/designer/{wf.Id}"))"
+                                               Style="flex: 1;">
+                                        Design
+                                    </MudButton>
+                                    @if (!wf.IsArchived)
+                                    {
+                                        <MudTooltip Text="Execute">
+                                            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" Color="Color.Success"
+                                                           OnClick="@(() => ExecuteWorkflow(wf))" aria-label="Execute"
+                                                           Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 6px;" />
+                                        </MudTooltip>
+                                    }
+                                    <MudTooltip Text="Edit">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                       OnClick="@(() => OpenEditWorkflowDialog(wf))" aria-label="Edit"
+                                                       Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 6px;" />
+                                    </MudTooltip>
+                                </div>
                             </div>
                         </MudPaper>
                     </MudItem>
@@ -216,20 +470,110 @@
     </MudTabPanel>
 
     @* Runs Tab *@
-    <MudTabPanel Text="Runs" Icon="@Icons.Material.Outlined.PlaylistPlay">
+    <MudTabPanel Text="Runs" Icon="@Icons.Material.Outlined.PlaylistPlay"
+                 BadgeData="@(_instances.Count(i => i.Status == "Running") > 0 ? _instances.Count(i => i.Status == "Running").ToString() : null)"
+                 BadgeColor="Color.Info">
         <div class="pa-4 animate-slide-in">
-            <MudDataGrid T="WorkflowInstanceDto" Items="_instances" Hover="true" Dense="true"
+            @* Runs Filters *@
+            <div class="d-flex justify-space-between align-center mb-3 flex-wrap gap-2">
+                <div class="d-flex align-center gap-3 flex-wrap">
+                    <MudTextField @bind-Value="_runSearch" Placeholder="Search runs..."
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 200px; max-width: 260px;"
+                                  Immediate="true" DebounceInterval="300" />
+                    <MudSelect T="string" @bind-Value="_runStatusFilter" Label="Status" Clearable="true"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 130px; max-width: 150px;">
+                        <MudSelectItem T="string" Value="@("All")">All</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Running")">Running</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Completed")">Completed</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Failed")">Failed</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Pending")">Pending</MudSelectItem>
+                    </MudSelect>
+                </div>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadInstances">
+                    Refresh
+                </MudButton>
+            </div>
+
+            @* Runs Summary Chips *@
+            @if (_instances.Count > 0)
+            {
+                <div class="d-flex gap-2 mb-3">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                             OnClick="@(() => _runStatusFilter = "All")">
+                        All (@_instances.Count)
+                    </MudChip>
+                    @if (_instances.Count(i => i.Status == "Running") > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled"
+                                 OnClick="@(() => _runStatusFilter = "Running")"
+                                 Style="animation: pulse-chip 2s ease-in-out infinite;">
+                            Running (@_instances.Count(i => i.Status == "Running"))
+                        </MudChip>
+                    }
+                    @if (_instances.Count(i => i.Status == "Completed") > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined"
+                                 OnClick="@(() => _runStatusFilter = "Completed")">
+                            Completed (@_instances.Count(i => i.Status == "Completed"))
+                        </MudChip>
+                    }
+                    @if (_instances.Count(i => i.Status == "Failed") > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
+                                 OnClick="@(() => _runStatusFilter = "Failed")">
+                            Failed (@_instances.Count(i => i.Status == "Failed"))
+                        </MudChip>
+                    }
+                </div>
+            }
+
+            <MudDataGrid T="WorkflowInstanceDto" Items="FilteredInstances" Hover="true" Dense="true"
                          Loading="_loadingInstances" Elevation="0"
-                         Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; overflow: hidden;">
+                         Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; overflow: hidden;"
+                         RowClick="@((DataGridRowClickEventArgs<WorkflowInstanceDto> args) => Navigation.NavigateTo($"/workflow-studio/runs/{args.Item.Id}"))">
                 <Columns>
-                    <PropertyColumn Property="x => x.WorkflowName" Title="Workflow" />
-                    <TemplateColumn Title="Status">
+                    <TemplateColumn Title="Workflow" SortBy="x => x.WorkflowName">
+                        <CellTemplate>
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Outlined.AccountTree" Size="Size.Small" Color="Color.Secondary" />
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Item.WorkflowName</MudText>
+                            </div>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Status" SortBy="x => x.Status">
                         <CellTemplate>
                             <StatusBadge Status="@context.Item.Status" />
                         </CellTemplate>
                     </TemplateColumn>
-                    <PropertyColumn Property="x => x.CurrentStep" Title="Step" />
-                    <PropertyColumn Property="x => x.StartedAt" Title="Started" Format="MMM dd, HH:mm" />
+                    <TemplateColumn Title="Progress">
+                        <CellTemplate>
+                            @if (context.Item.TotalSteps > 0)
+                            {
+                                var pct = context.Item.TotalSteps > 0 ? (double)context.Item.CurrentStep / context.Item.TotalSteps * 100 : 0;
+                                <div class="d-flex align-center gap-2">
+                                    <MudProgressLinear Value="@pct" Color="@(context.Item.Status == "Failed" ? Color.Error : Color.Primary)"
+                                                      Size="Size.Small" Rounded="true" Style="width: 60px; height: 6px;" />
+                                    <MudText Typo="Typo.caption">@context.Item.CurrentStep/@context.Item.TotalSteps</MudText>
+                                </div>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Step @context.Item.CurrentStep</MudText>
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Started" SortBy="x => x.StartedAt">
+                        <CellTemplate>
+                            @if (context.Item.StartedAt.HasValue)
+                            {
+                                <MudTooltip Text="@context.Item.StartedAt.Value.ToString("yyyy-MM-dd HH:mm:ss")">
+                                    <MudText Typo="Typo.body2">@FormatRelativeTime(context.Item.StartedAt.Value)</MudText>
+                                </MudTooltip>
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
                     <TemplateColumn Title="Duration">
                         <CellTemplate>
                             <MudText Typo="Typo.body2">@FormatDuration(context.Item.StartedAt, context.Item.CompletedAt)</MudText>
@@ -237,9 +581,11 @@
                     </TemplateColumn>
                     <TemplateColumn Title="" Sortable="false" Filterable="false">
                         <CellTemplate>
-                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary"
-                                           OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/runs/{context.Item.Id}"))"
-                                           aria-label="View Details" />
+                            <MudTooltip Text="View Details">
+                                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary"
+                                               OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/runs/{context.Item.Id}"))"
+                                               aria-label="View Details" />
+                            </MudTooltip>
                         </CellTemplate>
                     </TemplateColumn>
                 </Columns>
@@ -252,7 +598,9 @@
     </MudTabPanel>
 
     @* Approvals Tab *@
-    <MudTabPanel Text="Approvals" Icon="@Icons.Material.Outlined.TaskAlt">
+    <MudTabPanel Text="Approvals" Icon="@Icons.Material.Outlined.TaskAlt"
+                 BadgeData="@(_pendingApprovals.Count > 0 ? _pendingApprovals.Count.ToString() : null)"
+                 BadgeColor="Color.Warning">
         <div class="pa-4 animate-slide-in">
             @if (_loadingApprovals)
             {
@@ -268,17 +616,34 @@
                 <div class="d-flex flex-column gap-3">
                     @foreach (var approval in _pendingApprovals)
                     {
-                        <MudPaper Elevation="0" Class="@($"pa-4 inbox-item {(approval.DueAt.HasValue && approval.DueAt < DateTime.UtcNow ? "inbox-item--urgent" : "inbox-item--normal")}")">
+                        var isOverdue = approval.DueAt.HasValue && approval.DueAt < DateTime.UtcNow;
+                        <MudPaper Elevation="0" Class="@($"pa-4 inbox-item {(isOverdue ? "inbox-item--urgent" : "inbox-item--normal")}")">
                             <div class="d-flex justify-space-between align-start">
-                                <div>
-                                    <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@approval.WorkflowName</MudText>
+                                <div style="min-width: 0; flex: 1;">
+                                    <div class="d-flex align-center gap-2">
+                                        <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@approval.WorkflowName</MudText>
+                                        @if (isOverdue)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled"
+                                                     Style="font-size: 0.6rem; height: 18px;">
+                                                OVERDUE
+                                            </MudChip>
+                                        }
+                                    </div>
                                     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">
                                         Requested by @approval.RequesterFirstName @approval.RequesterLastName
                                     </MudText>
-                                    <div class="d-flex gap-3 mt-1 align-center">
+                                    <div class="d-flex gap-3 mt-1 align-center flex-wrap">
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            @approval.RequestedAt.ToString("MMM dd, HH:mm")
+                                            <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" Style="font-size: 14px; vertical-align: middle; margin-right: 2px;" />
+                                            @FormatRelativeTime(approval.RequestedAt)
                                         </MudText>
+                                        @if (approval.DueAt.HasValue)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="@(isOverdue ? Color.Error : Color.Secondary)">
+                                                Due: @approval.DueAt.Value.ToString("MMM dd, HH:mm")
+                                            </MudText>
+                                        }
                                         @if (approval.EscalationLevel > 0)
                                         {
                                             <MudChip T="string" Color="Color.Warning" Size="Size.Small">
@@ -287,7 +652,7 @@
                                         }
                                     </div>
                                 </div>
-                                <div class="d-flex gap-2">
+                                <div class="d-flex gap-2 flex-shrink-0">
                                     <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
                                                StartIcon="@Icons.Material.Filled.Check"
                                                OnClick="@(() => OpenApprovalAction(approval, true))">
@@ -298,6 +663,72 @@
                                                OnClick="@(() => OpenApprovalAction(approval, false))">
                                         Reject
                                     </MudButton>
+                                </div>
+                            </div>
+                        </MudPaper>
+                    }
+                </div>
+            }
+        </div>
+    </MudTabPanel>
+
+    @* Schedules Tab *@
+    <MudTabPanel Text="Schedules" Icon="@Icons.Material.Outlined.Schedule">
+        <div class="pa-4 animate-slide-in">
+            <div class="d-flex justify-space-between align-center mb-3">
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Workflow Triggers</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="AddSchedule">
+                    New Schedule
+                </MudButton>
+            </div>
+
+            @if (_schedules.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.Schedule" Title="No schedules configured"
+                            Description="Set up automatic triggers to run workflows on a schedule, via webhook, or on events."
+                            ActionText="Create Schedule"
+                            OnAction="AddSchedule"
+                            MinHeight="250px" />
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var schedule in _schedules)
+                    {
+                        <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px;">
+                            <div class="d-flex justify-space-between align-center">
+                                <div class="d-flex align-center gap-3">
+                                    <div class="wf-stat-icon @(schedule.IsEnabled ? "wf-stat-icon--success" : "wf-stat-icon--default")">
+                                        <MudIcon Icon="@GetTriggerIcon(schedule.TriggerType)" Size="Size.Small" />
+                                    </div>
+                                    <div>
+                                        <div class="d-flex align-center gap-2">
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@schedule.WorkflowName</MudText>
+                                            <MudChip T="string" Size="Size.Small"
+                                                     Color="@(schedule.IsEnabled ? Color.Success : Color.Default)"
+                                                     Variant="Variant.Filled" Style="font-size: 0.6rem; height: 20px;">
+                                                @(schedule.IsEnabled ? "Active" : "Paused")
+                                            </MudChip>
+                                        </div>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @GetTriggerDescription(schedule)
+                                        </MudText>
+                                        @if (schedule.NextRunAt.HasValue)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                Next run: @schedule.NextRunAt.Value.ToString("MMM dd, HH:mm")
+                                            </MudText>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <MudSwitch T="bool" Value="schedule.IsEnabled" Color="Color.Success" Size="Size.Small"
+                                               ValueChanged="@(val => ToggleSchedule(schedule, val))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   OnClick="@(() => EditSchedule(schedule))" aria-label="Edit schedule" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => DeleteSchedule(schedule))" aria-label="Delete schedule" />
                                 </div>
                             </div>
                         </MudPaper>
@@ -320,20 +751,36 @@
             <MudDataGrid T="IntegrationDto" Items="_integrations" Hover="true" Dense="true"
                          Loading="_loadingIntegrations" Elevation="0">
                 <Columns>
-                    <PropertyColumn Property="x => x.Name" Title="Name" />
-                    <PropertyColumn Property="x => x.Type" Title="Type" />
+                    <TemplateColumn Title="Name" SortBy="x => x.Name">
+                        <CellTemplate>
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@GetIntegrationIcon(context.Item.Type)" Size="Size.Small"
+                                         Color="@(context.Item.IsActive ? Color.Primary : Color.Default)" />
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Item.Name</MudText>
+                            </div>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Type">
+                        <CellTemplate>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                                @context.Item.Type
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
                     <TemplateColumn Title="Status">
                         <CellTemplate>
                             <MudChip T="string" Size="Size.Small"
-                                     Color="@(context.Item.IsActive ? Color.Success : Color.Default)">
-                                @(context.Item.IsActive ? "Active" : "Inactive")
+                                     Color="@(context.Item.IsActive ? Color.Success : Color.Default)"
+                                     Variant="Variant.Filled">
+                                @(context.Item.IsActive ? "Connected" : "Inactive")
                             </MudChip>
                         </CellTemplate>
                     </TemplateColumn>
                     <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
                         <CellTemplate>
                             <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" Class="mr-1"
-                                       OnClick="@(() => TestIntegration(context.Item))">
+                                       OnClick="@(() => TestIntegration(context.Item))"
+                                       StartIcon="@Icons.Material.Filled.ElectricalServices">
                                 Test
                             </MudButton>
                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
@@ -356,6 +803,12 @@
     private int _activeTab;
     private string _workflowSearch = string.Empty;
     private string _statusFilter = "All";
+    private string _typeFilter = "All";
+    private bool _viewAsList;
+
+    // Runs filters
+    private string _runSearch = string.Empty;
+    private string _runStatusFilter = "All";
 
     // Generator
     private bool _showGenerator;
@@ -381,6 +834,9 @@
     private List<IntegrationDto> _integrations = new();
     private bool _loadingIntegrations = true;
 
+    // Schedules
+    private List<ScheduleDto> _schedules = new();
+
     private List<WorkflowDto> FilteredWorkflows
     {
         get
@@ -388,7 +844,9 @@
             var result = _workflows.AsEnumerable();
 
             if (!string.IsNullOrWhiteSpace(_workflowSearch))
-                result = result.Where(w => w.Name.Contains(_workflowSearch, StringComparison.OrdinalIgnoreCase));
+                result = result.Where(w =>
+                    w.Name.Contains(_workflowSearch, StringComparison.OrdinalIgnoreCase) ||
+                    (w.Description?.Contains(_workflowSearch, StringComparison.OrdinalIgnoreCase) ?? false));
 
             if (!string.IsNullOrWhiteSpace(_statusFilter) && _statusFilter != "All")
             {
@@ -401,8 +859,50 @@
                 };
             }
 
+            if (!string.IsNullOrWhiteSpace(_typeFilter) && _typeFilter != "All")
+                result = result.Where(w => string.Equals(w.Type, _typeFilter, StringComparison.OrdinalIgnoreCase));
+
             return result.ToList();
         }
+    }
+
+    private List<WorkflowInstanceDto> FilteredInstances
+    {
+        get
+        {
+            var result = _instances.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(_runSearch))
+                result = result.Where(i => i.WorkflowName.Contains(_runSearch, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(_runStatusFilter) && _runStatusFilter != "All")
+                result = result.Where(i => string.Equals(i.Status, _runStatusFilter, StringComparison.OrdinalIgnoreCase));
+
+            return result.OrderByDescending(i => i.StartedAt).ToList();
+        }
+    }
+
+    private record WorkflowStats(int TotalRuns, int SuccessCount, int FailedCount, double SuccessRate, DateTime? LastRun);
+
+    private WorkflowStats GetWorkflowStats(Guid workflowId)
+    {
+        var runs = _instances.Where(i => i.WorkflowId == workflowId).ToList();
+        var total = runs.Count;
+        var success = runs.Count(r => r.Status == "Completed");
+        var failed = runs.Count(r => r.Status == "Failed");
+        var rate = total > 0 ? (double)success / total * 100 : 0;
+        var lastRun = runs.OrderByDescending(r => r.StartedAt).FirstOrDefault()?.StartedAt;
+        return new WorkflowStats(total, success, failed, rate, lastRun);
+    }
+
+    private static string FormatRelativeTime(DateTime dt)
+    {
+        var diff = DateTime.UtcNow - dt;
+        if (diff.TotalSeconds < 60) return "Just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+        return dt.ToString("MMM dd");
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -658,6 +1158,7 @@
         catch (Exception ex) { Snackbar.Add($"Restore failed: {ex.Message}", Severity.Error); }
     }
 
+    // --- Workflow Helpers ---
     private static string GetWorkflowStatusLabel(WorkflowDto wf)
     {
         if (wf.IsArchived) return "Archived";
@@ -670,13 +1171,101 @@
         return wf.IsActive ? Color.Success : Color.Warning;
     }
 
+    private static string GetWorkflowTypeIcon(string? type) => (type ?? "").ToLowerInvariant() switch
+    {
+        "sequential" => Icons.Material.Outlined.LinearScale,
+        "parallel" => Icons.Material.Outlined.AccountTree,
+        "conditional" => Icons.Material.Outlined.CallSplit,
+        "finance" => Icons.Material.Outlined.AccountBalance,
+        "hr" => Icons.Material.Outlined.People,
+        _ => Icons.Material.Outlined.AccountTree,
+    };
+
+    private static Color GetWorkflowTypeColor(string? type) => (type ?? "").ToLowerInvariant() switch
+    {
+        "sequential" => Color.Primary,
+        "parallel" => Color.Secondary,
+        "conditional" => Color.Tertiary,
+        "finance" => Color.Warning,
+        "hr" => Color.Info,
+        _ => Color.Default,
+    };
+
+    private static string GetWorkflowTypeHex(string? type) => (type ?? "").ToLowerInvariant() switch
+    {
+        "sequential" => "#7C3AED",
+        "parallel" => "#059669",
+        "conditional" => "#0EA5E9",
+        "finance" => "#D97706",
+        "hr" => "#3B82F6",
+        _ => "#6B7280",
+    };
+
+    private static string GetIntegrationIcon(string? type) => (type ?? "").ToLowerInvariant() switch
+    {
+        "api" or "rest" => Icons.Material.Outlined.Api,
+        "webhook" => Icons.Material.Outlined.Webhook,
+        "email" or "smtp" => Icons.Material.Outlined.Email,
+        "database" or "sql" => Icons.Material.Outlined.Storage,
+        "slack" => Icons.Material.Outlined.Chat,
+        "teams" => Icons.Material.Outlined.Groups,
+        _ => Icons.Material.Outlined.Extension,
+    };
+
+    private static string GetTriggerIcon(string? type) => (type ?? "").ToLowerInvariant() switch
+    {
+        "cron" or "schedule" => Icons.Material.Outlined.Schedule,
+        "webhook" => Icons.Material.Outlined.Webhook,
+        "event" => Icons.Material.Outlined.NotificationsActive,
+        "manual" => Icons.Material.Outlined.TouchApp,
+        _ => Icons.Material.Outlined.Schedule,
+    };
+
+    private static string GetTriggerDescription(ScheduleDto schedule) => (schedule.TriggerType ?? "").ToLowerInvariant() switch
+    {
+        "cron" or "schedule" => $"Cron: {schedule.CronExpression ?? "Not set"}",
+        "webhook" => $"Webhook trigger",
+        "event" => $"Event: {schedule.EventName ?? "Not configured"}",
+        _ => "Manual trigger",
+    };
+
+    private async Task CloneWorkflow(WorkflowDto workflow)
+    {
+        try
+        {
+            var sourceWf = await Http.GetFromJsonAsync<WorkflowRawDto>($"/api/v1/workflows/{workflow.Id}");
+            if (sourceWf is null) { Snackbar.Add("Failed to read workflow", Severity.Error); return; }
+
+            var response = await Http.PostAsJsonAsync("/api/v1/workflows", new
+            {
+                Name = $"{sourceWf.Name} (Copy)",
+                Description = sourceWf.Description,
+                Type = sourceWf.Type,
+                Steps = sourceWf.Steps
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add($"Workflow cloned as '{sourceWf.Name} (Copy)'", Severity.Success);
+                await LoadWorkflows();
+                StateHasChanged();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Clone failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Clone failed: {ex.Message}", Severity.Error); }
+    }
+
     // --- Runs ---
     private async Task LoadInstances()
     {
         _loadingInstances = true;
         try
         {
-            var result = await Http.GetFromJsonAsync<ListResult<WorkflowInstanceDto>>("/api/v1/operations/workflow-instances?pageSize=50");
+            var result = await Http.GetFromJsonAsync<ListResult<WorkflowInstanceDto>>("/api/v1/operations/workflow-instances?pageSize=100");
             _instances = result?.Items ?? new();
         }
         catch { Snackbar.Add("Failed to load workflow runs.", Severity.Warning); }
@@ -687,9 +1276,10 @@
     {
         if (start is null) return "—";
         var diff = (end ?? DateTime.UtcNow) - start.Value;
-        if (diff.TotalMinutes < 1) return $"{diff.Seconds}s";
-        if (diff.TotalHours < 1) return $"{(int)diff.TotalMinutes}m";
-        return $"{(int)diff.TotalHours}h {diff.Minutes}m";
+        if (diff.TotalSeconds < 60) return $"{diff.Seconds}s";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m {diff.Seconds}s";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h {diff.Minutes}m";
+        return $"{(int)diff.TotalDays}d {diff.Hours}h";
     }
 
     // --- Approvals ---
@@ -717,6 +1307,36 @@
             isApprove ? "Approve Request" : "Reject Request", parameters);
         var result = await dialog.Result;
         if (result?.Canceled == false) await LoadApprovals();
+    }
+
+    // --- Schedules ---
+    private void AddSchedule()
+    {
+        Snackbar.Add("Schedule configuration coming soon", Severity.Info);
+    }
+
+    private void EditSchedule(ScheduleDto schedule)
+    {
+        Snackbar.Add("Schedule editing coming soon", Severity.Info);
+    }
+
+    private async Task ToggleSchedule(ScheduleDto schedule, bool enabled)
+    {
+        schedule.IsEnabled = enabled;
+        Snackbar.Add($"Schedule {(enabled ? "activated" : "paused")}", Severity.Info);
+        await Task.CompletedTask;
+    }
+
+    private async Task DeleteSchedule(ScheduleDto schedule)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, schedule.WorkflowName } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Delete Schedule", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        _schedules.Remove(schedule);
+        Snackbar.Add("Schedule deleted", Severity.Success);
+        await Task.CompletedTask;
     }
 
     // --- Integrations ---
@@ -788,6 +1408,16 @@
         public string? Type { get; set; }
         public bool IsActive { get; set; }
         public bool IsArchived { get; set; }
+        public int StepCount { get; set; }
+        public string? Steps { get; set; }
+    }
+    private class WorkflowRawDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Type { get; set; }
+        public string? Steps { get; set; }
     }
     private class WorkflowInstanceDto
     {
@@ -796,6 +1426,7 @@
         public string WorkflowName { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public int CurrentStep { get; set; }
+        public int TotalSteps { get; set; }
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
     }
@@ -815,6 +1446,18 @@
         public string Name { get; set; } = string.Empty;
         public string? Type { get; set; }
         public bool IsActive { get; set; }
+    }
+    private class ScheduleDto
+    {
+        public Guid Id { get; set; }
+        public Guid WorkflowId { get; set; }
+        public string WorkflowName { get; set; } = string.Empty;
+        public string? TriggerType { get; set; }
+        public string? CronExpression { get; set; }
+        public string? EventName { get; set; }
+        public bool IsEnabled { get; set; }
+        public DateTime? NextRunAt { get; set; }
+        public DateTime? LastRunAt { get; set; }
     }
     private class TestResult { public bool Success { get; set; } public string? Message { get; set; } }
 }

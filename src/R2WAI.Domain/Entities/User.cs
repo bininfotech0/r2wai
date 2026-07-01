@@ -113,7 +113,17 @@ public sealed class User : BaseEntity<Guid>
             .Where(ur => ur.Role is not null)
             .Select(ur => ur.Role!.Permissions)
             .Any(permissions => !string.IsNullOrEmpty(permissions) &&
-                Enum.TryParse<Permission>(permissions, out var parsed) &&
-                parsed.HasFlag(permission));
+                ParsePermissions(permissions).HasFlag(permission));
+    }
+
+    private static Permission ParsePermissions(string permissions)
+    {
+        var result = Permission.None;
+        foreach (var part in permissions.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (Enum.TryParse<Permission>(part, ignoreCase: true, out var parsed))
+                result |= parsed;
+        }
+        return result;
     }
 }

@@ -10,6 +10,7 @@ public class ChatbotDto
     public Guid? ModelConfigurationId { get; init; }
     public Guid? KnowledgeBaseId { get; init; }
     public string? PromptTemplate { get; init; }
+    public bool VoiceEnabled { get; init; }
     public ChatbotStatus Status { get; init; }
     public DateTime CreatedAt { get; init; }
 }

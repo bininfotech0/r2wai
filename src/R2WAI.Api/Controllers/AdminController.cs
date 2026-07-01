@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.Net;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -123,11 +124,16 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
         CancellationToken ct = default)
     {
         (page, pageSize) = ClampPagination(page, pageSize);
+        Domain.Enums.AuditAction? parsedAction = null;
+        if (!string.IsNullOrWhiteSpace(action) && Enum.TryParse<Domain.Enums.AuditAction>(action, ignoreCase: true, out var a))
+            parsedAction = a;
+
         var query = new GetAuditLogsQuery
         {
             Page = page,
             PageSize = pageSize,
             UserId = userId,
+            Action = parsedAction,
             EntityType = entityType
         };
         var result = await mediator.Send(query, ct);
@@ -228,6 +234,9 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
 
         try
         {
+            if (!string.IsNullOrEmpty(model.Endpoint) && !IsAllowedEndpoint(model.Endpoint))
+                return BadRequest(new { success = false, message = "Endpoint URL is not allowed. Only HTTPS URLs to known AI providers are permitted." });
+
             var builder = Kernel.CreateBuilder();
             var apiKey = !string.IsNullOrEmpty(model.ApiKeyEncrypted)
                 ? encryptionService.Decrypt(model.ApiKeyEncrypted)
@@ -243,7 +252,7 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
                 var ollamaClient = new OpenAIClient(new ApiKeyCredential("ollama"), new OpenAIClientOptions { Endpoint = ollamaUri });
                 builder.AddOpenAIChatCompletion(model.ModelId, ollamaClient);
             }
-            else if (provider is "openai" or "azureopenai")
+            else if (provider is "openai" or "azureopenai" or "deepseek" or "together" or "fireworks" or "groq" or "perplexity" or "xai" or "openrouter" or "sambanova" or "cerebras" or "github" or "ai21" or "mistral" or "novita" or "replicate")
             {
                 if (string.IsNullOrEmpty(apiKey))
                     return UnprocessableEntity(new { success = false, message = "No API key configured for this model." });
@@ -254,7 +263,33 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
                     builder.AddOpenAIChatCompletion(model.ModelId, client);
                 }
                 else
-                    builder.AddOpenAIChatCompletion(model.ModelId, apiKey);
+                {
+                    var defaultEndpoints = new Dictionary<string, string>
+                    {
+                        ["deepseek"] = "https://api.deepseek.com/v1",
+                        ["togetherai"] = "https://api.together.xyz/v1",
+                        ["fireworksai"] = "https://api.fireworks.ai/inference/v1",
+                        ["groq"] = "https://api.groq.com/openai/v1",
+                        ["perplexity"] = "https://api.perplexity.ai",
+                        ["xai"] = "https://api.x.ai/v1",
+                        ["openrouter"] = "https://openrouter.ai/api/v1",
+                        ["sambanova"] = "https://api.sambanova.ai/v1",
+                        ["cerebras"] = "https://api.cerebras.ai/v1",
+                        ["githubmodels"] = "https://models.inference.ai.azure.com",
+                        ["ai21labs"] = "https://api.ai21.com/studio/v1",
+                        ["mistral"] = "https://api.mistral.ai/v1",
+                        ["novitaai"] = "https://api.novita.ai/v3/openai",
+                        ["replicate"] = "https://api.replicate.com/v1"
+                    };
+
+                    if (defaultEndpoints.TryGetValue(provider, out var ep))
+                    {
+                        var client = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = new Uri(ep) });
+                        builder.AddOpenAIChatCompletion(model.ModelId, client);
+                    }
+                    else
+                        builder.AddOpenAIChatCompletion(model.ModelId, apiKey);
+                }
             }
             else
             {
@@ -273,7 +308,19 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Model connection test failed for {ModelId}", id);
-            return UnprocessableEntity(new { success = false, message = $"Connection failed: {ex.Message}" });
+            var message = ex switch
+            {
+                HttpRequestException { StatusCode: System.Net.HttpStatusCode.PaymentRequired } =>
+                    $"Connection failed: Insufficient balance for {model.Provider}. Please add credits to your account.",
+                HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized } =>
+                    "Connection failed: Invalid API key. Please check your credentials.",
+                HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden } =>
+                    "Connection failed: Access denied. Your API key may lack permissions.",
+                HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests } =>
+                    "Connection failed: Rate limited. Please wait before retrying.",
+                _ => $"Connection failed: {ex.Message}"
+            };
+            return UnprocessableEntity(new { success = false, message });
         }
     }
 
@@ -370,35 +417,62 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
         days = Math.Clamp(days, 1, 365);
         var since = DateTime.UtcNow.AddDays(-days);
 
-        var assistantTask = dbContext.AssistantDefinitions
+        var assistantList = await dbContext.AssistantDefinitions
             .Select(a => new { a.Id, a.IsActive }).ToListAsync(ct);
-        var convTask = dbContext.Conversations.CountAsync(c => c.CreatedAt >= since, ct);
-        var msgTask = dbContext.Messages.CountAsync(m => m.CreatedAt >= since, ct);
-        var wfTotalTask = dbContext.WorkflowInstances.CountAsync(w => w.CreatedAt >= since, ct);
-        var wfCompletedTask = dbContext.WorkflowInstances.CountAsync(
+        var totalConversations = await dbContext.Conversations.CountAsync(c => c.CreatedAt >= since, ct);
+        var totalMessages = await dbContext.Messages.CountAsync(m => m.CreatedAt >= since, ct);
+        var totalWorkflows = await dbContext.WorkflowInstances.CountAsync(w => w.CreatedAt >= since, ct);
+        var completedWorkflows = await dbContext.WorkflowInstances.CountAsync(
             w => w.Status == Domain.Enums.WorkflowInstanceStatus.Completed && w.CreatedAt >= since, ct);
-        var wfFailedTask = dbContext.WorkflowInstances.CountAsync(
+        var failedWorkflows = await dbContext.WorkflowInstances.CountAsync(
             w => w.Status == Domain.Enums.WorkflowInstanceStatus.Failed && w.CreatedAt >= since, ct);
-        var aprTotalTask = dbContext.ApprovalRequests.CountAsync(a => a.CreatedAt >= since, ct);
-        var aprApprovedTask = dbContext.ApprovalRequests.CountAsync(
+        var totalApprovals = await dbContext.ApprovalRequests.CountAsync(a => a.CreatedAt >= since, ct);
+        var approvedApprovals = await dbContext.ApprovalRequests.CountAsync(
             a => a.Status == Domain.Enums.ApprovalStatus.Approved && a.CreatedAt >= since, ct);
-        var aprPendingTask = dbContext.ApprovalRequests.CountAsync(
+        var pendingApprovals = await dbContext.ApprovalRequests.CountAsync(
             a => a.Status == Domain.Enums.ApprovalStatus.Pending, ct);
-        var docTask = dbContext.Documents.CountAsync(d => d.CreatedAt >= since, ct);
-
-        await Task.WhenAll(assistantTask, convTask, msgTask, wfTotalTask, wfCompletedTask,
-            wfFailedTask, aprTotalTask, aprApprovedTask, aprPendingTask, docTask);
-
-        var assistantList = await assistantTask;
+        var totalDocuments = await dbContext.Documents.CountAsync(d => d.CreatedAt >= since, ct);
 
         return Ok(new
         {
             Period = $"Last {days} days",
             Assistants = new { Total = assistantList.Count, Active = assistantList.Count(a => a.IsActive) },
-            Conversations = new { Total = await convTask, Messages = await msgTask },
-            Workflows = new { Executions = await wfTotalTask, Completed = await wfCompletedTask, Failed = await wfFailedTask },
-            Approvals = new { Total = await aprTotalTask, Approved = await aprApprovedTask, Pending = await aprPendingTask },
-            Documents = new { Uploaded = await docTask }
+            Conversations = new { Total = totalConversations, Messages = totalMessages },
+            Workflows = new { Executions = totalWorkflows, Completed = completedWorkflows, Failed = failedWorkflows },
+            Approvals = new { Total = totalApprovals, Approved = approvedApprovals, Pending = pendingApprovals },
+            Documents = new { Uploaded = totalDocuments }
         });
+    }
+
+    private static bool IsAllowedEndpoint(string endpoint)
+    {
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+            return false;
+
+        if (uri.Scheme is not ("https" or "http"))
+            return false;
+
+        var host = uri.Host;
+
+        if (host is "localhost" or "127.0.0.1" or "0.0.0.0" or "::1")
+            return true;
+
+        if (System.Net.IPAddress.TryParse(host, out var ip))
+        {
+            var bytes = ip.GetAddressBytes();
+            if (bytes.Length == 4)
+            {
+                if (bytes[0] == 10) return false;
+                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return false;
+                if (bytes[0] == 192 && bytes[1] == 168) return false;
+                if (bytes[0] == 169 && bytes[1] == 254) return false;
+            }
+        }
+
+        var blockedSuffixes = new[] { ".internal", ".local", ".corp", ".svc.cluster.local" };
+        if (blockedSuffixes.Any(s => host.EndsWith(s, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        return true;
     }
 }

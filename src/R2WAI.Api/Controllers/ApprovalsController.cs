@@ -39,6 +39,9 @@ public class ApprovalsController(
         }
     }
 
+    private static (int page, int pageSize) ClampPagination(int page, int pageSize)
+        => (Math.Max(1, page), Math.Clamp(pageSize, 1, 100));
+
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? status = null,
@@ -46,6 +49,7 @@ public class ApprovalsController(
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
+        (page, pageSize) = ClampPagination(page, pageSize);
         if (string.IsNullOrEmpty(status) || status.Equals("Pending", StringComparison.OrdinalIgnoreCase))
         {
             var (items, totalCount) = await approvalService.GetPendingPagedAsync(
@@ -77,6 +81,7 @@ public class ApprovalsController(
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
+        (page, pageSize) = ClampPagination(page, pageSize);
         var (items, totalCount) = await approvalService.GetPendingPagedAsync(
             CurrentTenantId, CurrentUserId, null, page, pageSize, ct);
         return Ok(new { items, totalCount, page, pageSize });
@@ -88,6 +93,7 @@ public class ApprovalsController(
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
+        (page, pageSize) = ClampPagination(page, pageSize);
         var pending = await approvalService.GetPendingForRoleAsync(CurrentTenantId, role, ct);
         var totalCount = pending.Count;
         var paged = pending.Skip((page - 1) * pageSize).Take(pageSize).ToList();

@@ -7,6 +7,7 @@ public record CreateChatbotCommand : IRequest<ChatbotDto>
     public string Name { get; init; } = string.Empty;
     public Guid? KnowledgeBaseId { get; init; }
     public Guid? ModelConfigurationId { get; init; }
+    public bool VoiceEnabled { get; init; }
 }
 
 public class CreateChatbotCommandValidator : AbstractValidator<CreateChatbotCommand>
@@ -32,6 +33,9 @@ public class CreateChatbotCommandHandler(
         var chatbot = new Chatbot(
             Guid.NewGuid(), tenantId, userId, command.Name,
             command.KnowledgeBaseId, command.ModelConfigurationId);
+
+        if (command.VoiceEnabled)
+            chatbot.SetVoiceEnabled(true);
 
         await chatbotRepo.AddAsync(chatbot, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

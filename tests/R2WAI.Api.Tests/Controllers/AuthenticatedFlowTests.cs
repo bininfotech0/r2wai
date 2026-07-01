@@ -19,7 +19,7 @@ public class AuthenticatedFlowTests : IntegrationTestBase
         var response = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Email = "admin@r2wai.io",
-            Password = "admin123"
+            Password = "R2wai_Admin!2026"
         });
 
         if (!response.IsSuccessStatusCode) return null;
@@ -319,7 +319,7 @@ public class AuthenticatedFlowTests : IntegrationTestBase
         var loginResponse = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Email = "admin@r2wai.io",
-            Password = "admin123"
+            Password = "R2wai_Admin!2026"
         });
 
         if (!loginResponse.IsSuccessStatusCode)

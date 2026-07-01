@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace R2WAI.Api.Middleware;
 
@@ -27,8 +29,18 @@ public class ApiKeyAuthenticationMiddleware(RequestDelegate next, IConfiguration
             return;
         }
 
-        var matched = apiKeys.FirstOrDefault(k =>
-            string.Equals(k.Key, extractedApiKey, StringComparison.Ordinal) && k.Enabled);
+        // Hash the incoming key once, then compare against all configured keys using
+        // constant-time equality. Always iterate the full list to avoid timing leaks
+        // based on which position the matching key is at.
+        var incomingHash = SHA256.HashData(Encoding.UTF8.GetBytes(extractedApiKey.ToString()));
+        ApiKeyEntry? matched = null;
+        foreach (var entry in apiKeys)
+        {
+            if (!entry.Enabled) continue;
+            var entryHash = SHA256.HashData(Encoding.UTF8.GetBytes(entry.Key));
+            if (CryptographicOperations.FixedTimeEquals(entryHash, incomingHash))
+                matched = entry;
+        }
 
         if (matched is null)
         {

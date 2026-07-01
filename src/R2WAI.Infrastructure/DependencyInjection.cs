@@ -87,6 +87,9 @@ public static class DependencyInjection
         services.AddScoped<FileProcessingService>();
         services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 
+        services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
+        services.AddHostedService<BackgroundTaskProcessor>();
+
         services.AddScoped<IAIService, SemanticKernelService>();
         services.AddScoped<DocumentPlugin>();
         services.AddScoped<RAGPlugin>();

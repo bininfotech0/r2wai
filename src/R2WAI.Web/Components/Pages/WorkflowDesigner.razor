@@ -7,12 +7,27 @@
 
 <PageTitle>R2WAI - Workflow Designer</PageTitle>
 
-<div class="d-flex justify-space-between align-center mb-4">
+<div class="d-flex justify-space-between align-center mb-3">
     <div class="d-flex align-center gap-3">
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Default"
                        OnClick="@(() => Navigation.NavigateTo("/workflow-studio"))" aria-label="Back" />
         <div>
-            <MudText Typo="Typo.h5" Style="font-weight: 700;">@(_workflow?.Name ?? "Workflow Designer")</MudText>
+            @if (_editingName)
+            {
+                <MudTextField @bind-Value="_workflow!.Name" Variant="Variant.Text" Margin="Margin.Dense"
+                              Style="font-size: 1.25rem; font-weight: 700;"
+                              OnBlur="@(() => { _editingName = false; _hasChanges = true; })"
+                              Immediate="true" AutoFocus="true" />
+            }
+            else
+            {
+                <MudText Typo="Typo.h5" Style="font-weight: 700; cursor: pointer;"
+                         @onclick="@(() => _editingName = true)">
+                    @(_workflow?.Name ?? "Workflow Designer")
+                    <MudIcon Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
+                             Style="opacity: 0.4; margin-left: 4px; font-size: 14px;" />
+                </MudText>
+            }
             <MudText Typo="Typo.caption" Color="Color.Secondary">@(_workflow?.Description ?? "Design your workflow steps")</MudText>
         </div>
     </div>
@@ -30,10 +45,6 @@
         }
         else
         {
-            @if (_hasChanges)
-            {
-                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Unsaved changes</MudChip>
-            }
             @if (_executionCompleted)
             {
                 <MudChip T="string" Size="Size.Small"
@@ -44,6 +55,31 @@
                 <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
                                OnClick="ClearExecutionState" aria-label="Clear execution" />
             }
+            @if (_hasChanges)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Unsaved</MudChip>
+            }
+
+            @* Undo / Redo *@
+            <MudTooltip Text="Undo (Ctrl+Z)">
+                <MudIconButton Icon="@Icons.Material.Filled.Undo" Size="Size.Small"
+                               Disabled="@(_undoStack.Count == 0)" OnClick="Undo" aria-label="Undo" />
+            </MudTooltip>
+            <MudTooltip Text="Redo (Ctrl+Y)">
+                <MudIconButton Icon="@Icons.Material.Filled.Redo" Size="Size.Small"
+                               Disabled="@(_redoStack.Count == 0)" OnClick="Redo" aria-label="Redo" />
+            </MudTooltip>
+
+            <MudDivider Vertical="true" FlexItem="true" Style="height: 24px;" />
+
+            @* Variables *@
+            <MudTooltip Text="Workflow Variables">
+                <MudIconButton Icon="@Icons.Material.Outlined.DataObject" Size="Size.Small"
+                               Color="@(_showVariables ? Color.Primary : Color.Default)"
+                               OnClick="@(() => { _showVariables = !_showVariables; _editingStep = null; })"
+                               aria-label="Variables" />
+            </MudTooltip>
+
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveWorkflow"
                        Disabled="_saving" StartIcon="@Icons.Material.Filled.Save" Size="Size.Small">
                 @(_saving ? "Saving..." : "Save")
@@ -57,6 +93,7 @@
     </div>
 </div>
 
+@* Execution Status Bar *@
 @if (_executionMode || _executionCompleted)
 {
     <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
@@ -101,47 +138,370 @@ else if (_workflow is null)
 else
 {
     <MudGrid Spacing="3">
-        @* Left Panel: Steps & Controls *@
+        @* ── Left Panel: Steps, Inspector, Variables ── *@
         <MudItem xs="12" md="4">
-            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
-                @if (_editingStep is not null)
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); max-height: 780px; overflow-y: auto;">
+
+                @if (_showVariables)
                 {
-                    @* Step Inspector *@
+                    @* ── Workflow Variables Panel ── *@
                     <div class="d-flex justify-space-between align-center mb-3">
-                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Edit Step</MudText>
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Outlined.DataObject" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Variables</MudText>
+                        </div>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                       OnClick="@(() => _showVariables = false)" aria-label="Close variables" />
+                    </div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                        Define input parameters and variables for this workflow. These can be referenced in step configurations.
+                    </MudText>
+
+                    @for (var i = 0; i < _variables.Count; i++)
+                    {
+                        var idx = i;
+                        <MudPaper Class="pa-3 mb-2" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="5">
+                                    <MudTextField @bind-Value="_variables[idx].Name" Label="Name" Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense" Placeholder="e.g. amount" />
+                                </MudItem>
+                                <MudItem xs="4">
+                                    <MudSelect T="string" @bind-Value="_variables[idx].Type" Label="Type" Variant="Variant.Outlined"
+                                               Margin="Margin.Dense">
+                                        <MudSelectItem T="string" Value="@("string")">String</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("number")">Number</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("boolean")">Boolean</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("date")">Date</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("object")">Object</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="2">
+                                    <MudCheckBox T="bool" @bind-Value="_variables[idx].Required" Label="Req" Dense="true"
+                                                 Style="margin-top: 8px;" />
+                                </MudItem>
+                                <MudItem xs="1" Class="d-flex align-center justify-center">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => { _variables.RemoveAt(idx); _hasChanges = true; })" />
+                                </MudItem>
+                                <MudItem xs="9">
+                                    <MudTextField @bind-Value="_variables[idx].DefaultValue" Label="Default" Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense" Placeholder="Default value" />
+                                </MudItem>
+                                <MudItem xs="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="margin-top: 14px;">
+                                        @($"{{{{{_variables[idx].Name}}}}}")
+                                    </MudText>
+                                </MudItem>
+                            </MudGrid>
+                        </MudPaper>
+                    }
+
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="@(() => { _variables.Add(new VariableItem()); _hasChanges = true; })">
+                        Add Variable
+                    </MudButton>
+                }
+                else if (_editingStep is not null)
+                {
+                    @* ── Full Step Inspector ── *@
+                    <div class="d-flex justify-space-between align-center mb-3">
+                        <div class="d-flex align-center gap-2">
+                            <div style="width: 8px; height: 24px; border-radius: 4px; background: @StepHexColor(_editingStep.Action);"></div>
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Step Configuration</MudText>
+                        </div>
                         <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
                                        OnClick="@(() => _editingStep = null)" aria-label="Close step editor" />
                     </div>
+
+                    @* Basic Info *@
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;" Class="mb-1">BASIC</MudText>
                     <MudTextField @bind-Value="_editingStep.Name" Label="Step Name" Variant="Variant.Outlined"
-                                  Margin="Margin.Dense" Class="mb-3" />
-                    <MudSelect T="string" @bind-Value="_editingStep.Action" Label="Type" Variant="Variant.Outlined"
-                               Margin="Margin.Dense" Class="mb-3">
-                        <MudSelectItem T="string" Value="@("Action")">Action</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Approval")">Approval</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("AI Generate")">AI Generate</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Email")">Email</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("API Call")">API Call</MudSelectItem>
-                        <MudSelectItem T="string" Value="@("Condition")">Condition</MudSelectItem>
+                                  Margin="Margin.Dense" Class="mb-2" />
+                    <MudSelect T="string" Value="_editingStep.Action" Label="Type" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" Class="mb-2" ValueChanged="OnStepTypeChanged">
+                        <MudSelectItem T="string" Value="@("Action")">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" />
+                                Action
+                            </div>
+                        </MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Approval")">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.Approval" Size="Size.Small" />
+                                Approval
+                            </div>
+                        </MudSelectItem>
+                        <MudSelectItem T="string" Value="@("AI Generate")">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" />
+                                AI Generate
+                            </div>
+                        </MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Email")">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" />
+                                Email
+                            </div>
+                        </MudSelectItem>
+                        <MudSelectItem T="string" Value="@("API Call")">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Small" />
+                                API Call
+                            </div>
+                        </MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Condition")">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" />
+                                Condition
+                            </div>
+                        </MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Delay")">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.HourglassBottom" Size="Size.Small" />
+                                Delay / Wait
+                            </div>
+                        </MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Transform")">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.Transform" Size="Size.Small" />
+                                Transform Data
+                            </div>
+                        </MudSelectItem>
                     </MudSelect>
                     <MudTextField @bind-Value="_editingStep.AssignedRole" Label="Assigned Role (optional)"
                                   Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
-                    <div class="d-flex gap-2">
+
+                    <MudDivider Class="mb-3" />
+
+                    @* Type-Specific Configuration *@
+                    @switch ((_editingStep.Action ?? "").ToLowerInvariant())
+                    {
+                        case "approval":
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;" Class="mb-1">APPROVAL SETTINGS</MudText>
+                            <MudSelect T="string" @bind-Value="_editingStep.Config.ApprovalType" Label="Approval Type"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
+                                <MudSelectItem T="string" Value="@("single")">Single Approver</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("any")">Any One of Group</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("all")">All Must Approve</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("majority")">Majority Vote</MudSelectItem>
+                            </MudSelect>
+                            <MudTextField @bind-Value="_editingStep.Config.ApproverRoles" Label="Approver Roles (comma-separated)"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                          Placeholder="Manager, Director, Finance" />
+                            <MudNumericField T="int" @bind-Value="_editingStep.Config.EscalationHours" Label="Escalation After (hours)"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Min="0" Max="720" />
+                            <MudTextField @bind-Value="_editingStep.Config.EscalationTo" Label="Escalate To"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                          Placeholder="Director" />
+                            <MudCheckBox T="bool" @bind-Value="_editingStep.Config.RequireComments" Label="Require comments on reject"
+                                         Dense="true" Class="mb-2" />
+                            break;
+
+                        case "email":
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;" Class="mb-1">EMAIL SETTINGS</MudText>
+                            <MudTextField @bind-Value="_editingStep.Config.EmailTo" Label="To"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                          Placeholder="{{requester_email}} or role:Manager" />
+                            <MudTextField @bind-Value="_editingStep.Config.EmailCc" Label="CC (optional)"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
+                            <MudTextField @bind-Value="_editingStep.Config.EmailSubject" Label="Subject"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                          Placeholder="{{workflow_name}} - Action Required" />
+                            <MudTextField @bind-Value="_editingStep.Config.EmailBody" Label="Body Template"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" Class="mb-2"
+                                          Placeholder="Dear {{approver_name}},&#10;&#10;Please review..." />
+                            <MudSelect T="string" @bind-Value="_editingStep.Config.EmailTemplate" Label="Template"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Clearable="true">
+                                <MudSelectItem T="string" Value="@("approval_request")">Approval Request</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("approval_result")">Approval Result</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("notification")">General Notification</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("welcome")">Welcome</MudSelectItem>
+                            </MudSelect>
+                            break;
+
+                        case "ai generate":
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;" Class="mb-1">AI SETTINGS</MudText>
+                            <MudTextField @bind-Value="_editingStep.Config.AiPrompt" Label="Prompt"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="4" Class="mb-2"
+                                          Placeholder="Summarize the document content and extract key entities..." />
+                            <MudSelect T="string" @bind-Value="_editingStep.Config.AiModel" Label="Model"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
+                                <MudSelectItem T="string" Value="@("default")">Default Model</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("gpt-4o")">GPT-4o</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("gpt-4o-mini")">GPT-4o Mini</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("claude-sonnet")">Claude Sonnet</MudSelectItem>
+                            </MudSelect>
+                            <MudNumericField T="int" @bind-Value="_editingStep.Config.AiMaxTokens" Label="Max Tokens"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                             Min="100" Max="32000" />
+                            <MudNumericField T="double" @bind-Value="_editingStep.Config.AiTemperature" Label="Temperature"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                             Min="0.0" Max="2.0" Step="0.1" />
+                            <MudTextField @bind-Value="_editingStep.Config.AiOutputVariable" Label="Save Output To Variable"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                          Placeholder="ai_result" />
+                            break;
+
+                        case "api call":
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;" Class="mb-1">API SETTINGS</MudText>
+                            <MudGrid Spacing="2" Class="mb-2">
+                                <MudItem xs="4">
+                                    <MudSelect T="string" @bind-Value="_editingStep.Config.ApiMethod" Label="Method"
+                                               Variant="Variant.Outlined" Margin="Margin.Dense">
+                                        <MudSelectItem T="string" Value="@("GET")">GET</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("POST")">POST</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("PUT")">PUT</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("PATCH")">PATCH</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("DELETE")">DELETE</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="8">
+                                    <MudTextField @bind-Value="_editingStep.Config.ApiUrl" Label="URL"
+                                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Placeholder="https://api.example.com/endpoint" />
+                                </MudItem>
+                            </MudGrid>
+                            <MudTextField @bind-Value="_editingStep.Config.ApiHeaders" Label="Headers (JSON)"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Class="mb-2"
+                                          Placeholder='{"Authorization": "Bearer {{api_key}}"}' />
+                            <MudTextField @bind-Value="_editingStep.Config.ApiBody" Label="Request Body (JSON)"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="3" Class="mb-2"
+                                          Placeholder='{"data": "{{input}}"}' />
+                            <MudTextField @bind-Value="_editingStep.Config.ApiOutputVariable" Label="Save Response To"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                          Placeholder="api_response" />
+                            <MudSelect T="string" @bind-Value="_editingStep.Config.ApiAuth" Label="Authentication"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" Clearable="true">
+                                <MudSelectItem T="string" Value="@("none")">None</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("bearer")">Bearer Token</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("basic")">Basic Auth</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("api_key")">API Key</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("integration")">Use Integration</MudSelectItem>
+                            </MudSelect>
+                            break;
+
+                        case "condition":
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;" Class="mb-1">CONDITION SETTINGS</MudText>
+                            <MudTextField @bind-Value="_editingStep.Config.ConditionExpression" Label="Expression"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Class="mb-2"
+                                          Placeholder="{{amount}} > 100000" />
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2" Style="font-size: 0.75rem;">
+                                Use variables like <code>@("{{amount}}")</code> in expressions. Supports <code>&gt;</code>, <code>&lt;</code>, <code>==</code>, <code>!=</code>, <code>contains</code>, <code>&&</code>, <code>||</code>
+                            </MudAlert>
+                            <MudTextField @bind-Value="_editingStep.Config.TrueBranch" Label="If True → Go To Step"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                          Placeholder="Next step name or number" />
+                            <MudTextField @bind-Value="_editingStep.Config.FalseBranch" Label="If False → Go To Step"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                          Placeholder="Step name or 'skip'" />
+                            break;
+
+                        case "delay":
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;" Class="mb-1">DELAY SETTINGS</MudText>
+                            <MudGrid Spacing="2" Class="mb-2">
+                                <MudItem xs="6">
+                                    <MudNumericField T="int" @bind-Value="_editingStep.Config.DelayDuration" Label="Duration"
+                                                     Variant="Variant.Outlined" Margin="Margin.Dense" Min="1" />
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudSelect T="string" @bind-Value="_editingStep.Config.DelayUnit" Label="Unit"
+                                               Variant="Variant.Outlined" Margin="Margin.Dense">
+                                        <MudSelectItem T="string" Value="@("minutes")">Minutes</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("hours")">Hours</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("days")">Days</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                            </MudGrid>
+                            <MudCheckBox T="bool" @bind-Value="_editingStep.Config.WaitForEvent" Label="Wait for external event instead"
+                                         Dense="true" Class="mb-2" />
+                            @if (_editingStep.Config.WaitForEvent)
+                            {
+                                <MudTextField @bind-Value="_editingStep.Config.WaitEventName" Label="Event Name"
+                                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                              Placeholder="payment_received" />
+                            }
+                            break;
+
+                        case "transform":
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;" Class="mb-1">TRANSFORM SETTINGS</MudText>
+                            <MudTextField @bind-Value="_editingStep.Config.TransformInput" Label="Input Variable"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                          Placeholder="api_response" />
+                            <MudSelect T="string" @bind-Value="_editingStep.Config.TransformOperation" Label="Operation"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2">
+                                <MudSelectItem T="string" Value="@("extract")">Extract Field</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("map")">Map / Rename Fields</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("filter")">Filter Array</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("aggregate")">Aggregate (sum/count/avg)</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("format")">Format / Template</MudSelectItem>
+                            </MudSelect>
+                            <MudTextField @bind-Value="_editingStep.Config.TransformExpression" Label="Expression / JSONPath"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Class="mb-2"
+                                          Placeholder="$.data.items[*].name" />
+                            <MudTextField @bind-Value="_editingStep.Config.TransformOutput" Label="Output Variable"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                          Placeholder="transformed_data" />
+                            break;
+
+                        default:
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;" Class="mb-1">ACTION SETTINGS</MudText>
+                            <MudTextField @bind-Value="_editingStep.Config.ActionDescription" Label="Description"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" Class="mb-2"
+                                          Placeholder="Describe what this action does..." />
+                            break;
+                    }
+
+                    @* Common: Timeout & Retry *@
+                    <MudDivider Class="my-3" />
+                    <MudExpansionPanels Elevation="0" Dense="true">
+                        <MudExpansionPanel Text="Timeout & Retry" MaxHeight="400" Dense="true"
+                                           Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+                            <MudNumericField T="int" @bind-Value="_editingStep.Config.TimeoutMinutes" Label="Timeout (minutes)"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                             Min="0" Max="10080" />
+                            <MudNumericField T="int" @bind-Value="_editingStep.Config.RetryCount" Label="Max Retries"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                             Min="0" Max="10" />
+                            <MudNumericField T="int" @bind-Value="_editingStep.Config.RetryDelaySeconds" Label="Retry Delay (seconds)"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
+                                             Min="0" Max="3600" />
+                            <MudSelect T="string" @bind-Value="_editingStep.Config.OnFailure" Label="On Failure"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                                <MudSelectItem T="string" Value="@("stop")">Stop Workflow</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("skip")">Skip & Continue</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("retry")">Auto-Retry</MudSelectItem>
+                                <MudSelectItem T="string" Value="@("fallback")">Run Fallback Step</MudSelectItem>
+                            </MudSelect>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+
+                    @* Actions *@
+                    <div class="d-flex gap-2 mt-3">
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" FullWidth="true"
                                    OnClick="@(() => { _editingStep = null; _hasChanges = true; })">
                             Done
                         </MudButton>
                         <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
-                                   OnClick="@(() => { _steps.Remove(_editingStep); _editingStep = null; _hasChanges = true; })">
+                                   StartIcon="@Icons.Material.Filled.Delete"
+                                   OnClick="@(() => { PushUndo(); _steps.Remove(_editingStep); _editingStep = null; _hasChanges = true; })">
                             Delete
                         </MudButton>
                     </div>
                 }
                 else
                 {
-                    @* Step List *@
-                    <MudText Typo="Typo.subtitle1" Class="mb-2" Style="font-weight: 600;">
-                        Steps (@_steps.Count)
-                    </MudText>
+                    @* ── Step List ── *@
+                    <div class="d-flex justify-space-between align-center mb-2">
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                            Steps (@_steps.Count)
+                        </MudText>
+                        @if (_steps.Count > 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Click to configure</MudText>
+                        }
+                    </div>
 
                     @for (var i = 0; i < _steps.Count; i++)
                     {
@@ -149,7 +509,7 @@ else
                         var index = i;
                         var isDragging = _dragFromIndex == index;
                         var isDropTarget = _dropTargetIndex == index;
-                        var rowStyle = $"border: 1px solid var(--mud-palette-divider); border-left: 4px solid {GetStepColorValue(step.Action)}; border-radius: 8px; cursor: grab; transition: all 0.15s ease;"
+                        var rowStyle = $"border: 1px solid var(--mud-palette-divider); border-left: 4px solid {StepHexColor(step.Action)}; border-radius: 8px; cursor: grab; transition: all 0.15s ease;"
                             + (isDragging ? " opacity: 0.4;" : "")
                             + (isDropTarget ? " border-top: 2px solid var(--mud-palette-primary); margin-top: 6px;" : "");
 
@@ -162,23 +522,30 @@ else
                              @ondragend="OnDragEnd">
                             <MudPaper Class="pa-3 mb-2" Elevation="0"
                                       Style="@rowStyle"
-                                      @onclick="@(() => _editingStep = step)">
+                                      @onclick="@(() => { _editingStep = step; _showVariables = false; })">
                                 <div class="d-flex justify-space-between align-center">
-                                    <div class="d-flex align-center gap-2">
+                                    <div class="d-flex align-center gap-2" style="min-width: 0; flex: 1;">
                                         <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small"
-                                                 Color="Color.Secondary" Style="opacity: 0.5;" />
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="min-width: 18px; font-weight: 600;">@(index + 1)</MudText>
-                                        <div>
-                                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@step.Name</MudText>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@step.Action</MudText>
+                                                 Color="Color.Secondary" Style="opacity: 0.5; flex-shrink: 0;" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="min-width: 18px; font-weight: 600; flex-shrink: 0;">@(index + 1)</MudText>
+                                        <div style="min-width: 0; overflow: hidden;">
+                                            <MudText Typo="Typo.body2" Style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">@step.Name</MudText>
+                                            <div class="d-flex align-center gap-1">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">@step.Action</MudText>
+                                                @if (HasStepConfig(step))
+                                                {
+                                                    <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small"
+                                                             Style="font-size: 11px; color: var(--mud-palette-text-secondary); opacity: 0.5;" />
+                                                }
+                                            </div>
                                         </div>
                                     </div>
-                                    <div class="d-flex">
+                                    <div class="d-flex flex-shrink-0">
                                         <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small"
-                                                       Disabled="@(index == 0)" OnClick="@(() => MoveStep(index, -1))"
+                                                       Disabled="@(index == 0)" OnClick="@(() => { PushUndo(); MoveStep(index, -1); })"
                                                        aria-label="Move up" />
                                         <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small"
-                                                       Disabled="@(index == _steps.Count - 1)" OnClick="@(() => MoveStep(index, 1))"
+                                                       Disabled="@(index == _steps.Count - 1)" OnClick="@(() => { PushUndo(); MoveStep(index, 1); })"
                                                        aria-label="Move down" />
                                     </div>
                                 </div>
@@ -210,6 +577,12 @@ else
                         <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Secondary"
                                    StartIcon="@Icons.Material.Filled.Api"
                                    OnClick="@(() => QuickAddStep("API Call", "API Integration"))">API</MudButton>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Tertiary"
+                                   StartIcon="@Icons.Material.Filled.CallSplit"
+                                   OnClick="@(() => QuickAddStep("Condition", "Condition Check"))">Condition</MudButton>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default"
+                                   StartIcon="@Icons.Material.Filled.HourglassBottom"
+                                   OnClick="@(() => QuickAddStep("Delay", "Wait"))">Delay</MudButton>
                     </div>
 
                     @* AI Step Suggestion *@
@@ -227,7 +600,7 @@ else
             </MudPaper>
         </MudItem>
 
-        @* Right Panel: SVG Visual Canvas *@
+        @* ── Right Panel: SVG Visual Canvas ── *@
         <MudItem xs="12" md="8">
             <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); overflow: hidden;">
                 <div class="d-flex justify-space-between align-center pa-3" style="border-bottom: 1px solid var(--mud-palette-divider);">
@@ -240,7 +613,8 @@ else
                     </div>
                     <div class="d-flex align-center gap-1">
                         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="me-2 d-none d-md-inline">
-                            Click a node · Drag to reorder · <kbd style="background:#F3F4F6;padding:1px 4px;border-radius:3px;font-size:0.7rem;">Del</kbd> to remove
+                            Click node · Drag to reorder · <kbd style="background:#F3F4F6;padding:1px 4px;border-radius:3px;font-size:0.7rem;">Del</kbd> remove ·
+                            <kbd style="background:#F3F4F6;padding:1px 4px;border-radius:3px;font-size:0.7rem;">Ctrl+Z</kbd> undo
                         </MudText>
                         <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small"
                                        OnClick="ZoomOut" Disabled="@(_zoom <= MinZoom)" aria-label="Zoom out" />
@@ -255,7 +629,7 @@ else
                 </div>
 
                 <div tabindex="0" @onkeydown="OnCanvasKeyDown"
-                     style="overflow: auto; max-height: 640px; background: var(--mud-palette-background); outline: none;">
+                     style="overflow: auto; max-height: 700px; background: var(--mud-palette-background); outline: none;">
                     <svg viewBox="0 0 600 @CanvasHeight"
                          xmlns="http://www.w3.org/2000/svg"
                          style="@($"width: 100%; display: block; min-height: 400px; transform: scale({_zoom.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}); transform-origin: top center; transition: transform 0.15s ease;")">
@@ -269,7 +643,6 @@ else
                             <filter id="wf-shadow-sel" x="-30%" y="-30%" width="160%" height="160%">
                                 <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#7C3AED" flood-opacity="0.25" />
                             </filter>
-                            @* Execution mode filters *@
                             <filter id="wf-glow-running" x="-40%" y="-40%" width="180%" height="180%">
                                 <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#3B82F6" flood-opacity="0.5">
                                     <animate attributeName="stdDeviation" values="4;8;4" dur="1.5s" repeatCount="indefinite" />
@@ -296,6 +669,7 @@ else
                             var ny = NodeTop(i);
                             var prevBottom = i == 0 ? StartCY + 22 : NodeTop(i - 1) + NodeH;
                             var connMidY = (prevBottom + ny) / 2;
+                            var isCondition = (step.Action ?? "").Equals("Condition", StringComparison.OrdinalIgnoreCase);
 
                             @* Connector line *@
                             <path d="M 300,@prevBottom C 300,@(prevBottom + 36) 300,@(ny - 36) 300,@ny"
@@ -311,52 +685,78 @@ else
 
                             @* Step Node *@
                             <g @onclick="@(() => SelectStep(step))" style="cursor:pointer;">
-                                <rect x="180" y="@ny" width="240" height="@NodeH" rx="10"
-                                      fill="white"
-                                      stroke="@NodeStroke(idx, selected)"
-                                      stroke-width="@NodeStrokeWidth(idx, selected)"
-                                      stroke-dasharray="@NodeDash(idx)"
-                                      filter="@NodeFilter(idx, selected)" />
-                                @if (GetStepExecutionStatus(idx) == "Running")
+                                @if (isCondition)
                                 {
-                                    @* Animated pulsing border for running step *@
-                                    <rect x="180" y="@ny" width="240" height="@NodeH" rx="10"
-                                          fill="none" stroke="#3B82F6" stroke-width="2">
-                                        <animate attributeName="stroke-opacity" values="1;0.3;1" dur="1.2s" repeatCount="indefinite" />
-                                    </rect>
+                                    @* Diamond shape for conditions *@
+                                    var cx = 300;
+                                    var cy = ny + NodeH / 2;
+                                    var hw = 120;
+                                    var hh = NodeH / 2;
+                                    <polygon points="@($"{cx},{cy - hh} {cx + hw},{cy} {cx},{cy + hh} {cx - hw},{cy}")"
+                                             fill="white"
+                                             stroke="@NodeStroke(idx, selected)"
+                                             stroke-width="@NodeStrokeWidth(idx, selected)"
+                                             stroke-dasharray="@NodeDash(idx)"
+                                             filter="@NodeFilter(idx, selected)" />
+                                    @((MarkupString)$"<text x=\"{cx}\" y=\"{cy - 6}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"600\" fill=\"#111827\" font-family=\"Inter,sans-serif\">{System.Net.WebUtility.HtmlEncode(TruncateLabel(step.Name, 20))}</text>")
+                                    @((MarkupString)$"<text x=\"{cx}\" y=\"{cy + 10}\" text-anchor=\"middle\" font-size=\"9\" fill=\"#0EA5E9\" font-family=\"Inter,sans-serif\">Condition</text>")
+
+                                    @* Branch labels *@
+                                    @((MarkupString)$"<text x=\"{cx + hw + 12}\" y=\"{cy + 4}\" font-size=\"9\" font-weight=\"600\" fill=\"#10B981\" font-family=\"Inter,sans-serif\">True</text>")
+                                    @((MarkupString)$"<text x=\"{cx - hw - 12}\" y=\"{cy + 4}\" font-size=\"9\" font-weight=\"600\" fill=\"#EF4444\" font-family=\"Inter,sans-serif\" text-anchor=\"end\">False</text>")
                                 }
-                                <rect x="180" y="@ny" width="5" height="@NodeH" rx="2"
-                                      fill="@StepHexColor(step.Action)" />
-                                <circle cx="207" cy="@(ny + NodeH / 2)" r="15"
-                                        fill="@StepHexBg(step.Action)" />
-                                @((MarkupString)$"<text x=\"228\" y=\"{ny + 27}\" font-size=\"12\" font-weight=\"600\" fill=\"#111827\" font-family=\"Inter,sans-serif\">{System.Net.WebUtility.HtmlEncode(TruncateLabel(step.Name, 25))}</text>")
-                                @((MarkupString)$"<text x=\"228\" y=\"{ny + 45}\" font-size=\"10.5\" fill=\"#6B7280\" font-family=\"Inter,sans-serif\">{System.Net.WebUtility.HtmlEncode(step.Action + (!string.IsNullOrEmpty(step.AssignedRole) ? $" · {step.AssignedRole}" : ""))}</text>")
+                                else
+                                {
+                                    <rect x="180" y="@ny" width="240" height="@NodeH" rx="10"
+                                          fill="white"
+                                          stroke="@NodeStroke(idx, selected)"
+                                          stroke-width="@NodeStrokeWidth(idx, selected)"
+                                          stroke-dasharray="@NodeDash(idx)"
+                                          filter="@NodeFilter(idx, selected)" />
+                                    @if (GetStepExecutionStatus(idx) == "Running")
+                                    {
+                                        <rect x="180" y="@ny" width="240" height="@NodeH" rx="10"
+                                              fill="none" stroke="#3B82F6" stroke-width="2">
+                                            <animate attributeName="stroke-opacity" values="1;0.3;1" dur="1.2s" repeatCount="indefinite" />
+                                        </rect>
+                                    }
+                                    <rect x="180" y="@ny" width="5" height="@NodeH" rx="2"
+                                          fill="@StepHexColor(step.Action)" />
+                                    <circle cx="207" cy="@(ny + NodeH / 2)" r="15"
+                                            fill="@StepHexBg(step.Action)" />
+                                    @((MarkupString)GetStepIconSvg(step.Action, 207, ny + NodeH / 2))
+                                    @((MarkupString)$"<text x=\"228\" y=\"{ny + 27}\" font-size=\"12\" font-weight=\"600\" fill=\"#111827\" font-family=\"Inter,sans-serif\">{System.Net.WebUtility.HtmlEncode(TruncateLabel(step.Name, 22))}</text>")
+                                    @((MarkupString)$"<text x=\"228\" y=\"{ny + 45}\" font-size=\"10.5\" fill=\"#6B7280\" font-family=\"Inter,sans-serif\">{System.Net.WebUtility.HtmlEncode(step.Action + (!string.IsNullOrEmpty(step.AssignedRole) ? $" · {step.AssignedRole}" : ""))}</text>")
+                                }
 
                                 @* Status overlay or step number *@
                                 @if (GetStepExecutionStatus(idx) == "Completed")
                                 {
-                                    @* Green checkmark circle *@
                                     <circle cx="396" cy="@(ny + NodeH / 2)" r="13" fill="#10B981" />
                                     @((MarkupString)$"<text x=\"396\" y=\"{ny + NodeH / 2 + 5}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"700\" fill=\"white\" font-family=\"Inter,sans-serif\">&#x2713;</text>")
                                 }
                                 else if (GetStepExecutionStatus(idx) == "Failed")
                                 {
-                                    @* Red X circle *@
                                     <circle cx="396" cy="@(ny + NodeH / 2)" r="13" fill="#EF4444" />
                                     @((MarkupString)$"<text x=\"396\" y=\"{ny + NodeH / 2 + 5}\" text-anchor=\"middle\" font-size=\"14\" font-weight=\"700\" fill=\"white\" font-family=\"Inter,sans-serif\">&#x2717;</text>")
                                 }
                                 else if (GetStepExecutionStatus(idx) == "Running")
                                 {
-                                    @* Animated spinner indicator *@
                                     <circle cx="396" cy="@(ny + NodeH / 2)" r="13" fill="#3B82F6">
                                         <animate attributeName="fill-opacity" values="1;0.5;1" dur="1s" repeatCount="indefinite" />
                                     </circle>
                                     @((MarkupString)$"<text x=\"396\" y=\"{ny + NodeH / 2 + 4}\" text-anchor=\"middle\" font-size=\"10\" font-weight=\"700\" fill=\"white\" font-family=\"Inter,sans-serif\">&#9654;</text>")
                                 }
-                                else
+                                else if (!isCondition)
                                 {
                                     <circle cx="396" cy="@(ny + NodeH / 2)" r="13" fill="@(selected ? "#7C3AED" : (IsExecPending(idx) ? "#E5E7EB" : "#F3F4F6"))" />
                                     @((MarkupString)$"<text x=\"396\" y=\"{ny + NodeH / 2 + 4}\" text-anchor=\"middle\" font-size=\"10\" font-weight=\"700\" fill=\"{(selected ? "white" : (IsExecPending(idx) ? "#9CA3AF" : "#7C3AED"))}\" font-family=\"Inter,sans-serif\">{i + 1}</text>")
+                                }
+
+                                @if (HasStepConfig(step) && !isCondition)
+                                {
+                                    <circle cx="195" cy="@(ny + 8)" r="5" fill="#7C3AED" />
+                                    @((MarkupString)$"<text x=\"195\" y=\"{ny + 11}\" text-anchor=\"middle\" font-size=\"7\" fill=\"white\" font-family=\"Inter,sans-serif\">&#9881;</text>")
                                 }
 
                                 @* Status label below node in execution mode *@
@@ -398,6 +798,30 @@ else
                         }
                     </svg>
                 </div>
+
+                @* Minimap *@
+                @if (_steps.Count > 4)
+                {
+                    <div style="position: relative;">
+                        <div class="wf-minimap">
+                            <MudText Typo="Typo.caption" Style="font-size: 0.6rem; opacity: 0.7; margin-bottom: 2px;">@_steps.Count steps</MudText>
+                            @for (int i = 0; i < _steps.Count; i++)
+                            {
+                                var step = _steps[i];
+                                var status = GetStepExecutionStatus(i);
+                                var miniColor = status switch
+                                {
+                                    "Completed" => "#10B981",
+                                    "Running" => "#3B82F6",
+                                    "Failed" => "#EF4444",
+                                    _ => StepHexColor(step.Action)
+                                };
+                                <div style="@($"height: 4px; background: {miniColor}; border-radius: 2px; opacity: {(_editingStep == step ? "1" : "0.5")};")"
+                                     title="@step.Name"></div>
+                            }
+                        </div>
+                    </div>
+                }
             </MudPaper>
         </MudItem>
     </MudGrid>
@@ -408,11 +832,19 @@ else
 
     private WorkflowDetailDto? _workflow;
     private List<StepItem> _steps = new();
+    private List<VariableItem> _variables = new();
     private StepItem? _editingStep;
     private bool _loading = true;
     private bool _saving;
     private bool _hasChanges;
+    private bool _editingName;
+    private bool _showVariables;
     private string _aiStepPrompt = string.Empty;
+
+    // Undo/Redo
+    private Stack<List<StepItem>> _undoStack = new();
+    private Stack<List<StepItem>> _redoStack = new();
+    private const int MaxUndoDepth = 30;
 
     // Execution mode state
     private bool _executionMode;
@@ -426,11 +858,11 @@ else
     private System.Threading.Timer? _pollTimer;
     private bool _isPolling;
 
-    // Drag-and-drop state for left panel
+    // Drag-and-drop state
     private int? _dragFromIndex;
     private int? _dropTargetIndex;
 
-    // Canvas zoom (1.0 = 100%)
+    // Canvas zoom
     private double _zoom = 1.0;
     private const double MinZoom = 0.5;
     private const double MaxZoom = 1.5;
@@ -460,7 +892,8 @@ else
                             {
                                 Name = s.Name,
                                 Action = s.Action ?? "Action",
-                                AssignedRole = s.AssignedRole
+                                AssignedRole = s.AssignedRole,
+                                Config = s.Config ?? new StepConfig()
                             }).ToList();
                     }
                 }
@@ -470,7 +903,7 @@ else
         }
     }
 
-    // ── Canvas layout constants ──────────────────────────────────────────────
+    // ── Canvas layout constants ──
     private const int StartCY = 55;
     private const int NodeH = 68;
     private const int NodeSpacing = 140;
@@ -488,6 +921,8 @@ else
         "email"       => "#3B82F6",
         "api call"    => "#059669",
         "condition"   => "#0EA5E9",
+        "delay"       => "#6366F1",
+        "transform"   => "#EC4899",
         _             => "#6B7280",
     };
 
@@ -498,32 +933,102 @@ else
         "email"       => "#DBEAFE",
         "api call"    => "#D1FAE5",
         "condition"   => "#E0F2FE",
+        "delay"       => "#E0E7FF",
+        "transform"   => "#FCE7F3",
         _             => "#F3F4F6",
     };
+
+    private static string GetStepIconSvg(string? action, int cx, int cy)
+    {
+        var icon = (action ?? "").ToLowerInvariant() switch
+        {
+            "approval"    => "&#x2713;",
+            "ai generate" => "AI",
+            "email"       => "&#9993;",
+            "api call"    => "&#123;&#125;",
+            "condition"   => "?",
+            "delay"       => "&#9202;",
+            "transform"   => "&#8644;",
+            _             => "&#9654;"
+        };
+        var color = StepHexColor(action);
+        return $"<text x=\"{cx}\" y=\"{cy + 5}\" text-anchor=\"middle\" font-size=\"11\" font-weight=\"700\" fill=\"{color}\" font-family=\"Inter,sans-serif\">{icon}</text>";
+    }
 
     private static string TruncateLabel(string s, int max) =>
         s.Length <= max ? s : s[..(max - 1)] + "…";
 
-    // ── Step operations ──────────────────────────────────────────────────────
+    private static bool HasStepConfig(StepItem step)
+    {
+        var c = step.Config;
+        return !string.IsNullOrEmpty(c.AiPrompt) || !string.IsNullOrEmpty(c.ApiUrl) ||
+               !string.IsNullOrEmpty(c.EmailTo) || !string.IsNullOrEmpty(c.ConditionExpression) ||
+               !string.IsNullOrEmpty(c.ApproverRoles) || !string.IsNullOrEmpty(c.ActionDescription) ||
+               c.TimeoutMinutes > 0 || c.RetryCount > 0 || c.DelayDuration > 0 ||
+               !string.IsNullOrEmpty(c.TransformInput);
+    }
 
+    // ── Undo / Redo ──
+    private void PushUndo()
+    {
+        _undoStack.Push(_steps.Select(s => s.Clone()).ToList());
+        if (_undoStack.Count > MaxUndoDepth)
+        {
+            var temp = _undoStack.ToArray();
+            _undoStack = new Stack<List<StepItem>>(temp.Reverse().Skip(1));
+        }
+        _redoStack.Clear();
+    }
+
+    private void Undo()
+    {
+        if (_undoStack.Count == 0) return;
+        _redoStack.Push(_steps.Select(s => s.Clone()).ToList());
+        _steps = _undoStack.Pop();
+        _editingStep = null;
+        _hasChanges = true;
+    }
+
+    private void Redo()
+    {
+        if (_redoStack.Count == 0) return;
+        _undoStack.Push(_steps.Select(s => s.Clone()).ToList());
+        _steps = _redoStack.Pop();
+        _editingStep = null;
+        _hasChanges = true;
+    }
+
+    // ── Step operations ──
     private void SelectStep(StepItem step)
     {
         _editingStep = _editingStep == step ? null : step;
+        _showVariables = false;
+    }
+
+    private void OnStepTypeChanged(string newType)
+    {
+        if (_editingStep is not null)
+            _editingStep.Action = newType;
+        _hasChanges = true;
     }
 
     private void QuickAddStep(string action, string name)
     {
+        PushUndo();
         var step = new StepItem { Name = name, Action = action };
         _steps.Add(step);
         _editingStep = step;
+        _showVariables = false;
         _hasChanges = true;
     }
 
     private void InsertStep(int beforeIndex)
     {
+        PushUndo();
         var step = new StepItem { Name = "New Step", Action = "Action" };
         _steps.Insert(beforeIndex, step);
         _editingStep = step;
+        _showVariables = false;
         _hasChanges = true;
     }
 
@@ -535,23 +1040,10 @@ else
         _hasChanges = true;
     }
 
-    // ── Drag-and-drop on the left step list ─────────────────────────────────
-    private void OnDragStart(int index)
-    {
-        _dragFromIndex = index;
-        _dropTargetIndex = null;
-    }
-
-    private void OnDragOver(int index)
-    {
-        if (_dragFromIndex is null || _dragFromIndex == index) return;
-        _dropTargetIndex = index;
-    }
-
-    private void OnDragLeave()
-    {
-        _dropTargetIndex = null;
-    }
+    // ── Drag-and-drop ──
+    private void OnDragStart(int index) { _dragFromIndex = index; _dropTargetIndex = null; }
+    private void OnDragOver(int index) { if (_dragFromIndex is not null && _dragFromIndex != index) _dropTargetIndex = index; }
+    private void OnDragLeave() { _dropTargetIndex = null; }
 
     private void OnDrop(int index)
     {
@@ -559,9 +1051,9 @@ else
         var from = _dragFromIndex.Value;
         if (from == index) { _dragFromIndex = null; _dropTargetIndex = null; return; }
 
+        PushUndo();
         var moving = _steps[from];
         _steps.RemoveAt(from);
-        // After removal, target index shifts if from < index
         var insertAt = from < index ? index - 1 : index;
         if (insertAt < 0) insertAt = 0;
         if (insertAt > _steps.Count) insertAt = _steps.Count;
@@ -572,18 +1064,18 @@ else
         _dropTargetIndex = null;
     }
 
-    private void OnDragEnd()
-    {
-        _dragFromIndex = null;
-        _dropTargetIndex = null;
-    }
+    private void OnDragEnd() { _dragFromIndex = null; _dropTargetIndex = null; }
 
-    // ── Keyboard delete on selected step ────────────────────────────────────
+    // ── Keyboard shortcuts ──
     private void OnCanvasKeyDown(KeyboardEventArgs e)
     {
+        if (e.CtrlKey && e.Key == "z") { Undo(); return; }
+        if (e.CtrlKey && (e.Key == "y" || (e.ShiftKey && e.Key == "z"))) { Redo(); return; }
+
         if (_editingStep is null) return;
         if (e.Key != "Delete" && e.Key != "Backspace") return;
 
+        PushUndo();
         var step = _editingStep;
         _editingStep = null;
         _steps.Remove(step);
@@ -600,6 +1092,7 @@ else
     {
         if (string.IsNullOrWhiteSpace(_aiStepPrompt)) return;
 
+        PushUndo();
         var prompt = _aiStepPrompt.ToLowerInvariant();
         string action = "Action";
         string name = _aiStepPrompt;
@@ -633,16 +1126,26 @@ else
             action = "Condition";
             name = "Condition Check";
         }
+        else if (prompt.Contains("wait") || prompt.Contains("delay") || prompt.Contains("pause"))
+        {
+            action = "Delay";
+            name = prompt.Contains("event") ? "Wait for Event" : "Delay";
+        }
+        else if (prompt.Contains("transform") || prompt.Contains("convert") || prompt.Contains("map"))
+        {
+            action = "Transform";
+            name = "Transform Data";
+        }
 
         var step = new StepItem { Name = name, Action = action, AssignedRole = role };
         _steps.Add(step);
         _editingStep = step;
+        _showVariables = false;
         _aiStepPrompt = string.Empty;
         _hasChanges = true;
     }
 
-    // ── Execution mode ────────────────────────────────────────────────────
-
+    // ── Execution mode ──
     private async Task ExecuteWorkflow()
     {
         if (_steps.Count == 0 || _hasChanges) return;
@@ -653,7 +1156,6 @@ else
         _executionError = null;
         _stepStatuses = new Dictionary<int, string>();
 
-        // Initialize all steps as Pending
         for (int i = 0; i < _steps.Count; i++)
             _stepStatuses[i] = "Pending";
 
@@ -673,9 +1175,7 @@ else
                     StartPolling();
                 }
                 else
-                {
                     FinishExecution(true, "No instance ID returned");
-                }
             }
             else
             {
@@ -695,15 +1195,14 @@ else
         _pollTimer = new System.Threading.Timer(
             async _ => await PollStepStatuses(),
             null,
-            TimeSpan.FromSeconds(1),   // Initial delay
-            TimeSpan.FromSeconds(3));  // Poll every 3 seconds
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(3));
     }
 
     private async Task PollStepStatuses()
     {
         if (_isPolling || _instanceId is null) return;
         _isPolling = true;
-
         try
         {
             var stepsResult = await Http.GetFromJsonAsync<ExecutionStepsResult>(
@@ -719,11 +1218,7 @@ else
                 {
                     _stepStatuses[step.StepIndex] = step.Status;
                     if (step.Status == "Completed") completedCount++;
-                    if (step.Status == "Failed")
-                    {
-                        hasFailure = true;
-                        failureError = step.Error;
-                    }
+                    if (step.Status == "Failed") { hasFailure = true; failureError = step.Error; }
                 }
 
                 var runningCount = stepsResult.Items.Count(s => s.Status == "Running");
@@ -731,26 +1226,13 @@ else
                 _executionPercent = total > 0 ? (double)completedCount / total * 100 : 0;
                 _executionProgress = $"Step {completedCount + runningCount} of {total}";
 
-                if (hasFailure)
-                {
-                    FinishExecution(true, failureError ?? "A step failed");
-                }
-                else if (completedCount == total)
-                {
-                    FinishExecution(false, null);
-                }
+                if (hasFailure) FinishExecution(true, failureError ?? "A step failed");
+                else if (completedCount == total) FinishExecution(false, null);
             }
-
             await InvokeAsync(StateHasChanged);
         }
-        catch
-        {
-            // Silently continue polling on transient errors
-        }
-        finally
-        {
-            _isPolling = false;
-        }
+        catch { }
+        finally { _isPolling = false; }
     }
 
     private void FinishExecution(bool failed, string? error)
@@ -762,14 +1244,10 @@ else
         _executionFailed = failed;
         _executionError = error;
         _executionPercent = failed ? _executionPercent : 100;
-        _executionProgress = failed
-            ? "Execution failed"
-            : $"All {_steps.Count} steps completed";
+        _executionProgress = failed ? "Execution failed" : $"All {_steps.Count} steps completed";
 
-        if (failed)
-            Snackbar.Add(error ?? "Execution failed", Severity.Error);
-        else
-            Snackbar.Add("Workflow execution completed successfully!", Severity.Success);
+        if (failed) Snackbar.Add(error ?? "Execution failed", Severity.Error);
+        else Snackbar.Add("Workflow execution completed successfully!", Severity.Success);
 
         InvokeAsync(StateHasChanged);
     }
@@ -817,44 +1295,35 @@ else
         };
     }
 
-    private string NodeStrokeWidth(int index, bool selected)
-    {
-        var status = GetStepExecutionStatus(index);
-        if (status == "Running") return "2.5";
-        if (status is "Completed" or "Failed") return "2";
-        return selected ? "2.5" : "1";
-    }
+    private string NodeStrokeWidth(int index, bool selected) =>
+        GetStepExecutionStatus(index) switch
+        {
+            "Running" => "2.5",
+            "Completed" or "Failed" => "2",
+            _ => selected ? "2.5" : "1"
+        };
 
     private string NodeDash(int index) => IsExecPending(index) ? "6 3" : "none";
 
-    private string NodeFilter(int index, bool selected)
-    {
-        var status = GetStepExecutionStatus(index);
-        return status switch
+    private string NodeFilter(int index, bool selected) =>
+        GetStepExecutionStatus(index) switch
         {
             "Running" => "url(#wf-glow-running)",
             "Completed" => "url(#wf-glow-completed)",
             "Failed" => "url(#wf-glow-failed)",
             _ => selected ? "url(#wf-shadow-sel)" : "url(#wf-shadow)"
         };
-    }
 
-    private string ExecStatusColor(int index)
-    {
-        var status = GetStepExecutionStatus(index);
-        return status switch
+    private string ExecStatusColor(int index) =>
+        GetStepExecutionStatus(index) switch
         {
             "Running" => "#3B82F6",
             "Completed" => "#10B981",
             "Failed" => "#EF4444",
             _ => "#9CA3AF"
         };
-    }
 
-    public void Dispose()
-    {
-        _pollTimer?.Dispose();
-    }
+    public void Dispose() { _pollTimer?.Dispose(); }
 
     private async Task SaveWorkflow()
     {
@@ -862,7 +1331,14 @@ else
         try
         {
             var stepsJson = System.Text.Json.JsonSerializer.Serialize(
-                _steps.Select((s, i) => new { Name = s.Name, Action = s.Action, AssignedRole = s.AssignedRole, Order = i }));
+                _steps.Select((s, i) => new
+                {
+                    Name = s.Name,
+                    Action = s.Action,
+                    AssignedRole = s.AssignedRole,
+                    Order = i,
+                    Config = s.Config
+                }));
 
             await Http.PutAsJsonAsync($"/api/v1/workflows/{WorkflowId}", new
             {
@@ -877,41 +1353,86 @@ else
         finally { _saving = false; }
     }
 
-    private static string GetStepIcon(string? action) => (action ?? "").ToLowerInvariant() switch
+    // ── DTOs & Models ──
+    private class StepConfig
     {
-        "approval" => Icons.Material.Filled.Approval,
-        "ai generate" => Icons.Material.Filled.SmartToy,
-        "email" => Icons.Material.Filled.Email,
-        "api call" => Icons.Material.Filled.Api,
-        "condition" => Icons.Material.Filled.CallSplit,
-        _ => Icons.Material.Filled.PlayArrow,
-    };
+        // Approval
+        public string? ApprovalType { get; set; } = "single";
+        public string? ApproverRoles { get; set; }
+        public int EscalationHours { get; set; }
+        public string? EscalationTo { get; set; }
+        public bool RequireComments { get; set; }
 
-    private static Color GetStepColor(string? action) => (action ?? "").ToLowerInvariant() switch
-    {
-        "approval" => Color.Warning,
-        "ai generate" => Color.Primary,
-        "email" => Color.Info,
-        "api call" => Color.Secondary,
-        "condition" => Color.Tertiary,
-        _ => Color.Default,
-    };
+        // Email
+        public string? EmailTo { get; set; }
+        public string? EmailCc { get; set; }
+        public string? EmailSubject { get; set; }
+        public string? EmailBody { get; set; }
+        public string? EmailTemplate { get; set; }
 
-    private static string GetStepColorValue(string? action) => (action ?? "").ToLowerInvariant() switch
-    {
-        "approval" => "var(--mud-palette-warning)",
-        "ai generate" => "var(--mud-palette-primary)",
-        "email" => "var(--mud-palette-info)",
-        "api call" => "var(--mud-palette-secondary)",
-        "condition" => "var(--mud-palette-tertiary)",
-        _ => "var(--mud-palette-lines-default)",
-    };
+        // AI
+        public string? AiPrompt { get; set; }
+        public string? AiModel { get; set; } = "default";
+        public int AiMaxTokens { get; set; } = 2000;
+        public double AiTemperature { get; set; } = 0.7;
+        public string? AiOutputVariable { get; set; }
+
+        // API
+        public string? ApiMethod { get; set; } = "GET";
+        public string? ApiUrl { get; set; }
+        public string? ApiHeaders { get; set; }
+        public string? ApiBody { get; set; }
+        public string? ApiOutputVariable { get; set; }
+        public string? ApiAuth { get; set; } = "none";
+
+        // Condition
+        public string? ConditionExpression { get; set; }
+        public string? TrueBranch { get; set; }
+        public string? FalseBranch { get; set; }
+
+        // Delay
+        public int DelayDuration { get; set; } = 1;
+        public string? DelayUnit { get; set; } = "hours";
+        public bool WaitForEvent { get; set; }
+        public string? WaitEventName { get; set; }
+
+        // Transform
+        public string? TransformInput { get; set; }
+        public string? TransformOperation { get; set; } = "extract";
+        public string? TransformExpression { get; set; }
+        public string? TransformOutput { get; set; }
+
+        // Common
+        public int TimeoutMinutes { get; set; }
+        public int RetryCount { get; set; }
+        public int RetryDelaySeconds { get; set; } = 30;
+        public string? OnFailure { get; set; } = "stop";
+        public string? ActionDescription { get; set; }
+    }
 
     private class StepItem
     {
         public string Name { get; set; } = string.Empty;
         public string? Action { get; set; }
         public string? AssignedRole { get; set; }
+        public StepConfig Config { get; set; } = new();
+
+        public StepItem Clone() => new()
+        {
+            Name = Name,
+            Action = Action,
+            AssignedRole = AssignedRole,
+            Config = System.Text.Json.JsonSerializer.Deserialize<StepConfig>(
+                System.Text.Json.JsonSerializer.Serialize(Config)) ?? new()
+        };
+    }
+
+    private class VariableItem
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = "string";
+        public string? DefaultValue { get; set; }
+        public bool Required { get; set; }
     }
 
     private class WorkflowRawDto
@@ -935,18 +1456,11 @@ else
         public string? Action { get; set; }
         public string? AssignedRole { get; set; }
         public int Order { get; set; }
+        public StepConfig? Config { get; set; }
     }
 
-    private class ExecuteResultDto
-    {
-        public Guid InstanceId { get; set; }
-    }
-
-    private class ExecutionStepsResult
-    {
-        public List<ExecutionStepDto> Items { get; set; } = new();
-    }
-
+    private class ExecuteResultDto { public Guid InstanceId { get; set; } }
+    private class ExecutionStepsResult { public List<ExecutionStepDto> Items { get; set; } = new(); }
     private class ExecutionStepDto
     {
         public Guid Id { get; set; }

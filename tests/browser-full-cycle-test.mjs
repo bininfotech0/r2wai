@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 
 const BASE_URL = 'http://localhost:3001';
 const EMAIL = 'admin@r2wai.io';
-const PASSWORD = 'admin123';
+const PASSWORD = 'R2wai_Admin!2026';
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 

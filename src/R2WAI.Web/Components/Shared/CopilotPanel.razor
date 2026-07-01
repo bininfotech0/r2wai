@@ -1,6 +1,8 @@
 @inject NavigationManager Navigation
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 @if (IsOpen)
 {
@@ -70,18 +72,23 @@
                         {
                             <MarkdownRenderer Content="@msg.Content" Style="font-size: 0.875rem;" />
                         }
-                        @if (msg.Actions.Count > 0)
-                        {
-                            <div class="d-flex gap-2 mt-2">
-                                @foreach (var action in msg.Actions)
-                                {
-                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
-                                               OnClick="@(() => ExecuteAction(action))" Style="border-radius: 8px;">
-                                        @action.Label
-                                    </MudButton>
-                                }
-                            </div>
-                        }
+                        <div class="d-flex align-center gap-1 mt-1">
+                            @if (!msg.IsUser && _ttsSupported)
+                            {
+                                <MudIconButton Icon="@(_speakingMessageIndex == _messages.IndexOf(msg) ? Icons.Material.Filled.StopCircle : Icons.Material.Filled.VolumeUp)"
+                                               Size="Size.Small" Color="@(_speakingMessageIndex == _messages.IndexOf(msg) ? Color.Primary : Color.Default)"
+                                               OnClick="@(() => ToggleSpeakMessage(msg))"
+                                               Style="width: 22px; height: 22px; opacity: 0.6;"
+                                               aria-label="Read aloud" />
+                            }
+                            @foreach (var action in msg.Actions)
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                           OnClick="@(() => ExecuteAction(action))" Style="border-radius: 8px;">
+                                    @action.Label
+                                </MudButton>
+                            }
+                        </div>
                     </div>
                 </div>
             }
@@ -97,13 +104,33 @@
         }
     </div>
 
+    @if (_isListening)
+    {
+        <div class="d-flex align-center gap-2 px-3 py-1" style="background: rgba(76, 175, 80, 0.08); border-top: 1px solid rgba(76, 175, 80, 0.2);">
+            <div class="voice-pulse-dot"></div>
+            <MudText Typo="Typo.caption" Color="Color.Success" Style="font-weight: 600; font-size: 0.7rem;">
+                @(_interimTranscript.Length > 0 ? _interimTranscript : "Listening...")
+            </MudText>
+        </div>
+    }
+
     <div class="copilot-input pa-3" style="border-top: 1px solid var(--mud-palette-divider);">
-        <MudTextField @bind-Value="_input" Placeholder="Ask R2WAI anything..."
-                      Variant="Variant.Outlined" Margin="Margin.Dense"
-                      Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Send"
-                      AdornmentColor="Color.Primary" OnAdornmentClick="SendMessage"
-                      OnKeyUp="HandleKeyUp" Immediate="true"
-                      Style="border-radius: 10px;" aria-label="Copilot input" />
+        <div class="d-flex align-center gap-1">
+            @if (_sttSupported)
+            {
+                <MudIconButton Icon="@(_isListening ? Icons.Material.Filled.MicOff : Icons.Material.Filled.Mic)"
+                               Color="@(_isListening ? Color.Error : Color.Default)"
+                               OnClick="ToggleVoiceInput" Size="Size.Small"
+                               Style="@(_isListening ? "animation: pulse-soft 1.5s infinite;" : "")"
+                               aria-label="@(_isListening ? "Stop voice input" : "Voice input")" />
+            }
+            <MudTextField @bind-Value="_input" Placeholder="@(_isListening ? "Speak now..." : "Ask R2WAI anything...")"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Send"
+                          AdornmentColor="Color.Primary" OnAdornmentClick="SendMessage"
+                          OnKeyUp="HandleKeyUp" Immediate="true"
+                          Style="border-radius: 10px; flex: 1;" aria-label="Copilot input" />
+        </div>
     </div>
 </div>
 }
@@ -117,11 +144,37 @@
     private bool _isStreaming;
     private List<CopilotMessage> _messages = new();
 
+    private IJSObjectReference? _voiceModule;
+    private DotNetObjectReference<CopilotPanel>? _dotNetRef;
+    private bool _sttSupported;
+    private bool _ttsSupported;
+    private bool _isListening;
+    private string _interimTranscript = string.Empty;
+    private int _speakingMessageIndex = -1;
+    private bool _voiceInitialized;
+
+    private async Task InitVoice()
+    {
+        if (_voiceInitialized) return;
+        try
+        {
+            _voiceModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/voice.js");
+            _dotNetRef = DotNetObjectReference.Create(this);
+            var support = await _voiceModule.InvokeAsync<VoiceSupport>("isSupported");
+            _sttSupported = support.Stt;
+            _ttsSupported = support.Tts;
+            _voiceInitialized = true;
+            StateHasChanged();
+        }
+        catch { }
+    }
+
     public void Open()
     {
         IsOpen = true;
         IsOpenChanged.InvokeAsync(true);
         StateHasChanged();
+        _ = InitVoice();
     }
 
     public void Close()
@@ -325,6 +378,91 @@
     {
         public string? Reply { get; set; }
         public Guid ConversationId { get; set; }
+    }
+
+    private async Task ToggleVoiceInput()
+    {
+        if (_isListening)
+        {
+            if (_voiceModule is not null)
+            {
+                _isListening = false;
+                _interimTranscript = string.Empty;
+                await _voiceModule.InvokeVoidAsync("stopListening");
+                StateHasChanged();
+            }
+        }
+        else if (_voiceModule is not null && _dotNetRef is not null)
+        {
+            _interimTranscript = string.Empty;
+            await _voiceModule.InvokeAsync<bool>("startListening", _dotNetRef, "OnVoiceResult", "OnVoiceStatus", "en-US");
+        }
+    }
+
+    [JSInvokable]
+    public void OnVoiceResult(string transcript, bool isFinal)
+    {
+        if (isFinal)
+        {
+            _input = transcript;
+            _interimTranscript = string.Empty;
+            _isListening = false;
+        }
+        else
+        {
+            _interimTranscript = transcript;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnVoiceStatus(string status)
+    {
+        _isListening = status == "listening";
+        if (status == "not-allowed")
+            Snackbar.Add("Microphone access denied.", Severity.Warning);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleSpeakMessage(CopilotMessage msg)
+    {
+        if (_voiceModule is null || _dotNetRef is null) return;
+        var idx = _messages.IndexOf(msg);
+
+        if (_speakingMessageIndex == idx)
+        {
+            await _voiceModule.InvokeVoidAsync("stopSpeaking");
+            _speakingMessageIndex = -1;
+            StateHasChanged();
+            return;
+        }
+
+        _speakingMessageIndex = idx;
+        StateHasChanged();
+        await _voiceModule.InvokeAsync<bool>("speak", msg.Content, "en-US", 1.0, 1.0, _dotNetRef, "OnSpeakDone");
+    }
+
+    [JSInvokable]
+    public void OnSpeakDone()
+    {
+        _speakingMessageIndex = -1;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_voiceModule is not null)
+        {
+            try { await _voiceModule.InvokeVoidAsync("dispose"); } catch { }
+            await _voiceModule.DisposeAsync();
+        }
+        _dotNetRef?.Dispose();
+    }
+
+    private class VoiceSupport
+    {
+        public bool Stt { get; set; }
+        public bool Tts { get; set; }
     }
 
     private class AssistantsResult

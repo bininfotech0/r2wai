@@ -49,11 +49,28 @@ public class CurrentUserService : ICurrentUserService
             var context = _httpContextAccessor.HttpContext;
             if (context is null) return null;
 
-            var forwarded = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-            if (!string.IsNullOrEmpty(forwarded))
-                return forwarded.Split(',').First().Trim();
+            // Only trust X-Forwarded-For when the request arrives from a known private network
+            // (i.e. through a trusted reverse proxy). Otherwise use the raw connection IP to
+            // prevent clients from forging their address in audit logs.
+            var remoteIp = context.Connection.RemoteIpAddress;
+            if (remoteIp is not null && IsPrivateNetwork(remoteIp))
+            {
+                var forwarded = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+                if (!string.IsNullOrEmpty(forwarded))
+                    return forwarded.Split(',').Last().Trim();
+            }
 
-            return context.Connection.RemoteIpAddress?.ToString();
+            return remoteIp?.ToString();
         }
+    }
+
+    private static bool IsPrivateNetwork(System.Net.IPAddress ip)
+    {
+        if (System.Net.IPAddress.IsLoopback(ip)) return true;
+        var bytes = ip.GetAddressBytes();
+        if (bytes.Length != 4) return false;
+        return bytes[0] == 10
+            || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+            || (bytes[0] == 192 && bytes[1] == 168);
     }
 }

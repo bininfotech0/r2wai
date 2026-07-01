@@ -4,11 +4,18 @@ using R2WAI.Application.Common.Interfaces;
 
 namespace R2WAI.Infrastructure.Services;
 
-public class InMemoryIdempotencyStore(ILogger<InMemoryIdempotencyStore> logger) : IIdempotencyStore
+public class InMemoryIdempotencyStore : IIdempotencyStore, IDisposable
 {
     private readonly ConcurrentDictionary<string, (object Value, DateTime ExpiresAt)> _cache = new();
-
     private static readonly TimeSpan DefaultTtl = TimeSpan.FromHours(24);
+    private readonly ILogger<InMemoryIdempotencyStore> _logger;
+    private readonly Timer _evictionTimer;
+
+    public InMemoryIdempotencyStore(ILogger<InMemoryIdempotencyStore> logger)
+    {
+        _logger = logger;
+        _evictionTimer = new Timer(_ => EvictExpired(), null, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
+    }
 
     public Task<T?> GetAsync<T>(string key, CancellationToken ct = default) where T : class
     {
@@ -16,11 +23,11 @@ public class InMemoryIdempotencyStore(ILogger<InMemoryIdempotencyStore> logger) 
 
         if (_cache.TryGetValue(key, out var entry) && entry.ExpiresAt > DateTime.UtcNow)
         {
-            logger.LogDebug("IdempotencyStore hit for key: {Key}", key);
+            _logger.LogDebug("IdempotencyStore hit for key: {Key}", key);
             return Task.FromResult(entry.Value as T);
         }
 
-        if (entry.ExpiresAt <= DateTime.UtcNow)
+        if (_cache.TryGetValue(key, out var expired) && expired.ExpiresAt <= DateTime.UtcNow)
             _cache.TryRemove(key, out _);
 
         return Task.FromResult<T?>(null);
@@ -31,8 +38,8 @@ public class InMemoryIdempotencyStore(ILogger<InMemoryIdempotencyStore> logger) 
         ct.ThrowIfCancellationRequested();
 
         var expiry = DateTime.UtcNow.Add(ttl ?? DefaultTtl);
-        _cache[key] = (value, expiry);
-        logger.LogDebug("IdempotencyStore set for key: {Key}", key);
+        _cache[key] = (value!, expiry);
+        _logger.LogDebug("IdempotencyStore set for key: {Key}", key);
         return Task.CompletedTask;
     }
 
@@ -48,5 +55,23 @@ public class InMemoryIdempotencyStore(ILogger<InMemoryIdempotencyStore> logger) 
         }
 
         return Task.FromResult(false);
+    }
+
+    private void EvictExpired()
+    {
+        var count = 0;
+        foreach (var kvp in _cache)
+        {
+            if (kvp.Value.ExpiresAt <= DateTime.UtcNow && _cache.TryRemove(kvp.Key, out _))
+                count++;
+        }
+        if (count > 0)
+            _logger.LogDebug("Evicted {Count} expired idempotency entries", count);
+    }
+
+    public void Dispose()
+    {
+        _evictionTimer.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

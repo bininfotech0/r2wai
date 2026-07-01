@@ -18,6 +18,30 @@
     API keys grant programmatic access to the R2WAI API. Treat keys like passwords — never share them in code or public repositories.
 </MudAlert>
 
+<MudPaper Elevation="0" Class="pa-3 mb-4" Style="border: 1px solid var(--mud-palette-divider);">
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="4">
+            <MudTextField @bind-Value="_search" Label="Search" Variant="Variant.Outlined" Dense="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" DebounceInterval="300" OnDebounceIntervalElapsed="OnSearchChanged"
+                          Placeholder="Search by key name..." Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" Value="_statusFilter" Label="Status" Variant="Variant.Outlined" Dense="true"
+                       Clearable="true" ValueChanged="OnStatusFilterChanged">
+                <MudSelectItem T="string" Value="@("")">All</MudSelectItem>
+                <MudSelectItem T="string" Value="@("active")">Active</MudSelectItem>
+                <MudSelectItem T="string" Value="@("revoked")">Revoked</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="12" md="5" Class="d-flex align-center justify-end">
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                @_total key@(_total != 1 ? "s" : "") found
+            </MudText>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
 @if (_loading)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -39,17 +63,16 @@ else
                 <MudTh>Name</MudTh>
                 <MudTh>Key</MudTh>
                 <MudTh>Scopes</MudTh>
+                <MudTh>Roles</MudTh>
                 <MudTh>Created</MudTh>
                 <MudTh>Expires</MudTh>
                 <MudTh>Last Used</MudTh>
-                <MudTh Style="width: 100px;">Actions</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh Style="width: 140px;">Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Name">
-                    <div class="d-flex align-center gap-2">
-                        <span class="health-dot @(context.IsActive ? "health-dot--healthy" : "health-dot--unhealthy")"></span>
-                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Name</MudText>
-                    </div>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Name</MudText>
                 </MudTd>
                 <MudTd DataLabel="Key">
                     <code style="font-size: 0.75rem; background: var(--mud-palette-background-grey); padding: 2px 6px; border-radius: 4px;">
@@ -59,11 +82,30 @@ else
                 <MudTd DataLabel="Scopes">
                     @if (!string.IsNullOrEmpty(context.Scopes))
                     {
-                        @foreach (var scope in context.Scopes.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                        @foreach (var scope in context.Scopes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                         {
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default"
-                                     Style="font-size: 0.6875rem;">@scope.Trim()</MudChip>
+                                     Style="font-size: 0.6875rem;">@scope</MudChip>
                         }
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Roles">
+                    @if (!string.IsNullOrEmpty(context.Roles))
+                    {
+                        @foreach (var role in context.Roles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                     Color="@(role == "Admin" ? Color.Warning : Color.Info)"
+                                     Style="font-size: 0.6875rem;">@role</MudChip>
+                        }
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
                     }
                 </MudTd>
                 <MudTd DataLabel="Created">
@@ -75,6 +117,11 @@ else
                         var isExpired = context.ExpiresAt.Value < DateTime.UtcNow;
                         <MudText Typo="Typo.caption" Color="@(isExpired ? Color.Error : Color.Default)">
                             @context.ExpiresAt.Value.ToString("MMM dd, yyyy")
+                            @if (isExpired)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Error"
+                                         Style="vertical-align: middle; margin-left: 2px;" />
+                            }
                         </MudText>
                     }
                     else
@@ -92,20 +139,60 @@ else
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
                     }
                 </MudTd>
+                <MudTd DataLabel="Status">
+                    @if (context.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
+                                 Style="font-size: 0.6875rem;">Active</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Error"
+                                 Style="font-size: 0.6875rem;">Revoked</MudChip>
+                    }
+                </MudTd>
                 <MudTd>
-                    <MudIconButton Icon="@Icons.Material.Outlined.Refresh" Size="Size.Small"
-                                   OnClick="@(() => RegenerateKey(context))" aria-label="Regenerate key" />
-                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
-                                   OnClick="@(() => RevokeKey(context))" aria-label="Revoke key" />
+                    <MudTooltip Text="Edit">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
+                                       OnClick="@(() => OpenEditDialog(context))" aria-label="Edit key" />
+                    </MudTooltip>
+                    <MudTooltip Text="@(context.IsActive ? "Deactivate" : "Activate")">
+                        <MudIconButton Icon="@(context.IsActive ? Icons.Material.Outlined.ToggleOn : Icons.Material.Outlined.ToggleOff)"
+                                       Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)"
+                                       OnClick="@(() => ToggleStatus(context))" aria-label="Toggle status" />
+                    </MudTooltip>
+                    <MudTooltip Text="Regenerate">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Refresh" Size="Size.Small"
+                                       Disabled="@(!context.IsActive)"
+                                       OnClick="@(() => RegenerateKey(context))" aria-label="Regenerate key" />
+                    </MudTooltip>
+                    <MudTooltip Text="Delete">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => DeleteKey(context))" aria-label="Delete key" />
+                    </MudTooltip>
                 </MudTd>
             </RowTemplate>
         </MudTable>
     </MudPaper>
+
+    @if (_totalPages > 1)
+    {
+        <div class="d-flex justify-center mt-4">
+            <MudPagination Count="_totalPages" Selected="_page" SelectedChanged="OnPageChanged"
+                           Variant="Variant.Outlined" Color="Color.Primary" />
+        </div>
+    }
 }
 
 @code {
     private bool _loading = true;
     private List<ApiKeyItem> _apiKeys = new();
+    private string _search = string.Empty;
+    private string _statusFilter = string.Empty;
+    private int _page = 1;
+    private int _pageSize = 20;
+    private int _total;
+    private int _totalPages => (int)Math.Ceiling((double)_total / _pageSize);
 
     protected override async Task OnInitializedAsync()
     {
@@ -117,39 +204,97 @@ else
         _loading = true;
         try
         {
-            var result = await Http.GetFromJsonAsync<ApiKeyListResult>("/api/v1/admin/api-keys");
+            var url = $"/api/v1/admin/api-keys?page={_page}&pageSize={_pageSize}";
+            if (!string.IsNullOrWhiteSpace(_search))
+                url += $"&search={Uri.EscapeDataString(_search)}";
+            if (!string.IsNullOrEmpty(_statusFilter))
+                url += $"&status={_statusFilter}";
+
+            var result = await Http.GetFromJsonAsync<ApiKeyListResult>(url);
             _apiKeys = result?.Items ?? new();
+            _total = result?.Total ?? 0;
         }
         catch
         {
             _apiKeys = new();
+            _total = 0;
         }
         _loading = false;
     }
 
+    private async Task OnSearchChanged(string _)
+    {
+        _page = 1;
+        await LoadApiKeys();
+    }
+
+    private async Task OnStatusFilterChanged(string value)
+    {
+        _statusFilter = value;
+        _page = 1;
+        await LoadApiKeys();
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _page = page;
+        await LoadApiKeys();
+    }
+
     private async Task OpenCreateDialog()
     {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await Dialog.ShowAsync<CreateEditApiKeyDialog>("Generate API Key", options);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        await LoadApiKeys();
+    }
+
+    private async Task OpenEditDialog(ApiKeyItem key)
+    {
+        var parameters = new DialogParameters<CreateEditApiKeyDialog> { { x => x.EditId, key.Id } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await Dialog.ShowAsync<CreateEditApiKeyDialog>("Edit API Key", parameters, options);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+        await LoadApiKeys();
+    }
+
+    private async Task ToggleStatus(ApiKeyItem key)
+    {
+        var action = key.IsActive ? "deactivate" : "activate";
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, key.Name },
+            { x => x.Description, $"This will {action} the API key. Any systems using this key will {(key.IsActive ? "lose access" : "regain access")}." }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>($"Confirm {action}", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
         try
         {
-            var response = await Http.PostAsJsonAsync("/api/v1/admin/api-keys",
-                new { Name = $"API Key {DateTime.Now:yyyyMMdd-HHmm}", Scopes = new[] { "read", "write" }, Roles = new[] { "User" } });
+            var response = await Http.PostAsJsonAsync($"/api/v1/admin/api-keys/{key.Id}/toggle", new { });
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<CreateKeyResult>();
-                Snackbar.Add($"Key created! Copy it now — it won't be shown again: {result?.Key}", Severity.Success);
-                await LoadApiKeys();
+                key.IsActive = !key.IsActive;
+                Snackbar.Add($"API key {(key.IsActive ? "activated" : "deactivated")}: {key.Name}", Severity.Success);
             }
             else
             {
-                Snackbar.Add("Failed to create API key.", Severity.Error);
+                Snackbar.Add($"Failed to {action} key.", Severity.Error);
             }
         }
-        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        catch { Snackbar.Add($"Failed to {action} key.", Severity.Error); }
     }
 
     private async Task RegenerateKey(ApiKeyItem key)
     {
-        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, $"key: {key.Name}" } };
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, key.Name },
+            { x => x.Description, "Regenerating will invalidate the current key. Any systems using this key will need to be updated." }
+        };
         var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Regenerate", parameters);
         var result = await dialog.Result;
         if (result?.Canceled != false) return;
@@ -159,7 +304,7 @@ else
             var response = await Http.PostAsJsonAsync($"/api/v1/admin/api-keys/{key.Id}/regenerate", new { });
             if (response.IsSuccessStatusCode)
             {
-                var regenerated = await response.Content.ReadFromJsonAsync<CreateKeyResult>();
+                var regenerated = await response.Content.ReadFromJsonAsync<RegenerateKeyResult>();
                 Snackbar.Add($"Key regenerated! Copy it now: {regenerated?.Key}", Severity.Success);
                 await LoadApiKeys();
             }
@@ -167,24 +312,40 @@ else
         catch { Snackbar.Add("Failed to regenerate key.", Severity.Error); }
     }
 
-    private async Task RevokeKey(ApiKeyItem key)
+    private async Task DeleteKey(ApiKeyItem key)
     {
-        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, key.Name } };
-        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Revoke", parameters);
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, key.Name },
+            { x => x.Description, "This will permanently delete the API key. Any systems using this key will lose access immediately." }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
         var result = await dialog.Result;
         if (result?.Canceled != false) return;
 
         try
         {
-            await Http.DeleteAsync($"/api/v1/admin/api-keys/{key.Id}");
-            _apiKeys.Remove(key);
-            Snackbar.Add($"API key revoked: {key.Name}", Severity.Success);
+            var response = await Http.DeleteAsync($"/api/v1/admin/api-keys/{key.Id}");
+            if (response.IsSuccessStatusCode)
+            {
+                _apiKeys.Remove(key);
+                _total--;
+                Snackbar.Add($"API key deleted: {key.Name}", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to delete key.", Severity.Error);
+            }
         }
-        catch { Snackbar.Add("Failed to revoke key.", Severity.Error); }
+        catch { Snackbar.Add("Failed to delete key.", Severity.Error); }
     }
 
-    private class CreateKeyResult { public string? Key { get; set; } }
-    private class ApiKeyListResult { public List<ApiKeyItem>? Items { get; set; } }
+    private class RegenerateKeyResult { public string? Key { get; set; } }
+    private class ApiKeyListResult
+    {
+        public List<ApiKeyItem>? Items { get; set; }
+        public int Total { get; set; }
+    }
 
     private class ApiKeyItem
     {

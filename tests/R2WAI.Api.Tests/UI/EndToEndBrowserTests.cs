@@ -802,7 +802,7 @@ public class EndToEndBrowserTests : BrowserTestBase
         await emailInput.FillAsync("admin@r2wai.io");
 
         var passwordInput = Page.Locator("input[type='password']").First;
-        await passwordInput.FillAsync("admin123");
+        await passwordInput.FillAsync("R2wai_Admin!2026");
 
         var signInButton = Page.GetByRole(AriaRole.Button, new() { Name = "Sign in", Exact = true });
         await signInButton.ClickAsync();

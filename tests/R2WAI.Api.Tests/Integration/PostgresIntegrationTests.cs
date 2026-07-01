@@ -112,7 +112,7 @@ public class PostgresIntegrationTests : IAsyncLifetime
         var response = await _client!.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Email = "admin@r2wai.io",
-            Password = "admin123"
+            Password = "R2wai_Admin!2026"
         });
 
         if (!response.IsSuccessStatusCode) return string.Empty;
@@ -136,7 +136,7 @@ public class PostgresIntegrationTests : IAsyncLifetime
         var response = await _client!.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Email = "admin@r2wai.io",
-            Password = "admin123"
+            Password = "R2wai_Admin!2026"
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -152,7 +152,7 @@ public class PostgresIntegrationTests : IAsyncLifetime
         var loginResponse = await _client!.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Email = "admin@r2wai.io",
-            Password = "admin123"
+            Password = "R2wai_Admin!2026"
         });
 
         var loginBody = JsonDocument.Parse(await loginResponse.Content.ReadAsStringAsync());

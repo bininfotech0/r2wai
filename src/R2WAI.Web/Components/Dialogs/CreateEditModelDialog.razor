@@ -26,14 +26,40 @@
                     <MudSelectItem T="string" Value="@("Google")">Google AI</MudSelectItem>
                     <MudSelectItem T="string" Value="@("Mistral")">Mistral AI</MudSelectItem>
                     <MudSelectItem T="string" Value="@("Cohere")">Cohere</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("AI21Labs")">AI21 Labs</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Cerebras")">Cerebras</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("DeepSeek")">DeepSeek</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("FireworksAI")">Fireworks AI</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("GitHubModels")">GitHub Models</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Groq")">Groq</MudSelectItem>
                     <MudSelectItem T="string" Value="@("HuggingFace")">HuggingFace</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("NovitaAI")">Novita AI</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("OpenRouter")">OpenRouter</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Perplexity")">Perplexity</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Replicate")">Replicate</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("SambaNova")">SambaNova</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("TogetherAI")">Together AI</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("xAI")">xAI (Grok)</MudSelectItem>
                     <MudSelectItem T="string" Value="@("Ollama")">Ollama (Local)</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_modelId" Label="Model ID" Required="true"
-                              HelperText="@GetModelIdHelperText()" Variant="Variant.Outlined"
-                              Placeholder="@GetModelIdPlaceholder()" />
+                @if (_provider == "Ollama")
+                {
+                    <MudAutocomplete T="string" @bind-Value="_modelId" Label="Model ID" Required="true"
+                                     Variant="Variant.Outlined" Placeholder="@GetModelIdPlaceholder()"
+                                     HelperText="@GetModelIdHelperText()"
+                                     SearchFunc="SearchOllamaModels" Strict="false"
+                                     ResetValueOnEmptyText="false" CoerceText="true" CoerceValue="true"
+                                     AdornmentIcon="@Icons.Material.Outlined.Search"
+                                     Adornment="Adornment.Start" AdornmentColor="Color.Default" />
+                }
+                else
+                {
+                    <MudTextField @bind-Value="_modelId" Label="Model ID" Required="true"
+                                  HelperText="@GetModelIdHelperText()" Variant="Variant.Outlined"
+                                  Placeholder="@GetModelIdPlaceholder()" />
+                }
             </MudItem>
 
             <MudItem xs="12">
@@ -58,6 +84,20 @@
                               Placeholder="@GetEndpointPlaceholder()"
                               HelperText="@GetEndpointHelperText()" />
             </MudItem>
+
+            @if (_provider == "Ollama")
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Outlined.Info">
+                        <MudText Typo="Typo.caption">
+                            The endpoint must be reachable from the <strong>R2WAI server</strong>, not your browser.
+                            Default: <code>http://localhost:11434</code>. The Model ID must exactly match a model
+                            pulled on that server (e.g. run <code>ollama list</code> to see available names).
+                            Embedding models (e.g. <code>nomic-embed-text</code>) can also be registered here for knowledge base indexing.
+                        </MudText>
+                    </MudAlert>
+                </MudItem>
+            }
 
             <MudItem xs="12">
                 <MudDivider Class="my-1" />
@@ -163,7 +203,20 @@
         "Google" => "e.g. gemini-2.5-pro, gemini-2.5-flash",
         "Mistral" => "e.g. mistral-large-latest, codestral",
         "Cohere" => "e.g. command-r-plus, command-r",
+        "AI21Labs" => "e.g. jamba-1.5-large, jamba-1.5-mini",
+        "Cerebras" => "e.g. llama3.1-8b, llama-3.3-70b",
+        "DeepSeek" => "e.g. deepseek-chat, deepseek-reasoner",
+        "FireworksAI" => "e.g. accounts/fireworks/models/llama-v3p3-70b-instruct",
+        "GitHubModels" => "e.g. gpt-4o, gpt-4o-mini, Llama-3.3-70B",
+        "Groq" => "e.g. llama-3.3-70b-versatile, deepseek-r1-distill-llama-70b",
         "HuggingFace" => "e.g. meta-llama/Llama-3-70b",
+        "NovitaAI" => "e.g. meta-llama/llama-3.1-8b-instruct",
+        "OpenRouter" => "e.g. anthropic/claude-sonnet-4, openai/gpt-4o",
+        "Perplexity" => "e.g. sonar-pro, sonar-deep-research",
+        "Replicate" => "e.g. meta/meta-llama-3-70b-instruct",
+        "SambaNova" => "e.g. Meta-Llama-3.1-405B-Instruct",
+        "TogetherAI" => "e.g. meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+        "xAI" => "e.g. grok-2, grok-3",
         "Ollama" => "e.g. llama3, mistral, codellama",
         _ => "Model identifier"
     };
@@ -176,7 +229,20 @@
         "Google" => "gemini-2.5-pro",
         "Mistral" => "mistral-large-latest",
         "Cohere" => "command-r-plus",
+        "AI21Labs" => "jamba-1.5-large",
+        "Cerebras" => "llama3.1-8b",
+        "DeepSeek" => "deepseek-chat",
+        "FireworksAI" => "accounts/fireworks/models/llama-v3p3-70b-instruct",
+        "GitHubModels" => "gpt-4o",
+        "Groq" => "llama-3.3-70b-versatile",
         "HuggingFace" => "meta-llama/Llama-3-70b",
+        "NovitaAI" => "meta-llama/llama-3.1-8b-instruct",
+        "OpenRouter" => "anthropic/claude-sonnet-4",
+        "Perplexity" => "sonar-pro",
+        "Replicate" => "meta/meta-llama-3-70b-instruct",
+        "SambaNova" => "Meta-Llama-3.1-405B-Instruct",
+        "TogetherAI" => "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+        "xAI" => "grok-2",
         "Ollama" => "llama3",
         _ => ""
     };
@@ -184,18 +250,65 @@
     private string GetEndpointPlaceholder() => _provider switch
     {
         "AzureOpenAI" => "https://your-resource.openai.azure.com/",
-        "Ollama" => "http://localhost:11434",
+        "OpenAI" => "https://api.openai.com",
+        "Anthropic" => "https://api.anthropic.com",
+        "Google" => "https://generativelanguage.googleapis.com",
+        "Mistral" => "https://api.mistral.ai",
+        "Cohere" => "https://api.cohere.com",
+        "AI21Labs" => "https://api.ai21.com",
+        "Cerebras" => "https://api.cerebras.ai",
+        "DeepSeek" => "https://api.deepseek.com",
+        "FireworksAI" => "https://api.fireworks.ai",
+        "GitHubModels" => "https://models.inference.ai.azure.com",
+        "Groq" => "https://api.groq.com",
         "HuggingFace" => "https://api-inference.huggingface.co",
+        "NovitaAI" => "https://api.novita.ai",
+        "OpenRouter" => "https://openrouter.ai",
+        "Perplexity" => "https://api.perplexity.ai",
+        "Replicate" => "https://api.replicate.com",
+        "SambaNova" => "https://api.sambanova.ai",
+        "TogetherAI" => "https://api.together.xyz",
+        "xAI" => "https://api.x.ai",
+        "Ollama" => "http://localhost:11434",
         _ => "Leave blank for default endpoint"
     };
 
     private string GetEndpointHelperText() => _provider switch
     {
-        "OpenAI" => "Optional. Leave blank for api.openai.com",
         "AzureOpenAI" => "Required. Your Azure OpenAI resource URL",
-        "Ollama" => "Default: http://localhost:11434",
-        _ => "Optional custom endpoint"
+        "Ollama" => "Default: http://localhost:11434 — must be reachable from the R2WAI server",
+        _ => "Optional. Leave blank for provider's default endpoint"
     };
+
+    private static readonly string[] _ollamaModels =
+    [
+        // Chat / instruction models
+        "llama3.2:1b", "llama3.2:3b", "llama3.2",
+        "llama3.1:8b", "llama3.1:70b", "llama3.1:405b", "llama3.1",
+        "llama3:8b", "llama3:70b", "llama3",
+        "mistral:7b", "mistral",
+        "mistral-nemo", "mistral-large",
+        "codellama:7b", "codellama:13b", "codellama:34b", "codellama",
+        "gemma2:2b", "gemma2:9b", "gemma2:27b", "gemma2",
+        "phi3:mini", "phi3:medium", "phi3:large", "phi3",
+        "phi4", "phi4-mini",
+        "qwen2.5:0.5b", "qwen2.5:1.5b", "qwen2.5:3b", "qwen2.5:7b",
+        "qwen2.5:14b", "qwen2.5:32b", "qwen2.5:72b", "qwen2.5",
+        "qwen2.5-coder:7b", "qwen2.5-coder:32b",
+        "deepseek-r1:7b", "deepseek-r1:14b", "deepseek-r1:32b", "deepseek-r1:70b", "deepseek-r1",
+        "deepseek-coder-v2",
+        // Embedding models
+        "nomic-embed-text", "mxbai-embed-large", "all-minilm",
+        "granite-embedding", "snowflake-arctic-embed",
+    ];
+
+    private Task<IEnumerable<string>> SearchOllamaModels(string value, CancellationToken _)
+    {
+        var results = string.IsNullOrWhiteSpace(value)
+            ? _ollamaModels
+            : _ollamaModels.Where(m => m.Contains(value, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(results);
+    }
 
     private async Task Save()
     {

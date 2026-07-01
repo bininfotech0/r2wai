@@ -1,6 +1,7 @@
 @page "/assistant-studio/documents"
 @page "/documents"
 @attribute [Authorize]
+@implements IDisposable
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService Dialog
@@ -45,6 +46,23 @@
         <div class="d-flex align-center gap-2">
             <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
             <span>Uploading @_inlineUploadProgress of @_inlineUploadTotal files...</span>
+        </div>
+    </MudAlert>
+}
+
+@* Processing status banner — shown while any document is being indexed *@
+@{ var processingCount = _documents.Count(d => d.Status == "Processing"); }
+@if (processingCount > 0)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4" Dense="true" Icon="@Icons.Material.Outlined.HourglassTop">
+        <div class="d-flex align-center justify-space-between" style="width: 100%;">
+            <div class="d-flex align-center gap-2">
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Info" />
+                <span>
+                    <strong>@processingCount document@(processingCount == 1 ? "" : "s") indexing</strong>
+                    — OCR, chunking, and embedding in progress. This page will update automatically.
+                </span>
+            </div>
         </div>
     </MudAlert>
 }
@@ -117,6 +135,13 @@ else
             <CellTemplate>
                 <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary"
                                OnClick="@(() => OpenDetailDialog(context.Item))" aria-label="View" />
+                @if (context.Item.Status == "Error")
+                {
+                    <MudTooltip Text="Retry indexing this document">
+                        <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" Color="Color.Warning"
+                                       OnClick="@(() => ReindexDocument(context.Item))" aria-label="Reindex" />
+                    </MudTooltip>
+                }
                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                OnClick="@(() => DeleteDocument(context.Item))" aria-label="Delete" />
             </CellTemplate>
@@ -147,6 +172,8 @@ else
     private int _pageSize = 20;
     private int _totalCount;
     private HashSet<Guid> _selectedDocIds = new();
+    private Timer? _pollingTimer;
+    private Dictionary<Guid, string> _lastKnownStatuses = new();
 
     private IEnumerable<DocumentDto> _filteredDocuments =>
         string.IsNullOrWhiteSpace(_searchTerm)
@@ -154,6 +181,62 @@ else
             : _documents.Where(d => d.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await LoadDocuments(); }
+
+    public void Dispose()
+    {
+        _pollingTimer?.Dispose();
+        _pollingTimer = null;
+    }
+
+    private void SnapshotStatuses() =>
+        _lastKnownStatuses = _documents.ToDictionary(d => d.Id, d => d.Status);
+
+    private void StartPollingIfNeeded()
+    {
+        if (_documents.Any(d => d.Status == "Processing") && _pollingTimer == null)
+            _pollingTimer = new Timer(async _ => await PollStatusesAsync(), null, 5_000, 5_000);
+        else if (!_documents.Any(d => d.Status == "Processing"))
+            StopPolling();
+    }
+
+    private void StopPolling()
+    {
+        _pollingTimer?.Dispose();
+        _pollingTimer = null;
+    }
+
+    private async Task PollStatusesAsync()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<DocumentsResult>(
+                $"/api/v1/documents?page=1&pageSize={_pageSize}");
+            var updated = result?.Items ?? new();
+
+            foreach (var doc in updated)
+            {
+                if (_lastKnownStatuses.TryGetValue(doc.Id, out var prev) && prev == "Processing")
+                {
+                    if (doc.Status == "Ready")
+                        await InvokeAsync(() => Snackbar.Add(
+                            $"\"{doc.Name}\" is ready — indexing complete.", Severity.Success));
+                    else if (doc.Status == "Error")
+                        await InvokeAsync(() => Snackbar.Add(
+                            $"\"{doc.Name}\" failed to process. Click Retry to try again.", Severity.Error));
+                }
+            }
+
+            _documents = updated;
+            SnapshotStatuses();
+
+            await InvokeAsync(() =>
+            {
+                if (!_documents.Any(d => d.Status == "Processing")) StopPolling();
+                StateHasChanged();
+            });
+        }
+        catch { }
+    }
 
     private async Task LoadDocuments()
     {
@@ -166,6 +249,8 @@ else
                 $"/api/v1/documents?page={_page}&pageSize={_pageSize}");
             _documents = result?.Items ?? new();
             _totalCount = result?.TotalCount ?? _documents.Count;
+            SnapshotStatuses();
+            StartPollingIfNeeded();
         }
         catch (Exception ex)
         {
@@ -174,6 +259,27 @@ else
             Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error);
         }
         finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task ReindexDocument(DocumentDto doc)
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/documents/{doc.Id}/reindex", null);
+            if (response.IsSuccessStatusCode)
+            {
+                doc.Status = "Processing";
+                SnapshotStatuses();
+                StartPollingIfNeeded();
+                Snackbar.Add($"Reindexing \"{doc.Name}\"...", Severity.Info);
+                StateHasChanged();
+            }
+            else
+            {
+                Snackbar.Add("Reindex request failed.", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Reindex failed: {ex.Message}", Severity.Error); }
     }
 
     private async Task OpenUploadDialog()
@@ -305,7 +411,7 @@ else
         _inlineUploading = false;
 
         if (failed == 0)
-            Snackbar.Add($"{succeeded} document(s) uploaded successfully", Severity.Success);
+            Snackbar.Add($"{succeeded} document(s) uploaded — indexing in progress.", Severity.Success);
         else
             Snackbar.Add($"{succeeded} uploaded, {failed} failed", Severity.Warning);
 

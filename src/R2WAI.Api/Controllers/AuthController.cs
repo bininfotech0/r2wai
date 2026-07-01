@@ -1,9 +1,12 @@
+using System.Collections.Concurrent;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using R2WAI.Application.Common.Interfaces;
+using R2WAI.Application.Common.Security;
 using R2WAI.Domain.Entities;
 using R2WAI.Infrastructure.Authentication;
 using R2WAI.Infrastructure.Persistence;
@@ -20,6 +23,17 @@ public class AuthController(
     IPasswordHasher passwordHasher,
     ILogger<AuthController> logger) : ControllerBase
 {
+    private static readonly ConcurrentDictionary<string, LoginAttemptTracker> _loginAttempts = new();
+    private const int MaxFailedAttempts = 5;
+    private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
+
+    private sealed class LoginAttemptTracker
+    {
+        public int FailedAttempts;
+        public DateTime? LockedUntil;
+        public DateTime LastAttempt = DateTime.UtcNow;
+    }
+
     public record LoginRequest(string Email, string Password, string? MfaCode = null);
 
     public record LoginResponse(string Token, string RefreshToken, DateTime ExpiresAt, UserInfo User);
@@ -54,6 +68,16 @@ public class AuthController(
     {
         logger.LogInformation("Login attempt for: {Email}", request.Email);
 
+        var normalizedEmail = request.Email.ToLowerInvariant();
+        var tracker = _loginAttempts.GetOrAdd(normalizedEmail, _ => new LoginAttemptTracker());
+
+        if (tracker.LockedUntil.HasValue && tracker.LockedUntil.Value > DateTime.UtcNow)
+        {
+            var remaining = (int)(tracker.LockedUntil.Value - DateTime.UtcNow).TotalSeconds;
+            logger.LogWarning("Login blocked for locked account: {Email}", request.Email);
+            return StatusCode(429, new { error = $"Account temporarily locked. Try again in {remaining} seconds.", retryAfter = remaining });
+        }
+
         var user = await dbContext.Users
             .IgnoreQueryFilters()
             .Include(u => u.UserRoles)
@@ -64,7 +88,14 @@ public class AuthController(
         if (user is null || string.IsNullOrEmpty(user.PasswordHash) ||
             !passwordHasher.Verify(request.Password, user.PasswordHash))
         {
-            logger.LogWarning("Failed login attempt for: {Email}", request.Email);
+            var attempts = Interlocked.Increment(ref tracker.FailedAttempts);
+            tracker.LastAttempt = DateTime.UtcNow;
+            if (attempts >= MaxFailedAttempts)
+            {
+                tracker.LockedUntil = DateTime.UtcNow.Add(LockoutDuration);
+                logger.LogWarning("Account locked after {Attempts} failed attempts: {Email}", attempts, request.Email);
+            }
+            logger.LogWarning("Failed login attempt for: {Email} (attempt {Attempt})", request.Email, attempts);
             return Unauthorized(new { error = "Invalid email or password" });
         }
 
@@ -76,6 +107,9 @@ public class AuthController(
             if (!totpService.ValidateCode(user.MfaSecret!, request.MfaCode))
                 return Unauthorized(new { error = "Invalid MFA code", mfaRequired = true });
         }
+
+        Interlocked.Exchange(ref tracker.FailedAttempts, 0);
+        tracker.LockedUntil = null;
 
         var roles = user.UserRoles?
             .Where(ur => ur.Role is not null)
@@ -126,7 +160,9 @@ public class AuthController(
             return Unauthorized(new { error = "User not found" });
 
         var incomingHash = jwtService.HashRefreshToken(request.RefreshToken);
-        if (user.RefreshTokenHash != incomingHash)
+        if (!CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(user.RefreshTokenHash ?? ""),
+            System.Text.Encoding.UTF8.GetBytes(incomingHash)))
         {
             logger.LogWarning("Refresh token mismatch for user {UserId} — possible token reuse", userId);
             user.RevokeRefreshToken();
@@ -261,11 +297,13 @@ public class AuthController(
             return BadRequest(new { error = "Invalid reset request." });
 
         var incomingTokenHash = jwtService.HashRefreshToken(request.Token);
-        if (user.PasswordResetToken != incomingTokenHash || user.PasswordResetExpiresAt < DateTime.UtcNow)
+        if (!CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(user.PasswordResetToken ?? ""),
+            System.Text.Encoding.UTF8.GetBytes(incomingTokenHash)) || user.PasswordResetExpiresAt < DateTime.UtcNow)
             return BadRequest(new { error = "Invalid or expired reset token." });
 
-        if (request.NewPassword.Length < 8)
-            return BadRequest(new { error = "Password must be at least 8 characters." });
+        if (!PasswordPolicy.IsValid(request.NewPassword, out var passwordError))
+            return BadRequest(new { error = passwordError });
 
         user.SetPasswordHash(passwordHasher.Hash(request.NewPassword));
         user.ClearPasswordResetToken();

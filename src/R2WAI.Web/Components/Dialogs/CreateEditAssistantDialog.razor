@@ -1,60 +1,137 @@
 @inject ISnackbar Snackbar
 @inject AuthenticatedHttpClient Http
 
-<MudDialog>
+<MudDialog Style="max-width: 700px;">
     <TitleContent>
-        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Assistant" : "Create Assistant")</MudText>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@(_isEdit ? Icons.Material.Outlined.Edit : Icons.Material.Outlined.AutoAwesome)" Color="Color.Primary" />
+            <MudText Typo="Typo.h6" Style="font-weight: 700;">@(_isEdit ? "Edit Assistant" : "Create Assistant")</MudText>
+        </div>
     </TitleContent>
     <DialogContent>
         <MudForm @ref="_form">
-        <MudGrid>
-            <MudItem xs="12" sm="8">
-                <MudTextField @bind-Value="_name" Label="Name" Required="true" RequiredError="Name is required"
-                              Validation="@(new Func<string, string>(ValidateName))" Variant="Variant.Outlined" />
-            </MudItem>
-            <MudItem xs="12" sm="4">
-                <MudSelect T="string" @bind-Value="_type" Label="Type" Variant="Variant.Outlined">
-                    <MudSelectItem T="string" Value="@("General")">General</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("HR")">HR</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("IT")">IT</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Procurement")">Procurement</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Finance")">Finance</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("Legal")">Legal</MudSelectItem>
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12">
-                <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
-            </MudItem>
-            <MudItem xs="12">
-                <MudText Typo="Typo.body2" Class="mb-2" Style="font-weight: 600;">System Prompt</MudText>
-                <MarkdownEditor @bind-Value="_systemPrompt" Lines="6"
-                                Placeholder="Instructions that define the assistant's behavior and expertise..."
-                                HelperText="Use markdown to format instructions clearly" />
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudSelect T="Guid?" @bind-Value="_knowledgeBaseId" Label="Knowledge Base" Clearable="true" Variant="Variant.Outlined">
-                    @foreach (var kb in _knowledgeBases)
+            @if (!_isEdit && _step == 0)
+            {
+                @* Step 1: Template Selection *@
+                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="font-weight: 600;">Choose a starting point</MudText>
+                <MudGrid Spacing="2" Class="mb-4">
+                    @foreach (var tmpl in _quickTemplates)
                     {
-                        <MudSelectItem T="Guid?" Value="@((Guid?)kb.Id)">@kb.Name</MudSelectItem>
+                        <MudItem xs="6" sm="4">
+                            <MudPaper Elevation="0" Class="pa-3 cursor-pointer d-flex flex-column align-center"
+                                      Style="@($"border: 2px solid {(_selectedQuickTemplate == tmpl.Type ? "var(--r2-primary)" : "var(--mud-palette-divider)")}; border-radius: var(--r2-radius-sm); transition: all 0.15s ease; height: 100%;")"
+                                      @onclick="@(() => SelectQuickTemplate(tmpl))">
+                                <MudAvatar Size="Size.Medium" Style="@($"background: {tmpl.Color}; color: white;")">
+                                    <MudIcon Icon="@tmpl.Icon" Size="Size.Small" />
+                                </MudAvatar>
+                                <MudText Typo="Typo.caption" Class="mt-2" Style="font-weight: 600;" Align="Align.Center">@tmpl.Name</MudText>
+                            </MudPaper>
+                        </MudItem>
                     }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudSelect T="Guid?" @bind-Value="_modelConfigurationId" Label="AI Model" Clearable="true" Variant="Variant.Outlined">
-                    @foreach (var model in _models)
-                    {
-                        <MudSelectItem T="Guid?" Value="@((Guid?)model.Id)">@model.Name (@model.Provider)</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-        </MudGrid>
+                </MudGrid>
+
+                <MudDivider Class="mb-3" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">Or describe what you need</MudText>
+                <MudTextField @bind-Value="_aiDescription" Lines="3" Variant="Variant.Outlined"
+                              Placeholder="e.g. I need an assistant that helps new employees understand our company policies and benefits..."
+                              HelperText="We'll use AI to generate the optimal configuration" />
+            }
+            else
+            {
+                @* Step 2: Configuration (or Edit mode) *@
+                <MudGrid Spacing="3">
+                    <MudItem xs="12" sm="8">
+                        <MudTextField @bind-Value="_name" Label="Name" Required="true" RequiredError="Name is required"
+                                      Validation="@(new Func<string, string>(ValidateName))" Variant="Variant.Outlined"
+                                      Placeholder="e.g. HR Onboarding Assistant" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudSelect T="string" @bind-Value="_type" Label="Category" Variant="Variant.Outlined">
+                            <MudSelectItem T="string" Value="@("General")">General</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("HR")">HR</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("IT")">IT Support</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Procurement")">Procurement</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Finance")">Finance</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Legal")">Legal</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Sales")">Sales</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Customer Support")">Customer Support</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined"
+                                      Placeholder="Brief description of what this assistant does"
+                                      HelperText="Shown to users when selecting this assistant" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.body2" Class="mb-2" Style="font-weight: 600;">System Prompt</MudText>
+                        <MarkdownEditor @bind-Value="_systemPrompt" Lines="8"
+                                        Placeholder="Instructions that define the assistant's behavior, expertise, and communication style..."
+                                        HelperText="Use markdown to format instructions clearly" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid?" @bind-Value="_knowledgeBaseId" Label="Knowledge Base" Clearable="true" Variant="Variant.Outlined"
+                                   HelperText="Connect a knowledge base for RAG">
+                            @foreach (var kb in _knowledgeBases)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)kb.Id)">@kb.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid?" @bind-Value="_modelConfigurationId" Label="AI Model" Clearable="true" Variant="Variant.Outlined"
+                                   HelperText="Which AI model powers responses">
+                            @foreach (var model in _models)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)model.Id)">@model.Name (@model.Provider)</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="8">
+                        <MudTextField @bind-Value="_tags" Label="Tags" Variant="Variant.Outlined"
+                                      Placeholder="e.g. onboarding, hr, policies"
+                                      HelperText="Comma-separated tags for categorization" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudTextField @bind-Value="_avatarUrl" Label="Avatar URL" Variant="Variant.Outlined"
+                                      Placeholder="https://..." />
+                    </MudItem>
+                </MudGrid>
+            }
         </MudForm>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
-            @(_saving ? "Saving..." : "Save")
-        </MudButton>
+        @if (!_isEdit && _step == 0)
+        {
+            <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+            <MudSpacer />
+            @if (!string.IsNullOrWhiteSpace(_aiDescription))
+            {
+                <MudButton OnClick="GenerateFromDescription" Variant="Variant.Outlined" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.AutoAwesome" Disabled="_generating" Class="mr-2">
+                    @(_generating ? "Generating..." : "AI Generate")
+                </MudButton>
+            }
+            <MudButton OnClick="NextStep" Variant="Variant.Filled" Color="Color.Primary"
+                       Disabled="@(string.IsNullOrWhiteSpace(_selectedQuickTemplate) && string.IsNullOrWhiteSpace(_aiDescription))">
+                Next
+            </MudButton>
+        }
+        else
+        {
+            @if (!_isEdit && _step == 1)
+            {
+                <MudButton OnClick="@(() => _step = 0)" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack">Back</MudButton>
+            }
+            else
+            {
+                <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+            }
+            <MudSpacer />
+            <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving"
+                       StartIcon="@(_saving ? Icons.Material.Filled.HourglassEmpty : Icons.Material.Filled.Check)">
+                @(_saving ? "Saving..." : _isEdit ? "Update" : "Create")
+            </MudButton>
+        }
     </DialogActions>
 </MudDialog>
 
@@ -64,25 +141,45 @@
     [Parameter] public string? EditId { get; set; }
 
     private bool _isEdit => !string.IsNullOrEmpty(EditId);
+    private int _step;
     private string _name = string.Empty;
     private string _description = string.Empty;
     private string _type = "General";
     private string _systemPrompt = string.Empty;
+    private string _tags = string.Empty;
+    private string _avatarUrl = string.Empty;
     private Guid? _knowledgeBaseId;
     private Guid? _modelConfigurationId;
     private bool _saving;
+    private bool _generating;
     private MudForm _form = default!;
     private List<KbOption> _knowledgeBases = new();
     private List<ModelOption> _models = new();
 
+    private string? _selectedQuickTemplate;
+    private string _aiDescription = string.Empty;
+
+    private readonly List<QuickTemplate> _quickTemplates = new()
+    {
+        new() { Name = "HR", Type = "HR", Icon = Icons.Material.Outlined.People, Color = "linear-gradient(135deg, #7C3AED, #A78BFA)" },
+        new() { Name = "IT Support", Type = "IT", Icon = Icons.Material.Outlined.Computer, Color = "linear-gradient(135deg, #3B82F6, #60A5FA)" },
+        new() { Name = "Finance", Type = "Finance", Icon = Icons.Material.Outlined.AccountBalance, Color = "linear-gradient(135deg, #10B981, #34D399)" },
+        new() { Name = "Legal", Type = "Legal", Icon = Icons.Material.Outlined.Gavel, Color = "linear-gradient(135deg, #F59E0B, #FBBF24)" },
+        new() { Name = "Sales", Type = "Sales", Icon = Icons.Material.Outlined.TrendingUp, Color = "linear-gradient(135deg, #EF4444, #F87171)" },
+        new() { Name = "Custom", Type = "General", Icon = Icons.Material.Outlined.AutoAwesome, Color = "linear-gradient(135deg, #6366F1, #818CF8)" },
+    };
+
     protected override async Task OnInitializedAsync()
     {
+        if (_isEdit) _step = 1;
+
         try
         {
-            var kbResult = await Http.GetFromJsonAsync<KbListResult>("/api/v1/knowledgebases");
-            _knowledgeBases = kbResult?.Items ?? new();
-            var modelResult = await Http.GetFromJsonAsync<ModelListResult>("/api/v1/admin/models");
-            _models = modelResult?.Items ?? new();
+            var kbTask = Http.GetFromJsonAsync<KbListResult>("/api/v1/knowledgebases");
+            var modelTask = Http.GetFromJsonAsync<ModelListResult>("/api/v1/admin/models");
+            await Task.WhenAll(kbTask, modelTask);
+            _knowledgeBases = kbTask.Result?.Items ?? new();
+            _models = modelTask.Result?.Items ?? new();
         }
         catch { Snackbar.Add("Failed to load form options.", Severity.Warning); }
 
@@ -99,10 +196,80 @@
                     _systemPrompt = assistant.SystemPrompt ?? string.Empty;
                     _knowledgeBaseId = assistant.KnowledgeBaseId;
                     _modelConfigurationId = assistant.ModelConfigurationId;
+                    _tags = assistant.Tags ?? string.Empty;
+                    _avatarUrl = assistant.AvatarUrl ?? string.Empty;
                 }
             }
             catch { Snackbar.Add("Failed to load assistant", Severity.Error); }
         }
+    }
+
+    private void SelectQuickTemplate(QuickTemplate tmpl)
+    {
+        _selectedQuickTemplate = tmpl.Type;
+        _type = tmpl.Type;
+    }
+
+    private async Task NextStep()
+    {
+        if (!string.IsNullOrWhiteSpace(_aiDescription) && string.IsNullOrWhiteSpace(_name))
+        {
+            await GenerateFromDescription();
+        }
+        else if (!string.IsNullOrWhiteSpace(_selectedQuickTemplate))
+        {
+            _type = _selectedQuickTemplate;
+            _name = $"{_selectedQuickTemplate} Assistant";
+            await LoadPromptTemplate(_selectedQuickTemplate);
+        }
+        _step = 1;
+    }
+
+    private async Task GenerateFromDescription()
+    {
+        _generating = true;
+        StateHasChanged();
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/assistants/generate-config",
+                new { Description = _aiDescription });
+            if (response.IsSuccessStatusCode)
+            {
+                var cfg = await response.Content.ReadFromJsonAsync<GeneratedConfigDto>();
+                if (cfg is not null)
+                {
+                    _name = cfg.Name ?? "New Assistant";
+                    _type = cfg.Type ?? "General";
+                    _description = cfg.Description ?? _aiDescription;
+                    _systemPrompt = cfg.SystemPrompt ?? string.Empty;
+                    _step = 1;
+                    Snackbar.Add(cfg.IsAiGenerated ? "AI-generated configuration ready" : "Template-based configuration ready", Severity.Success);
+                }
+            }
+            else
+            {
+                Snackbar.Add("Failed to generate. Fill in the fields manually.", Severity.Warning);
+                _step = 1;
+            }
+        }
+        catch
+        {
+            Snackbar.Add("AI generation failed. Fill in the fields manually.", Severity.Warning);
+            _step = 1;
+        }
+        finally { _generating = false; StateHasChanged(); }
+    }
+
+    private async Task LoadPromptTemplate(string type)
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<PromptTemplatesResult>("/api/v1/assistants/prompt-templates");
+            var template = result?.Items?.FirstOrDefault(t => string.Equals(t.Type, type, StringComparison.OrdinalIgnoreCase));
+            if (template is not null)
+                _systemPrompt = template.Prompt;
+        }
+        catch { }
     }
 
     private string ValidateName(string name)
@@ -130,7 +297,9 @@
                 Type = _type,
                 SystemPrompt = (string?)(string.IsNullOrWhiteSpace(_systemPrompt) ? null : _systemPrompt),
                 KnowledgeBaseId = _knowledgeBaseId,
-                ModelConfigurationId = _modelConfigurationId
+                ModelConfigurationId = _modelConfigurationId,
+                Tags = (string?)(string.IsNullOrWhiteSpace(_tags) ? null : _tags),
+                AvatarUrl = (string?)(string.IsNullOrWhiteSpace(_avatarUrl) ? null : _avatarUrl),
             };
 
             if (_isEdit)
@@ -159,10 +328,31 @@
         public string? SystemPrompt { get; set; }
         public Guid? KnowledgeBaseId { get; set; }
         public Guid? ModelConfigurationId { get; set; }
+        public string? Tags { get; set; }
+        public string? AvatarUrl { get; set; }
+    }
+
+    private class QuickTemplate
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+        public string Color { get; set; } = string.Empty;
+    }
+
+    private class GeneratedConfigDto
+    {
+        public string? Name { get; set; }
+        public string? Type { get; set; }
+        public string? Description { get; set; }
+        public string? SystemPrompt { get; set; }
+        public bool IsAiGenerated { get; set; }
     }
 
     private class KbListResult { public List<KbOption> Items { get; set; } = new(); }
     private class KbOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
     private class ModelListResult { public List<ModelOption> Items { get; set; } = new(); }
     private class ModelOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string Provider { get; set; } = string.Empty; }
+    private class PromptTemplatesResult { public List<PromptTemplateItem>? Items { get; set; } }
+    private class PromptTemplateItem { public string Type { get; set; } = string.Empty; public string Prompt { get; set; } = string.Empty; }
 }

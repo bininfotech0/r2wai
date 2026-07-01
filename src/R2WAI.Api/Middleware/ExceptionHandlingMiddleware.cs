@@ -51,6 +51,11 @@ public class ExceptionHandlingMiddleware
                 problemDetails = new { Status = 401, Title = "Unauthorized", Detail = unauthorized.Message, Type = "https://tools.ietf.org/html/rfc7235#section-3.1" };
                 break;
 
+            case UnauthorizedAccessException accessDenied:
+                statusCode = HttpStatusCode.Forbidden;
+                problemDetails = new { Status = 403, Title = "Forbidden", Detail = "You do not have permission to perform this action.", Type = "https://tools.ietf.org/html/rfc7231#section-6.5.3" };
+                break;
+
             default:
                 statusCode = HttpStatusCode.InternalServerError;
                 var detail = _isDevelopment

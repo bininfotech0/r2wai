@@ -115,9 +115,9 @@ public class ChatService : IChatService
             }
         }
 
-        await _context.SaveChangesAsync(ct);
-
         message.AddDomainEvent(new MessageCreatedEvent(messageId, conversationId, tenantId, userId, content));
+
+        await _context.SaveChangesAsync(ct);
 
         var recentMessages = await _context.Messages
             .Where(m => m.ConversationId == conversationId)

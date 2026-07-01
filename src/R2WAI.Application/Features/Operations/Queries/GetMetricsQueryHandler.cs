@@ -19,31 +19,22 @@ public class GetMetricsQueryHandler(
 
         var startOfDayUtc = DateTime.UtcNow.Date;
 
-        var totalWorkflowsTask = workflowRepo.CountAsync(
+        // Sequential queries — EF Core DbContext is not thread-safe; Task.WhenAll would throw
+        var totalWorkflows    = await workflowRepo.CountAsync(
             w => w.TenantId == tenantId && !w.IsDeleted, cancellationToken);
-        var activeWorkflowsTask = instanceRepo.CountAsync(
+        var activeWorkflows   = await instanceRepo.CountAsync(
             i => i.TenantId == tenantId && i.Status == WorkflowInstanceStatus.Running, cancellationToken);
-        var completedTodayTask = instanceRepo.CountAsync(
+        var completedToday    = await instanceRepo.CountAsync(
             i => i.TenantId == tenantId
                  && i.Status == WorkflowInstanceStatus.Completed
                  && i.CompletedAt != null
                  && i.CompletedAt >= startOfDayUtc, cancellationToken);
-        var totalDocumentsTask = documentRepo.CountAsync(
+        var totalDocuments    = await documentRepo.CountAsync(
             d => d.TenantId == tenantId && !d.IsDeleted, cancellationToken);
-        var totalKnowledgeBasesTask = kbRepo.CountAsync(
+        var totalKnowledgeBases = await kbRepo.CountAsync(
             kb => kb.TenantId == tenantId && !kb.IsDeleted, cancellationToken);
-        var totalAssistantsTask = assistantRepo.CountAsync(
+        var totalAssistants   = await assistantRepo.CountAsync(
             a => a.TenantId == tenantId && !a.IsDeleted, cancellationToken);
-
-        await Task.WhenAll(totalWorkflowsTask, activeWorkflowsTask, completedTodayTask,
-            totalDocumentsTask, totalKnowledgeBasesTask, totalAssistantsTask);
-
-        var totalWorkflows = await totalWorkflowsTask;
-        var activeWorkflows = await activeWorkflowsTask;
-        var completedToday = await completedTodayTask;
-        var totalDocuments = await totalDocumentsTask;
-        var totalKnowledgeBases = await totalKnowledgeBasesTask;
-        var totalAssistants = await totalAssistantsTask;
 
         var result = new MetricsDto
         {

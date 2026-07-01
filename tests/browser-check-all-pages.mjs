@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 const BASE_URL = 'http://localhost:3001';
 const API_URL = 'http://localhost:5000';
 const EMAIL = 'admin@r2wai.io';
-const PASSWORD = 'admin123';
+const PASSWORD = 'R2wai_Admin!2026';
 
 const PAGES = [
   { name: 'Home', path: '/' },

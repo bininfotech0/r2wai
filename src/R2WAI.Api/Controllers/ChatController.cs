@@ -55,15 +55,20 @@ public class ChatController(IMediator mediator, IAIService aiService, ILogger<Ch
 
     [HttpPost("conversations/{id:guid}/messages")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(50 * 1024 * 1024)]
     public async Task<IActionResult> SendMessage(Guid id, [FromForm] string content, [FromForm] List<IFormFile>? attachments, [FromForm] string? idempotencyKey, CancellationToken ct = default)
     {
         var attachmentDtos = new List<MessageAttachmentDto>();
-        
+
         if (attachments?.Count > 0)
         {
             foreach (var file in attachments)
             {
-                var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}_{file.FileName}");
+                if (file.Length > 50 * 1024 * 1024)
+                    return BadRequest(new { error = $"File '{file.FileName}' exceeds the 50MB size limit." });
+
+                var safeFileName = Path.GetFileName(file.FileName);
+                var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}_{safeFileName}");
                 await using (var stream = new FileStream(tempPath, FileMode.Create))
                 {
                     await file.CopyToAsync(stream, ct);
@@ -84,16 +89,24 @@ public class ChatController(IMediator mediator, IAIService aiService, ILogger<Ch
             }
         }
 
-        var command = new SendMessageCommand 
-        { 
-            ConversationId = id, 
+        var command = new SendMessageCommand
+        {
+            ConversationId = id,
             Content = content,
             Attachments = attachmentDtos,
             IdempotencyKey = idempotencyKey
         };
-        
-        var result = await mediator.Send(command, ct);
-        return CreatedAtAction(nameof(GetMessages), new { id }, result);
+
+        try
+        {
+            var result = await mediator.Send(command, ct);
+            return CreatedAtAction(nameof(GetMessages), new { id }, result);
+        }
+        finally
+        {
+            foreach (var att in attachmentDtos.Where(a => !string.IsNullOrEmpty(a.TempFilePath)))
+                try { System.IO.File.Delete(att.TempFilePath!); } catch { }
+        }
     }
 
     [HttpGet("conversations/{id:guid}/messages")]

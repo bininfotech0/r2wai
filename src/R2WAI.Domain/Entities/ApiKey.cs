@@ -34,9 +34,24 @@ public sealed class ApiKey : BaseEntity<Guid>
         CreatedAt = DateTime.UtcNow;
     }
 
+    public void Update(string name, string? scopes, string? roles, DateTime? expiresAt)
+    {
+        Name = name;
+        Scopes = scopes;
+        Roles = roles;
+        ExpiresAt = expiresAt;
+        MarkAsModified();
+    }
+
     public void Revoke()
     {
         IsActive = false;
+        MarkAsModified();
+    }
+
+    public void Activate()
+    {
+        IsActive = true;
         MarkAsModified();
     }
 

@@ -9,7 +9,7 @@
 <PageHeader Title="Permission Matrix" Subtitle="Manage role-based access control across the platform">
     <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
                StartIcon="@Icons.Material.Filled.Save" OnClick="SaveChanges"
-               Disabled="_saving">
+               Disabled="@(_saving || !_hasChanges)">
         @if (_saving)
         {
             <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
@@ -26,6 +26,12 @@
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-4" />
 }
+else if (_roles.Count == 0)
+{
+    <MudAlert Severity="Severity.Warning" Class="mt-4">
+        No roles found. Create roles in Admin → Roles before configuring permissions.
+    </MudAlert>
+}
 else
 {
     <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); overflow-x: auto;">
@@ -37,7 +43,14 @@ else
                     </th>
                     @foreach (var role in _roles)
                     {
-                        <th style="text-align: center; font-weight: 600; min-width: 110px;">@role</th>
+                        <th style="text-align: center; font-weight: 600; min-width: 110px;">
+                            <div>@role.Name</div>
+                            @if (role.IsSystem)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                                         Style="font-size: 0.55rem; height: 16px; margin-top: 2px;">system</MudChip>
+                            }
+                        </th>
                     }
                 </tr>
             </thead>
@@ -60,10 +73,11 @@ else
                             </td>
                             @foreach (var role in _roles)
                             {
+                                var roleName = role.Name;
                                 <td style="text-align: center;">
                                     <MudCheckBox T="bool"
-                                                 Value="@(GetPermission(role, permKey))"
-                                                 ValueChanged="@((bool v) => SetPermission(role, permKey, v))"
+                                                 Value="@(GetPermission(roleName, permKey))"
+                                                 ValueChanged="@((bool v) => SetPermission(roleName, permKey, v))"
                                                  Color="Color.Primary"
                                                  Dense="true" />
                                 </td>
@@ -77,8 +91,9 @@ else
 
     @if (_hasChanges)
     {
-        <MudAlert Severity="Severity.Info" Class="mt-3" Dense="true">
-            You have unsaved changes.
+        <MudAlert Severity="Severity.Info" Class="mt-3" Dense="true"
+                  Icon="@Icons.Material.Outlined.Info">
+            You have unsaved changes. Click <strong>Save Changes</strong> to apply them.
         </MudAlert>
     }
 }
@@ -88,26 +103,55 @@ else
     private bool _saving;
     private bool _hasChanges;
 
-    private List<string> _roles = new() { "Admin", "Business User", "Approver", "Operator", "Viewer" };
+    private List<RoleItem> _roles = new();
     private Dictionary<string, HashSet<string>> _rolePermissions = new();
 
     private static readonly List<PermissionCategory> _permissionCategories = new()
     {
         new("Assistants", new() { "Create", "Edit", "Delete", "Publish", "Chat", "ViewAll" }),
-        new("Workflows", new() { "Create", "Edit", "Delete", "Execute", "ViewRuns" }),
-        new("Knowledge", new() { "Create", "Edit", "Delete", "Search", "Upload" }),
-        new("Documents", new() { "Upload", "Download", "Delete", "ViewAll" }),
+        new("Workflows",  new() { "Create", "Edit", "Delete", "Execute", "ViewRuns" }),
+        new("Knowledge",  new() { "Create", "Edit", "Delete", "Search", "Upload" }),
+        new("Documents",  new() { "Upload", "Download", "Delete", "ViewAll" }),
         new("Operations", new() { "ViewDashboard", "ViewAuditLogs", "ExportLogs" }),
-        new("Admin", new() { "ManageUsers", "ManageRoles", "ManageModels", "ManageSettings", "ManageTenants" }),
+        new("Admin",      new() { "ManageUsers", "ManageRoles", "ManageModels", "ManageSettings", "ManageTenants" }),
     };
 
-    private static readonly HashSet<string> _viewerPermissions = new()
+    // Sensible defaults used when a role has no saved permissions yet
+    private static readonly Dictionary<string, HashSet<string>> _defaults = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Assistants.Chat", "Assistants.ViewAll",
-        "Workflows.ViewRuns",
-        "Knowledge.Search",
-        "Documents.Download", "Documents.ViewAll",
-        "Operations.ViewDashboard",
+        ["Admin"] = new HashSet<string>(
+            _permissionCategories.SelectMany(c => c.Permissions.Select(p => $"{c.Name}.{p}"))),
+        ["Viewer"] = new HashSet<string>
+        {
+            "Assistants.Chat", "Assistants.ViewAll",
+            "Workflows.ViewRuns",
+            "Knowledge.Search",
+            "Documents.Download", "Documents.ViewAll",
+            "Operations.ViewDashboard",
+        },
+        ["Approver"] = new HashSet<string>
+        {
+            "Assistants.Chat", "Assistants.ViewAll",
+            "Workflows.ViewRuns",
+            "Knowledge.Search",
+            "Documents.Download", "Documents.ViewAll",
+            "Operations.ViewDashboard",
+        },
+        ["Operator"] = new HashSet<string>
+        {
+            "Assistants.ViewAll",
+            "Workflows.ViewRuns",
+            "Documents.ViewAll",
+            "Operations.ViewDashboard", "Operations.ViewAuditLogs", "Operations.ExportLogs",
+        },
+        ["Business User"] = new HashSet<string>
+        {
+            "Assistants.Create", "Assistants.Edit", "Assistants.Publish", "Assistants.Chat", "Assistants.ViewAll",
+            "Workflows.Create", "Workflows.Edit", "Workflows.Execute", "Workflows.ViewRuns",
+            "Knowledge.Create", "Knowledge.Edit", "Knowledge.Search", "Knowledge.Upload",
+            "Documents.Upload", "Documents.Download", "Documents.ViewAll",
+            "Operations.ViewDashboard",
+        },
     };
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -121,65 +165,55 @@ else
         StateHasChanged();
         try
         {
-            var result = await Http.GetFromJsonAsync<RolesResult>("/api/v1/admin/roles");
-            var loadedRoles = result?.Items ?? new();
+            var result = await Http.GetFromJsonAsync<RolesResult>("/api/v1/admin/roles?pageSize=100");
+            var loaded = result?.Items ?? new();
 
-            if (loadedRoles.Count > 0)
+            _roles = loaded.Select(r => new RoleItem(r.Id, r.Name, r.IsSystem, r.Description, r.Permissions)).ToList();
+            _rolePermissions.Clear();
+
+            foreach (var role in _roles)
             {
-                _roles = loadedRoles.Select(r => r.Name).ToList();
+                var saved = ParsePermissions(role.Permissions);
+                // Use saved permissions if present, otherwise fall back to defaults
+                _rolePermissions[role.Name] = saved.Count > 0
+                    ? saved
+                    : _defaults.TryGetValue(role.Name, out var def) ? new HashSet<string>(def) : new HashSet<string>();
             }
-
-            InitializePermissions();
         }
-        catch
+        catch (Exception ex)
         {
-            Snackbar.Add("Failed to load roles. Using default role list.", Severity.Warning);
-            InitializePermissions();
+            Snackbar.Add($"Failed to load roles: {ex.Message}", Severity.Warning);
         }
         finally { _loading = false; StateHasChanged(); }
     }
 
-    private void InitializePermissions()
+    private static HashSet<string> ParsePermissions(string? json)
     {
-        _rolePermissions.Clear();
-
-        var allPermKeys = _permissionCategories
-            .SelectMany(c => c.Permissions.Select(p => $"{c.Name}.{p}"))
-            .ToList();
-
-        foreach (var role in _roles)
+        if (string.IsNullOrWhiteSpace(json)) return new();
+        try
         {
-            var perms = new HashSet<string>();
-
-            if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
-            {
-                foreach (var key in allPermKeys)
-                    perms.Add(key);
-            }
-            else if (role.Equals("Viewer", StringComparison.OrdinalIgnoreCase))
-            {
-                foreach (var key in _viewerPermissions)
-                    perms.Add(key);
-            }
-
-            _rolePermissions[role] = perms;
+            // Support JSON array: ["Assistants.Create", "Workflows.Execute"]
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                return new HashSet<string>(doc.RootElement.EnumerateArray()
+                    .Where(e => e.ValueKind == System.Text.Json.JsonValueKind.String)
+                    .Select(e => e.GetString()!)
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
         }
+        catch { }
+        return new();
     }
 
-    private bool GetPermission(string role, string permKey)
-    {
-        return _rolePermissions.TryGetValue(role, out var perms) && perms.Contains(permKey);
-    }
+    private bool GetPermission(string role, string permKey) =>
+        _rolePermissions.TryGetValue(role, out var perms) && perms.Contains(permKey);
 
     private void SetPermission(string role, string permKey, bool enabled)
     {
         if (!_rolePermissions.ContainsKey(role))
             _rolePermissions[role] = new HashSet<string>();
 
-        if (enabled)
-            _rolePermissions[role].Add(permKey);
-        else
-            _rolePermissions[role].Remove(permKey);
+        if (enabled) _rolePermissions[role].Add(permKey);
+        else _rolePermissions[role].Remove(permKey);
 
         _hasChanges = true;
     }
@@ -189,32 +223,61 @@ else
         _saving = true;
         StateHasChanged();
 
-        try
+        var errors = new List<string>();
+
+        foreach (var role in _roles)
         {
-            var payload = _rolePermissions.ToDictionary(
-                kvp => kvp.Key,
-                kvp => kvp.Value.ToList()
-            );
+            if (role.IsSystem) continue; // don't overwrite system roles
 
-            var response = await Http.PostAsJsonAsync("/api/v1/admin/permissions", payload);
-            response.EnsureSuccessStatusCode();
+            var perms = _rolePermissions.TryGetValue(role.Name, out var p) ? p : new HashSet<string>();
+            var permJson = System.Text.Json.JsonSerializer.Serialize(perms.OrderBy(x => x).ToList());
 
+            try
+            {
+                var response = await Http.PutAsJsonAsync($"/api/v1/admin/roles/{role.Id}", new
+                {
+                    Name = role.Name,
+                    Description = role.Description,
+                    Permissions = permJson
+                });
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var err = await response.Content.ReadAsStringAsync();
+                    errors.Add($"{role.Name}: {response.StatusCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"{role.Name}: {ex.Message}");
+            }
+        }
+
+        if (errors.Count == 0)
+        {
             _hasChanges = false;
             Snackbar.Add("Permissions saved successfully", Severity.Success);
         }
-        catch (Exception ex)
+        else
         {
-            Snackbar.Add($"Failed to save permissions: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Some roles failed to save: {string.Join("; ", errors)}", Severity.Error);
         }
-        finally { _saving = false; StateHasChanged(); }
+
+        _saving = false;
+        StateHasChanged();
     }
 
     private record PermissionCategory(string Name, List<string> Permissions);
+
+    private record RoleItem(Guid Id, string Name, bool IsSystem, string? Description, string? Permissions);
 
     private class RolesResult { public List<RoleDto> Items { get; set; } = new(); }
     private class RoleDto
     {
         public Guid Id { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Permissions { get; set; }
+        public bool IsSystem { get; set; }
     }
 }

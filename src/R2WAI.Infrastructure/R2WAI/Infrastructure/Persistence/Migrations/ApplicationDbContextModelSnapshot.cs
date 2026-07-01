@@ -436,6 +436,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("VoiceEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("WelcomeMessage")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");

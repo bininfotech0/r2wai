@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Hosting;
 using R2WAI.Application.Common.Interfaces;
 
 namespace R2WAI.Infrastructure.Services;
@@ -8,12 +9,18 @@ public class EncryptionService : IEncryptionService
 {
     private readonly byte[] _key;
 
-    public EncryptionService(IConfiguration configuration)
+    public EncryptionService(IConfiguration configuration, IHostEnvironment environment)
     {
-        var keyString = Environment.GetEnvironmentVariable("ENCRYPTION_KEY")
-            ?? configuration["Security:EncryptionKey"]
+        var keyFromEnv = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
+        var keyFromConfig = configuration["Security:EncryptionKey"];
+
+        var keyString = keyFromEnv ?? keyFromConfig
             ?? throw new InvalidOperationException(
                 "Encryption key not configured. Set the ENCRYPTION_KEY environment variable (32-byte base64 string).");
+
+        if (!environment.IsDevelopment() && keyFromEnv is null && keyFromConfig is not null)
+            throw new InvalidOperationException(
+                "In non-development environments, the encryption key must be supplied via the ENCRYPTION_KEY environment variable, not appsettings.json.");
 
         _key = Convert.FromBase64String(keyString);
         if (_key.Length != 32)
@@ -23,7 +30,7 @@ public class EncryptionService : IEncryptionService
     public string Encrypt(string plainText)
     {
         if (string.IsNullOrEmpty(plainText))
-            return plainText;
+            return string.Empty;
 
         var plainBytes = Encoding.UTF8.GetBytes(plainText);
         var nonce = new byte[12];
@@ -46,7 +53,7 @@ public class EncryptionService : IEncryptionService
     public string Decrypt(string cipherText)
     {
         if (string.IsNullOrEmpty(cipherText))
-            return cipherText;
+            return string.Empty;
 
         var fullBytes = Convert.FromBase64String(cipherText);
         if (fullBytes.Length < 28) // 12 nonce + 0 cipher + 16 tag minimum

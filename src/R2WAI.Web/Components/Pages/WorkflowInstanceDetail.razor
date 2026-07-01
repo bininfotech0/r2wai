@@ -8,9 +8,23 @@
 
 <PageTitle>R2WAI - Workflow Execution</PageTitle>
 
-
-<div class="d-flex justify-space-between align-center mb-2">
-    <MudText Typo="Typo.h4">Workflow Execution</MudText>
+<div class="d-flex justify-space-between align-center mb-3">
+    <div class="d-flex align-center gap-3">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Default"
+                       OnClick="@(() => Navigation.NavigateTo("/workflow-studio"))" aria-label="Back" />
+        <div>
+            <MudText Typo="Typo.h5" Style="font-weight: 700;">@(_instance?.WorkflowName ?? "Workflow Execution")</MudText>
+            <div class="d-flex align-center gap-2">
+                @if (_instance is not null)
+                {
+                    <StatusBadge Status="@_instance.Status" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Instance: @InstanceId[..Math.Min(8, InstanceId.Length)]...
+                    </MudText>
+                }
+            </div>
+        </div>
+    </div>
     <div class="d-flex align-center gap-2">
         @if (_autoRefresh)
         {
@@ -71,24 +85,54 @@ else if (_instance is null)
 }
 else
 {
-    <MudGrid>
+    <MudGrid Spacing="3">
+        @* ── Left Panel: Instance Info & Metrics ── *@
         <MudItem xs="12" md="4">
-            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
-                <MudText Typo="Typo.h6" Class="mb-3">@_instance.WorkflowName</MudText>
+            <MudPaper Elevation="0" Class="pa-4 mb-3" Style="border: 1px solid var(--mud-palette-divider);">
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" Class="mb-3">Execution Details</MudText>
                 <MudSimpleTable Dense="true" Elevation="0">
                     <tbody>
                         <tr>
                             <td><strong>Status</strong></td>
+                            <td><StatusBadge Status="@_instance.Status" /></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Started</strong></td>
+                            <td>@(_instance.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Completed</strong></td>
+                            <td>@(_instance.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</td>
+                        </tr>
+                        @if (_instance.StartedAt.HasValue)
+                        {
+                            <tr>
+                                <td><strong>Duration</strong></td>
+                                <td>@FormatDuration(_instance.StartedAt.Value, _instance.CompletedAt)</td>
+                            </tr>
+                        }
+                        <tr>
+                            <td><strong>Steps</strong></td>
                             <td>
-                                <StatusBadge Status="@_instance.Status" />
+                                <div class="d-flex align-center gap-2">
+                                    <MudText Typo="Typo.body2">@_steps.Count total</MudText>
+                                    @if (_steps.Any(s => s.Status == "Completed"))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined"
+                                                 Style="font-size: 0.6rem; height: 18px;">
+                                            @_steps.Count(s => s.Status == "Completed") passed
+                                        </MudChip>
+                                    }
+                                    @if (_steps.Any(s => s.Status == "Failed"))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
+                                                 Style="font-size: 0.6rem; height: 18px;">
+                                            @_steps.Count(s => s.Status == "Failed") failed
+                                        </MudChip>
+                                    }
+                                </div>
                             </td>
                         </tr>
-                        <tr><td><strong>Started</strong></td><td>@_instance.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss")</td></tr>
-                        <tr><td><strong>Completed</strong></td><td>@(_instance.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</td></tr>
-                        @if (_instance.StartedAt.HasValue && _instance.CompletedAt.HasValue)
-                        {
-                            <tr><td><strong>Duration</strong></td><td>@((_instance.CompletedAt.Value - _instance.StartedAt.Value).ToString(@"hh\:mm\:ss"))</td></tr>
-                        }
                     </tbody>
                 </MudSimpleTable>
 
@@ -101,11 +145,70 @@ else
                     </MudButton>
                 }
             </MudPaper>
+
+            @* Step Metrics *@
+            @if (_steps.Count > 0)
+            {
+                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" Class="mb-3">Step Metrics</MudText>
+
+                    @foreach (var step in _steps.OrderBy(s => s.StepIndex))
+                    {
+                        var duration = step.StartedAt.HasValue && step.CompletedAt.HasValue
+                            ? (step.CompletedAt.Value - step.StartedAt.Value)
+                            : (TimeSpan?)null;
+                        var maxDuration = _steps
+                            .Where(s => s.StartedAt.HasValue && s.CompletedAt.HasValue)
+                            .Select(s => (s.CompletedAt!.Value - s.StartedAt!.Value).TotalMilliseconds)
+                            .DefaultIfEmpty(1)
+                            .Max();
+                        var barPct = duration.HasValue && maxDuration > 0
+                            ? duration.Value.TotalMilliseconds / maxDuration * 100
+                            : 0;
+
+                        <div class="mb-2">
+                            <div class="d-flex justify-space-between align-center">
+                                <MudText Typo="Typo.caption" Style="font-weight: 500;">@step.StepName</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @(duration.HasValue ? FormatTimeSpan(duration.Value) : "—")
+                                </MudText>
+                            </div>
+                            <MudProgressLinear Value="@barPct"
+                                              Color="@GetStepMetricColor(step.Status)"
+                                              Size="Size.Small" Rounded="true"
+                                              Style="height: 4px; margin-top: 2px;" />
+                        </div>
+                    }
+
+                    @if (_steps.Any(s => s.StartedAt.HasValue && s.CompletedAt.HasValue))
+                    {
+                        var totalDuration = _steps
+                            .Where(s => s.StartedAt.HasValue && s.CompletedAt.HasValue)
+                            .Sum(s => (s.CompletedAt!.Value - s.StartedAt!.Value).TotalMilliseconds);
+                        <MudDivider Class="my-2" />
+                        <div class="d-flex justify-space-between">
+                            <MudText Typo="Typo.caption" Style="font-weight: 600;">Total Processing</MudText>
+                            <MudText Typo="Typo.caption" Style="font-weight: 600;">
+                                @FormatTimeSpan(TimeSpan.FromMilliseconds(totalDuration))
+                            </MudText>
+                        </div>
+                    }
+                </MudPaper>
+            }
         </MudItem>
 
+        @* ── Right Panel: Timeline & Logs ── *@
         <MudItem xs="12" md="8">
             <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
-                <MudText Typo="Typo.h6" Class="mb-4">Step Timeline</MudText>
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Step Timeline</MudText>
+                    <MudToggleIconButton @bind-Toggled="_showRawOutput"
+                                         Icon="@Icons.Material.Outlined.Code"
+                                         ToggledIcon="@Icons.Material.Filled.Code"
+                                         Size="Size.Small"
+                                         ToggledColor="Color.Primary"
+                                         aria-label="Toggle raw output" />
+                </div>
 
                 @if (_steps.Count == 0)
                 {
@@ -120,56 +223,97 @@ else
                         {
                             var step = _steps[i];
                             var isCurrentStep = step.Status == "Running";
-                            var stepElementId = $"step-{step.StepIndex}";
                             <MudTimelineItem Color="@GetStepStatusColor(step.Status)" Size="Size.Medium"
                                              Variant="Variant.Filled">
                                 <ItemDot>
                                     <MudIcon Icon="@GetStepStatusIcon(step.Status)" Size="Size.Small" />
                                 </ItemDot>
                                 <ItemContent>
-                                    <div id="@stepElementId">
-                                        <MudPaper Class="pa-3" Elevation="0"
-                                                  Style="@($"border: 1px solid var(--mud-palette-divider);{(isCurrentStep ? " border-left: 4px solid var(--mud-palette-primary); background: rgba(59,130,246,0.04);" : "")}")">
-                                            <div class="d-flex justify-space-between align-center">
-                                                <MudText Typo="Typo.subtitle2">@step.StepName</MudText>
-                                                <MudChip T="string" Size="Size.Small" Color="@GetStepStatusColor(step.Status)">
-                                                    @step.Status
-                                                </MudChip>
+                                    <MudPaper Class="pa-3" Elevation="0"
+                                              Style="@($"border: 1px solid var(--mud-palette-divider);{(isCurrentStep ? " border-left: 4px solid var(--mud-palette-primary); background: rgba(59,130,246,0.04);" : "")}")">
+                                        <div class="d-flex justify-space-between align-center">
+                                            <div class="d-flex align-center gap-2">
+                                                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@step.StepName</MudText>
+                                                @if (!string.IsNullOrEmpty(step.StepType))
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                                                             Style="font-size: 0.6rem; height: 18px;">
+                                                        @step.StepType
+                                                    </MudChip>
+                                                }
                                             </div>
-                                            @if (!string.IsNullOrEmpty(step.StepType))
-                                            {
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary">Type: @step.StepType</MudText>
-                                            }
-                                            @if (step.StartedAt.HasValue)
-                                            {
+                                            <MudChip T="string" Size="Size.Small" Color="@GetStepStatusColor(step.Status)">
+                                                @step.Status
+                                            </MudChip>
+                                        </div>
+
+                                        @* Timing info *@
+                                        @if (step.StartedAt.HasValue)
+                                        {
+                                            <div class="d-flex gap-3 mt-1 flex-wrap">
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    Started: @step.StartedAt.Value.ToString("HH:mm:ss")
-                                                    @if (step.CompletedAt.HasValue)
+                                                    <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small"
+                                                             Style="font-size: 12px; vertical-align: middle; margin-right: 2px;" />
+                                                    @step.StartedAt.Value.ToString("HH:mm:ss.fff")
+                                                </MudText>
+                                                @if (step.CompletedAt.HasValue)
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Size="Size.Small"
+                                                                 Style="font-size: 12px; vertical-align: middle; margin-right: 2px;" />
+                                                        @step.CompletedAt.Value.ToString("HH:mm:ss.fff")
+                                                    </MudText>
+                                                    <MudText Typo="Typo.caption" Style="font-weight: 600;">
+                                                        @FormatTimeSpan(step.CompletedAt.Value - step.StartedAt.Value)
+                                                    </MudText>
+                                                }
+                                            </div>
+                                        }
+
+                                        @* Output viewer *@
+                                        @if (!string.IsNullOrEmpty(step.Output))
+                                        {
+                                            <MudDivider Class="my-2" />
+                                            @if (_showRawOutput)
+                                            {
+                                                <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 6px; padding: 8px; overflow-x: auto; max-height: 200px;">
+                                                    <pre style="margin: 0; font-size: 0.75rem; font-family: 'Fira Code', monospace; white-space: pre-wrap; word-break: break-all; color: #374151;">@step.Output</pre>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="d-flex align-center gap-1">
+                                                    <MudIcon Icon="@Icons.Material.Outlined.Output" Size="Size.Small" Color="Color.Success"
+                                                             Style="font-size: 14px;" />
+                                                    <MudText Typo="Typo.caption" Color="Color.Success">
+                                                        @(step.Output.Length > 300 ? step.Output[..300] + "..." : step.Output)
+                                                    </MudText>
+                                                </div>
+                                                @if (step.Output.Length > 300)
+                                                {
+                                                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                                               OnClick="@(() => _expandedOutputStep = _expandedOutputStep == step ? null : step)">
+                                                        @(_expandedOutputStep == step ? "Show less" : "Show full output")
+                                                    </MudButton>
+                                                    @if (_expandedOutputStep == step)
                                                     {
-                                                        <text> | Completed: @step.CompletedAt.Value.ToString("HH:mm:ss")</text>
+                                                        <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 6px; padding: 8px; max-height: 400px; overflow: auto;">
+                                                            <pre style="margin: 0; font-size: 0.75rem; font-family: 'Fira Code', monospace; white-space: pre-wrap; word-break: break-all;">@step.Output</pre>
+                                                        </div>
                                                     }
-                                                </MudText>
+                                                }
                                             }
-                                            @if (step.StartedAt.HasValue && step.CompletedAt.HasValue)
-                                            {
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    Duration: @((step.CompletedAt.Value - step.StartedAt.Value).ToString(@"mm\:ss\.fff"))
-                                                </MudText>
-                                            }
-                                            @if (!string.IsNullOrEmpty(step.Output))
-                                            {
-                                                <MudText Typo="Typo.caption" Color="Color.Success" Class="mt-1">
-                                                    Output: @step.Output[..Math.Min(200, step.Output.Length)]
-                                                </MudText>
-                                            }
-                                            @if (!string.IsNullOrEmpty(step.Error))
-                                            {
-                                                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-1">
-                                                    @step.Error
-                                                </MudAlert>
-                                            }
-                                        </MudPaper>
-                                    </div>
+                                        }
+
+                                        @* Error display *@
+                                        @if (!string.IsNullOrEmpty(step.Error))
+                                        {
+                                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2"
+                                                      Style="font-size: 0.8rem;">
+                                                @step.Error
+                                            </MudAlert>
+                                        }
+                                    </MudPaper>
                                 </ItemContent>
                             </MudTimelineItem>
                         }
@@ -188,8 +332,11 @@ else
     private bool _retrying;
     private bool _loading = true;
     private bool _autoRefresh;
+    private bool _showRawOutput;
+    private StepDto? _expandedOutputStep;
     private System.Threading.Timer? _refreshTimer;
     private bool _isRefreshing;
+    private IJSObjectReference? _utilsModule;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -205,16 +352,12 @@ else
                 _instance = instanceTask.Result;
                 _steps = stepsTask.Result?.Items ?? new();
 
-                // Start auto-refresh if the workflow is still running
                 if (_instance?.Status == "Running")
-                {
                     StartAutoRefresh();
-                }
             }
             catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
             finally { _loading = false; StateHasChanged(); }
 
-            // Auto-scroll to the current running step
             await ScrollToCurrentStep();
         }
     }
@@ -252,7 +395,6 @@ else
             _instance = instanceTask.Result;
             _steps = stepsTask.Result?.Items ?? new();
 
-            // Stop auto-refresh if no longer running
             if (_instance?.Status != "Running")
             {
                 StopAutoRefresh();
@@ -263,18 +405,10 @@ else
             }
 
             await InvokeAsync(StateHasChanged);
-
-            // Auto-scroll to the current step
             await ScrollToCurrentStep();
         }
-        catch
-        {
-            // Silently continue on transient errors
-        }
-        finally
-        {
-            _isRefreshing = false;
-        }
+        catch { }
+        finally { _isRefreshing = false; }
     }
 
     private async Task ManualRefresh()
@@ -292,7 +426,6 @@ else
             _instance = instanceTask.Result;
             _steps = stepsTask.Result?.Items ?? new();
 
-            // Re-enable auto-refresh if running
             if (_instance?.Status == "Running" && !_autoRefresh)
                 StartAutoRefresh();
 
@@ -308,17 +441,14 @@ else
     {
         try
         {
+            _utilsModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/utils.js");
             var runningStep = _steps.FirstOrDefault(s => s.Status == "Running");
             if (runningStep is not null)
             {
-                await JS.InvokeVoidAsync("eval",
-                    $"document.getElementById('step-{runningStep.StepIndex}')?.scrollIntoView({{ behavior: 'smooth', block: 'center' }})");
+                await _utilsModule.InvokeVoidAsync("scrollToElement", $"step-{runningStep.StepIndex}");
             }
         }
-        catch
-        {
-            // Scroll is best-effort; ignore errors (e.g., prerendering)
-        }
+        catch { }
     }
 
     private async Task RetryFailedStep()
@@ -335,15 +465,12 @@ else
                 var stepsResult = await Http.GetFromJsonAsync<StepsResult>($"/api/v1/workflows/instances/{InstanceId}/steps");
                 _steps = stepsResult?.Items ?? new();
 
-                // Refresh instance status and restart auto-refresh
                 _instance = await Http.GetFromJsonAsync<InstanceDto>($"/api/v1/workflows/instances/{InstanceId}");
                 if (_instance?.Status == "Running" && !_autoRefresh)
                     StartAutoRefresh();
             }
             else
-            {
                 Snackbar.Add("Retry failed", Severity.Error);
-            }
         }
         catch (Exception ex) { Snackbar.Add($"Retry failed: {ex.Message}", Severity.Error); }
         finally { _retrying = false; _loading = false; StateHasChanged(); }
@@ -352,8 +479,25 @@ else
     public void Dispose()
     {
         _refreshTimer?.Dispose();
+        if (_utilsModule is IAsyncDisposable disposable)
+            _ = disposable.DisposeAsync();
     }
 
+    private static string FormatDuration(DateTime start, DateTime? end)
+    {
+        var diff = (end ?? DateTime.UtcNow) - start;
+        if (diff.TotalSeconds < 60) return $"{diff.Seconds}s";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m {diff.Seconds}s";
+        return $"{(int)diff.TotalHours}h {diff.Minutes}m {diff.Seconds}s";
+    }
+
+    private static string FormatTimeSpan(TimeSpan ts)
+    {
+        if (ts.TotalMilliseconds < 1000) return $"{ts.TotalMilliseconds:F0}ms";
+        if (ts.TotalSeconds < 60) return $"{ts.TotalSeconds:F1}s";
+        if (ts.TotalMinutes < 60) return $"{(int)ts.TotalMinutes}m {ts.Seconds}s";
+        return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+    }
 
     private static Color GetStepStatusColor(string status) => status switch
     {
@@ -362,6 +506,14 @@ else
         "Failed" => Color.Error,
         "Pending" => Color.Default,
         "Skipped" => Color.Default,
+        _ => Color.Default,
+    };
+
+    private static Color GetStepMetricColor(string status) => status switch
+    {
+        "Running" => Color.Primary,
+        "Completed" => Color.Success,
+        "Failed" => Color.Error,
         _ => Color.Default,
     };
 

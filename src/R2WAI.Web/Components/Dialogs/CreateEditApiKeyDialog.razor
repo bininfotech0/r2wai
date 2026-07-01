@@ -1,0 +1,196 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+@inject IJSRuntime JS
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Outlined.Key" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">@(_isEdit ? "Edit API Key" : "Generate API Key")</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        @if (_generatedKey is not null)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4" Variant="Variant.Outlined">
+                Copy this key now — it will not be shown again.
+            </MudAlert>
+            <MudPaper Outlined="true" Class="pa-3 d-flex align-center gap-2" Style="background: var(--mud-palette-background-grey);">
+                <code style="font-size: 0.8125rem; word-break: break-all; flex: 1;">@_generatedKey</code>
+                <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Size="Size.Small"
+                               OnClick="CopyKey" aria-label="Copy key" />
+            </MudPaper>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                Key prefix: <code>@_generatedKeyPrefix</code> — use this to identify the key later.
+            </MudText>
+        }
+        else
+        {
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_name" Label="Key Name" Required="true" Variant="Variant.Outlined"
+                                  Placeholder="e.g. CI/CD Pipeline, Mobile App, Partner Integration"
+                                  HelperText="A descriptive name to identify this key's purpose." />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSelect T="string" Label="Scopes" MultiSelection="true" @bind-SelectedValues="_selectedScopes"
+                               Variant="Variant.Outlined" HelperText="Permissions granted to this key.">
+                        <MudSelectItem T="string" Value="@("read")">Read</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("write")">Write</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("chat")">Chat</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("documents")">Documents</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("workflows")">Workflows</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("admin")">Admin</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSelect T="string" Label="Roles" MultiSelection="true" @bind-SelectedValues="_selectedRoles"
+                               Variant="Variant.Outlined" HelperText="Roles assigned to requests using this key.">
+                        <MudSelectItem T="string" Value="@("User")">User</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Admin")">Admin</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Viewer")">Viewer</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudDatePicker @bind-Date="_expiresAt" Label="Expiration Date" Variant="Variant.Outlined"
+                                   Placeholder="Optional — leave blank for no expiration"
+                                   MinDate="DateTime.Today.AddDays(1)"
+                                   HelperText="Key will be automatically deactivated after this date." />
+                </MudItem>
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (_generatedKey is not null)
+        {
+            <MudButton OnClick="Done" Variant="Variant.Filled" Color="Color.Primary">Done</MudButton>
+        }
+        else
+        {
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary"
+                       Disabled="_saving || string.IsNullOrWhiteSpace(_name)">
+                @(_saving ? "Saving..." : _isEdit ? "Update" : "Generate Key")
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Guid? EditId { get; set; }
+
+    private bool _isEdit => EditId.HasValue;
+    private string _name = string.Empty;
+    private IReadOnlyCollection<string> _selectedScopes = new HashSet<string> { "read", "write" };
+    private IReadOnlyCollection<string> _selectedRoles = new HashSet<string> { "User" };
+    private DateTime? _expiresAt;
+    private bool _saving;
+    private string? _generatedKey;
+    private string? _generatedKeyPrefix;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            try
+            {
+                var key = await Http.GetFromJsonAsync<ApiKeyEditDto>($"/api/v1/admin/api-keys/{EditId}");
+                if (key is not null)
+                {
+                    _name = key.Name;
+                    _selectedScopes = key.Scopes?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .ToHashSet() ?? new HashSet<string>();
+                    _selectedRoles = key.Roles?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .ToHashSet() ?? new HashSet<string>();
+                    _expiresAt = key.ExpiresAt;
+                }
+            }
+            catch { Snackbar.Add("Failed to load API key details.", Severity.Error); }
+        }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Name is required.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var payload = new
+            {
+                Name = _name,
+                Scopes = _selectedScopes.ToArray(),
+                Roles = _selectedRoles.ToArray(),
+                ExpiresAt = _expiresAt
+            };
+
+            if (_isEdit)
+            {
+                var response = await Http.PutAsJsonAsync($"/api/v1/admin/api-keys/{EditId}", payload);
+                if (response.IsSuccessStatusCode)
+                {
+                    Snackbar.Add("API key updated.", Severity.Success);
+                    MudDialog.Close(DialogResult.Ok(true));
+                }
+                else
+                {
+                    Snackbar.Add("Failed to update API key.", Severity.Error);
+                }
+            }
+            else
+            {
+                var response = await Http.PostAsJsonAsync("/api/v1/admin/api-keys", payload);
+                if (response.IsSuccessStatusCode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<CreateKeyResult>();
+                    _generatedKey = result?.Key;
+                    _generatedKeyPrefix = result?.KeyPrefix;
+                }
+                else
+                {
+                    Snackbar.Add("Failed to create API key.", Severity.Error);
+                }
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task CopyKey()
+    {
+        if (_generatedKey is null) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _generatedKey);
+            Snackbar.Add("Key copied to clipboard.", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to copy — please select and copy manually.", Severity.Warning);
+        }
+    }
+
+    private void Done() => MudDialog.Close(DialogResult.Ok(true));
+    private void Cancel() => MudDialog.Cancel();
+
+    private class CreateKeyResult
+    {
+        public string? Key { get; set; }
+        public string? KeyPrefix { get; set; }
+    }
+
+    private class ApiKeyEditDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? Scopes { get; set; }
+        public string? Roles { get; set; }
+        public DateTime? ExpiresAt { get; set; }
+    }
+}

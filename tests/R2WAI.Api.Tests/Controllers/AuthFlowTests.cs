@@ -67,7 +67,7 @@ public class AuthFlowTests : IntegrationTestBase
         {
             Email = "admin@r2wai.io",
             Token = "INVALID",
-            NewPassword = "newpassword123"
+            NewPassword = "NewPass@2026!"
         });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -90,7 +90,7 @@ public class AuthFlowTests : IntegrationTestBase
         var response = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Email = "admin@r2wai.io",
-            Password = "admin123"
+            Password = "R2wai_Admin!2026"
         });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 

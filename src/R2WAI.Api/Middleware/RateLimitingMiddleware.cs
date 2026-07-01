@@ -11,12 +11,25 @@ public class RateLimitingMiddleware
 
     // In-memory fallback — used only when Redis is unavailable
     private readonly ConcurrentDictionary<string, RateLimitEntry> _fallbackClients = new();
+    private readonly Timer _cleanupTimer;
 
-    public RateLimitingMiddleware(RequestDelegate next, int maxRequests = 100, int windowSeconds = 60)
+    public RateLimitingMiddleware(RequestDelegate next, int maxRequests = 10000, int windowSeconds = 60)
     {
         _next = next;
         _maxRequests = maxRequests;
         _window = TimeSpan.FromSeconds(windowSeconds);
+        _cleanupTimer = new Timer(_ => CleanupExpiredEntries(), null,
+            TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
+    }
+
+    private void CleanupExpiredEntries()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var kvp in _fallbackClients)
+        {
+            if (now - kvp.Value.WindowStart > _window * 2)
+                _fallbackClients.TryRemove(kvp.Key, out _);
+        }
     }
 
     public async Task InvokeAsync(HttpContext context)

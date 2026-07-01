@@ -23,7 +23,7 @@ public class TenantResolutionMiddleware
             tenantId = context.User.FindFirst("tenant_id")?.Value;
         }
 
-        if (string.IsNullOrEmpty(tenantId))
+        if (string.IsNullOrEmpty(tenantId) && context.User.Identity?.IsAuthenticated == true)
         {
             tenantId = context.Request.Headers["X-Tenant-Id"].FirstOrDefault();
         }

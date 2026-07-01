@@ -369,6 +369,14 @@ public class WorkflowsController(
     [HttpGet("instances/{instanceId:guid}/steps")]
     public async Task<IActionResult> GetInstanceSteps(Guid instanceId, CancellationToken ct = default)
     {
+        var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+
+        var instanceBelongsToTenant = await dbContext.WorkflowInstances
+            .AnyAsync(wi => wi.Id == instanceId && wi.TenantId == tenantId, ct);
+        if (!instanceBelongsToTenant)
+            return NotFound(new { error = "Workflow instance not found." });
+
         var steps = await dbContext.WorkflowStepExecutions
             .Where(s => s.WorkflowInstanceId == instanceId)
             .OrderBy(s => s.StepIndex)

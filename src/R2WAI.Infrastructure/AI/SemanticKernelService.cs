@@ -18,9 +18,8 @@ public class SemanticKernelService : IAIService
     private readonly IConfiguration _configuration;
     private readonly ILogger<SemanticKernelService> _logger;
     private readonly IServiceProvider _serviceProvider;
-    // Static so the Kernel (and its heavy chat completion client) is shared across scoped instances.
-    // Keyed by a config fingerprint so changes to AI config take effect on restart.
-    private static readonly ConcurrentDictionary<string, Kernel> _kernels = new();
+    private static readonly ConcurrentDictionary<string, (Kernel Kernel, DateTime CreatedAt)> _kernels = new();
+    private static readonly TimeSpan KernelMaxAge = TimeSpan.FromHours(1);
 
     public SemanticKernelService(
         IConfiguration configuration,
@@ -278,7 +277,18 @@ public class SemanticKernelService : IAIService
     private Kernel GetOrCreateBaseKernel()
     {
         var configKey = "default";
-        return _kernels.GetOrAdd(configKey, _ =>
+
+        if (_kernels.TryGetValue(configKey, out var existing) && DateTime.UtcNow - existing.CreatedAt < KernelMaxAge)
+            return existing.Kernel;
+
+        if (existing.Kernel is not null)
+            _kernels.TryRemove(configKey, out _);
+
+        return _kernels.GetOrAdd(configKey, _ => (CreateKernel(), DateTime.UtcNow)).Kernel;
+    }
+
+    private Kernel CreateKernel()
+    {
         {
             var builder = Kernel.CreateBuilder();
 
@@ -330,6 +340,6 @@ public class SemanticKernelService : IAIService
             builder.Plugins.AddFromType<TimePlugin>();
 
             return builder.Build();
-        });
+        }
     }
 }

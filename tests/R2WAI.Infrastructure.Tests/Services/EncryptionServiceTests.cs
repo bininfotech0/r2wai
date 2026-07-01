@@ -1,9 +1,19 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 
 namespace R2WAI.Infrastructure.Tests.Services;
 
 public class EncryptionServiceTests
 {
+    private sealed class DevelopmentEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = Environments.Development;
+        public string ApplicationName { get; set; } = "Test";
+        public string ContentRootPath { get; set; } = "";
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
     private static EncryptionService CreateService(string? key = null)
     {
         var actualKey = key ?? Convert.ToBase64String(new byte[32]);
@@ -14,7 +24,7 @@ public class EncryptionServiceTests
             })
             .Build();
 
-        return new EncryptionService(config);
+        return new EncryptionService(config, new DevelopmentEnvironment());
     }
 
     [Fact]

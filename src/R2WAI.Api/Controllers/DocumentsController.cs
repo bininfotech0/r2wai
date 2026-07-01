@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using R2WAI.Application.Features.Documents.Commands;
 using R2WAI.Application.Features.Documents.Queries;
 
@@ -98,7 +99,9 @@ public class DocumentsController(IMediator mediator, ILogger<DocumentsController
         var storageService = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.IStorageService>();
         var dbContext = HttpContext.RequestServices.GetRequiredService<R2WAI.Infrastructure.Persistence.ApplicationDbContext>();
 
-        var document = await dbContext.Documents.FindAsync([id], ct);
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+        var document = await dbContext.Documents
+            .FirstOrDefaultAsync(d => d.Id == id && d.TenantId == tenantId, ct);
         if (document is null)
             return NotFound(new { error = "Document not found." });
 

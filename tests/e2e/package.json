@@ -1,0 +1,12 @@
+{
+  "name": "r2wai-e2e",
+  "type": "module",
+  "description": "R2WAI complete product E2E tests using Playwright",
+  "scripts": {
+    "test": "node e2e_full_product.mjs",
+    "test:install": "npm install && npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.61.0"
+  }
+}

@@ -59,7 +59,7 @@ public static class ApplicationDbContextSeed
             AdminUserId, DefaultTenantId,
             "admin@r2wai.io", "admin@r2wai.io",
             "System", "Administrator");
-        adminUser.SetPasswordHash(new PasswordHasher().Hash("admin123"));
+        adminUser.SetPasswordHash(new PasswordHasher().Hash("R2wai_Admin!2026"));
 
         var adminUserRole = new UserRole(AdminUserId, AdminRoleId);
 

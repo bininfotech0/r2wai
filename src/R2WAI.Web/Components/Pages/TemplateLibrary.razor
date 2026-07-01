@@ -195,106 +195,151 @@
     private HashSet<string> _usedWorkflowTemplates = new();
     private HashSet<string> _usedAssistantTemplates = new();
 
-    private static readonly string[] _workflowCategories = { "All", "Approval", "HR", "Finance", "IT", "Operations" };
-    private static readonly string[] _assistantCategories = { "All", "HR", "IT", "Finance", "Legal", "Procurement", "General" };
+    private static readonly string[] _workflowCategories = { "All", "Approval", "HR", "Finance", "IT", "Operations", "Steel", "Manufacturing", "Government", "Hospitality", "B2B" };
+    private static readonly string[] _assistantCategories = { "All", "HR", "IT", "Finance", "Legal", "Procurement", "General", "Steel", "Government", "Hospitality", "B2B", "Website Agent" };
 
     // Combined count for the search summary
     private List<object> FilteredItems => _activeTab == 0
         ? FilteredWorkflowTemplates.Cast<object>().ToList()
         : FilteredAssistantTemplates.Cast<object>().ToList();
 
-    // ──────────────── Workflow Templates ────────────────
+    // ──────────────── Workflow Templates (55+) ────────────────
     private static readonly List<WorkflowTemplate> _workflowTemplates = new()
     {
-        // Approval
-        new() { Name = "Invoice Approval", Category = "Approval", StepCount = 3,
-                 Description = "Three-level approval: Submit, Manager Review, Finance Approval.",
-                 Steps = "Submit|Manager Review|Finance Approval" },
-        new() { Name = "Purchase Request", Category = "Approval", StepCount = 4,
-                 Description = "End-to-end purchasing: Submit, Budget Check, Manager Approval, Procurement.",
-                 Steps = "Submit|Budget Check|Manager Approval|Procurement" },
-        new() { Name = "Contract Review", Category = "Approval", StepCount = 4,
-                 Description = "Full contract lifecycle: Draft, Legal Review, Manager Approval, Sign.",
-                 Steps = "Draft|Legal Review|Manager Approval|Sign" },
-        new() { Name = "Travel Request", Category = "Approval", StepCount = 4,
-                 Description = "Travel approval flow: Submit, Manager Review, Finance Approval, Booking.",
-                 Steps = "Submit|Manager Review|Finance Approval|Book Travel" },
+        // ── Approval ──
+        new() { Name = "Invoice Approval", Category = "Approval", StepCount = 3, Description = "Three-level approval: Submit, Manager Review, Finance Approval.", Steps = "Submit|Manager Review|Finance Approval" },
+        new() { Name = "Purchase Request", Category = "Approval", StepCount = 4, Description = "End-to-end purchasing with budget check and procurement sign-off.", Steps = "Submit|Budget Check|Manager Approval|Procurement" },
+        new() { Name = "Contract Review", Category = "Approval", StepCount = 4, Description = "Full contract lifecycle with legal and management approval.", Steps = "Draft|Legal Review|Manager Approval|Sign" },
+        new() { Name = "Travel Request", Category = "Approval", StepCount = 4, Description = "Travel approval with policy check and booking automation.", Steps = "Submit|Policy Check|Manager Approval|Book Travel" },
+        new() { Name = "Vendor Approval", Category = "Approval", StepCount = 5, Description = "New vendor onboarding with compliance and legal review.", Steps = "Submit|Compliance Check|Legal Review|Finance Approval|Register" },
+        new() { Name = "Capital Expenditure", Category = "Approval", StepCount = 5, Description = "CapEx approval with ROI analysis and multi-level sign-off.", Steps = "Submit|ROI Analysis|Dept Head|CFO Review|Board Approval" },
 
-        // HR
-        new() { Name = "Employee Onboarding", Category = "HR", StepCount = 4,
-                 Description = "New hire setup: HR Intake, IT Setup, Manager Intro, Training Assignment.",
-                 Steps = "HR Intake|IT Setup|Manager Intro|Training" },
-        new() { Name = "Leave Request", Category = "HR", StepCount = 4,
-                 Description = "Leave management: Submit Request, Manager Approval, HR Update, Calendar Sync.",
-                 Steps = "Submit|Manager Approval|HR Update|Calendar Sync" },
-        new() { Name = "Performance Review", Category = "HR", StepCount = 4,
-                 Description = "Review cycle: Self-Assessment, Manager Review, HR Review, Meeting Schedule.",
-                 Steps = "Self-Assessment|Manager Review|HR Review|Meeting" },
-        new() { Name = "Offboarding", Category = "HR", StepCount = 4,
-                 Description = "Employee exit: Manager Notify, IT Revoke Access, HR Exit Interview, Final Paycheck.",
-                 Steps = "Manager Notify|IT Revoke|HR Exit|Final Paycheck" },
+        // ── HR ──
+        new() { Name = "Employee Onboarding", Category = "HR", StepCount = 4, Description = "New hire setup: HR Intake, IT Setup, Manager Intro, Training.", Steps = "HR Intake|IT Setup|Manager Intro|Training" },
+        new() { Name = "Leave Request", Category = "HR", StepCount = 4, Description = "Leave management with calendar sync.", Steps = "Submit|Manager Approval|HR Update|Calendar Sync" },
+        new() { Name = "Performance Review", Category = "HR", StepCount = 4, Description = "360-degree review cycle with self-assessment.", Steps = "Self-Assessment|Manager Review|HR Review|Meeting" },
+        new() { Name = "Offboarding", Category = "HR", StepCount = 4, Description = "Employee exit with access revocation and knowledge transfer.", Steps = "Manager Notify|IT Revoke|HR Exit|Final Paycheck" },
+        new() { Name = "Recruitment Pipeline", Category = "HR", StepCount = 5, Description = "Hiring workflow from screening to offer letter.", Steps = "Screen Resume|Phone Interview|Technical Round|HR Round|Offer" },
 
-        // Finance
-        new() { Name = "Expense Report", Category = "Finance", StepCount = 5,
-                 Description = "Expense processing: Submit, Receipt Check, Manager Review, Finance Audit, Reimburse.",
-                 Steps = "Submit|Receipt Check|Manager Review|Finance Audit|Reimburse" },
-        new() { Name = "Budget Approval", Category = "Finance", StepCount = 4,
-                 Description = "Budget cycle: Draft Proposal, Department Head Review, CFO Approval, Record.",
-                 Steps = "Draft|Department Head|CFO Approval|Record" },
+        // ── Finance ──
+        new() { Name = "Expense Report", Category = "Finance", StepCount = 5, Description = "Expense processing with receipt validation and reimbursement.", Steps = "Submit|Receipt Check|Manager Review|Finance Audit|Reimburse" },
+        new() { Name = "Budget Approval", Category = "Finance", StepCount = 4, Description = "Budget cycle with department and CFO approval.", Steps = "Draft|Department Head|CFO Approval|Record" },
+        new() { Name = "GST Filing Workflow", Category = "Finance", StepCount = 4, Description = "Indian GST compliance: data collection, validation, filing, reconciliation.", Steps = "Collect Data|Validate|File Return|Reconcile" },
+        new() { Name = "Payroll Processing", Category = "Finance", StepCount = 5, Description = "Monthly payroll with attendance, deductions, and bank transfer.", Steps = "Attendance Import|Calculate Salary|Deductions|Manager Verify|Bank Transfer" },
 
-        // IT
-        new() { Name = "Access Request", Category = "IT", StepCount = 4,
-                 Description = "Access provisioning: Submit Request, Manager Approval, IT Security Review, Provision.",
-                 Steps = "Submit|Manager Approval|IT Security|Provision" },
-        new() { Name = "Change Request", Category = "IT", StepCount = 4,
-                 Description = "Change management: Submit, Impact Analysis, CAB Review, Deploy.",
-                 Steps = "Submit|Impact Analysis|CAB Review|Deploy" },
-        new() { Name = "Incident Response", Category = "IT", StepCount = 5,
-                 Description = "Incident handling: Detect, Triage, Assign, Resolve, Post-Mortem.",
-                 Steps = "Detect|Triage|Assign|Resolve|Post-Mortem" },
+        // ── IT ──
+        new() { Name = "Access Request", Category = "IT", StepCount = 4, Description = "Access provisioning with security review.", Steps = "Submit|Manager Approval|IT Security|Provision" },
+        new() { Name = "Change Request", Category = "IT", StepCount = 4, Description = "Change management with impact analysis and CAB review.", Steps = "Submit|Impact Analysis|CAB Review|Deploy" },
+        new() { Name = "Incident Response", Category = "IT", StepCount = 5, Description = "Incident handling: Detect, Triage, Assign, Resolve, Post-Mortem.", Steps = "Detect|Triage|Assign|Resolve|Post-Mortem" },
+        new() { Name = "Server Provisioning", Category = "IT", StepCount = 4, Description = "Infrastructure provisioning with security hardening.", Steps = "Request|Approve|Provision|Security Hardening" },
 
-        // Operations
-        new() { Name = "Vendor Onboarding", Category = "Operations", StepCount = 5,
-                 Description = "Vendor setup: Application, Due Diligence, Legal Review, Procurement, Activate.",
-                 Steps = "Application|Due Diligence|Legal Review|Procurement|Activate" },
-        new() { Name = "Quality Review", Category = "Operations", StepCount = 4,
-                 Description = "QA process: Sample Collection, Inspection, Report Generation, Corrective Action.",
-                 Steps = "Sample|Inspection|Report|Corrective Action" },
+        // ── Operations ──
+        new() { Name = "Vendor Onboarding", Category = "Operations", StepCount = 5, Description = "Vendor setup with due diligence and compliance.", Steps = "Application|Due Diligence|Legal Review|Procurement|Activate" },
+        new() { Name = "Quality Review", Category = "Operations", StepCount = 4, Description = "QA process with inspection and corrective action.", Steps = "Sample|Inspection|Report|Corrective Action" },
+        new() { Name = "Document Translation", Category = "Operations", StepCount = 4, Description = "AI-powered document translation with human review.", Steps = "Upload|AI Translate|Human Review|Publish" },
+        new() { Name = "Compliance Audit", Category = "Operations", StepCount = 5, Description = "Regulatory compliance audit with evidence collection.", Steps = "Schedule|Collect Evidence|Review|Findings Report|Remediation" },
+
+        // ── Steel Industry ──
+        new() { Name = "Steel Coil Quality Inspection", Category = "Steel", StepCount = 5, Description = "Incoming coil quality check with metallurgical testing and grading.", Steps = "Receive Coil|Sample Cut|Lab Testing|Grade Assignment|Quality Certificate" },
+        new() { Name = "Blast Furnace Maintenance", Category = "Steel", StepCount = 5, Description = "Scheduled maintenance workflow for blast furnace operations.", Steps = "Plan Shutdown|Safety Clearance|Maintenance Execution|Testing|Restart" },
+        new() { Name = "Raw Material Procurement", Category = "Steel", StepCount = 5, Description = "Iron ore and coal procurement with supplier evaluation.", Steps = "Requirement|Supplier Quote|Quality Check|PO Generation|Delivery Tracking" },
+        new() { Name = "Steel Dispatch & Logistics", Category = "Steel", StepCount = 5, Description = "Order processing to delivery tracking for steel products.", Steps = "Order Confirm|Production Schedule|Quality Check|Loading|Dispatch & Track" },
+        new() { Name = "Environmental Compliance - Steel", Category = "Steel", StepCount = 4, Description = "Pollution control and emission monitoring for steel plants.", Steps = "Emission Monitoring|Data Collection|SPCB Report|Corrective Action" },
+        new() { Name = "Heat Treatment Process", Category = "Steel", StepCount = 4, Description = "Steel heat treatment workflow with temperature monitoring.", Steps = "Load Furnace|Temperature Control|Cooling Cycle|Hardness Testing" },
+
+        // ── Manufacturing / Motor & Automation ──
+        new() { Name = "Motor Assembly Line QC", Category = "Manufacturing", StepCount = 5, Description = "Motor assembly quality control with testing at each stage.", Steps = "Component Check|Winding Test|Assembly|Vibration Test|Final QC" },
+        new() { Name = "PLC Program Deployment", Category = "Manufacturing", StepCount = 4, Description = "Deploy automation PLC programs with safety validation.", Steps = "Code Review|Simulation Test|Safety Validation|Deploy to PLC" },
+        new() { Name = "Predictive Maintenance Alert", Category = "Manufacturing", StepCount = 4, Description = "IoT sensor-triggered maintenance workflow for factory equipment.", Steps = "Sensor Alert|AI Analysis|Work Order|Maintenance Execution" },
+        new() { Name = "Production Batch Tracking", Category = "Manufacturing", StepCount = 5, Description = "Track manufacturing batches from raw material to finished goods.", Steps = "Raw Material In|Production Start|In-Process QC|Packaging|Warehouse" },
+        new() { Name = "Equipment Calibration", Category = "Manufacturing", StepCount = 4, Description = "Periodic calibration of measurement and testing equipment.", Steps = "Schedule|Calibrate|Verify Accuracy|Certificate Update" },
+        new() { Name = "Safety Incident Report", Category = "Manufacturing", StepCount = 5, Description = "Factory safety incident reporting with root cause analysis.", Steps = "Report Incident|First Aid|Investigation|Root Cause|CAPA" },
+
+        // ── Jharkhand Government ──
+        new() { Name = "RTI Application Processing", Category = "Government", StepCount = 4, Description = "Right to Information request handling with departmental routing.", Steps = "Receive RTI|Route to Department|Compile Response|Send Reply" },
+        new() { Name = "Land Record Mutation", Category = "Government", StepCount = 5, Description = "Jharkhand land mutation process with verification and registration.", Steps = "Application|Document Verify|Field Survey|Revenue Officer Approval|Mutation Entry" },
+        new() { Name = "Domicile Certificate", Category = "Government", StepCount = 4, Description = "Jharkhand domicile certificate application processing.", Steps = "Application|Document Verify|Circle Officer Approval|Certificate Issue" },
+        new() { Name = "Caste Certificate Processing", Category = "Government", StepCount = 4, Description = "Caste certificate issuance with verification workflow.", Steps = "Application|Enquiry Report|SDO Verification|Certificate Issue" },
+        new() { Name = "Public Grievance Redressal", Category = "Government", StepCount = 5, Description = "CM Helpline / Samadhan grievance resolution workflow.", Steps = "Register Grievance|Classify & Route|Department Action|Follow Up|Resolution" },
+        new() { Name = "e-Procurement Tender", Category = "Government", StepCount = 5, Description = "Government tender process from publication to award.", Steps = "Publish NIT|Bid Submission|Technical Evaluation|Financial Evaluation|Award" },
+        new() { Name = "MGNREGA Job Card", Category = "Government", StepCount = 4, Description = "MGNREGA job card application and work allocation.", Steps = "Application|Gram Sabha Verify|Job Card Issue|Work Allocation" },
+
+        // ── Hospitality ──
+        new() { Name = "Hotel Guest Check-In", Category = "Hospitality", StepCount = 4, Description = "Automated guest check-in with room assignment and welcome.", Steps = "ID Verify|Room Assignment|Key Handover|Welcome Kit" },
+        new() { Name = "Restaurant Table Reservation", Category = "Hospitality", StepCount = 3, Description = "Table booking with confirmation and kitchen notification.", Steps = "Book Table|Confirm Guest|Notify Kitchen" },
+        new() { Name = "Guest Complaint Resolution", Category = "Hospitality", StepCount = 4, Description = "Guest complaint handling with escalation and compensation.", Steps = "Log Complaint|Assign Staff|Resolve|Guest Follow-Up" },
+        new() { Name = "Event & Banquet Booking", Category = "Hospitality", StepCount = 5, Description = "Corporate event booking with menu, AV, and billing.", Steps = "Enquiry|Site Visit|Menu & AV Setup|Contract Sign|Event Execution" },
+        new() { Name = "Housekeeping Schedule", Category = "Hospitality", StepCount = 4, Description = "Room cleaning and maintenance scheduling workflow.", Steps = "Room Status Check|Assign Staff|Clean & Inspect|Mark Ready" },
+
+        // ── B2B / Small Business ──
+        new() { Name = "B2B Lead Qualification", Category = "B2B", StepCount = 4, Description = "Lead scoring and qualification for B2B sales teams.", Steps = "Capture Lead|Score & Qualify|Sales Outreach|Proposal Send" },
+        new() { Name = "B2B Order Processing", Category = "B2B", StepCount = 5, Description = "Bulk order processing with credit check and fulfillment.", Steps = "Receive Order|Credit Check|Inventory Check|Fulfill|Invoice & Ship" },
+        new() { Name = "Dealer Onboarding", Category = "B2B", StepCount = 5, Description = "New dealer registration with territory and credit setup.", Steps = "Application|Background Check|Agreement Sign|Territory Assign|System Setup" },
+        new() { Name = "Quotation Management", Category = "B2B", StepCount = 4, Description = "B2B quote generation with approval and follow-up.", Steps = "Request Quote|Generate|Manager Approval|Send & Follow Up" },
+        new() { Name = "Customer Feedback Loop", Category = "B2B", StepCount = 4, Description = "Collect, analyze, and act on B2B customer feedback.", Steps = "Survey Send|Collect Responses|AI Analysis|Action Plan" },
+        new() { Name = "Partnership Agreement", Category = "B2B", StepCount = 4, Description = "B2B partnership setup with legal and commercial terms.", Steps = "Proposal|Legal Review|Commercial Terms|Sign & Activate" },
     };
 
-    // ──────────────── Assistant Templates ────────────────
+    // ──────────────── Assistant/Agent Templates (55+) ────────────────
     private static readonly List<AssistantTemplate> _assistantTemplates = new()
     {
-        new() { Name = "HR Onboarding Guide", Type = "HR",
-                 Description = "Guides new employees through onboarding steps, benefits enrollment, and company policies.",
-                 SystemPrompt = "You are an HR onboarding assistant. Help new employees navigate their first days, explain benefits enrollment, company policies, team structures, and answer common onboarding questions. Be warm, welcoming, and thorough." },
-        new() { Name = "IT Helpdesk", Type = "IT",
-                 Description = "Troubleshoots common IT issues, guides password resets, and escalates complex tickets.",
-                 SystemPrompt = "You are an IT helpdesk assistant. Help employees troubleshoot common IT issues such as password resets, VPN connectivity, software installation, printer setup, and account access. Escalate complex issues to the IT team when needed." },
-        new() { Name = "Finance FAQ", Type = "Finance",
-                 Description = "Answers questions about expense policies, budget processes, and financial procedures.",
-                 SystemPrompt = "You are a finance assistant. Help employees with questions about expense report policies, reimbursement procedures, budget approval processes, invoice processing, and financial compliance. Provide accurate and clear guidance." },
-        new() { Name = "Legal Advisor", Type = "Legal",
-                 Description = "Assists with contract questions, compliance policies, and legal process guidance.",
-                 SystemPrompt = "You are a legal advisory assistant. Help employees with questions about contract terms, NDA requirements, compliance policies, data privacy regulations, and legal review processes. Always recommend consulting with the legal team for binding decisions." },
-        new() { Name = "Procurement Assistant", Type = "Procurement",
-                 Description = "Helps with vendor selection, purchase orders, and procurement policy questions.",
-                 SystemPrompt = "You are a procurement assistant. Help employees with vendor selection criteria, purchase order processes, procurement policies, supplier evaluation, and contract negotiation guidance. Ensure compliance with procurement thresholds and approval requirements." },
-        new() { Name = "Sales Enablement", Type = "General",
-                 Description = "Supports sales teams with pitch preparation, proposal drafting, and competitive insights.",
-                 SystemPrompt = "You are a sales enablement assistant. Help sales representatives prepare compelling pitches, draft proposals, analyze competitive landscapes, and craft follow-up communications. Focus on value-driven messaging and customer-centric approaches." },
-        new() { Name = "Customer Support", Type = "General",
-                 Description = "Handles customer inquiries, resolves common issues, and provides product guidance.",
-                 SystemPrompt = "You are a customer support assistant. Help resolve customer inquiries professionally and efficiently. Provide product guidance, troubleshoot common issues, process routine requests, and escalate complex cases appropriately. Maintain a friendly and empathetic tone." },
-        new() { Name = "Executive Briefing", Type = "General",
-                 Description = "Summarizes reports, prepares briefings, and provides data-driven analysis for leadership.",
-                 SystemPrompt = "You are an executive briefing assistant. Help prepare concise briefings, summarize lengthy reports, analyze business metrics, and provide data-driven insights for leadership decisions. Focus on clarity, key takeaways, and actionable recommendations." },
-        new() { Name = "Training Coach", Type = "General",
-                 Description = "Creates learning paths, quizzes, and training content for employee development.",
-                 SystemPrompt = "You are a training and development coach. Help create learning paths, generate quiz questions, develop training materials, and guide employees through skill development programs. Make learning engaging and track progress through clear milestones." },
-        new() { Name = "Compliance Officer", Type = "Legal",
-                 Description = "Monitors compliance requirements, audit checklists, and regulatory obligations.",
-                 SystemPrompt = "You are a compliance assistant. Help employees understand regulatory requirements, prepare for audits, maintain compliance checklists, and navigate industry-specific regulations. Provide clear guidance on reporting obligations and risk mitigation strategies." },
+        // ── Core Enterprise ──
+        new() { Name = "HR Onboarding Guide", Type = "HR", Description = "Guides new employees through onboarding, benefits, and policies.", SystemPrompt = "You are an HR onboarding assistant. Help new employees navigate their first days — benefits enrollment, company policies, team structures, and common questions. Be warm, welcoming, and thorough." },
+        new() { Name = "IT Helpdesk", Type = "IT", Description = "Troubleshoots IT issues, password resets, VPN, software access.", SystemPrompt = "You are an IT helpdesk assistant. Help employees troubleshoot password resets, VPN connectivity, software installation, printer setup, and account access. Escalate complex issues to the IT team." },
+        new() { Name = "Finance FAQ", Type = "Finance", Description = "Answers questions about expenses, budgets, and financial procedures.", SystemPrompt = "You are a finance assistant. Help employees with expense reports, reimbursement policies, budget approvals, invoice processing, and GST compliance. Provide accurate and clear guidance." },
+        new() { Name = "Legal Advisor", Type = "Legal", Description = "Assists with contracts, compliance, and legal process guidance.", SystemPrompt = "You are a legal advisory assistant. Help with contract terms, NDA requirements, compliance policies, and data privacy regulations. Always recommend consulting the legal team for binding decisions." },
+        new() { Name = "Procurement Assistant", Type = "Procurement", Description = "Helps with vendor selection, POs, and procurement policies.", SystemPrompt = "You are a procurement assistant. Help with vendor selection, purchase order processes, procurement policies, and contract negotiation. Ensure compliance with approval thresholds." },
+        new() { Name = "Sales Enablement", Type = "General", Description = "Supports sales teams with pitches, proposals, and competitive insights.", SystemPrompt = "You are a sales enablement assistant. Help sales reps prepare pitches, draft proposals, analyze competition, and craft follow-ups. Focus on value-driven, customer-centric messaging." },
+        new() { Name = "Customer Support Agent", Type = "General", Description = "Handles inquiries, resolves issues, and provides product guidance.", SystemPrompt = "You are a customer support assistant. Resolve inquiries professionally, provide product guidance, troubleshoot issues, and escalate complex cases. Be friendly and empathetic." },
+        new() { Name = "Executive Briefing", Type = "General", Description = "Summarizes reports and provides data-driven analysis for leadership.", SystemPrompt = "You are an executive briefing assistant. Prepare concise briefings, summarize reports, analyze business metrics, and provide data-driven insights. Focus on key takeaways and actionable recommendations." },
+        new() { Name = "Training Coach", Type = "General", Description = "Creates learning paths, quizzes, and training content.", SystemPrompt = "You are a training coach. Create learning paths, generate quizzes, develop training materials, and guide employees through skill development. Make learning engaging with clear milestones." },
+        new() { Name = "Compliance Officer", Type = "Legal", Description = "Monitors compliance, audit checklists, and regulatory obligations.", SystemPrompt = "You are a compliance assistant. Help understand regulatory requirements, prepare for audits, maintain compliance checklists, and navigate industry regulations. Provide clear guidance on reporting and risk mitigation." },
+
+        // ── Steel Industry ──
+        new() { Name = "Steel Quality Inspector", Type = "Steel", Description = "Assists with steel grade identification, testing standards, and quality certificates.", SystemPrompt = "You are a steel quality inspection assistant for a steel plant. Help engineers with grade identification (IS 2062, IS 1786, ASTM standards), testing procedures (tensile, impact, chemical composition), quality certificates, and BIS compliance. Provide guidance on acceptance criteria and rejection grounds." },
+        new() { Name = "Steel Plant Safety Officer", Type = "Steel", Description = "Monitors safety protocols, PPE compliance, and hazard reporting in steel plants.", SystemPrompt = "You are a safety officer assistant for a steel manufacturing plant. Help with safety protocols for blast furnace operations, hot metal handling, crane operations, gas line safety, and PPE compliance. Guide incident reporting, near-miss documentation, and safety training requirements." },
+        new() { Name = "Metallurgy Advisor", Type = "Steel", Description = "Provides metallurgical guidance on alloy composition and heat treatment.", SystemPrompt = "You are a metallurgy advisor for steel manufacturing. Help with alloy composition analysis, heat treatment parameters, grain structure optimization, and mechanical property targets. Provide guidance on steel grades for specific applications — construction, automotive, rails, and pipes." },
+        new() { Name = "Steel Procurement Specialist", Type = "Steel", Description = "Assists with raw material sourcing — iron ore, coal, scrap, ferroalloys.", SystemPrompt = "You are a steel industry procurement specialist. Help with sourcing iron ore (Jharkhand mines), coking coal, ferroalloys, and steel scrap. Provide guidance on supplier evaluation, quality specifications, logistics from Jharkhand/Odisha mines, and Indian Railway rake booking." },
+        new() { Name = "Steel Dispatch Coordinator", Type = "Steel", Description = "Manages order dispatch, logistics, and delivery tracking for steel products.", SystemPrompt = "You are a steel dispatch coordinator. Help track orders from production to delivery — inventory allocation, truck/rake booking, e-way bill generation, weighbridge data, and real-time GPS tracking. Support dispatch from Jamshedpur, Bokaro, and Rourkela plants." },
+
+        // ── Jharkhand Government ──
+        new() { Name = "Jharkhand Citizen Services", Type = "Government", Description = "Guides citizens through government services — certificates, land records, schemes.", SystemPrompt = "You are a Jharkhand government citizen services assistant. Help citizens navigate state services — domicile certificates, caste certificates, income certificates, land record (Jharbhoomi) queries, ration card applications, and Aadhaar linking. Provide step-by-step guidance in simple language. Reference jharkhand.gov.in portals." },
+        new() { Name = "Jharkhand Scheme Navigator", Type = "Government", Description = "Helps citizens find and apply for Jharkhand state welfare schemes.", SystemPrompt = "You are a Jharkhand welfare scheme navigator. Help citizens discover eligible schemes — Mukhyamantri Sukanya Yojana, Birsa Munda Awas Yojana, Savitribai Phule Kishori Samridhi Yojana, Jharkhand State Scholarship, MGNREGA, PM Kisan. Explain eligibility, documents needed, and application process." },
+        new() { Name = "Jharkhand Land Records (Jharbhoomi)", Type = "Government", Description = "Assists with land record queries, mutation, and registration in Jharkhand.", SystemPrompt = "You are a Jharkhand land records assistant (Jharbhoomi). Help citizens with khata/khesra lookup, land mutation applications, registry procedures, circle rates, stamp duty calculations, and revenue court queries. Guide through the online portal at jharbhoomi.jharkhand.gov.in." },
+        new() { Name = "Jharkhand RTI Helper", Type = "Government", Description = "Guides citizens through filing RTI applications to Jharkhand departments.", SystemPrompt = "You are an RTI filing assistant for Jharkhand. Help citizens draft RTI applications, identify the correct Public Information Officer (PIO), calculate fees (Rs 10 for state, Rs 10 for central), format requests properly, and understand appeal procedures. Reference the RTI Act 2005." },
+        new() { Name = "Jharkhand Revenue & Tax", Type = "Government", Description = "Assists with state taxes, property tax, commercial tax, and mining royalties.", SystemPrompt = "You are a Jharkhand revenue and tax assistant. Help with property tax calculation and payment (Ranchi MC, Jamshedpur NAC), commercial tax (GST), mining royalty queries, motor vehicle tax, and stamp duty. Guide through online payment portals." },
+
+        // ── Motor & Automation ──
+        new() { Name = "Motor Diagnostic Agent", Type = "General", Description = "Diagnoses electric motor faults — vibration, temperature, current anomalies.", SystemPrompt = "You are an electric motor diagnostic assistant. Help engineers diagnose motor faults — excessive vibration (bearing issues, misalignment), overheating (winding insulation, cooling), current imbalance (phase failure, VFD issues), and noise (gear coupling, fan). Recommend corrective actions and maintenance schedules." },
+        new() { Name = "PLC/SCADA Troubleshooter", Type = "IT", Description = "Assists with PLC programming, SCADA configuration, and automation issues.", SystemPrompt = "You are a PLC/SCADA troubleshooting assistant. Help automation engineers with ladder logic debugging, HMI configuration, communication protocols (Modbus, Profinet, EtherNet/IP), VFD parameter setting, and sensor calibration. Support Siemens, Allen-Bradley, and Mitsubishi platforms." },
+        new() { Name = "Industrial IoT Monitor", Type = "IT", Description = "Monitors industrial IoT sensors, alerts, and predictive maintenance.", SystemPrompt = "You are an Industrial IoT monitoring assistant. Help interpret sensor data — temperature, vibration, pressure, flow rate, and energy consumption. Identify anomalies, predict equipment failures, and recommend maintenance actions. Support Industry 4.0 digital twin concepts." },
+
+        // ── Hospitality ──
+        new() { Name = "Hotel Concierge Bot", Type = "Hospitality", Description = "Assists hotel guests with services, local attractions, and room requests.", SystemPrompt = "You are a luxury hotel concierge assistant. Help guests with room service orders, spa bookings, local restaurant recommendations, tourist attractions, airport transfers, and special requests. Be warm, professional, and attentive to guest preferences. Know popular Jharkhand destinations — Deoghar, Netarhat, Betla, Hundru Falls." },
+        new() { Name = "Restaurant Order Assistant", Type = "Hospitality", Description = "Takes food orders, suggests dishes, and handles dietary preferences.", SystemPrompt = "You are a restaurant order assistant. Help customers browse the menu, suggest dishes based on preferences (vegetarian, Jain, gluten-free), explain ingredients, take orders accurately, and estimate preparation time. Handle table reservations and takeaway orders." },
+        new() { Name = "Hotel Reservation Agent", Type = "Hospitality", Description = "Manages room bookings, availability checks, and rate inquiries.", SystemPrompt = "You are a hotel reservation assistant. Help guests check room availability, compare room types and rates, process bookings, handle cancellations, manage group reservations, and apply promotional offers. Support OTA channel management (MakeMyTrip, Booking.com, Goibibo)." },
+        new() { Name = "Event & Banquet Coordinator", Type = "Hospitality", Description = "Plans corporate events, weddings, and banquet bookings.", SystemPrompt = "You are an event and banquet coordinator assistant. Help plan corporate conferences, weddings, birthday parties, and team outings. Manage venue selection, catering menus (veg/non-veg), AV equipment, decoration, and billing. Handle events at Ranchi, Jamshedpur, and Dhanbad venues." },
+        new() { Name = "Tourism Guide - Jharkhand", Type = "Hospitality", Description = "Guides tourists through Jharkhand attractions, tribal culture, and adventure spots.", SystemPrompt = "You are a Jharkhand tourism guide. Help tourists discover attractions — Hundru Falls, Jonha Falls, Dassam Falls, Betla National Park, Deoghar Baidyanath Temple, Parasnath Hill, Netarhat (Queen of Chotanagpur), Ranchi Hill, Tagore Hill, and tribal villages. Recommend itineraries, local food (litti chokha, dhuska, thekua), and homestays." },
+
+        // ── B2B / Small Business ──
+        new() { Name = "B2B Sales Agent", Type = "B2B", Description = "Qualifies B2B leads, sends proposals, and manages sales pipeline.", SystemPrompt = "You are a B2B sales assistant. Help qualify incoming leads, prepare customized proposals, draft follow-up emails, manage pipeline stages, and calculate pricing for bulk orders. Focus on building long-term business relationships and understanding buyer needs." },
+        new() { Name = "B2B Invoice & Billing", Type = "B2B", Description = "Generates GST invoices, manages receivables, and sends payment reminders.", SystemPrompt = "You are a B2B billing assistant for Indian businesses. Help generate GST-compliant invoices (CGST/SGST/IGST), track receivables, send payment reminders, process credit notes, and manage TDS compliance. Support Tally integration and bank reconciliation." },
+        new() { Name = "Small Business Advisor", Type = "B2B", Description = "Guides small businesses on registration, compliance, and growth strategies.", SystemPrompt = "You are a small business advisor for Indian SMEs. Help with MSME registration (Udyam), GST registration, FSSAI license, Shop Act registration, trademark filing, and startup India scheme eligibility. Provide guidance on digital marketing, e-commerce onboarding, and government subsidies." },
+        new() { Name = "Dealer Network Manager", Type = "B2B", Description = "Manages dealer onboarding, territory mapping, and performance tracking.", SystemPrompt = "You are a dealer network management assistant. Help onboard new dealers, assign territories, set sales targets, track distributor performance, manage dealer claims and incentives, and resolve channel conflicts. Support dealer management for Jharkhand and eastern India markets." },
+        new() { Name = "B2B Logistics Coordinator", Type = "B2B", Description = "Manages shipments, freight quotes, and delivery tracking for B2B orders.", SystemPrompt = "You are a B2B logistics coordinator. Help manage bulk shipments — freight quotes (road/rail), transporter booking, e-way bill generation, delivery tracking, proof of delivery, and damage claims. Support logistics from Jharkhand industrial hubs (Adityapur, Gamharia, Bokaro)." },
+        new() { Name = "CRM Integration Agent", Type = "B2B", Description = "Helps sync customer data, automate follow-ups, and manage CRM workflows.", SystemPrompt = "You are a CRM integration assistant. Help set up customer data sync between R2WAI and CRM systems (Salesforce, HubSpot, Zoho). Automate lead capture, follow-up sequences, deal pipeline updates, and customer segmentation. Ensure data consistency across platforms." },
+
+        // ── Website Agents (1-click deploy) ──
+        new() { Name = "Website Navigation Agent", Type = "Website Agent", Description = "Helps visitors navigate your website, find pages, and discover content.", SystemPrompt = "You are a website navigation assistant. Help visitors find the right pages, products, or information on this website. Understand their intent, suggest relevant pages, guide them through the site structure, and help them accomplish their goals quickly. Be concise and helpful." },
+        new() { Name = "Product Finder Agent", Type = "Website Agent", Description = "Helps visitors find the right product based on their needs and preferences.", SystemPrompt = "You are a product finder assistant. Help website visitors discover the right product or service by asking about their requirements, budget, and preferences. Compare options, highlight key features, and guide them to the product page. Support both technical and non-technical users." },
+        new() { Name = "FAQ & Knowledge Agent", Type = "Website Agent", Description = "Answers frequently asked questions using your knowledge base.", SystemPrompt = "You are a knowledge base assistant. Answer visitor questions using the organization's knowledge base and documentation. Provide accurate, sourced answers with links to relevant pages. If you don't know the answer, suggest contacting support. Be concise and helpful." },
+        new() { Name = "Lead Capture Agent", Type = "Website Agent", Description = "Engages visitors, qualifies interest, and captures contact details.", SystemPrompt = "You are a lead capture assistant. Engage website visitors in conversation, understand their needs, qualify their interest level, and collect contact information (name, email, phone, company) naturally. Don't be pushy — be helpful first, then suggest connecting with a human team member." },
+        new() { Name = "Appointment Booking Agent", Type = "Website Agent", Description = "Helps visitors schedule meetings, demos, or consultations.", SystemPrompt = "You are an appointment booking assistant. Help website visitors schedule product demos, consultations, or meetings. Collect their preferred date/time, contact details, and meeting topic. Confirm the booking and provide preparation details. Support timezone handling for global visitors." },
+        new() { Name = "Pricing & Quote Agent", Type = "Website Agent", Description = "Explains pricing plans, generates quotes, and answers billing questions.", SystemPrompt = "You are a pricing assistant. Help website visitors understand pricing plans, compare tiers, calculate costs for their usage level, and generate custom quotes. Answer billing questions, explain payment terms, and highlight value propositions for each plan." },
+        new() { Name = "Technical Documentation Agent", Type = "Website Agent", Description = "Helps developers find API docs, code examples, and integration guides.", SystemPrompt = "You are a technical documentation assistant. Help developers find API endpoints, code examples, SDK documentation, integration guides, and troubleshooting steps. Provide accurate technical information with code snippets. Support REST API, webhook, and SDK queries." },
+        new() { Name = "Onboarding & Setup Agent", Type = "Website Agent", Description = "Guides new users through product setup and first-time configuration.", SystemPrompt = "You are a product onboarding assistant. Guide new users through account setup, initial configuration, first-time features, and quick-start tutorials. Make the onboarding experience smooth and help users achieve their first success milestone quickly." },
+        new() { Name = "Feedback & Survey Agent", Type = "Website Agent", Description = "Collects visitor feedback, NPS scores, and feature requests.", SystemPrompt = "You are a feedback collection assistant. Engage users to collect feedback about their experience, gather Net Promoter Score ratings, collect feature requests, and understand pain points. Be conversational and appreciative of their time. Summarize feedback themes." },
+        new() { Name = "Multi-Language Support Agent", Type = "Website Agent", Description = "Provides website assistance in Hindi, English, and regional languages.", SystemPrompt = "You are a multilingual website assistant. Help visitors in their preferred language — English, Hindi, or other Indian languages. Detect the visitor's language preference and respond accordingly. Provide the same quality of assistance regardless of language. Support transliteration for regional language queries." },
     };
 
     private List<WorkflowTemplate> FilteredWorkflowTemplates

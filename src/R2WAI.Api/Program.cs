@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using MudBlazor.Services;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -31,8 +30,8 @@ using Serilog;
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseDefaultServiceProvider(options =>
 {
-    options.ValidateScopes = builder.Environment.IsDevelopment();
-    options.ValidateOnBuild = false;
+    options.ValidateScopes = true;
+    options.ValidateOnBuild = builder.Environment.IsDevelopment();
 });
 
 Log.Logger = new LoggerConfiguration()
@@ -75,7 +74,6 @@ if (!string.IsNullOrEmpty(elsaConnectionString) && !builder.Environment.IsEnviro
 }
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddFastEndpoints();
-builder.Services.AddMudServices();
 builder.Services.AddSingleton<R2WAI.Api.Hubs.IWorkflowStatusService, R2WAI.Api.Hubs.WorkflowStatusService>();
 builder.Services.AddHostedService<R2WAI.Infrastructure.Services.EscalationBackgroundService>();
 
@@ -154,7 +152,7 @@ if (allowedOrigins is { Length: > 0 })
         });
     });
 }
-else
+else if (builder.Environment.IsDevelopment())
 {
     var devOrigins = new[] { "http://localhost:3000", "http://localhost:5000", "http://localhost:5143" };
     builder.Services.AddCors(options =>
@@ -168,6 +166,17 @@ else
         });
     });
     Log.Warning("CORS:AllowedOrigins not configured. Using development origins only.");
+}
+else
+{
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("ApiCorsPolicy", policy =>
+        {
+            policy.SetIsOriginAllowed(_ => false);
+        });
+    });
+    Log.Error("CORS:AllowedOrigins not configured in non-development environment. No origins will be allowed.");
 }
 
 builder.Services.AddAntiforgery();
@@ -303,12 +312,15 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<RateLimitingMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
-app.UseSwagger();
-app.UseSwaggerUI(options =>
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
-    options.SwaggerEndpoint("/swagger/v1/swagger.json", "R2WAI API v1");
-    options.RoutePrefix = "swagger";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "R2WAI API v1");
+        options.RoutePrefix = "swagger";
+    });
+}
 
 app.UseCors("ApiCorsPolicy");
 app.UseAuthentication();
@@ -421,18 +433,24 @@ static void ValidateProductionConfig(WebApplication app)
     var connectionString = config.GetConnectionString("DefaultConnection");
     if (string.IsNullOrEmpty(connectionString))
         errors.Add("Database connection string (ConnectionStrings:DefaultConnection) is not configured");
+    else if (connectionString.Contains("CHANGE_ME") || connectionString.Contains("${"))
+        errors.Add("Database connection string contains a placeholder value. Set a real connection string via ConnectionStrings__DefaultConnection env var");
 
-    var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET")
-        ?? config["Authentication:Jwt:SecretKey"];
+    // Must match what JwtBearer middleware actually reads
+    var jwtSecret = config["Authentication:Jwt:SecretKey"];
     if (string.IsNullOrEmpty(jwtSecret))
-        errors.Add("JWT secret key is not configured. Set JWT_SECRET environment variable");
+        errors.Add("JWT secret key is not configured. Set Authentication__Jwt__SecretKey environment variable");
+    else if (jwtSecret.Contains("CHANGE_ME") || jwtSecret.StartsWith("${"))
+        errors.Add("JWT secret key contains a placeholder value. Override via Authentication__Jwt__SecretKey env var");
     else if (jwtSecret.Length < 32)
         warnings.Add("JWT secret key is shorter than 32 characters — use a longer key in production");
 
-    var encryptionKey = Environment.GetEnvironmentVariable("ENCRYPTION_KEY")
-        ?? config["Security:EncryptionKey"];
-    if (string.IsNullOrEmpty(encryptionKey))
+    var encryptionKeyFromEnv = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
+    var encryptionKeyFromConfig = config["Security:EncryptionKey"];
+    if (string.IsNullOrEmpty(encryptionKeyFromEnv) && string.IsNullOrEmpty(encryptionKeyFromConfig))
         errors.Add("Encryption key is not configured. Set ENCRYPTION_KEY environment variable");
+    else if (!app.Environment.IsDevelopment() && string.IsNullOrEmpty(encryptionKeyFromEnv))
+        errors.Add("In non-development environments the ENCRYPTION_KEY environment variable is required; appsettings.json must not be the sole source");
 
     var aiProvider = (config["AI:Provider"] ?? "openai").ToLowerInvariant();
     if (aiProvider == "openai")

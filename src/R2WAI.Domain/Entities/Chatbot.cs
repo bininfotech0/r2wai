@@ -17,6 +17,7 @@ public sealed class Chatbot : BaseEntity<Guid>
     public string? Settings { get; private set; }
     public string? EmbedScript { get; private set; }
     public string? WidgetSettings { get; private set; }
+    public bool VoiceEnabled { get; private set; }
     public ChatbotStatus Status { get; private set; } = ChatbotStatus.Draft;
 
     public Tenant Tenant { get; private set; } = null!;
@@ -64,6 +65,12 @@ public sealed class Chatbot : BaseEntity<Guid>
     public void LinkModelConfiguration(Guid modelConfigurationId)
     {
         ModelConfigurationId = modelConfigurationId;
+        MarkAsModified();
+    }
+
+    public void SetVoiceEnabled(bool enabled)
+    {
+        VoiceEnabled = enabled;
         MarkAsModified();
     }
 

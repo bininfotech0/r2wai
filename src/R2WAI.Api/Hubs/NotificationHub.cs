@@ -46,6 +46,13 @@ public class NotificationHub : Hub
 
     public async Task SubscribeToUser(string userId)
     {
+        if (Context.UserIdentifier != userId)
+        {
+            _logger.LogWarning("User {AuthUser} attempted to subscribe to notifications for {TargetUser}",
+                Context.UserIdentifier, userId);
+            throw new HubException("You can only subscribe to your own notifications.");
+        }
+
         await Groups.AddToGroupAsync(Context.ConnectionId, $"user_{userId}");
         _logger.LogDebug("Connection {ConnectionId} subscribed to user {UserId}",
             Context.ConnectionId, userId);
@@ -53,6 +60,9 @@ public class NotificationHub : Hub
 
     public async Task UnsubscribeFromUser(string userId)
     {
+        if (Context.UserIdentifier != userId)
+            throw new HubException("You can only unsubscribe from your own notifications.");
+
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"user_{userId}");
         _logger.LogDebug("Connection {ConnectionId} unsubscribed from user {UserId}",
             Context.ConnectionId, userId);

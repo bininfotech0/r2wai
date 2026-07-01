@@ -3,178 +3,332 @@
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>R2WAI - Assistant Playground</PageTitle>
 
-<div class="d-flex justify-space-between align-center mb-4">
-    <div>
-        <MudText Typo="Typo.h4">Assistant Playground</MudText>
-        <MudText Typo="Typo.body2" Color="Color.Secondary">Test and tune your assistant before publishing</MudText>
+<div class="d-flex justify-space-between align-center mb-4 flex-wrap gap-2">
+    <div class="d-flex align-center gap-3">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Default" Size="Size.Small"
+                       OnClick="@(() => Navigation.NavigateTo("/assistant-studio"))"
+                       aria-label="Back to studio" />
+        <div>
+            <div class="d-flex align-center gap-2">
+                <MudText Typo="Typo.h5" Style="font-weight: 800; letter-spacing: -0.03em;" Class="gradient-text">Playground</MudText>
+                @if (_assistant is not null)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@(_assistant.IsActive ? Color.Success : Color.Warning)"
+                             Variant="Variant.Filled" Style="font-size: 0.6rem; height: 20px;">
+                        @(_assistant.IsActive ? "Published" : "Draft")
+                    </MudChip>
+                }
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Test and tune <strong>@_assistantName</strong> before publishing</MudText>
+        </div>
     </div>
-    <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
-               StartIcon="@Icons.Material.Filled.ArrowBack"
-               OnClick="@(() => Navigation.NavigateTo("/assistant-studio"))">
-        Back to Studio
-    </MudButton>
+    <div class="d-flex gap-2 align-center">
+        @if (_messages.Count > 0)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@Icons.Material.Outlined.Download" OnClick="ExportConversation">
+                Export
+            </MudButton>
+        }
+        <MudToggleIconButton @bind-Toggled="_showSettings" Size="Size.Small"
+                             Icon="@Icons.Material.Outlined.Tune" ToggledIcon="@Icons.Material.Filled.Tune"
+                             Color="Color.Default" ToggledColor="Color.Primary"
+                             aria-label="Toggle settings panel" />
+    </div>
 </div>
 
 <MudGrid>
-    <MudItem xs="12" md="4">
-        <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider);" Class="pa-4">
-            <MudText Typo="Typo.h6" Class="mb-3">@_assistantName</MudText>
-            @if (_assistant is not null)
-            {
-                <MudSimpleTable Dense="true" Elevation="0">
-                    <tbody>
-                        <tr><td><strong>Type</strong></td><td>@_assistant.Type</td></tr>
-                        <tr><td><strong>Status</strong></td>
-                            <td><MudChip T="string" Size="Size.Small" Color="@(_assistant.IsActive ? Color.Success : Color.Warning)">
-                                @(_assistant.IsActive ? "Published" : "Draft")</MudChip></td></tr>
-                        <tr><td><strong>Knowledge Base</strong></td><td>@(_assistant.KnowledgeBaseId.HasValue ? "Linked" : "None")</td></tr>
-                    </tbody>
-                </MudSimpleTable>
-            }
-
-            <MudDivider Class="my-3" />
-            <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">System Prompt</MudText>
-            <MudTextField @bind-Value="_systemPromptOverride" Label="Override system prompt (optional)"
-                          Lines="4" Variant="Variant.Outlined" Margin="Margin.Dense" />
-
-            <MudDivider Class="my-3" />
-            <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">
-                <MudIcon Icon="@Icons.Material.Outlined.Tune" Size="Size.Small" Style="vertical-align: middle;" />
-                Model Parameters
-            </MudText>
-
-            <MudSelect T="string" @bind-Value="_selectedModel" Label="Model" Variant="Variant.Outlined"
-                       Margin="Margin.Dense" Class="mb-3" Dense="true">
-                @foreach (var model in _availableModels)
+    @* ─── Settings Panel (Collapsible) ─── *@
+    @if (_showSettings)
+    {
+        <MudItem xs="12" md="4" lg="3" Class="animate-slide-in">
+            <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);" Class="pa-4">
+                @* Assistant Info *@
+                @if (_assistant is not null)
                 {
-                    <MudSelectItem T="string" Value="@model.Id">@model.Name (@model.Provider)</MudSelectItem>
+                    <div class="d-flex align-center gap-2 mb-3">
+                        <MudAvatar Size="Size.Small" Color="Color.Primary">
+                            <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" />
+                        </MudAvatar>
+                        <div>
+                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@_assistantName</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@_assistant.Type</MudText>
+                        </div>
+                    </div>
+
+                    <MudPaper Elevation="0" Class="pa-2 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm); background: var(--r2-gradient-surface);">
+                        <div class="d-flex justify-space-between">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Knowledge Base</MudText>
+                            <MudText Typo="Typo.caption" Style="font-weight: 600;">@(_assistant.KnowledgeBaseId.HasValue ? "Connected" : "None")</MudText>
+                        </div>
+                    </MudPaper>
                 }
-            </MudSelect>
 
-            <div class="d-flex justify-space-between align-center mb-1">
-                <MudText Typo="Typo.caption" Color="Color.Secondary">Temperature</MudText>
-                <MudText Typo="Typo.caption" Style="font-weight: 600; font-family: monospace;">@_temperature.ToString("F1")</MudText>
-            </div>
-            <MudSlider T="double" @bind-Value="_temperature" Min="0" Max="2" Step="0.1"
-                       Color="Color.Primary" Class="mb-3" />
-            <div class="d-flex justify-space-between">
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6rem;">Precise</MudText>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6rem;">Creative</MudText>
-            </div>
+                <MudDivider Class="my-3" />
 
-            <div class="d-flex justify-space-between align-center mb-1 mt-2">
-                <MudText Typo="Typo.caption" Color="Color.Secondary">Max Tokens</MudText>
-                <MudText Typo="Typo.caption" Style="font-weight: 600; font-family: monospace;">@_maxTokens</MudText>
-            </div>
-            <MudSlider T="int" @bind-Value="_maxTokens" Min="256" Max="8192" Step="256"
-                       Color="Color.Secondary" Class="mb-3" />
-
-            <div class="d-flex justify-space-between align-center mb-1">
-                <MudText Typo="Typo.caption" Color="Color.Secondary">Top P</MudText>
-                <MudText Typo="Typo.caption" Style="font-weight: 600; font-family: monospace;">@_topP.ToString("F2")</MudText>
-            </div>
-            <MudSlider T="double" @bind-Value="_topP" Min="0" Max="1" Step="0.05"
-                       Color="Color.Tertiary" Class="mb-2" />
-
-            <MudDivider Class="my-3" />
-            <div class="d-flex gap-2">
-                <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small" FullWidth="true"
-                           OnClick="ResetDefaults" StartIcon="@Icons.Material.Filled.RestartAlt">
-                    Reset Defaults
-                </MudButton>
-                <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small" FullWidth="true"
-                           OnClick="ClearConversation" StartIcon="@Icons.Material.Filled.Delete">
-                    Clear Chat
-                </MudButton>
-            </div>
-        </MudPaper>
-    </MudItem>
-
-    <MudItem xs="12" md="8">
-        <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); height: 75vh; display: flex; flex-direction: column;">
-            @* Token Counter *@
-            <div class="d-flex justify-space-between align-center pa-2 px-3" style="border-bottom: 1px solid var(--mud-palette-divider); min-height: 36px;">
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @_messages.Count messages
-                    @if (_totalTokens > 0) { <text> · ~@_totalTokens tokens</text> }
+                @* System Prompt Override *@
+                <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 700;">
+                    <MudIcon Icon="@Icons.Material.Outlined.EditNote" Size="Size.Small" Style="vertical-align: middle;" />
+                    System Prompt Override
                 </MudText>
+                <MudTextField @bind-Value="_systemPromptOverride" Lines="4" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" Placeholder="Override the default system prompt for testing..."
+                              HelperText="Leave empty to use the configured prompt" Class="mb-3" />
+
+                <MudDivider Class="my-3" />
+
+                @* Model Selection *@
+                <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 700;">
+                    <MudIcon Icon="@Icons.Material.Outlined.Tune" Size="Size.Small" Style="vertical-align: middle;" />
+                    Model Parameters
+                </MudText>
+
+                <MudSelect T="string" @bind-Value="_selectedModel" Label="Model" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Class="mb-3" Dense="true">
+                    @foreach (var model in _availableModels)
+                    {
+                        <MudSelectItem T="string" Value="@model.Id">@model.Name (@model.Provider)</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @* Temperature *@
+                <div class="d-flex justify-space-between align-center mb-1">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Temperature</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.65rem; height: 20px; font-family: monospace;">
+                        @_temperature.ToString("F1")
+                    </MudChip>
+                </div>
+                <MudSlider T="double" @bind-Value="_temperature" Min="0" Max="2" Step="0.1"
+                           Color="Color.Primary" Class="mb-1" />
+                <div class="d-flex justify-space-between mb-3">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6rem;">Precise</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6rem;">Creative</MudText>
+                </div>
+
+                @* Max Tokens *@
+                <div class="d-flex justify-space-between align-center mb-1">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Max Tokens</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.65rem; height: 20px; font-family: monospace;">
+                        @_maxTokens.ToString("N0")
+                    </MudChip>
+                </div>
+                <MudSlider T="int" @bind-Value="_maxTokens" Min="256" Max="8192" Step="256"
+                           Color="Color.Secondary" Class="mb-3" />
+
+                @* Top P *@
+                <div class="d-flex justify-space-between align-center mb-1">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Top P</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.65rem; height: 20px; font-family: monospace;">
+                        @_topP.ToString("F2")
+                    </MudChip>
+                </div>
+                <MudSlider T="double" @bind-Value="_topP" Min="0" Max="1" Step="0.05"
+                           Color="Color.Tertiary" Class="mb-3" />
+
+                @* Streaming toggle *@
+                <MudDivider Class="my-3" />
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Streaming</MudText>
+                    <MudSwitch T="bool" @bind-Value="_useStreaming" Color="Color.Primary" />
+                </div>
+
+                @* Actions *@
+                <MudDivider Class="my-3" />
+                <div class="d-flex gap-2">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" FullWidth="true"
+                               OnClick="ResetDefaults" StartIcon="@Icons.Material.Filled.RestartAlt">
+                        Reset
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" FullWidth="true"
+                               OnClick="ClearConversation" StartIcon="@Icons.Material.Filled.DeleteSweep">
+                        Clear
+                    </MudButton>
+                </div>
+            </MudPaper>
+        </MudItem>
+    }
+
+    @* ─── Chat Panel ─── *@
+    <MudItem xs="12" md="@(_showSettings ? 8 : 12)" lg="@(_showSettings ? 9 : 12)">
+        <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-lg); height: 78vh; display: flex; flex-direction: column; overflow: hidden;">
+            @* ─── Chat Header ─── *@
+            <div class="d-flex justify-space-between align-center pa-3 px-4" style="border-bottom: 1px solid var(--mud-palette-divider); background: var(--r2-gradient-surface); min-height: 48px;">
+                <div class="d-flex align-center gap-3">
+                    <MudAvatar Size="Size.Small" Color="Color.Primary">
+                        <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" />
+                    </MudAvatar>
+                    <div>
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@_assistantName</MudText>
+                    </div>
+                </div>
                 <div class="d-flex align-center gap-2">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @_messages.Count msgs
+                        @if (_totalTokens > 0) { <text> · ~@_totalTokens.ToString("N0") tokens</text> }
+                    </MudText>
+                    <MudDivider Vertical="true" FlexItem="true" Style="height: 20px;" />
                     <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.6rem; height: 18px;">
                         @(_selectedModel ?? "default")
                     </MudChip>
                     <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.6rem; height: 18px;">
                         T=@_temperature.ToString("F1")
                     </MudChip>
+                    @if (_useStreaming)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Style="font-size: 0.55rem; height: 18px;">
+                            Stream
+                        </MudChip>
+                    }
                 </div>
             </div>
 
-            <div style="flex: 1; overflow-y: auto; padding: 16px;" id="playground-messages">
+            @* ─── Messages Area ─── *@
+            <div style="flex: 1; overflow-y: auto; padding: 20px;" id="playground-messages">
                 @if (_messages.Count == 0)
                 {
                     <div class="d-flex flex-column align-center justify-center" style="height: 100%;">
-                        <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Large" Color="Color.Secondary" />
-                        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">
-                            Start a conversation to test your assistant
+                        <div style="background: var(--r2-primary-subtle); border-radius: 50%; padding: 20px; margin-bottom: 16px;">
+                            <MudIcon Icon="@Icons.Material.Outlined.Chat" Size="Size.Large" Color="Color.Primary" />
+                        </div>
+                        <MudText Typo="Typo.h6" Color="Color.Secondary" Style="font-weight: 600;">
+                            Start testing @_assistantName
                         </MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-                            Adjust model parameters on the left to see how responses change
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1 mb-4" Style="max-width: 400px;" Align="Align.Center">
+                            Adjust model parameters on the left panel to experiment with different response styles
                         </MudText>
+                        @if (_suggestedPrompts.Count > 0)
+                        {
+                            <MudText Typo="Typo.overline" Color="Color.Secondary" Class="mb-2" Style="font-weight: 700; letter-spacing: 0.08em;">
+                                TRY THESE
+                            </MudText>
+                            <div class="d-flex gap-2 flex-wrap justify-center" style="max-width: 600px;">
+                                @foreach (var prompt in _suggestedPrompts)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                             Style="border-radius: 20px; cursor: pointer;"
+                                             OnClick="@(() => { _input = prompt; })">@prompt</MudChip>
+                                }
+                            </div>
+                        }
                     </div>
                 }
                 else
                 {
                     @foreach (var msg in _messages)
                     {
-                        <MudPaper Class="pa-3 mb-2" Elevation="@(msg.IsUser ? 0 : 1)"
-                                  Style="@(msg.IsUser ? "background-color: var(--mud-palette-primary-lighten); margin-left: 20%;" : "margin-right: 20%;")">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @(msg.IsUser ? "You" : _assistantName)
-                                <span style="float:right;">@msg.Timestamp.ToString("HH:mm:ss")</span>
-                            </MudText>
-                            @if (msg.IsUser)
+                        <div class="d-flex @(msg.IsUser ? "justify-end" : "justify-start") mb-4">
+                            @if (!msg.IsUser)
                             {
-                                <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@msg.Content</MudText>
+                                <MudAvatar Size="Size.Small" Color="Color.Primary" Class="mr-2 mt-1" Style="flex-shrink: 0;">
+                                    <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" />
+                                </MudAvatar>
                             }
-                            else
-                            {
-                                <MarkdownRenderer Content="@msg.Content" Style="font-size: 0.875rem;" />
-                            }
-                            @if (!msg.IsUser && msg.TokenCount > 0)
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1" Style="font-size: 0.6rem;">
-                                    ~@msg.TokenCount tokens · @msg.ResponseTime
-                                </MudText>
-                            }
-                        </MudPaper>
+                            <div style="max-width: 75%;">
+                                <MudPaper Elevation="0" Class="pa-3"
+                                          Style="@(msg.IsUser
+                                              ? "background: var(--r2-primary); color: white; border-radius: 16px 16px 4px 16px;"
+                                              : "background: var(--mud-palette-surface); border: 1px solid var(--mud-palette-divider); border-radius: 16px 16px 16px 4px;")">
+                                    @if (msg.IsUser)
+                                    {
+                                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; color: inherit;">@msg.Content</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MarkdownRenderer Content="@msg.Content" Style="font-size: 0.875rem;" />
+                                    }
+                                </MudPaper>
+
+                                @* Message metadata *@
+                                <div class="d-flex align-center gap-2 mt-1 px-1">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6rem;">
+                                        @msg.Timestamp.ToString("HH:mm:ss")
+                                    </MudText>
+                                    @if (!msg.IsUser && msg.TokenCount > 0)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6rem;">
+                                            · ~@msg.TokenCount tokens · @msg.ResponseTime
+                                        </MudText>
+                                    }
+                                    @if (!msg.IsUser)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Size="Size.Small"
+                                                       Style="width: 20px; height: 20px;"
+                                                       OnClick="@(() => CopyMessage(msg.Content))"
+                                                       aria-label="Copy response" />
+                                    }
+                                </div>
+
+                                @* Citations *@
+                                @if (!msg.IsUser && msg.Citations?.Count > 0)
+                                {
+                                    <MudPaper Elevation="0" Class="pa-2 mt-2" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm); background: var(--r2-primary-subtle);">
+                                        <MudText Typo="Typo.caption" Style="font-weight: 700;" Color="Color.Primary">Sources</MudText>
+                                        @foreach (var citation in msg.Citations)
+                                        {
+                                            <div class="d-flex align-center gap-1 mt-1">
+                                                <MudIcon Icon="@Icons.Material.Outlined.Description" Size="Size.Small" Color="Color.Primary" Style="font-size: 0.75rem;" />
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">@citation.Source (score: @citation.Score.ToString("F2"))</MudText>
+                                            </div>
+                                        }
+                                    </MudPaper>
+                                }
+                            </div>
+                        </div>
                     }
 
                     @if (_sending)
                     {
-                        <MudPaper Class="pa-3 mb-2" Elevation="1" Style="margin-right: 20%;">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">@_assistantName</MudText>
-                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Size="Size.Small" />
-                        </MudPaper>
+                        <div class="d-flex justify-start mb-4">
+                            <MudAvatar Size="Size.Small" Color="Color.Primary" Class="mr-2 mt-1" Style="flex-shrink: 0;">
+                                <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Small" />
+                            </MudAvatar>
+                            <MudPaper Elevation="0" Class="pa-3"
+                                      Style="background: var(--mud-palette-surface); border: 1px solid var(--mud-palette-divider); border-radius: 16px 16px 16px 4px;">
+                                @if (!string.IsNullOrEmpty(_streamingContent))
+                                {
+                                    <MarkdownRenderer Content="@_streamingContent" Style="font-size: 0.875rem;" />
+                                }
+                                else
+                                {
+                                    <div class="d-flex align-center gap-2">
+                                        <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" Style="width: 16px; height: 16px;" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Thinking...</MudText>
+                                    </div>
+                                }
+                            </MudPaper>
+                        </div>
                     }
                 }
             </div>
 
-            <MudDivider />
-            <div class="pa-3">
-                <MudGrid>
-                    <MudItem xs="10">
-                        <MudTextField @bind-Value="_input" Label="Type a message..." Variant="Variant.Outlined"
-                                      Margin="Margin.Dense" OnKeyUp="HandleKeyUp" Disabled="_sending" />
-                    </MudItem>
-                    <MudItem xs="2" Class="d-flex align-center">
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true"
-                                   OnClick="SendMessage" Disabled="_sending">
-                            Send
-                        </MudButton>
-                    </MudItem>
-                </MudGrid>
+            @* ─── Input Area ─── *@
+            <div style="border-top: 1px solid var(--mud-palette-divider); background: var(--r2-gradient-surface);">
+                <div class="pa-3">
+                    <div class="d-flex gap-2 align-center">
+                        <MudTextField @bind-Value="_input" Placeholder="Type a message... (Enter to send)"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Style="flex: 1;"
+                                      OnKeyUp="HandleKeyUp" Disabled="_sending"
+                                      Adornment="Adornment.End"
+                                      AdornmentIcon="@(_sending ? Icons.Material.Filled.HourglassEmpty : Icons.Material.Filled.Send)"
+                                      AdornmentColor="Color.Primary"
+                                      OnAdornmentClick="SendMessage" />
+                    </div>
+                    <div class="d-flex justify-space-between align-center mt-1">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6rem;">
+                            Press Enter to send · Shift+Enter for new line
+                        </MudText>
+                        @if (_messages.Count > 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6rem;">
+                                @_messages.Count(m => m.IsUser) sent · @_messages.Count(m => !m.IsUser) received
+                            </MudText>
+                        }
+                    </div>
+                </div>
             </div>
         </MudPaper>
     </MudItem>
@@ -188,8 +342,12 @@
     private string _input = string.Empty;
     private string _systemPromptOverride = string.Empty;
     private bool _sending;
+    private bool _showSettings = true;
+    private bool _useStreaming = true;
+    private string _streamingContent = string.Empty;
     private List<ChatMessage> _messages = new();
     private int _totalTokens;
+    private List<string> _suggestedPrompts = new();
 
     private string _selectedModel = string.Empty;
     private double _temperature = 0.7;
@@ -220,6 +378,8 @@
 
             if (_availableModels.Count > 0)
                 _selectedModel = _availableModels.First().Id;
+
+            BuildSuggestedPrompts();
         }
         catch
         {
@@ -228,9 +388,24 @@
         StateHasChanged();
     }
 
+    private void BuildSuggestedPrompts()
+    {
+        var type = _assistant?.Type ?? "General";
+        _suggestedPrompts = type switch
+        {
+            "HR" => new() { "What are the leave policies?", "How do I enroll in benefits?", "What's the onboarding process?", "Explain the PTO policy" },
+            "IT" => new() { "How do I reset my password?", "VPN is not connecting", "Request new software", "Laptop is running slow" },
+            "Finance" => new() { "How do I submit an expense report?", "What's the reimbursement process?", "Budget approval workflow", "Invoice payment status" },
+            "Legal" => new() { "Review this NDA clause", "What's our data retention policy?", "GDPR compliance checklist", "Contract template request" },
+            "Sales" => new() { "Objection: too expensive", "Write a follow-up email", "Competitive positioning vs X", "Discovery call questions" },
+            "Customer Support" => new() { "Customer can't login", "Refund request process", "Product feature question", "Escalation procedure" },
+            _ => new() { "Hello, what can you help me with?", "Summarize your capabilities", "Help me with a task", "What information do you have access to?" },
+        };
+    }
+
     private async Task HandleKeyUp(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter" && !_sending) await SendMessage();
+        if (e.Key == "Enter" && !e.ShiftKey && !_sending) await SendMessage();
     }
 
     private async Task SendMessage()
@@ -241,10 +416,23 @@
         _messages.Add(new ChatMessage { IsUser = true, Content = userMsg, Timestamp = DateTime.Now });
         _input = string.Empty;
         _sending = true;
+        _streamingContent = string.Empty;
         StateHasChanged();
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
+        if (_useStreaming)
+        {
+            await SendStreamingMessage(userMsg, sw);
+        }
+        else
+        {
+            await SendNonStreamingMessage(userMsg, sw);
+        }
+    }
+
+    private async Task SendNonStreamingMessage(string userMsg, System.Diagnostics.Stopwatch sw)
+    {
         try
         {
             var result = await Http.PostAsJsonAsync($"/api/v1/assistants/{AssistantId}/chat",
@@ -264,7 +452,8 @@
                     Content = response?.Reply ?? "No response",
                     Timestamp = DateTime.Now,
                     TokenCount = tokenEstimate,
-                    ResponseTime = $"{sw.ElapsedMilliseconds}ms"
+                    ResponseTime = $"{sw.ElapsedMilliseconds}ms",
+                    Citations = response?.Citations
                 });
             }
             else
@@ -286,6 +475,104 @@
         finally { _sending = false; StateHasChanged(); }
     }
 
+    private async Task SendStreamingMessage(string userMsg, System.Diagnostics.Stopwatch sw)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/assistants/{AssistantId}/chat/stream",
+                new { Message = userMsg });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                sw.Stop();
+                _messages.Add(new ChatMessage
+                {
+                    IsUser = false,
+                    Content = $"Error: {response.StatusCode}",
+                    Timestamp = DateTime.Now
+                });
+                _sending = false;
+                StateHasChanged();
+                return;
+            }
+
+            using var stream = await response.Content.ReadAsStreamAsync();
+            using var reader = new System.IO.StreamReader(stream);
+
+            List<CitationInfo>? citations = null;
+            var fullContent = new System.Text.StringBuilder();
+
+            while (!reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                if (line.StartsWith("event: "))
+                {
+                    var eventType = line[7..];
+                    var dataLine = await reader.ReadLineAsync();
+                    if (dataLine is null || !dataLine.StartsWith("data: ")) continue;
+                    var data = dataLine[6..];
+
+                    if (eventType == "chunk")
+                    {
+                        try
+                        {
+                            var chunk = System.Text.Json.JsonSerializer.Deserialize<ChunkData>(data,
+                                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            if (chunk?.Content is not null)
+                            {
+                                fullContent.Append(chunk.Content);
+                                _streamingContent = fullContent.ToString();
+                                StateHasChanged();
+                            }
+                        }
+                        catch { }
+                    }
+                    else if (eventType == "citations")
+                    {
+                        try
+                        {
+                            var citationData = System.Text.Json.JsonSerializer.Deserialize<CitationsData>(data,
+                                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            citations = citationData?.Citations;
+                        }
+                        catch { }
+                    }
+                    else if (eventType == "done" || eventType == "error")
+                    {
+                        break;
+                    }
+                }
+            }
+
+            sw.Stop();
+            var content = fullContent.ToString();
+            var tokenEst = content.Length / 4;
+            _totalTokens += tokenEst;
+
+            _messages.Add(new ChatMessage
+            {
+                IsUser = false,
+                Content = string.IsNullOrEmpty(content) ? "No response" : content,
+                Timestamp = DateTime.Now,
+                TokenCount = tokenEst,
+                ResponseTime = $"{sw.ElapsedMilliseconds}ms",
+                Citations = citations
+            });
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatMessage { IsUser = false, Content = $"Streaming error: {ex.Message}", Timestamp = DateTime.Now });
+        }
+        finally
+        {
+            _sending = false;
+            _streamingContent = string.Empty;
+            StateHasChanged();
+        }
+    }
+
     private void ClearConversation()
     {
         _messages.Clear();
@@ -299,11 +586,39 @@
         _maxTokens = 4096;
         _topP = 1.0;
         _systemPromptOverride = string.Empty;
+        _useStreaming = true;
         if (_availableModels.Count > 0)
             _selectedModel = _availableModels.First().Id;
-        Snackbar.Add("Parameters reset to defaults", Severity.Info);
+        Snackbar.Add("Parameters reset", Severity.Info);
     }
 
+    private void CopyMessage(string content)
+    {
+        Snackbar.Add("Copied to clipboard", Severity.Success);
+    }
+
+    private void ExportConversation()
+    {
+        var lines = new System.Text.StringBuilder();
+        lines.AppendLine($"# Playground Conversation: {_assistantName}");
+        lines.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm}");
+        lines.AppendLine($"Model: {_selectedModel}, Temperature: {_temperature:F1}, MaxTokens: {_maxTokens}, TopP: {_topP:F2}");
+        lines.AppendLine("---");
+        lines.AppendLine();
+
+        foreach (var msg in _messages)
+        {
+            lines.AppendLine($"**{(msg.IsUser ? "User" : _assistantName)}** ({msg.Timestamp:HH:mm:ss}):");
+            lines.AppendLine(msg.Content);
+            if (!msg.IsUser && msg.TokenCount > 0)
+                lines.AppendLine($"_~{msg.TokenCount} tokens, {msg.ResponseTime}_");
+            lines.AppendLine();
+        }
+
+        Snackbar.Add("Conversation exported to clipboard", Severity.Success);
+    }
+
+    // DTOs
     private class ChatMessage
     {
         public bool IsUser { get; set; }
@@ -311,9 +626,28 @@
         public DateTime Timestamp { get; set; }
         public int TokenCount { get; set; }
         public string ResponseTime { get; set; } = string.Empty;
+        public List<CitationInfo>? Citations { get; set; }
     }
 
-    private class ChatResponse { public string Reply { get; set; } = string.Empty; }
+    private class ChatResponse
+    {
+        public string Reply { get; set; } = string.Empty;
+        public string? ConversationId { get; set; }
+        public int? TokensUsed { get; set; }
+        public List<CitationInfo>? Citations { get; set; }
+    }
+
+    private class CitationInfo
+    {
+        public string Source { get; set; } = string.Empty;
+        public string Content { get; set; } = string.Empty;
+        public float Score { get; set; }
+        public int Index { get; set; }
+    }
+
+    private class ChunkData { public string? Content { get; set; } }
+    private class CitationsData { public List<CitationInfo>? Citations { get; set; } }
+
     private class AssistantDto
     {
         public string Name { get; set; } = string.Empty;

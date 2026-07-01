@@ -1,5 +1,6 @@
 @page "/conversations"
 @attribute [Authorize]
+@implements IAsyncDisposable
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
 @inject IDialogService Dialog
@@ -9,7 +10,7 @@
 <PageTitle>R2WAI - Conversations</PageTitle>
 
 <PageHeader Title="Conversations" Subtitle="Your chat history with AI assistants">
-    @if (_selectedConversation is not null && _conversationDetail is not null)
+    @if (_selectedConversation is not null && _conversationDetail is not null && !_pickingAssistant)
     {
         <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" Class="mr-2"
                    StartIcon="@Icons.Material.Filled.Download" OnClick="ExportConversation">
@@ -17,38 +18,145 @@
         </MudButton>
     }
     <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
-               StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Navigation.NavigateTo("/assistant-studio"))">
+               StartIcon="@Icons.Material.Filled.Add" OnClick="StartNewChat">
         New Chat
     </MudButton>
 </PageHeader>
 
-<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
-    <MudTextField @bind-Value="_searchTerm" Placeholder="Search conversations by title or assistant..."
-                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                  Variant="Variant.Outlined" Margin="Margin.Dense"
-                  Immediate="true" DebounceInterval="300" />
-</MudPaper>
-
-@if (_loading)
+@if (_pickingAssistant)
 {
+    <MudPaper Class="pa-6 animate-slide-in" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+        <div class="d-flex justify-space-between align-center mb-4">
+            <div>
+                <MudText Typo="Typo.h6" Style="font-weight: 700;">New Conversation</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Choose an assistant to start chatting</MudText>
+            </div>
+            <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="CancelNewChat" Size="Size.Small" aria-label="Cancel" />
+        </div>
+
+        @if (_loadingAssistants)
+        {
+            <div class="d-flex justify-center pa-8">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            </div>
+        }
+        else if (_availableAssistants.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Outlined.SmartToy" Class="mb-4">
+                <MudText Typo="Typo.body2">
+                    No published assistants found. Open <strong>Assistant Studio</strong> to create and publish one first.
+                </MudText>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Class="mt-2"
+                           OnClick="@(() => Navigation.NavigateTo("/assistant-studio"))">
+                    Open Assistant Studio
+                </MudButton>
+            </MudAlert>
+        }
+        else
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-3" Style="font-weight: 600;">Select an Assistant</MudText>
+            <MudGrid Spacing="2" Class="mb-4">
+                @foreach (var asst in _availableAssistants)
+                {
+                    var asstId = asst.Id;
+                    var isSelected = _newChatAssistantId == asstId;
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="0"
+                                  Style="@(isSelected
+                                      ? "border: 2px solid #7C3AED; border-radius: 12px; background: rgba(124,58,237,0.06); cursor: pointer; padding: 12px;"
+                                      : "border: 1px solid var(--mud-palette-divider); border-radius: 12px; cursor: pointer; padding: 12px;")"
+                                  @onclick="@(() => SelectAssistant(asstId))">
+                            <div class="d-flex align-center gap-3">
+                                <MudAvatar Size="Size.Medium"
+                                           Style="@(isSelected
+                                               ? "background: linear-gradient(135deg, #7C3AED, #6D28D9);"
+                                               : "background: var(--mud-palette-action-disabled-background);")">
+                                    @(asst.Name.Length > 0 ? asst.Name[0].ToString().ToUpper() : "A")
+                                </MudAvatar>
+                                <div style="flex: 1; min-width: 0;">
+                                    <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@asst.Name</MudText>
+                                    @if (!string.IsNullOrEmpty(asst.Description))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary"
+                                                 Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;">
+                                            @asst.Description
+                                        </MudText>
+                                    }
+                                </div>
+                                @if (isSelected)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" Size="Size.Small" />
+                                }
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            <MudTextField @bind-Value="_newChatTitle"
+                          Label="Conversation name (optional)"
+                          Placeholder="@GetNewChatPlaceholder()"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Class="mb-4" />
+
+            <div class="d-flex gap-2 justify-end">
+                <MudButton Variant="Variant.Text" OnClick="CancelNewChat">Cancel</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
+                           StartIcon="@Icons.Material.Filled.Chat"
+                           OnClick="CreateConversation"
+                           Disabled="@(_newChatAssistantId is null || _creatingConversation)">
+                    @(_creatingConversation ? "Starting..." : "Start Chat")
+                </MudButton>
+            </div>
+        }
+    </MudPaper>
+}
+else if (_loading)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+        <MudTextField @bind-Value="_searchTerm" Placeholder="Search conversations by title or assistant..."
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Immediate="true" DebounceInterval="300" />
+    </MudPaper>
     <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Chat" />
 }
 else if (_hasError)
 {
+    <MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+        <MudTextField @bind-Value="_searchTerm" Placeholder="Search conversations by title or assistant..."
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Immediate="true" DebounceInterval="300" />
+    </MudPaper>
     <ErrorState ErrorMessage="@_error" OnRetry="LoadConversations" />
 }
 else if (!FilteredConversations.Any())
 {
+    <MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+        <MudTextField @bind-Value="_searchTerm" Placeholder="Search conversations by title or assistant..."
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Immediate="true" DebounceInterval="300" />
+    </MudPaper>
     <EmptyState Icon="@Icons.Material.Outlined.ChatBubbleOutline"
                 Title="No conversations yet"
                 Description="Start chatting with an assistant to see your history here."
                 ActionText="Start a Chat"
                 ActionIcon="@Icons.Material.Filled.Chat"
-                OnAction="@(() => Navigation.NavigateTo("/assistant-studio"))"
+                OnAction="StartNewChat"
                 MinHeight="300px" />
 }
 else
 {
+    <MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+        <MudTextField @bind-Value="_searchTerm" Placeholder="Search conversations by title or assistant..."
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Immediate="true" DebounceInterval="300" />
+    </MudPaper>
+
     <MudGrid Spacing="3">
         @* Left Panel: Conversation List *@
         <MudItem xs="12" md="4">
@@ -178,6 +286,17 @@ else
                                         else
                                         {
                                             <MarkdownRenderer Content="@msg.Content" Style="line-height: 1.6; font-size: 0.875rem;" />
+                                            @if (_ttsSupported)
+                                            {
+                                                <div class="d-flex justify-end mt-1">
+                                                    <MudIconButton Icon="@(_speakingMsgId == msg.Id ? Icons.Material.Filled.StopCircle : Icons.Material.Filled.VolumeUp)"
+                                                                   Size="Size.Small"
+                                                                   Color="@(_speakingMsgId == msg.Id ? Color.Primary : Color.Default)"
+                                                                   OnClick="@(() => ToggleSpeakMessage(msg))"
+                                                                   Style="width: 26px; height: 26px; opacity: 0.6;"
+                                                                   aria-label="@(_speakingMsgId == msg.Id ? "Stop speaking" : "Read aloud")" />
+                                                </div>
+                                            }
                                         }
                                     </div>
                                 </div>
@@ -217,8 +336,28 @@ else
 
                     @* Reply Input *@
                     <div class="pa-3" style="border-top: 1px solid var(--mud-palette-divider);">
+                        @if (_isListening)
+                        {
+                            <div class="d-flex align-center gap-2 mb-2 pa-2" style="background: rgba(76,175,80,0.08); border-radius: 8px; border: 1px solid rgba(76,175,80,0.2);">
+                                <div class="voice-pulse-dot"></div>
+                                <MudText Typo="Typo.caption" Color="Color.Success" Style="font-weight: 600;">
+                                    @(_interimTranscript.Length > 0 ? _interimTranscript : "Listening...")
+                                </MudText>
+                            </div>
+                        }
                         <div class="d-flex gap-2 align-center">
-                            <MudTextField @bind-Value="_replyInput" Placeholder="Type a message..."
+                            @if (_sttSupported)
+                            {
+                                <MudTooltip Text="@(_isListening ? "Stop listening" : "Voice input")">
+                                    <MudIconButton Icon="@(_isListening ? Icons.Material.Filled.MicOff : Icons.Material.Filled.Mic)"
+                                                   Color="@(_isListening ? Color.Error : Color.Default)"
+                                                   OnClick="ToggleVoiceInput" Disabled="_sendingReply"
+                                                   Size="Size.Small"
+                                                   Style="@(_isListening ? "animation: pulse-soft 1.5s infinite;" : "")"
+                                                   aria-label="@(_isListening ? "Stop voice input" : "Voice input")" />
+                                </MudTooltip>
+                            }
+                            <MudTextField @bind-Value="_replyInput" Placeholder="@(_isListening ? "Speak now..." : "Type a message...")"
                                           Variant="Variant.Outlined" Margin="Margin.Dense"
                                           OnKeyUp="HandleReplyKeyUp" Disabled="_sendingReply"
                                           Immediate="true" Style="flex: 1;" aria-label="Reply input" />
@@ -235,6 +374,21 @@ else
                                 }
                             </MudButton>
                         </div>
+                        @if (_sttSupported && _ttsSupported)
+                        {
+                            <div class="d-flex align-center justify-end mt-1" style="opacity: 0.7;">
+                                <MudTooltip Text="Voice Chat: auto-listen after each reply is spoken aloud">
+                                    <div class="d-flex align-center gap-1" style="cursor: pointer;" @onclick="ToggleVoiceChatMode">
+                                        <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small"
+                                                 Color="@(_voiceChatActive ? Color.Success : Color.Default)" Style="font-size: 14px;" />
+                                        <MudText Typo="Typo.caption" Color="@(_voiceChatActive ? Color.Success : Color.Secondary)"
+                                                 Style="font-size: 0.65rem; font-weight: 600;">
+                                            Voice Chat @(_voiceChatActive ? "ON" : "OFF")
+                                        </MudText>
+                                    </div>
+                                </MudTooltip>
+                            </div>
+                        }
                     </div>
                 </MudPaper>
             }
@@ -259,6 +413,24 @@ else
     private int _totalCount;
     private bool _hasMore;
 
+    // New chat picker state
+    private bool _pickingAssistant;
+    private bool _loadingAssistants;
+    private List<AssistantOption> _availableAssistants = new();
+    private Guid? _newChatAssistantId;
+    private string _newChatTitle = string.Empty;
+    private bool _creatingConversation;
+
+    // Voice (STT + TTS)
+    private IJSObjectReference? _voiceModule;
+    private DotNetObjectReference<Conversations>? _dotNetRef;
+    private bool _sttSupported;
+    private bool _ttsSupported;
+    private bool _isListening;
+    private bool _voiceChatActive;
+    private string _interimTranscript = string.Empty;
+    private Guid _speakingMsgId = Guid.Empty;
+
     private List<ConversationListItem> FilteredConversations =>
         string.IsNullOrWhiteSpace(_searchTerm)
             ? _conversations
@@ -268,7 +440,18 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) await LoadConversations();
+        if (!firstRender) return;
+        await LoadConversations();
+        try
+        {
+            _voiceModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/voice.js");
+            _dotNetRef = DotNetObjectReference.Create(this);
+            var support = await _voiceModule.InvokeAsync<VoiceSupport>("isSupported");
+            _sttSupported = support.Stt;
+            _ttsSupported = support.Tts;
+            StateHasChanged();
+        }
+        catch { }
     }
 
     private async Task LoadConversations()
@@ -320,6 +503,96 @@ else
     {
         _page++;
         await LoadConversationPage();
+    }
+
+    private async Task StartNewChat()
+    {
+        _pickingAssistant = true;
+        _loadingAssistants = true;
+        _newChatAssistantId = null;
+        _newChatTitle = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<AssistantListResult>("/api/v1/assistants?pageSize=100");
+            var all = result?.Items ?? new();
+            _availableAssistants = all.Where(a => a.PublishStatus == "Published").ToList();
+        }
+        catch { Snackbar.Add("Failed to load assistants.", Severity.Warning); }
+        finally { _loadingAssistants = false; StateHasChanged(); }
+    }
+
+    private void CancelNewChat()
+    {
+        _pickingAssistant = false;
+        _newChatAssistantId = null;
+        _newChatTitle = string.Empty;
+    }
+
+    private void SelectAssistant(Guid id)
+    {
+        _newChatAssistantId = id;
+    }
+
+    private string GetNewChatPlaceholder()
+    {
+        if (_newChatAssistantId is null) return "Give this chat a name...";
+        var name = _availableAssistants.FirstOrDefault(a => a.Id == _newChatAssistantId)?.Name ?? "AI";
+        return $"{name} — {DateTime.Now:MMM d}";
+    }
+
+    private async Task CreateConversation()
+    {
+        if (_newChatAssistantId is null)
+        {
+            Snackbar.Add("Please select an assistant.", Severity.Warning);
+            return;
+        }
+
+        var assistant = _availableAssistants.FirstOrDefault(a => a.Id == _newChatAssistantId);
+        var title = string.IsNullOrWhiteSpace(_newChatTitle)
+            ? $"{assistant?.Name ?? "AI"} — {DateTime.Now:MMM d, h:mm tt}"
+            : _newChatTitle.Trim();
+
+        _creatingConversation = true;
+        StateHasChanged();
+
+        try
+        {
+            var payload = new { Title = title, ReferenceId = _newChatAssistantId.ToString() };
+            var response = await Http.PostAsJsonAsync("/api/v1/chat/conversations", payload);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var created = await response.Content.ReadFromJsonAsync<ConversationCreatedResult>();
+                if (created is not null)
+                {
+                    var newItem = new ConversationListItem
+                    {
+                        Id = created.Id,
+                        Title = title,
+                        AssistantName = assistant?.Name ?? string.Empty,
+                        MessageCount = 0,
+                        CreatedAt = DateTime.UtcNow,
+                        LastMessagePreview = string.Empty
+                    };
+                    _conversations.Insert(0, newItem);
+                    _pickingAssistant = false;
+                    await SelectConversation(newItem);
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to create conversation: {response.StatusCode}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to create conversation: {ex.Message}", Severity.Error);
+        }
+        finally { _creatingConversation = false; StateHasChanged(); }
     }
 
     private async Task SelectConversation(ConversationListItem conversation)
@@ -457,21 +730,28 @@ else
                 var result = await response.Content.ReadFromJsonAsync<MessageReplyResult>();
                 if (result is not null)
                 {
-                    _conversationDetail?.Messages.Add(new MessageItem
+                    var replyMsg = new MessageItem
                     {
                         Id = result.Id,
                         Role = "Assistant",
                         Content = result.Content,
                         CreatedAt = result.CreatedAt
-                    });
+                    };
+                    _conversationDetail?.Messages.Add(replyMsg);
                     _selectedConversation.MessageCount++;
                     _selectedConversation.LastMessagePreview = result.Content.Length > 80
                         ? result.Content[..80] + "..." : result.Content;
+
+                    if (_voiceChatActive && _voiceModule is not null && _dotNetRef is not null)
+                    {
+                        _speakingMsgId = replyMsg.Id;
+                        StateHasChanged();
+                        await _voiceModule.InvokeAsync<bool>("speak", replyMsg.Content, "en-US", 1.0, 1.0, _dotNetRef, "OnSpeakDone");
+                    }
                 }
             }
             else
             {
-                var errorBody = await response.Content.ReadAsStringAsync();
                 Snackbar.Add($"Failed to send: {response.StatusCode}", Severity.Error);
             }
         }
@@ -486,6 +766,120 @@ else
             StateHasChanged();
         }
     }
+
+    // ── Voice helpers ──────────────────────────────────────────────────────────
+
+    private async Task ToggleVoiceInput()
+    {
+        if (_isListening) await StopListening();
+        else await StartListening();
+    }
+
+    private async Task StartListening()
+    {
+        if (_voiceModule is null || _dotNetRef is null) return;
+        _interimTranscript = string.Empty;
+        await _voiceModule.InvokeAsync<bool>("startListening", _dotNetRef, "OnVoiceResult", "OnVoiceStatus", "en-US");
+    }
+
+    private async Task StopListening()
+    {
+        if (_voiceModule is null) return;
+        _isListening = false;
+        _interimTranscript = string.Empty;
+        await _voiceModule.InvokeVoidAsync("stopListening");
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnVoiceResult(string transcript, bool isFinal)
+    {
+        if (isFinal)
+        {
+            _replyInput = transcript;
+            _interimTranscript = string.Empty;
+            _isListening = false;
+            StateHasChanged();
+            if (_voiceChatActive)
+                await SendReply();
+        }
+        else
+        {
+            _interimTranscript = transcript;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    [JSInvokable]
+    public void OnVoiceStatus(string status)
+    {
+        _isListening = status == "listening";
+        if (status == "not-allowed")
+            Snackbar.Add("Microphone access denied.", Severity.Warning);
+        else if (status == "no-speech")
+            _interimTranscript = string.Empty;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleSpeakMessage(MessageItem msg)
+    {
+        if (_voiceModule is null || _dotNetRef is null) return;
+
+        if (_speakingMsgId == msg.Id)
+        {
+            await _voiceModule.InvokeVoidAsync("stopSpeaking");
+            _speakingMsgId = Guid.Empty;
+            StateHasChanged();
+            return;
+        }
+
+        _speakingMsgId = msg.Id;
+        StateHasChanged();
+        await _voiceModule.InvokeAsync<bool>("speak", msg.Content, "en-US", 1.0, 1.0, _dotNetRef, "OnSpeakDone");
+    }
+
+    [JSInvokable]
+    public async Task OnSpeakDone()
+    {
+        _speakingMsgId = Guid.Empty;
+        await InvokeAsync(StateHasChanged);
+        if (_voiceChatActive)
+            await InvokeAsync(StartListening);
+    }
+
+    private async Task ToggleVoiceChatMode()
+    {
+        if (_voiceChatActive)
+        {
+            _voiceChatActive = false;
+            if (_voiceModule is not null)
+                await _voiceModule.InvokeVoidAsync("setVoiceChatMode", false);
+            _isListening = false;
+            _interimTranscript = string.Empty;
+            StateHasChanged();
+        }
+        else
+        {
+            _voiceChatActive = true;
+            if (_voiceModule is not null)
+                await _voiceModule.InvokeVoidAsync("setVoiceChatMode", true);
+            Snackbar.Add("Voice Chat enabled — speak to reply!", Severity.Success);
+            StateHasChanged();
+            await StartListening();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_voiceModule is not null)
+        {
+            try { await _voiceModule.InvokeVoidAsync("dispose"); } catch { }
+            await _voiceModule.DisposeAsync();
+        }
+        _dotNetRef?.Dispose();
+    }
+
+    // ── Utilities ──────────────────────────────────────────────────────────────
 
     private static string FormatRelativeTime(DateTime dateTime)
     {
@@ -539,5 +933,31 @@ else
         public string Content { get; set; } = string.Empty;
         public string Role { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+    }
+
+    private class AssistantOption
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string PublishStatus { get; set; } = string.Empty;
+    }
+
+    private class AssistantListResult
+    {
+        public List<AssistantOption> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+    }
+
+    private class ConversationCreatedResult
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+    }
+
+    private class VoiceSupport
+    {
+        public bool Stt { get; set; }
+        public bool Tts { get; set; }
     }
 }

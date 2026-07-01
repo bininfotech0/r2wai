@@ -28,6 +28,7 @@ public class GenericRepository<T> : IRepository<T> where T : BaseEntity<Guid>
     {
         var totalCount = await _dbSet.CountAsync(cancellationToken);
         var items = await _dbSet
+            .OrderBy(e => e.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -47,6 +48,7 @@ public class GenericRepository<T> : IRepository<T> where T : BaseEntity<Guid>
         var query = _dbSet.Where(predicate);
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
+            .OrderBy(e => e.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);

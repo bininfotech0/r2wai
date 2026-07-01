@@ -1,4 +1,5 @@
 using FluentValidation;
+using R2WAI.Application.Common.Security;
 
 namespace R2WAI.Application.Features.Admin.Commands;
 
@@ -21,7 +22,10 @@ public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>
         RuleFor(v => v.Email).NotEmpty().EmailAddress().MaximumLength(256);
         RuleFor(v => v.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(v => v.LastName).NotEmpty().MaximumLength(100);
-        RuleFor(v => v.Password).NotEmpty().MinimumLength(6).When(v => !string.IsNullOrEmpty(v.Password));
+        RuleFor(v => v.Password)
+            .Must(p => p is null || PasswordPolicy.IsValid(p, out _))
+            .WithMessage($"Password must be at least {PasswordPolicy.MinLength} characters and contain uppercase, lowercase, digit, and special character.")
+            .When(v => !string.IsNullOrEmpty(v.Password));
     }
 }
 

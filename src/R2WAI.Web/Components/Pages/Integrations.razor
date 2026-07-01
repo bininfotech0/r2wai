@@ -99,25 +99,50 @@
         <PropertyColumn Property="x => x.Type" Title="Type" />
         <TemplateColumn Title="Status">
             <CellTemplate>
-                <MudChip T="string" Color="@(context.Item.IsActive ? Color.Success : Color.Default)" Size="Size.Small">
-                    @(context.Item.IsActive ? "Active" : "Inactive")
-                </MudChip>
+                <div class="d-flex align-center gap-2">
+                    <MudChip T="string" Color="@(context.Item.IsActive ? Color.Success : Color.Default)" Size="Size.Small">
+                        @(context.Item.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                    @if (NeedsSetup(context.Item))
+                    {
+                        <MudTooltip Text="Endpoint URL contains template placeholders or credentials are not configured — edit to add your account values and auth token">
+                            <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Small"
+                                     Icon="@Icons.Material.Outlined.Warning">
+                                Setup Required
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                </div>
             </CellTemplate>
         </TemplateColumn>
         <PropertyColumn Property="x => x.CreatedAt" Title="Created" Format="yyyy-MM-dd" />
         <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
             <CellTemplate>
-                <MudIconButton Icon="@Icons.Material.Filled.ToggleOn" Size="Size.Small" Color="Color.Primary"
-                               OnClick="@(() => ToggleIntegration(context.Item))" aria-label="Toggle active" />
-                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                               OnClick="@(() => OpenEditDialog(context.Item))" aria-label="Edit" />
-                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                               OnClick="@(() => DeleteIntegration(context.Item))" aria-label="Delete" />
+                <MudTooltip Text="@(context.Item.IsActive ? "Deactivate" : "Activate")">
+                    <MudIconButton Icon="@(context.Item.IsActive ? Icons.Material.Filled.ToggleOn : Icons.Material.Filled.ToggleOff)"
+                                   Size="Size.Small"
+                                   Color="@(context.Item.IsActive ? Color.Success : Color.Default)"
+                                   OnClick="@(() => ToggleIntegration(context.Item))"
+                                   aria-label="@(context.Item.IsActive ? "Deactivate" : "Activate")" />
+                </MudTooltip>
+                <MudTooltip Text="Configure">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                   OnClick="@(() => OpenEditDialog(context.Item))" aria-label="Configure" />
+                </MudTooltip>
+                <MudTooltip Text="Delete">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteIntegration(context.Item))" aria-label="Delete" />
+                </MudTooltip>
             </CellTemplate>
         </TemplateColumn>
     </Columns>
     <NoRecordsContent>
-        <MudText Align="Align.Center" Class="pa-4">No integrations found.</MudText>
+        <div class="d-flex flex-column align-center pa-6 gap-3">
+            <MudIcon Icon="@Icons.Material.Outlined.Extension" Size="Size.Large" Color="Color.Primary" Style="opacity: 0.5;" />
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                No integrations installed yet. Browse the Connector Marketplace above to add your first integration.
+            </MudText>
+        </div>
     </NoRecordsContent>
 </MudDataGrid>
 
@@ -241,8 +266,28 @@
             if (response.IsSuccessStatusCode)
             {
                 _installedConnectors.Add(connector.Name);
-                Snackbar.Add($"'{connector.Name}' installed successfully!", Severity.Success);
                 await LoadIntegrations();
+
+                // Immediately open configure dialog so user can add credentials
+                var installed = _integrations.FirstOrDefault(i =>
+                    i.Name.Equals(connector.Name, StringComparison.OrdinalIgnoreCase));
+                if (installed is not null)
+                {
+                    var parameters = new DialogParameters<CreateEditIntegrationDialog>
+                    {
+                        { x => x.EditId, installed.Id.ToString() },
+                        { x => x.FromMarketplace, true }
+                    };
+                    var dialog = await Dialog.ShowAsync<CreateEditIntegrationDialog>(
+                        $"Configure {connector.Name}", parameters);
+                    var result = await dialog.Result;
+                    if (result?.Canceled == false)
+                        await LoadIntegrations();
+                }
+                else
+                {
+                    Snackbar.Add($"'{connector.Name}' installed — configure credentials to activate it.", Severity.Success);
+                }
             }
             else
             {
@@ -344,6 +389,16 @@
         catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
     }
 
+    private static bool NeedsSetup(IntegrationDto i)
+    {
+        var hasPlaceholder = !string.IsNullOrEmpty(i.EndpointUrl) && i.EndpointUrl.Contains('{');
+        var hasNoAuth = string.IsNullOrEmpty(i.Configuration)
+            || i.Configuration.Contains("\"AuthType\":\"None\"")
+            || i.Configuration == "{}"
+            || !i.Configuration.Contains("AuthType");
+        return hasPlaceholder || hasNoAuth;
+    }
+
     // DTOs
     private class IntegrationsResult { public List<IntegrationDto> Items { get; set; } = new(); }
     private class IntegrationDto
@@ -352,6 +407,8 @@
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public string Type { get; set; } = string.Empty;
+        public string? EndpointUrl { get; set; }
+        public string? Configuration { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
     }

@@ -25,7 +25,7 @@ public class IntegrationTestBase : IClassFixture<R2WAIWebApplicationFactory>
         var response = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
             Email = "admin@r2wai.io",
-            Password = "admin123"
+            Password = "R2wai_Admin!2026"
         });
 
         if (!response.IsSuccessStatusCode)

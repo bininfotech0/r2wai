@@ -93,10 +93,19 @@
                     <MudText Typo="Typo.body2">@(WelcomeMessage ?? "Hello! How can I help you today?")</MudText>
                 </MudPaper>
             </div>
-            <div style="padding: 8px 16px; border-top: 1px solid var(--mud-palette-divider); display: flex; gap: 8px;">
-                <MudTextField T="string" Variant="Variant.Outlined" Placeholder="Type a message..." Margin="Margin.Dense"
+            <div style="padding: 8px 16px; border-top: 1px solid var(--mud-palette-divider); display: flex; gap: 8px; align-items: center;">
+                <MudIconButton Icon="@Icons.Material.Filled.Mic" Color="Color.Default" Disabled="true" Size="Size.Small"
+                               aria-label="Voice input" Style="opacity: 0.5;" />
+                <MudTextField T="string" Variant="Variant.Outlined" Placeholder="Type or speak a message..." Margin="Margin.Dense"
                               Disabled="true" Style="flex: 1;" />
                 <MudIconButton Icon="@Icons.Material.Filled.Send" Color="Color.Primary" Disabled="true" aria-label="Send" />
+            </div>
+            <div style="padding: 2px 16px 4px; display: flex; justify-content: space-between; align-items: center;">
+                <div class="d-flex align-center gap-1" style="opacity: 0.5;">
+                    <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small" Style="font-size: 13px;" Color="Color.Default" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6rem;">Voice Chat OFF</MudText>
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Tertiary" Style="font-size: 0.6rem;">Powered by R2WAI</MudText>
             </div>
         </MudPaper>
 

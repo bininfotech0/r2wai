@@ -7,6 +7,27 @@
     </TitleContent>
     <DialogContent>
         <MudGrid>
+            @* Setup guide — shown on create when prerequisites may be missing *@
+            @if (!_isEdit && (_models.Count == 0 || _knowledgeBases.Count == 0))
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Outlined.Lightbulb" Class="mb-1">
+                        <MudText Typo="Typo.caption" Style="line-height: 1.6;">
+                            <strong>How a chatbot works:</strong> An AI Model provides the language intelligence.
+                            A Knowledge Base lets the chatbot answer questions from your documents.
+                            @if (_models.Count == 0)
+                            {
+                                <span> <strong>No AI models are configured yet</strong> — ask your administrator to add one in Admin → Models before the chatbot can respond.</span>
+                            }
+                            @if (_knowledgeBases.Count == 0)
+                            {
+                                <span> <strong>No knowledge bases exist yet</strong> — create one and upload documents to give your chatbot document-based answers.</span>
+                            }
+                        </MudText>
+                    </MudAlert>
+                </MudItem>
+            }
+
             <MudItem xs="12">
                 <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
             </MudItem>
@@ -24,20 +45,45 @@
                                 HelperText="Use markdown to structure the chatbot's instructions" />
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudSelect T="Guid?" @bind-Value="_knowledgeBaseId" Label="Knowledge Base" Clearable="true" Variant="Variant.Outlined">
+                <MudSelect T="Guid?" Value="_modelConfigurationId" ValueChanged="OnModelChanged" Label="AI Model (required)" Clearable="true"
+                           Variant="Variant.Outlined"
+                           HelperText="@(_models.Count == 0 ? "No models configured — go to Admin → Models first" : "The LLM that powers this chatbot's responses")"
+                           Error="@(_modelMissing)"
+                           ErrorText="An AI model is required for the chatbot to respond">
+                    @if (_models.Count == 0)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)" Disabled="true">
+                            No models available — contact your administrator
+                        </MudSelectItem>
+                    }
+                    @foreach (var model in _models)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)model.Id)">@model.Name (@model.Provider)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?" @bind-Value="_knowledgeBaseId" Label="Knowledge Base (optional)" Clearable="true"
+                           Variant="Variant.Outlined"
+                           HelperText="@(_knowledgeBases.Count == 0 ? "No knowledge bases yet — create one to enable document search" : "Enables document-grounded answers (RAG)")">
+                    @if (_knowledgeBases.Count == 0)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)null)" Disabled="true">
+                            No knowledge bases — create one first
+                        </MudSelectItem>
+                    }
                     @foreach (var kb in _knowledgeBases)
                     {
                         <MudSelectItem T="Guid?" Value="@((Guid?)kb.Id)">@kb.Name</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudSelect T="Guid?" @bind-Value="_modelConfigurationId" Label="AI Model" Clearable="true" Variant="Variant.Outlined">
-                    @foreach (var model in _models)
-                    {
-                        <MudSelectItem T="Guid?" Value="@((Guid?)model.Id)">@model.Name (@model.Provider)</MudSelectItem>
-                    }
-                </MudSelect>
+            <MudItem xs="12">
+                <MudSwitch @bind-Value="_voiceEnabled" Label="Enable Voice Mode" Color="Color.Primary"
+                           LabelPosition="LabelPosition.End" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Allows users to speak messages (STT) and hear responses (TTS) in the chat widget. Requires a browser with Web Speech API support.
+                </MudText>
             </MudItem>
         </MudGrid>
     </DialogContent>
@@ -61,7 +107,9 @@
     private string _promptTemplate = string.Empty;
     private Guid? _knowledgeBaseId;
     private Guid? _modelConfigurationId;
+    private bool _voiceEnabled;
     private bool _saving;
+    private bool _modelMissing;
     private List<KbOption> _knowledgeBases = new();
     private List<ModelOption> _models = new();
 
@@ -90,6 +138,7 @@
                     _promptTemplate = chatbot.PromptTemplate ?? string.Empty;
                     _knowledgeBaseId = chatbot.KnowledgeBaseId;
                     _modelConfigurationId = chatbot.ModelConfigurationId;
+                    _voiceEnabled = chatbot.VoiceEnabled;
                 }
             }
             catch { Snackbar.Add("Failed to load chatbot", Severity.Error); }
@@ -104,6 +153,14 @@
             return;
         }
 
+        _modelMissing = _modelConfigurationId is null;
+        if (_modelMissing)
+        {
+            Snackbar.Add("Please select an AI Model — the chatbot cannot respond without one.", Severity.Warning);
+            StateHasChanged();
+            return;
+        }
+
         _saving = true;
         try
         {
@@ -114,7 +171,8 @@
                 WelcomeMessage = (string?)(_welcomeMessage == string.Empty ? null : _welcomeMessage),
                 PromptTemplate = (string?)(_promptTemplate == string.Empty ? null : _promptTemplate),
                 KnowledgeBaseId = _knowledgeBaseId,
-                ModelConfigurationId = _modelConfigurationId
+                ModelConfigurationId = _modelConfigurationId,
+                VoiceEnabled = _voiceEnabled
             };
 
             if (_isEdit)
@@ -135,6 +193,12 @@
 
     private void Cancel() => MudDialog.Cancel();
 
+    private void OnModelChanged(Guid? id)
+    {
+        _modelConfigurationId = id;
+        if (id is not null) _modelMissing = false;
+    }
+
     private class ChatbotEditDto
     {
         public string Name { get; set; } = string.Empty;
@@ -143,6 +207,7 @@
         public string? PromptTemplate { get; set; }
         public Guid? KnowledgeBaseId { get; set; }
         public Guid? ModelConfigurationId { get; set; }
+        public bool VoiceEnabled { get; set; }
     }
 
     private class KbListResult { public List<KbOption> Items { get; set; } = new(); }

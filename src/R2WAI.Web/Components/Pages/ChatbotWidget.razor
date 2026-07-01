@@ -2,17 +2,24 @@
 @page "/chatbot/widget/{ChatbotId}"
 @layout R2WAI.Web.Components.Layout.WidgetLayout
 @attribute [AllowAnonymous]
-@implements IDisposable
+@implements IAsyncDisposable
 @inject IConfiguration Configuration
 @inject ISnackbar Snackbar
+@inject IJSRuntime JS
 
 <PageTitle>R2WAI Chat</PageTitle>
 
 <div style="@GetContainerStyle()">
     <div style="@GetHeaderStyle()">
-        <div class="d-flex align-center gap-2">
+        <div class="d-flex align-center gap-2" style="flex: 1;">
             <MudIcon Icon="@Icons.Material.Filled.ChatBubble" Style="color: white;" />
             <MudText Typo="Typo.subtitle1" Style="color: white;">@_title</MudText>
+            @if (_voiceChatActive)
+            {
+                <span style="background: rgba(255,255,255,0.2); border-radius: 12px; padding: 2px 8px; font-size: 0.6rem; color: white; display: flex; align-items: center; gap: 4px; animation: pulse-soft 1.5s infinite;">
+                    <MudIcon Icon="@Icons.Material.Filled.GraphicEq" Style="color: white; font-size: 12px;" /> Voice
+                </span>
+            }
         </div>
     </div>
 
@@ -30,6 +37,16 @@
                 <MudPaper Class="pa-3" Elevation="@(msg.IsUser ? 0 : 1)"
                           Style="@($"max-width: 80%; border-radius: 12px; {(msg.IsUser ? $"background: {_color}; color: white;" : "")}")">
                     <MudText Typo="Typo.body2" Style="@(msg.IsUser ? "color: white;" : "")">@msg.Content</MudText>
+                    @if (!msg.IsUser && _voiceConfigEnabled && _ttsSupported)
+                    {
+                        <div class="d-flex justify-end mt-1">
+                            <MudIconButton Icon="@(_speakingMessageIndex == _messages.IndexOf(msg) ? Icons.Material.Filled.StopCircle : Icons.Material.Filled.VolumeUp)"
+                                           Size="Size.Small" Color="@(_speakingMessageIndex == _messages.IndexOf(msg) ? Color.Primary : Color.Default)"
+                                           OnClick="@(() => ToggleSpeakMessage(msg))"
+                                           Style="width: 22px; height: 22px; opacity: 0.5;"
+                                           aria-label="Read aloud" />
+                        </div>
+                    }
                 </MudPaper>
             </div>
         }
@@ -47,8 +64,28 @@
         }
     </div>
 
+    @if (_isListening)
+    {
+        <div class="d-flex align-center gap-2 px-4 py-1" style="background: rgba(76, 175, 80, 0.08); border-top: 1px solid rgba(76, 175, 80, 0.2);">
+            <div class="voice-pulse-dot"></div>
+            <MudText Typo="Typo.caption" Color="Color.Success" Style="font-weight: 600; font-size: 0.7rem;">
+                @(_interimTranscript.Length > 0 ? _interimTranscript : "Listening...")
+            </MudText>
+        </div>
+    }
+
     <div style="padding: 8px 16px; border-top: 1px solid var(--mud-palette-divider); display: flex; gap: 8px; align-items: center;">
-        <MudTextField T="string" @bind-Value="_input" Variant="Variant.Outlined" Placeholder="Type a message..."
+        @if (_voiceConfigEnabled && _sttSupported)
+        {
+            <MudIconButton Icon="@(_isListening ? Icons.Material.Filled.MicOff : Icons.Material.Filled.Mic)"
+                           Color="@(_isListening ? Color.Error : Color.Default)"
+                           OnClick="ToggleVoiceInput" Disabled="_sending"
+                           Size="Size.Small"
+                           Style="@(_isListening ? "animation: pulse-soft 1.5s infinite;" : "")"
+                           aria-label="@(_isListening ? "Stop voice input" : "Voice input")" />
+        }
+        <MudTextField T="string" @bind-Value="_input" Variant="Variant.Outlined"
+                      Placeholder="@(_isListening ? "Speak now..." : "Type a message...")"
                       Margin="Margin.Dense" Style="flex: 1;" OnKeyUp="HandleKeyUp"
                       Disabled="_sending" aria-label="Chat message" />
         <MudIconButton Icon="@Icons.Material.Filled.Send" Color="Color.Primary"
@@ -56,8 +93,23 @@
                        aria-label="Send message" />
     </div>
 
-    <div style="padding: 4px; text-align: center; border-top: 1px solid var(--mud-palette-divider);">
-        <MudText Typo="Typo.caption" Color="Color.Tertiary">Powered by R2WAI</MudText>
+    <div style="padding: 4px 16px; border-top: 1px solid var(--mud-palette-divider); display: flex; align-items: center; justify-content: space-between;">
+        @if (_voiceConfigEnabled && _sttSupported && _ttsSupported)
+        {
+            <div class="d-flex align-center gap-1" style="cursor: pointer; opacity: 0.7;" @onclick="ToggleVoiceChatMode">
+                <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small"
+                         Color="@(_voiceChatActive ? Color.Success : Color.Default)" Style="font-size: 13px;" />
+                <MudText Typo="Typo.caption" Color="@(_voiceChatActive ? Color.Success : Color.Secondary)"
+                         Style="font-size: 0.6rem; font-weight: 600;">
+                    Voice Chat @(_voiceChatActive ? "ON" : "OFF")
+                </MudText>
+            </div>
+        }
+        else
+        {
+            <span></span>
+        }
+        <MudText Typo="Typo.caption" Color="Color.Tertiary" Style="font-size: 0.6rem;">Powered by R2WAI</MudText>
     </div>
 </div>
 
@@ -76,6 +128,17 @@
     private List<ChatMessage> _messages = new();
     private HttpClient? _httpClient;
 
+    private bool _voiceConfigEnabled;
+
+    private IJSObjectReference? _voiceModule;
+    private DotNetObjectReference<ChatbotWidget>? _dotNetRef;
+    private bool _sttSupported;
+    private bool _ttsSupported;
+    private bool _isListening;
+    private bool _voiceChatActive;
+    private string _interimTranscript = string.Empty;
+    private int _speakingMessageIndex = -1;
+
     protected override void OnInitialized()
     {
         _title = Title ?? "R2WAI Chat";
@@ -88,7 +151,7 @@
         var apiBase = Configuration["ApiPublicUrl"]
                       ?? Configuration["ApiBaseUrl"]
                       ?? Navigation?.BaseUri?.TrimEnd('/')
-                      ?? throw new InvalidOperationException("ApiBaseUrl must be configured.");
+                      ?? "http://localhost:5000";
         _httpClient = new HttpClient { BaseAddress = new Uri(apiBase) };
     }
 
@@ -102,10 +165,148 @@
             {
                 _title = Title ?? chatbot.Name;
                 _welcomeMessage = chatbot.WelcomeMessage ?? _welcomeMessage;
+                _voiceConfigEnabled = chatbot.VoiceEnabled;
                 StateHasChanged();
             }
         }
         catch { }
+
+        try
+        {
+            _voiceModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/voice.js");
+            _dotNetRef = DotNetObjectReference.Create(this);
+            var support = await _voiceModule.InvokeAsync<VoiceSupport>("isSupported");
+            _sttSupported = support.Stt;
+            _ttsSupported = support.Tts;
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    private async Task ToggleVoiceInput()
+    {
+        if (_voiceChatActive)
+        {
+            await StopVoiceChatMode();
+            return;
+        }
+
+        if (_isListening)
+        {
+            await StopListening();
+        }
+        else
+        {
+            await StartListening();
+        }
+    }
+
+    private async Task StartListening()
+    {
+        if (_voiceModule is null || _dotNetRef is null) return;
+        _interimTranscript = string.Empty;
+        await _voiceModule.InvokeAsync<bool>("startListening", _dotNetRef, "OnVoiceResult", "OnVoiceStatus", "en-US");
+    }
+
+    private async Task StopListening()
+    {
+        if (_voiceModule is null) return;
+        _isListening = false;
+        _interimTranscript = string.Empty;
+        await _voiceModule.InvokeVoidAsync("stopListening");
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnVoiceResult(string transcript, bool isFinal)
+    {
+        if (isFinal)
+        {
+            _input = transcript;
+            _interimTranscript = string.Empty;
+            _isListening = false;
+            StateHasChanged();
+            if (_voiceChatActive)
+            {
+                await SendMessage();
+            }
+        }
+        else
+        {
+            _interimTranscript = transcript;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    [JSInvokable]
+    public void OnVoiceStatus(string status)
+    {
+        _isListening = status == "listening";
+        if (status == "not-allowed")
+            Snackbar.Add("Microphone access denied.", Severity.Warning);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleSpeakMessage(ChatMessage msg)
+    {
+        if (_voiceModule is null || _dotNetRef is null) return;
+        var idx = _messages.IndexOf(msg);
+
+        if (_speakingMessageIndex == idx)
+        {
+            await _voiceModule.InvokeVoidAsync("stopSpeaking");
+            _speakingMessageIndex = -1;
+            StateHasChanged();
+            return;
+        }
+
+        _speakingMessageIndex = idx;
+        StateHasChanged();
+        await _voiceModule.InvokeAsync<bool>("speak", msg.Content, "en-US", 1.0, 1.0, _dotNetRef, "OnSpeakDone");
+    }
+
+    [JSInvokable]
+    public async Task OnSpeakDone()
+    {
+        _speakingMessageIndex = -1;
+        await InvokeAsync(StateHasChanged);
+
+        if (_voiceChatActive)
+        {
+            await InvokeAsync(StartListening);
+        }
+    }
+
+    private async Task ToggleVoiceChatMode()
+    {
+        if (_voiceChatActive)
+        {
+            await StopVoiceChatMode();
+        }
+        else
+        {
+            await StartVoiceChatMode();
+        }
+    }
+
+    private async Task StartVoiceChatMode()
+    {
+        if (_voiceModule is null) return;
+        _voiceChatActive = true;
+        await _voiceModule.InvokeVoidAsync("setVoiceChatMode", true);
+        Snackbar.Add("Voice Chat mode enabled!", Severity.Success);
+        StateHasChanged();
+        await StartListening();
+    }
+
+    private async Task StopVoiceChatMode()
+    {
+        if (_voiceModule is null) return;
+        _voiceChatActive = false;
+        await _voiceModule.InvokeVoidAsync("setVoiceChatMode", false);
+        _isListening = false;
+        _interimTranscript = string.Empty;
+        StateHasChanged();
     }
 
     private async Task HandleKeyUp(KeyboardEventArgs e)
@@ -150,6 +351,14 @@
             _sending = false;
             StateHasChanged();
         }
+
+        var lastMsg = _messages.LastOrDefault(m => !m.IsUser);
+        if (_voiceChatActive && lastMsg is not null && _voiceModule is not null && _dotNetRef is not null)
+        {
+            _speakingMessageIndex = _messages.IndexOf(lastMsg);
+            StateHasChanged();
+            await _voiceModule.InvokeAsync<bool>("speak", lastMsg.Content, "en-US", 1.0, 1.0, _dotNetRef, "OnSpeakDone");
+        }
     }
 
     private string GetContainerStyle()
@@ -165,7 +374,22 @@
 
     [Inject] private NavigationManager? Navigation { get; set; }
 
-    public void Dispose() => _httpClient?.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        _httpClient?.Dispose();
+        if (_voiceModule is not null)
+        {
+            try { await _voiceModule.InvokeVoidAsync("dispose"); } catch { }
+            await _voiceModule.DisposeAsync();
+        }
+        _dotNetRef?.Dispose();
+    }
+
+    private class VoiceSupport
+    {
+        public bool Stt { get; set; }
+        public bool Tts { get; set; }
+    }
 
     private class ChatMessage
     {
@@ -178,5 +402,6 @@
     {
         public string Name { get; set; } = string.Empty;
         public string? WelcomeMessage { get; set; }
+        public bool VoiceEnabled { get; set; }
     }
 }

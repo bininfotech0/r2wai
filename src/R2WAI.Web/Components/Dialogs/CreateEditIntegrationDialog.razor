@@ -3,17 +3,29 @@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Integration" : "Add Integration")</MudText>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Configure Integration" : "Add Integration")</MudText>
     </TitleContent>
     <DialogContent>
         <MudGrid>
+            @if (FromMarketplace && _isEdit)
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Outlined.Key" Class="mb-1">
+                        <MudText Typo="Typo.caption">
+                            <strong>Add your credentials</strong> to activate this integration.
+                            Update the endpoint URL if your account uses a custom domain, then select an auth method and enter your token or API key.
+                        </MudText>
+                    </MudAlert>
+                </MudItem>
+            }
+
             <MudItem xs="12">
-                <MudTextField @bind-Value="_name" Label="Name" Required="true" For="@(() => _name)" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
             </MudItem>
             <MudItem xs="12">
-                <MudTextField @bind-Value="_description" Label="Description" Lines="3" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
             </MudItem>
-            <MudItem xs="12">
+            <MudItem xs="12" sm="6">
                 <MudSelect T="string" @bind-Value="_type" Label="Type" Variant="Variant.Outlined">
                     <MudSelectItem T="string" Value="@("Http")">REST API / HTTP</MudSelectItem>
                     <MudSelectItem T="string" Value="@("Database")">Database</MudSelectItem>
@@ -22,9 +34,59 @@
                     <MudSelectItem T="string" Value="@("Custom")">Custom</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12">
-                <MudTextField @bind-Value="_endpointUrl" Label="Endpoint URL" Placeholder="https://..." Variant="Variant.Outlined" />
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_endpointUrl" Label="Endpoint URL"
+                              Placeholder="https://api.example.com"
+                              HelperText="@(_hasPlaceholder ? "Replace {placeholders} with your actual account values" : null)"
+                              Error="@_hasPlaceholder"
+                              Variant="Variant.Outlined" />
             </MudItem>
+
+            <MudItem xs="12">
+                <MudDivider Class="my-2" />
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 700;" Class="mb-3">Authentication</MudText>
+            </MudItem>
+
+            <MudItem xs="12" sm="4">
+                <MudSelect T="string" @bind-Value="_authType" Label="Auth Method" Variant="Variant.Outlined">
+                    <MudSelectItem T="string" Value="@("None")">No Authentication</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Bearer")">Bearer Token</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("ApiKey")">API Key</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Basic")">Basic Auth</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("OAuth2")">OAuth2 (manual token)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            @if (_authType is "Bearer" or "OAuth2")
+            {
+                <MudItem xs="12" sm="8">
+                    <MudTextField @bind-Value="_authCredential"
+                                  Label="Bearer Token"
+                                  InputType="InputType.Password"
+                                  HelperText="Stored in configuration — keep this secret"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+            }
+            else if (_authType == "ApiKey")
+            {
+                <MudItem xs="12" sm="8">
+                    <MudTextField @bind-Value="_authCredential"
+                                  Label="API Key"
+                                  InputType="InputType.Password"
+                                  HelperText="Stored in configuration — keep this secret"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+            }
+            else if (_authType == "Basic")
+            {
+                <MudItem xs="12" sm="4">
+                    <MudTextField @bind-Value="_authCredential" Label="Username" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudTextField @bind-Value="_authPassword" Label="Password"
+                                  InputType="InputType.Password" Variant="Variant.Outlined" />
+                </MudItem>
+            }
         </MudGrid>
     </DialogContent>
     <DialogActions>
@@ -39,13 +101,19 @@
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
 
     [Parameter] public string? EditId { get; set; }
+    [Parameter] public bool FromMarketplace { get; set; }
 
     private bool _isEdit => !string.IsNullOrEmpty(EditId);
     private string _name = string.Empty;
     private string _description = string.Empty;
     private string _type = "Http";
     private string _endpointUrl = string.Empty;
+    private string _authType = "None";
+    private string _authCredential = string.Empty;
+    private string _authPassword = string.Empty;
     private bool _saving;
+
+    private bool _hasPlaceholder => _endpointUrl.Contains('{') && _endpointUrl.Contains('}');
 
     protected override async Task OnInitializedAsync()
     {
@@ -60,11 +128,37 @@
                     _description = integration.Description ?? string.Empty;
                     _type = integration.Type ?? "Http";
                     _endpointUrl = integration.EndpointUrl ?? string.Empty;
+                    ParseConfiguration(integration.Configuration);
                 }
             }
             catch { Snackbar.Add("Failed to load integration", Severity.Error); }
         }
     }
+
+    private void ParseConfiguration(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            _authType = root.TryGetProperty("AuthType", out var at) ? at.GetString() ?? "None" : "None";
+            _authCredential = root.TryGetProperty("Token", out var t) ? t.GetString() ?? string.Empty
+                            : root.TryGetProperty("ApiKey", out var ak) ? ak.GetString() ?? string.Empty
+                            : root.TryGetProperty("Username", out var u) ? u.GetString() ?? string.Empty
+                            : string.Empty;
+            _authPassword = root.TryGetProperty("Password", out var p) ? p.GetString() ?? string.Empty : string.Empty;
+        }
+        catch { }
+    }
+
+    private string BuildConfiguration() => _authType switch
+    {
+        "Bearer" or "OAuth2" => System.Text.Json.JsonSerializer.Serialize(new { AuthType = _authType, Token = _authCredential }),
+        "ApiKey" => System.Text.Json.JsonSerializer.Serialize(new { AuthType = "ApiKey", ApiKey = _authCredential }),
+        "Basic"  => System.Text.Json.JsonSerializer.Serialize(new { AuthType = "Basic", Username = _authCredential, Password = _authPassword }),
+        _ => System.Text.Json.JsonSerializer.Serialize(new { AuthType = "None" })
+    };
 
     private async Task Save()
     {
@@ -77,16 +171,23 @@
         _saving = true;
         try
         {
+            var payload = new
+            {
+                Name = _name,
+                Description = _description,
+                Type = _type,
+                EndpointUrl = _endpointUrl,
+                Configuration = BuildConfiguration()
+            };
+
             if (_isEdit)
             {
-                await Http.PutAsJsonAsync($"/api/v1/integrations/{EditId}",
-                    new { Name = _name, Description = _description, Type = _type, EndpointUrl = _endpointUrl });
-                Snackbar.Add("Integration updated", Severity.Success);
+                await Http.PutAsJsonAsync($"/api/v1/integrations/{EditId}", payload);
+                Snackbar.Add("Integration saved", Severity.Success);
             }
             else
             {
-                await Http.PostAsJsonAsync("/api/v1/integrations",
-                    new { Name = _name, Description = _description, Type = _type, EndpointUrl = _endpointUrl });
+                await Http.PostAsJsonAsync("/api/v1/integrations", payload);
                 Snackbar.Add("Integration created", Severity.Success);
             }
             MudDialog.Close(DialogResult.Ok(true));
@@ -103,5 +204,6 @@
         public string? Description { get; set; }
         public string? Type { get; set; }
         public string? EndpointUrl { get; set; }
+        public string? Configuration { get; set; }
     }
 }

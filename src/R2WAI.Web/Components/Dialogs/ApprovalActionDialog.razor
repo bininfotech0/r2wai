@@ -6,9 +6,32 @@
         <MudText Typo="Typo.h6">@(IsApprove ? "Approve" : "Reject") Request</MudText>
     </TitleContent>
     <DialogContent>
-        <MudText Class="mb-4">
-            @(IsApprove ? "Approve" : "Reject") the approval request for workflow <strong>@WorkflowName</strong>?
+        <MudText Class="mb-3" Typo="Typo.body2">
+            @(IsApprove ? "Approve" : "Reject") the request for workflow <strong>@WorkflowName</strong>@(ApprovalLevel > 0 ? $" — Level {ApprovalLevel}" : "").
         </MudText>
+
+        @if (_parsedData.Count > 0)
+        {
+            <MudPaper Elevation="0" Class="pa-3 mb-4" Style="background: var(--mud-palette-background-grey); border-radius: 8px; border: 1px solid var(--mud-palette-divider);">
+                <MudText Typo="Typo.caption" Style="font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.6;" Class="mb-2">
+                    Request Details
+                </MudText>
+                <MudGrid Spacing="1">
+                    @foreach (var kv in _parsedData)
+                    {
+                        <MudItem xs="5">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">
+                                @FormatKey(kv.Key)
+                            </MudText>
+                        </MudItem>
+                        <MudItem xs="7">
+                            <MudText Typo="Typo.caption" Style="word-break: break-word;">@kv.Value</MudText>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudPaper>
+        }
+
         <MudTextField @bind-Value="_comments" Label="Comments (optional)" Lines="3"
                       Placeholder="Add any notes for this decision..." Variant="Variant.Outlined" />
     </DialogContent>
@@ -27,9 +50,44 @@
     [Parameter] public string ApprovalId { get; set; } = string.Empty;
     [Parameter] public string WorkflowName { get; set; } = string.Empty;
     [Parameter] public bool IsApprove { get; set; }
+    [Parameter] public string? Data { get; set; }
+    [Parameter] public int ApprovalLevel { get; set; }
 
     private string _comments = string.Empty;
     private bool _submitting;
+    private Dictionary<string, string> _parsedData = new();
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrWhiteSpace(Data))
+            _parsedData = ParseData(Data);
+    }
+
+    private static Dictionary<string, string> ParseData(string json)
+    {
+        var result = new Dictionary<string, string>();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                var val = prop.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? prop.Value.GetString() ?? ""
+                    : prop.Value.ToString();
+                if (!string.IsNullOrWhiteSpace(val))
+                    result[prop.Name] = val;
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    private static string FormatKey(string key)
+    {
+        // Convert camelCase / snake_case to "Title Case"
+        var spaced = System.Text.RegularExpressions.Regex.Replace(key, "([A-Z])", " $1").Replace("_", " ").Trim();
+        return System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(spaced.ToLower());
+    }
 
     private async Task Submit()
     {

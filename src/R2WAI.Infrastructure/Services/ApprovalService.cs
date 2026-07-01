@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using R2WAI.Application.Common.Interfaces;
 
 namespace R2WAI.Infrastructure.Services;
 
@@ -88,17 +89,17 @@ public class ApprovalService : IApprovalService
     private readonly ApplicationDbContext _context;
     private readonly IEmailService _emailService;
     private readonly INotificationService _notificationService;
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IBackgroundTaskQueue _taskQueue;
     private readonly ILogger<ApprovalService> _logger;
 
     public ApprovalService(ApplicationDbContext context, IEmailService emailService,
-        INotificationService notificationService, IServiceScopeFactory scopeFactory,
+        INotificationService notificationService, IBackgroundTaskQueue taskQueue,
         ILogger<ApprovalService> logger)
     {
         _context = context;
         _emailService = emailService;
         _notificationService = notificationService;
-        _scopeFactory = scopeFactory;
+        _taskQueue = taskQueue;
         _logger = logger;
     }
 
@@ -115,45 +116,37 @@ public class ApprovalService : IApprovalService
             request.Id, workflowInstanceId);
 
         var requestId = request.Id;
-        _ = Task.Run(async () =>
+        await _taskQueue.EnqueueAsync(async (sp, ct) =>
         {
-            try
+            var db = sp.GetRequiredService<ApplicationDbContext>();
+            var emailSvc = sp.GetRequiredService<IEmailService>();
+            var notifySvc = sp.GetRequiredService<INotificationService>();
+
+            var policy = await db.ApprovalPolicies
+                .Where(p => p.TenantId == tenantId && p.IsActive)
+                .FirstOrDefaultAsync(ct);
+
+            if (policy?.ApproverRoles is not null)
             {
-                using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                var emailSvc = scope.ServiceProvider.GetRequiredService<IEmailService>();
-                var notifySvc = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                var roles = policy.ApproverRoles.Split(',', StringSplitOptions.TrimEntries);
+                var approvers = await db.Users
+                    .Where(u => u.TenantId == tenantId && u.UserRoles.Any(ur => roles.Contains(ur.Role!.Name)))
+                    .ToListAsync(ct);
 
-                var policy = await db.ApprovalPolicies
-                    .Where(p => p.TenantId == tenantId && p.IsActive)
-                    .FirstOrDefaultAsync(CancellationToken.None);
+                var requester = await db.Users.FindAsync([requesterId], ct);
+                var workflow = await db.Workflows.FindAsync([workflowId], ct);
 
-                if (policy?.ApproverRoles is not null)
+                foreach (var approver in approvers)
                 {
-                    var roles = policy.ApproverRoles.Split(',', StringSplitOptions.TrimEntries);
-                    var approvers = await db.Users
-                        .Where(u => u.TenantId == tenantId && u.UserRoles.Any(ur => roles.Contains(ur.Role!.Name)))
-                        .ToListAsync(CancellationToken.None);
+                    await emailSvc.SendApprovalRequestAsync(
+                        approver.Email, approver.FirstName, workflow?.Name ?? "Workflow",
+                        requester is not null ? $"{requester.FirstName} {requester.LastName}" : "Unknown",
+                        data, requestId, ct);
 
-                    var requester = await db.Users.FindAsync([requesterId], CancellationToken.None);
-                    var workflow = await db.Workflows.FindAsync([workflowId], CancellationToken.None);
-
-                    foreach (var approver in approvers)
-                    {
-                        await emailSvc.SendApprovalRequestAsync(
-                            approver.Email, approver.FirstName, workflow?.Name ?? "Workflow",
-                            requester is not null ? $"{requester.FirstName} {requester.LastName}" : "Unknown",
-                            data, requestId, CancellationToken.None);
-
-                        await notifySvc.SendAsync(approver.Id.ToString(),
-                            "Approval Required", $"{workflow?.Name ?? "Workflow"} needs your approval",
-                            "approval", null, CancellationToken.None);
-                    }
+                    await notifySvc.SendAsync(approver.Id.ToString(),
+                        "Approval Required", $"{workflow?.Name ?? "Workflow"} needs your approval",
+                        "approval", null, ct);
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send approval notifications for request {RequestId}", requestId);
             }
         });
 
@@ -174,6 +167,13 @@ public class ApprovalService : IApprovalService
 
         if (request.ApproverId.HasValue && request.ApproverId.Value != approverId)
             throw new UnauthorizedAccessException($"Approval request {requestId} is assigned to a different approver");
+
+        if (!request.ApproverId.HasValue)
+        {
+            var isAuthorized = await VerifyApproverAuthorization(request, approverId, ct);
+            if (!isAuthorized)
+                throw new UnauthorizedAccessException($"User {approverId} is not authorized to approve request {requestId}");
+        }
 
         request.AssignApprover(approverId);
         request.Approve(comments);
@@ -213,6 +213,13 @@ public class ApprovalService : IApprovalService
         if (request.ApproverId.HasValue && request.ApproverId.Value != approverId)
             throw new UnauthorizedAccessException($"Approval request {requestId} is assigned to a different approver");
 
+        if (!request.ApproverId.HasValue)
+        {
+            var isAuthorized = await VerifyApproverAuthorization(request, approverId, ct);
+            if (!isAuthorized)
+                throw new UnauthorizedAccessException($"User {approverId} is not authorized to reject request {requestId}");
+        }
+
         request.AssignApprover(approverId);
         request.Reject(comments);
         await _context.SaveChangesAsync(ct);
@@ -230,6 +237,22 @@ public class ApprovalService : IApprovalService
             WorkflowInstanceId = request.WorkflowInstanceId,
             ApprovalRequestId = request.Id
         };
+    }
+
+    private async Task<bool> VerifyApproverAuthorization(ApprovalRequest request, Guid approverId, CancellationToken ct)
+    {
+        var policy = await _context.ApprovalPolicies
+            .Where(p => p.TenantId == request.TenantId && p.IsActive)
+            .FirstOrDefaultAsync(ct);
+
+        if (policy?.ApproverRoles is null)
+            return false;
+
+        var roles = policy.ApproverRoles.Split(',', StringSplitOptions.TrimEntries);
+        return await _context.Users
+            .AnyAsync(u => u.Id == approverId &&
+                u.TenantId == request.TenantId &&
+                u.UserRoles.Any(ur => roles.Contains(ur.Role!.Name)), ct);
     }
 
     public async Task<List<PendingApprovalDto>> GetPendingForApproverAsync(
@@ -320,8 +343,12 @@ public class ApprovalService : IApprovalService
 
     public async Task EscalateOverdueAsync(CancellationToken ct = default)
     {
+        // IgnoreQueryFilters: this is a cross-tenant background job — the global tenant filter
+        // would silently match nothing here because there is no HttpContext. Soft-delete is
+        // re-applied manually since IgnoreQueryFilters also bypasses that filter.
         var overdue = await _context.ApprovalRequests
-            .Where(ar => ar.Status == ApprovalStatus.Pending && ar.DueAt != null && ar.DueAt < DateTime.UtcNow)
+            .IgnoreQueryFilters()
+            .Where(ar => !ar.IsDeleted && ar.Status == ApprovalStatus.Pending && ar.DueAt != null && ar.DueAt < DateTime.UtcNow)
             .ToListAsync(ct);
 
         foreach (var request in overdue)
@@ -511,38 +538,30 @@ public class ApprovalService : IApprovalService
         var nextApprovalTenantId = completedRequest.TenantId;
         var nextApprovalWorkflowId = completedRequest.WorkflowId;
         var nextApprovalData = completedRequest.Data;
-        _ = Task.Run(async () =>
+        await _taskQueue.EnqueueAsync(async (sp, ct) =>
         {
-            try
+            var db = sp.GetRequiredService<ApplicationDbContext>();
+            var emailSvc = sp.GetRequiredService<IEmailService>();
+            var notifySvc = sp.GetRequiredService<INotificationService>();
+
+            var approvers = await db.Users
+                .Where(u => u.TenantId == nextApprovalTenantId &&
+                            u.UserRoles.Any(ur => ur.Role!.Name == nextRole))
+                .ToListAsync(ct);
+
+            var workflow = await db.Workflows.FindAsync([nextApprovalWorkflowId], ct);
+
+            foreach (var approver in approvers)
             {
-                using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                var emailSvc = scope.ServiceProvider.GetRequiredService<IEmailService>();
-                var notifySvc = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                await emailSvc.SendApprovalRequestAsync(
+                    approver.Email, approver.FirstName, workflow?.Name ?? "Workflow",
+                    "Previous level approved", nextApprovalData,
+                    nextApprovalId, ct);
 
-                var approvers = await db.Users
-                    .Where(u => u.TenantId == nextApprovalTenantId &&
-                                u.UserRoles.Any(ur => ur.Role!.Name == nextRole))
-                    .ToListAsync(CancellationToken.None);
-
-                var workflow = await db.Workflows.FindAsync([nextApprovalWorkflowId], CancellationToken.None);
-
-                foreach (var approver in approvers)
-                {
-                    await emailSvc.SendApprovalRequestAsync(
-                        approver.Email, approver.FirstName, workflow?.Name ?? "Workflow",
-                        "Previous level approved", nextApprovalData,
-                        nextApprovalId, CancellationToken.None);
-
-                    await notifySvc.SendAsync(approver.Id.ToString(),
-                        $"Level {nextLevel + 1} Approval Required",
-                        $"{workflow?.Name ?? "Workflow"} needs your approval (escalated from previous level)",
-                        "approval", null, CancellationToken.None);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to notify next-level approvers");
+                await notifySvc.SendAsync(approver.Id.ToString(),
+                    $"Level {nextLevel + 1} Approval Required",
+                    $"{workflow?.Name ?? "Workflow"} needs your approval (escalated from previous level)",
+                    "approval", null, ct);
             }
         });
 

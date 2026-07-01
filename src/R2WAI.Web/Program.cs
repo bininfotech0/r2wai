@@ -11,7 +11,7 @@ builder.Services.AddRazorPages(options =>
 });
 builder.Services.AddServerSideBlazor(options =>
 {
-    options.DetailedErrors = true;
+    options.DetailedErrors = builder.Environment.IsDevelopment();
 });
 builder.Services.AddMudServices(config =>
 {
@@ -32,8 +32,7 @@ builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredServ
 
 builder.Services.AddHttpClient("R2WAI", client =>
 {
-    var apiUrl = builder.Configuration["ApiBaseUrl"]
-        ?? throw new InvalidOperationException("ApiBaseUrl must be configured in appsettings.json or environment variables.");
+    var apiUrl = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5000";
     client.BaseAddress = new Uri(apiUrl);
 });
 

@@ -10,6 +10,7 @@ public record UpdateChatbotCommand : IRequest<ChatbotDto>
     public string? WelcomeMessage { get; init; }
     public string? SuggestedQuestions { get; init; }
     public string? PromptTemplate { get; init; }
+    public bool VoiceEnabled { get; init; }
 }
 
 public class UpdateChatbotCommandValidator : AbstractValidator<UpdateChatbotCommand>
@@ -35,6 +36,7 @@ public class UpdateChatbotCommandHandler(
 
         chatbot.UpdateDetails(command.Name, command.Description, command.WelcomeMessage,
             command.SuggestedQuestions, command.PromptTemplate);
+        chatbot.SetVoiceEnabled(command.VoiceEnabled);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

@@ -151,15 +151,14 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
             }
         }
 
-        var domainEvents = ChangeTracker.Entries<BaseEntity<Guid>>()
+        var entitiesWithEvents = ChangeTracker.Entries<BaseEntity<Guid>>()
             .Where(e => e.Entity.DomainEvents.Count > 0)
-            .SelectMany(e => e.Entity.DomainEvents)
+            .Select(e => e.Entity)
             .ToList();
 
-        foreach (var entity in ChangeTracker.Entries<BaseEntity<Guid>>())
-        {
-            entity.Entity.ClearDomainEvents();
-        }
+        var domainEvents = entitiesWithEvents
+            .SelectMany(e => e.DomainEvents)
+            .ToList();
 
         var auditEntries = OnBeforeSaveAudit();
 
@@ -168,6 +167,9 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
         var result = await base.SaveChangesAsync(cancellationToken);
 
         await DispatchDomainEventsAsync(domainEvents, cancellationToken);
+
+        foreach (var entity in entitiesWithEvents)
+            entity.ClearDomainEvents();
 
         return result;
     }

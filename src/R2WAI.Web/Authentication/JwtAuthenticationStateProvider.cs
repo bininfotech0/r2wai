@@ -105,6 +105,16 @@ public class JwtAuthenticationStateProvider(TokenStorageService tokenStorage, Ci
             if (keyValuePairs == null)
                 return null;
 
+            if (keyValuePairs.TryGetValue("exp", out var expVal))
+            {
+                if (expVal is JsonElement expEl && expEl.TryGetInt64(out var expSeconds))
+                {
+                    var expiry = DateTimeOffset.FromUnixTimeSeconds(expSeconds);
+                    if (expiry < DateTimeOffset.UtcNow)
+                        return null;
+                }
+            }
+
             var claims = new List<Claim>();
 
             if (keyValuePairs.TryGetValue("nameid", out var nameId))
