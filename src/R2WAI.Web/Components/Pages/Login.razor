@@ -32,6 +32,8 @@
                           Label="Email address"
                           Variant="Variant.Outlined"
                           InputType="InputType.Email"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.MailOutline"
                           Class="mb-4"
                           Required="true"
                           RequiredError="Email is required."
@@ -52,10 +54,12 @@
 
             @if (_mfaRequired)
             {
-                <MudTextField @bind-Value="_loginModel.MfaCode"
+                <MudTextField @ref="_mfaField"
+                              @bind-Value="_loginModel.MfaCode"
                               Label="Authenticator Code"
                               Variant="Variant.Outlined"
                               InputType="InputType.Text"
+                              InputMode="InputMode.numeric"
                               Class="mb-4"
                               MaxLength="6"
                               Placeholder="Enter 6-digit code"
@@ -140,25 +144,35 @@
     private bool _msalConfigured;
     private bool _isMsalLoading;
     private IJSObjectReference? _authModule;
+    private MudTextField<string?>? _mfaField;
+    private bool _mfaFieldFocused;
 
     [SupplyParameterFromQuery]
     private string? ReturnUrl { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
-        try
+        if (firstRender)
         {
-            var clientId = Configuration["Authentication:EntraId:ClientId"];
-            var tenantId = Configuration["Authentication:EntraId:TenantId"];
-            if (!string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(tenantId))
+            try
             {
-                _authModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
-                _msalConfigured = await _authModule.InvokeAsync<bool>("initMsal", clientId, tenantId);
-                StateHasChanged();
+                var clientId = Configuration["Authentication:EntraId:ClientId"];
+                var tenantId = Configuration["Authentication:EntraId:TenantId"];
+                if (!string.IsNullOrWhiteSpace(clientId) && !string.IsNullOrWhiteSpace(tenantId))
+                {
+                    _authModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/auth.js");
+                    _msalConfigured = await _authModule.InvokeAsync<bool>("initMsal", clientId, tenantId);
+                    StateHasChanged();
+                }
             }
+            catch { }
         }
-        catch { }
+
+        if (_mfaRequired && !_mfaFieldFocused && _mfaField is not null)
+        {
+            _mfaFieldFocused = true;
+            await _mfaField.FocusAsync();
+        }
     }
 
     private async Task HandleMicrosoftLogin()

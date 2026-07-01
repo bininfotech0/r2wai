@@ -24,7 +24,7 @@
 
         @if (_submitted)
         {
-            <div class="d-flex flex-column align-center py-4">
+            <div class="d-flex flex-column align-center py-4" tabindex="-1" @ref="_successRef" role="status" aria-live="polite">
                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success"
                          Style="font-size: 3rem;" Class="mb-3" />
                 <MudText Typo="Typo.h6" Align="Align.Center" Style="font-weight: 600;" Class="mb-2">
@@ -49,6 +49,8 @@
                 <MudTextField @bind-Value="_model.FullName"
                               Label="Full Name"
                               Variant="Variant.Outlined"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.PersonOutline"
                               Class="mb-3"
                               Required="true"
                               RequiredError="Full name is required."
@@ -59,6 +61,8 @@
                               Label="Work Email"
                               Variant="Variant.Outlined"
                               InputType="InputType.Email"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.MailOutline"
                               Class="mb-3"
                               Required="true"
                               RequiredError="Work email is required."
@@ -67,6 +71,8 @@
                 <MudTextField @bind-Value="_model.Organization"
                               Label="Organization"
                               Variant="Variant.Outlined"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.BusinessCenter"
                               Class="mb-3"
                               Required="true"
                               RequiredError="Organization is required."
@@ -75,6 +81,8 @@
                 <MudSelect @bind-Value="_model.Department"
                            Label="Role / Department"
                            Variant="Variant.Outlined"
+                           Adornment="Adornment.Start"
+                           AdornmentIcon="@Icons.Material.Filled.WorkOutline"
                            Class="mb-3"
                            Required="true"
                            RequiredError="Please select a department."
@@ -133,6 +141,17 @@
     private RequestAccessModel _model = new();
     private bool _isLoading;
     private bool _submitted;
+    private bool _successFocused;
+    private ElementReference _successRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_submitted && !_successFocused)
+        {
+            _successFocused = true;
+            await _successRef.FocusAsync();
+        }
+    }
 
     private async Task HandleSubmit()
     {
