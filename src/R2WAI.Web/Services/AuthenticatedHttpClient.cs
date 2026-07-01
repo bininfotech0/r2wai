@@ -181,6 +181,15 @@ public class AuthenticatedHttpClient
         return response;
     }
 
+    public async Task<HttpResponseMessage> PatchAsJsonAsync<T>(string url, T value)
+    {
+        await EnsureTokenAsync();
+        var response = await _http.PatchAsJsonAsync(url, value);
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+            return await HandleUnauthorizedAsync(() => _http.PatchAsJsonAsync(url, value), response);
+        return response;
+    }
+
     public async Task<HttpResponseMessage> GetAsync(string url)
     {
         await EnsureTokenAsync();

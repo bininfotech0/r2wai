@@ -41,6 +41,14 @@ public sealed class Document : BaseEntity<Guid>
         CreatedAt = DateTime.UtcNow;
     }
 
+    public void UpdateDetails(string name, string? description, Guid? knowledgeBaseId)
+    {
+        Name = name;
+        Description = description;
+        KnowledgeBaseId = knowledgeBaseId;
+        MarkAsModified();
+    }
+
     public void UpdateStatus(DocumentStatus status, string? error = null)
     {
         Status = status;

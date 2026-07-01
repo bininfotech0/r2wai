@@ -10,7 +10,11 @@
         {
             <MudProgressLinear Indeterminate="true" />
         }
-        else if (_document is not null)
+        else if (_document is null)
+        {
+            <MudAlert Severity="Severity.Error">Unable to load this document. Please close and try again.</MudAlert>
+        }
+        else
         {
             <MudGrid>
                 <MudItem xs="6">
@@ -71,25 +75,33 @@
             </MudExpansionPanels>
 
             <MudText Typo="Typo.h6" Class="mb-2">AI Actions</MudText>
+
+            @if (!IsReady)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    AI actions become available once this document finishes processing.
+                </MudAlert>
+            }
+
             <MudGrid>
                 <MudItem xs="12" sm="4">
                     <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true"
                                StartIcon="@Icons.Material.Filled.Summarize" OnClick="Summarize"
-                               Disabled="_actionLoading">
+                               Disabled="@(_actionLoading || !IsReady)">
                         Summarize
                     </MudButton>
                 </MudItem>
                 <MudItem xs="12" sm="4">
                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true"
                                StartIcon="@Icons.Material.Filled.DataObject" OnClick="Extract"
-                               Disabled="_actionLoading">
+                               Disabled="@(_actionLoading || !IsReady)">
                         Extract Data
                     </MudButton>
                 </MudItem>
                 <MudItem xs="12" sm="4">
                     <MudButton Variant="Variant.Outlined" Color="Color.Tertiary" FullWidth="true"
                                StartIcon="@Icons.Material.Filled.QuestionAnswer" OnClick="ToggleAsk"
-                               Disabled="_actionLoading">
+                               Disabled="@(_actionLoading || !IsReady)">
                         Ask Question
                     </MudButton>
                 </MudItem>
@@ -146,6 +158,8 @@
     private string _previewContent = string.Empty;
     private bool _previewLoading;
     private bool _previewLoaded;
+
+    private bool IsReady => string.Equals(_document?.Status, "Ready", StringComparison.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {

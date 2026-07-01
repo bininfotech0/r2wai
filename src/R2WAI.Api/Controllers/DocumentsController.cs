@@ -123,6 +123,14 @@ public class DocumentsController(IMediator mediator, ILogger<DocumentsController
         }
     }
 
+    [HttpPatch("{id:guid}")]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDocumentCommand command, CancellationToken ct = default)
+    {
+        command = command with { DocumentId = id };
+        var result = await mediator.Send(command, ct);
+        return Ok(result);
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {

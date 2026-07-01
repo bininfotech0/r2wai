@@ -135,6 +135,8 @@ else
             <CellTemplate>
                 <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary"
                                OnClick="@(() => OpenDetailDialog(context.Item))" aria-label="View" />
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Default"
+                               OnClick="@(() => OpenEditDialog(context.Item))" aria-label="Edit" />
                 @if (context.Item.Status == "Error")
                 {
                     <MudTooltip Text="Retry indexing this document">
@@ -213,24 +215,22 @@ else
                 $"/api/v1/documents?page=1&pageSize={_pageSize}");
             var updated = result?.Items ?? new();
 
-            foreach (var doc in updated)
-            {
-                if (_lastKnownStatuses.TryGetValue(doc.Id, out var prev) && prev == "Processing")
-                {
-                    if (doc.Status == "Ready")
-                        await InvokeAsync(() => Snackbar.Add(
-                            $"\"{doc.Name}\" is ready — indexing complete.", Severity.Success));
-                    else if (doc.Status == "Error")
-                        await InvokeAsync(() => Snackbar.Add(
-                            $"\"{doc.Name}\" failed to process. Click Retry to try again.", Severity.Error));
-                }
-            }
-
-            _documents = updated;
-            SnapshotStatuses();
-
             await InvokeAsync(() =>
             {
+                foreach (var doc in updated)
+                {
+                    if (_lastKnownStatuses.TryGetValue(doc.Id, out var prev) && prev == "Processing")
+                    {
+                        if (doc.Status == "Ready")
+                            Snackbar.Add($"\"{doc.Name}\" is ready — indexing complete.", Severity.Success);
+                        else if (doc.Status == "Error")
+                            Snackbar.Add($"\"{doc.Name}\" failed to process. Click Retry to try again.", Severity.Error);
+                    }
+                }
+
+                _documents = updated;
+                SnapshotStatuses();
+
                 if (!_documents.Any(d => d.Status == "Processing")) StopPolling();
                 StateHasChanged();
             });
@@ -301,6 +301,21 @@ else
         await Dialog.ShowAsync<DocumentDetailDialog>(doc.Name, parameters, options);
     }
 
+    private async Task OpenEditDialog(DocumentDto doc)
+    {
+        var parameters = new DialogParameters<EditDocumentDialog>
+        {
+            { x => x.DocumentId, doc.Id },
+            { x => x.Name, doc.Name },
+            { x => x.Description, doc.Description },
+            { x => x.KnowledgeBaseId, doc.KnowledgeBaseId }
+        };
+        var dialog = await Dialog.ShowAsync<EditDocumentDialog>("Edit Document", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+            await LoadDocuments();
+    }
+
     private async Task DeleteDocument(DocumentDto doc)
     {
         var parameters = new DialogParameters<DeleteConfirmationDialog>
@@ -314,6 +329,7 @@ else
         try
         {
             await Http.DeleteAsync($"/api/v1/documents/{doc.Id}");
+            _selectedDocIds.Remove(doc.Id);
             Snackbar.Add("Document deleted", Severity.Success);
             await LoadDocuments();
         }
