@@ -70,9 +70,10 @@ A walkthrough for end users (not developers) of the deployed application, organi
 6. **Automate a process** (*Studio → Workflows*) — Build visually, generate from a natural-language description, or start from a template (Invoice Approval, Leave Request, Expense Report, Employee Onboarding). Define approval steps, escalation rules, and SLA timers, then activate it.
 7. **Handle approvals** (*Workspace → Inbox / Approvals*) — Review items routed to you with full context (requester, amount, due date); approve, reject, or comment. Overdue and escalated items are flagged.
 8. **Deploy a chatbot** (*Studio → Chatbots*, optional) — Wrap an assistant + knowledge base into an embeddable widget for your website; grab the embed code.
-9. **Generate an RFP response** (*Workspace → Proposals*, optional) — Paste in RFP requirements and get an AI-drafted response built from your knowledge base and templates, then edit it.
-10. **Monitor health** (*Monitor*) — Dashboard KPIs, AI usage/cost, analytics, reports, and the immutable audit trail (who did what, when).
-11. **Administer the tenant** (*Settings*, admin only) — Manage users, roles and permissions, security/MFA, AI model providers and API keys, webhooks, and content moderation.
+9. **Track leads** (*Workspace → Leads*, optional) — Prospects captured by your chatbots and assistants during conversations show up here with contact info, interest, and source; search, filter, and update their status as they move through your pipeline.
+10. **Generate an RFP response** (*Workspace → Proposals*, optional) — Paste in RFP requirements and get an AI-drafted response built from your knowledge base and templates, then edit it.
+11. **Monitor health** (*Monitor*) — Dashboard KPIs, AI usage/cost, analytics, reports, and the immutable audit trail (who did what, when).
+12. **Administer the tenant** (*Settings*, admin only) — Manage users, roles and permissions, security/MFA, AI model providers and API keys, webhooks, and content moderation.
 
 ## Screenshots
 

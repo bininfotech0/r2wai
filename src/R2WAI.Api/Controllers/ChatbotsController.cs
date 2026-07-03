@@ -17,6 +17,7 @@ public class ChatbotsController(
     ApplicationDbContext dbContext,
     IAIService aiService,
     IKnowledgeBaseService knowledgeBaseService,
+    IConfiguration configuration,
     ILogger<ChatbotsController> logger) : ControllerBase
 {
     [HttpPost]
@@ -57,6 +58,61 @@ public class ChatbotsController(
         var command = new DeleteChatbotCommand { Id = id };
         await mediator.Send(command, ct);
         return NoContent();
+    }
+
+    [HttpGet("{id:guid}/channels")]
+    public async Task<IActionResult> GetChannels(Guid id, CancellationToken ct = default)
+    {
+        var query = new GetChatbotChannelsQuery { ChatbotId = id };
+        var result = await mediator.Send(query, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/channels/{channel}")]
+    public async Task<IActionResult> ConnectChannel(Guid id, string channel, [FromBody] System.Text.Json.JsonElement payload, CancellationToken ct = default)
+    {
+        var command = new ConnectChatbotChannelCommand
+        {
+            ChatbotId = id,
+            Channel = channel,
+            PayloadJson = payload.GetRawText(),
+        };
+        await mediator.Send(command, ct);
+        return Ok();
+    }
+
+    [HttpDelete("{id:guid}/channels/{channel}")]
+    public async Task<IActionResult> DisconnectChannel(Guid id, string channel, CancellationToken ct = default)
+    {
+        var command = new DisconnectChatbotChannelCommand { ChatbotId = id, Channel = channel };
+        await mediator.Send(command, ct);
+        return Ok();
+    }
+
+    [HttpGet("{id:guid}/webhook-key")]
+    public async Task<IActionResult> GetWebhookKey(Guid id, CancellationToken ct = default)
+    {
+        var configuredHost = configuration["ApiPublicUrl"] ?? configuration["ApiBaseUrl"];
+        var baseUrl = !string.IsNullOrWhiteSpace(configuredHost)
+            ? configuredHost.TrimEnd('/')
+            : $"{Request.Scheme}://{Request.Host}";
+        var query = new GetWebhookKeyInfoQuery { ChatbotId = id, WebhookUrl = $"{baseUrl}/api/v1/chatbots/{id}/webhook" };
+        var result = await mediator.Send(query, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/webhook-key/regenerate")]
+    public async Task<IActionResult> RegenerateWebhookKey(Guid id, CancellationToken ct = default)
+    {
+        var command = new RegenerateWebhookKeyCommand { ChatbotId = id };
+        var result = await mediator.Send(command, ct);
+        logger.LogInformation("Webhook API key regenerated for chatbot {ChatbotId}", id);
+        return Ok(new
+        {
+            Key = result.RawKey,
+            result.KeyPrefix,
+            Message = "Store this key securely — it cannot be retrieved again."
+        });
     }
 
     public record ChatbotChatRequest(string Message);

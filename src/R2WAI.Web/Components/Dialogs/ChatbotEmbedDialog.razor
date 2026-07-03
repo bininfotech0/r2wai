@@ -337,6 +337,12 @@
                     </MudButton>
 
                     <MudText Typo="Typo.subtitle2" Class="mb-1">API Key</MudText>
+                    @if (_showKeyWarning)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                            Copy this key now — it will not be shown again.
+                        </MudAlert>
+                    }
                     <div class="d-flex align-center gap-2">
                         <MudTextField T="string" @bind-Value="_webhookApiKey" ReadOnly="true" Margin="Margin.Dense"
                                       InputType="InputType.Password" Style="font-family: monospace;" />
@@ -405,22 +411,46 @@
     // Webhook
     private string _webhookUrl = string.Empty;
     private string _webhookApiKey = string.Empty;
+    private bool _showKeyWarning;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _widgetTitle = ChatbotName;
         UpdateEmbedCodes();
-        GenerateWebhookInfo();
+        await LoadChannels();
+        await LoadWebhookKeyInfo();
     }
 
-    private void GenerateWebhookInfo()
+    private async Task LoadChannels()
     {
-        var configuredHost = Configuration["ApiPublicUrl"] ?? Configuration["ApiBaseUrl"];
-        var baseUrl = !string.IsNullOrWhiteSpace(configuredHost)
-            ? configuredHost.TrimEnd('/')
-            : Navigation.BaseUri.TrimEnd('/');
-        _webhookUrl = $"{baseUrl}/api/v1/chatbots/{ChatbotId}/webhook";
-        _webhookApiKey = $"r2w_{Guid.NewGuid():N}";
+        try
+        {
+            var channels = await Http.GetFromJsonAsync<List<ChannelStatusDto>>($"/api/v1/chatbots/{ChatbotId}/channels");
+            if (channels is null) return;
+            foreach (var ch in channels)
+            {
+                switch (ch.ChannelType)
+                {
+                    case "Teams": _teamsConnected = ch.IsConnected; break;
+                    case "Slack": _slackConnected = ch.IsConnected; break;
+                    case "WhatsApp": _whatsappConnected = ch.IsConnected; break;
+                    case "Sms": _smsConnected = ch.IsConnected; break;
+                }
+            }
+        }
+        catch { /* leave channels as disconnected on failure */ }
+    }
+
+    private async Task LoadWebhookKeyInfo()
+    {
+        try
+        {
+            var info = await Http.GetFromJsonAsync<WebhookKeyInfoDto>($"/api/v1/chatbots/{ChatbotId}/webhook-key");
+            if (info is null) return;
+            _webhookUrl = info.WebhookUrl;
+            _webhookApiKey = info.HasKey ? $"{info.ApiKeyPrefix}••••••••••••" : "No key generated yet";
+        }
+        catch { }
     }
 
     private void UpdateEmbedCodes(string? _ = null)
@@ -575,10 +605,24 @@
         }
     }
 
-    private void RegenerateApiKey()
+    private async Task RegenerateApiKey()
     {
-        _webhookApiKey = $"r2w_{Guid.NewGuid():N}";
-        Snackbar.Add("API key regenerated.", Severity.Success);
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/chatbots/{ChatbotId}/webhook-key/regenerate", null);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<RegenerateKeyResponseDto>();
+            if (result is not null)
+            {
+                _webhookApiKey = result.Key;
+                _showKeyWarning = true;
+                Snackbar.Add("API key regenerated. Copy it now — it won't be shown again.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to regenerate key: {ex.Message}", Severity.Error);
+        }
         StateHasChanged();
     }
 
@@ -596,4 +640,24 @@
     }
 
     private void Close() => MudDialog.Close();
+
+    private class ChannelStatusDto
+    {
+        public string ChannelType { get; set; } = string.Empty;
+        public bool IsConnected { get; set; }
+        public DateTime? ConnectedAt { get; set; }
+    }
+
+    private class WebhookKeyInfoDto
+    {
+        public string WebhookUrl { get; set; } = string.Empty;
+        public string? ApiKeyPrefix { get; set; }
+        public bool HasKey { get; set; }
+    }
+
+    private class RegenerateKeyResponseDto
+    {
+        public string Key { get; set; } = string.Empty;
+        public string KeyPrefix { get; set; } = string.Empty;
+    }
 }

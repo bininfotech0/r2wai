@@ -75,12 +75,24 @@
                             }
                             @if (!msg.IsUser && msg.SuggestsWorkflow)
                             {
-                                <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
-                                           StartIcon="@Icons.Material.Filled.PlayArrow"
-                                           OnClick="@(() => ExecuteWorkflow(msg.Content))"
-                                           Style="border-radius: 8px;">
-                                    Execute Workflow
-                                </MudButton>
+                                <MudMenu Label="Execute Workflow" Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                         StartIcon="@Icons.Material.Filled.PlayArrow" Style="border-radius: 8px;">
+                                    @if (_workflowOptions is null)
+                                    {
+                                        <MudMenuItem Disabled="true">Loading workflows…</MudMenuItem>
+                                    }
+                                    else if (_workflowOptions.Count == 0)
+                                    {
+                                        <MudMenuItem Disabled="true">No workflows available</MudMenuItem>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var wf in _workflowOptions)
+                                        {
+                                            <MudMenuItem OnClick="@(() => ExecuteWorkflow(wf, msg.Content))">@wf.Name</MudMenuItem>
+                                        }
+                                    }
+                                </MudMenu>
                             }
                         </div>
                     </div>
@@ -519,6 +531,7 @@
         };
         _messages.Add(assistantMsg);
         _streamBuffer = string.Empty;
+        if (assistantMsg.SuggestsWorkflow) _ = EnsureWorkflowOptionsLoaded();
 
         if (_voiceChatActive && _voiceModule is not null && _dotNetRef is not null)
         {
@@ -550,6 +563,7 @@
                     assistantMsg.Content = chatResponse.Reply;
                     assistantMsg.SuggestsWorkflow = WorkflowKeywords.Any(kw =>
                         chatResponse.Reply.Contains(kw, StringComparison.OrdinalIgnoreCase));
+                    if (assistantMsg.SuggestsWorkflow) _ = EnsureWorkflowOptionsLoaded();
 
                     if (chatResponse.ConversationId != Guid.Empty)
                         _conversationId = chatResponse.ConversationId;
@@ -589,21 +603,29 @@
         catch { }
     }
 
-    private async Task ExecuteWorkflow(string context)
+    private List<WorkflowItem>? _workflowOptions;
+
+    private async Task EnsureWorkflowOptionsLoaded()
     {
+        if (_workflowOptions is not null) return;
         try
         {
             var workflows = await Http.GetFromJsonAsync<WorkflowsResult>("/api/v1/workflows");
-            var first = workflows?.Items?.FirstOrDefault();
-            if (first is not null)
-            {
-                await Http.PostAsJsonAsync($"/api/v1/workflows/{first.Id}/execute", new { Context = context });
-                Snackbar.Add($"Workflow '{first.Name}' started", Severity.Success);
-            }
-            else
-            {
-                Snackbar.Add("No workflows available to execute", Severity.Warning);
-            }
+            _workflowOptions = workflows?.Items ?? new();
+        }
+        catch
+        {
+            _workflowOptions = new();
+        }
+        StateHasChanged();
+    }
+
+    private async Task ExecuteWorkflow(WorkflowItem workflow, string context)
+    {
+        try
+        {
+            await Http.PostAsJsonAsync($"/api/v1/workflows/{workflow.Id}/execute", new { Context = context });
+            Snackbar.Add($"Workflow '{workflow.Name}' started", Severity.Success);
         }
         catch (Exception ex) { Snackbar.Add($"Workflow execution failed: {ex.Message}", Severity.Error); }
     }

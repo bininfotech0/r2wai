@@ -1,0 +1,172 @@
+@page "/leads"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - Leads</PageTitle>
+
+<PageHeader Title="Leads" Subtitle="Prospects captured by your chatbots and assistants" />
+
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+    <div class="d-flex gap-3 flex-wrap align-center">
+        <MudTextField @bind-Value="_searchTerm" Placeholder="Search leads..."
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Immediate="true" DebounceInterval="300" Style="max-width: 300px;" />
+        <MudSelect T="string" @bind-Value="_statusFilter" Label="Status" Variant="Variant.Outlined"
+                   Margin="Margin.Dense" Style="max-width: 200px;">
+            <MudSelectItem T="string" Value="@("")">All</MudSelectItem>
+            @foreach (var status in _statuses)
+            {
+                <MudSelectItem T="string" Value="@status">@status</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+</MudPaper>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-4" />
+}
+else if (!_filteredLeads.Any())
+{
+    <EmptyState Icon="@Icons.Material.Outlined.ContactMail"
+                Title="No leads yet"
+                Description="Leads captured from chatbot conversations will show up here."
+                MinHeight="300px" />
+}
+else
+{
+    <MudTable Items="_filteredLeads" Hover="true" Class="stagger-in">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Phone</MudTh>
+            <MudTh>Email</MudTh>
+            <MudTh>Class / Grade</MudTh>
+            <MudTh>Interest</MudTh>
+            <MudTh>Source</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Notes</MudTh>
+            <MudTh>Captured</MudTh>
+            <MudTh Style="width: 96px;">Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Phone">@(context.Phone ?? "-")</MudTd>
+            <MudTd DataLabel="Email">@(context.Email ?? "-")</MudTd>
+            <MudTd DataLabel="Class / Grade">@(context.ClassOrGrade ?? "-")</MudTd>
+            <MudTd DataLabel="Interest">@(context.Interest ?? "-")</MudTd>
+            <MudTd DataLabel="Source">@(context.Source ?? "-")</MudTd>
+            <MudTd DataLabel="Status">
+                @{ var lead = context; }
+                <MudMenu Variant="Variant.Text" Size="Size.Small">
+                    <ActivatorContent Context="menuActivatorContext">
+                        <StatusBadge Status="@lead.Status" />
+                    </ActivatorContent>
+                    <ChildContent>
+                        @foreach (var status in _statuses)
+                        {
+                            <MudMenuItem OnClick="@(() => UpdateStatus(lead, status))">@status</MudMenuItem>
+                        }
+                    </ChildContent>
+                </MudMenu>
+            </MudTd>
+            <MudTd DataLabel="Notes">@(string.IsNullOrWhiteSpace(context.Notes) ? "-" : context.Notes)</MudTd>
+            <MudTd DataLabel="Captured">@context.CreatedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
+                               OnClick="@(() => OpenEditLeadDialog(context))" aria-label="Edit lead" />
+                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
+                               OnClick="@(() => DeleteLead(context))" aria-label="Delete lead" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private List<LeadDto> _leads = new();
+    private string _searchTerm = string.Empty;
+    private string _statusFilter = string.Empty;
+    private bool _loading = true;
+
+    private readonly string[] _statuses = ["New", "Contacted", "DemoScheduled", "Enrolled", "Lost"];
+
+    private IEnumerable<LeadDto> _filteredLeads =>
+        _leads.Where(l =>
+            (string.IsNullOrWhiteSpace(_searchTerm) || l.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(_statusFilter) || l.Status == _statusFilter));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await LoadLeads(); }
+
+    private async Task LoadLeads()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<LeadsResult>("/api/v1/leads?pageSize=100");
+            _leads = result?.Items ?? new();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task UpdateStatus(LeadDto lead, string status)
+    {
+        try
+        {
+            await Http.PutAsJsonAsync($"/api/v1/leads/{lead.Id}/status", new { status });
+            Snackbar.Add($"Lead marked as {status}", Severity.Success);
+            await LoadLeads();
+        }
+        catch (Exception ex) { Snackbar.Add($"Update failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task OpenEditLeadDialog(LeadDto lead)
+    {
+        var parameters = new DialogParameters<CreateEditLeadDialog>
+        {
+            { x => x.LeadId, lead.Id },
+            { x => x.Name, lead.Name },
+            { x => x.Phone, lead.Phone },
+            { x => x.Email, lead.Email },
+            { x => x.ClassOrGrade, lead.ClassOrGrade },
+            { x => x.Interest, lead.Interest },
+            { x => x.Notes, lead.Notes },
+        };
+        var dialog = await Dialog.ShowAsync<CreateEditLeadDialog>("Edit Lead", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadLeads();
+    }
+
+    private async Task DeleteLead(LeadDto lead)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, lead.Name } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/leads/{lead.Id}");
+            Snackbar.Add("Lead deleted", Severity.Success);
+            await LoadLeads();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    private class LeadsResult { public List<LeadDto> Items { get; set; } = new(); }
+    private class LeadDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+        public string? Email { get; set; }
+        public string? ClassOrGrade { get; set; }
+        public string? Interest { get; set; }
+        public string? Source { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string? Notes { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+}

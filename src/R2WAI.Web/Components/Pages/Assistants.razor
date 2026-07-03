@@ -5,6 +5,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService Dialog
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>R2WAI - AI Assistant Studio</PageTitle>
 
@@ -388,6 +389,13 @@
                                     <MudSelectItem T="string" Value="@("Marketing")">Marketing</MudSelectItem>
                                     <MudSelectItem T="string" Value="@("Engineering")">Engineering</MudSelectItem>
                                     <MudSelectItem T="string" Value="@("Customer Support")">Customer Support</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("WordPress")">WordPress</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Strapi")">Strapi</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Joomla")">Joomla</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Drupal")">Drupal</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Shopify")">Shopify</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Salesforce")">Salesforce</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("SAP")">SAP</MudSelectItem>
                                 </MudSelect>
                             </MudItem>
                             <MudItem xs="12">
@@ -881,6 +889,34 @@
             Color = "linear-gradient(135deg, #8B5CF6, #A78BFA)",
             Description = "Manages vendor inquiries, purchase orders, supplier evaluation and procurement policies.",
             Capabilities = new[] { "Vendors", "POs", "Evaluation", "Policies" } },
+        new() { Name = "WordPress Assistant", Type = "WordPress", Icon = Icons.Material.Outlined.Language,
+            Color = "linear-gradient(135deg, #21759B, #4FA9D8)",
+            Description = "Helps with WordPress SEO, plugin/theme guidance, content publishing, and site maintenance.",
+            Capabilities = new[] { "SEO", "Plugins", "Content", "Maintenance" } },
+        new() { Name = "Strapi Assistant", Type = "Strapi", Icon = Icons.Material.Outlined.Hub,
+            Color = "linear-gradient(135deg, #4945FF, #8B87FF)",
+            Description = "Helps with Strapi content-type modeling, roles/permissions, API tokens, and REST/GraphQL queries.",
+            Capabilities = new[] { "Content Types", "Permissions", "API Tokens", "Queries" } },
+        new() { Name = "Joomla Assistant", Type = "Joomla", Icon = Icons.Material.Outlined.Web,
+            Color = "linear-gradient(135deg, #F44321, #FF7A5C)",
+            Description = "Helps with Joomla articles, menus, extensions, user ACL, and SEF/SEO configuration.",
+            Capabilities = new[] { "Articles", "Menus", "Extensions", "ACL" } },
+        new() { Name = "Drupal Assistant", Type = "Drupal", Icon = Icons.Material.Outlined.AccountTree,
+            Color = "linear-gradient(135deg, #0678BE, #4FB3F0)",
+            Description = "Helps with Drupal content types, taxonomy, Views, modules, and roles/permissions.",
+            Capabilities = new[] { "Content Types", "Views", "Modules", "Permissions" } },
+        new() { Name = "Shopify Assistant", Type = "Shopify", Icon = Icons.Material.Outlined.ShoppingCart,
+            Color = "linear-gradient(135deg, #95BF47, #C4E17F)",
+            Description = "Helps with Shopify products, theme/Liquid basics, apps, discounts, and order management.",
+            Capabilities = new[] { "Products", "Themes", "Apps", "Orders" } },
+        new() { Name = "Salesforce Assistant", Type = "Salesforce", Icon = Icons.Material.Outlined.Cloud,
+            Color = "linear-gradient(135deg, #00A1E0, #5FC4F0)",
+            Description = "Helps with leads/opportunities, reports and dashboards, flows, and roles/permission sets.",
+            Capabilities = new[] { "Leads", "Reports", "Flows", "Permissions" } },
+        new() { Name = "SAP Assistant", Type = "SAP", Icon = Icons.Material.Outlined.Business,
+            Color = "linear-gradient(135deg, #0FAAFF, #003D6B)",
+            Description = "Helps with SAP T-codes, master data, core modules (FI/CO, MM, SD), and approval workflows.",
+            Capabilities = new[] { "T-Codes", "Master Data", "Modules", "Approvals" } },
     };
 
     private List<AssistantDto> FilteredAssistants
@@ -982,6 +1018,13 @@
             "Sales" => "I need a Sales coaching assistant that helps sales reps with objection handling, competitive positioning, proposal writing, and deal strategy. It should be motivating and action-oriented.",
             "Customer Support" => "I need a Customer Support assistant that handles customer inquiries, troubleshoots product issues, manages escalations, and provides product knowledge with empathy and efficiency.",
             "Procurement" => "I need a Procurement assistant that helps with vendor inquiries, purchase order processes, supplier evaluation criteria, and procurement policy guidance.",
+            "WordPress" => "I need a WordPress assistant that helps with on-page SEO, plugin and theme recommendations, content publishing workflow, and site maintenance guidance.",
+            "Strapi" => "I need a Strapi assistant that helps with content-type modeling, roles and permissions, API token setup, and writing REST/GraphQL queries against the Strapi API.",
+            "Joomla" => "I need a Joomla assistant that helps with articles, menu structure, extensions, user ACL permissions, and SEF/SEO URL configuration.",
+            "Drupal" => "I need a Drupal assistant that helps with content types, taxonomy, Views configuration, module selection, and user roles and permissions.",
+            "Shopify" => "I need a Shopify assistant that helps with product and collection setup, theme customization, app recommendations, discounts, and order management.",
+            "Salesforce" => "I need a Salesforce assistant that helps with leads, opportunities, and accounts management, report and dashboard building, and flow automation basics.",
+            "SAP" => "I need an SAP assistant that helps with common transaction codes, master data questions, core module concepts, and approval workflow guidance.",
             _ => _creatorPrompt
         };
     }
@@ -1093,15 +1136,27 @@
     private (string name, string type, string description, string systemPrompt) FallbackConfig()
     {
         var prompt = _creatorPrompt.ToLowerInvariant();
-        var type = prompt.Contains("hr") || prompt.Contains("onboard") || prompt.Contains("employee") ? "HR"
+        var displayType = prompt.Contains("hr") || prompt.Contains("onboard") || prompt.Contains("employee") ? "HR"
             : prompt.Contains("it ") || prompt.Contains("helpdesk") || prompt.Contains("support") ? "IT"
             : prompt.Contains("finance") || prompt.Contains("expense") || prompt.Contains("invoice") ? "Finance"
             : prompt.Contains("legal") || prompt.Contains("contract") ? "Legal"
             : prompt.Contains("procure") || prompt.Contains("vendor") ? "Procurement"
             : prompt.Contains("sales") || prompt.Contains("deal") ? "Sales"
             : prompt.Contains("customer") ? "Customer Support"
+            : prompt.Contains("wordpress") || prompt.Contains("seo") || prompt.Contains("plugin") ? "WordPress"
+            : prompt.Contains("strapi") || prompt.Contains("content type") || prompt.Contains("headless") ? "Strapi"
+            : prompt.Contains("joomla") ? "Joomla"
+            : prompt.Contains("drupal") ? "Drupal"
+            : prompt.Contains("shopify") ? "Shopify"
+            : prompt.Contains("salesforce") ? "Salesforce"
+            : prompt.Contains("sap ") || prompt.Contains("s/4hana") || prompt.Contains("t-code") ? "SAP"
             : "General";
-        return ($"{type} Assistant", type, _creatorPrompt, $"You are a helpful {type} assistant. {_creatorPrompt.Trim('.')}.");
+
+        // "Sales" and "Customer Support" are display-only labels — the backend AssistantType enum
+        // has no matching member, so the value actually sent to the API must fall back to "General".
+        var apiType = displayType is "Sales" or "Customer Support" ? "General" : displayType;
+
+        return ($"{displayType} Assistant", apiType, _creatorPrompt, $"You are a helpful {displayType} assistant. {_creatorPrompt.Trim('.')}.");
     }
 
     private async Task SelectAssistant(AssistantDto assistant)
@@ -1206,6 +1261,20 @@
 
     private async Task UnpublishAssistant()
     {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, _selectedAssistant!.Name },
+            { x => x.Description, "This assistant will be taken offline and moved back to Draft. It will stop responding to end users until republished." },
+            { x => x.Title, "Confirm Unpublish" },
+            { x => x.ActionLabel, "Unpublish" },
+            { x => x.ActionIcon, Icons.Material.Filled.VisibilityOff },
+            { x => x.ActionColor, Color.Warning },
+            { x => x.Irreversible, false },
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Unpublish", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == true) return;
+
         try
         {
             await Http.PostAsync($"/api/v1/assistants/{_selectedAssistant!.Id}/unpublish", null);
@@ -1218,6 +1287,20 @@
 
     private async Task ArchiveAssistant()
     {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, _selectedAssistant!.Name },
+            { x => x.Description, "This assistant will be archived and taken offline. It can be restored later, but will stop responding to end users immediately." },
+            { x => x.Title, "Confirm Archive" },
+            { x => x.ActionLabel, "Archive" },
+            { x => x.ActionIcon, Icons.Material.Filled.Archive },
+            { x => x.ActionColor, Color.Warning },
+            { x => x.Irreversible, false },
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Archive", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == true) return;
+
         try
         {
             await Http.PostAsync($"/api/v1/assistants/{_selectedAssistant!.Id}/archive", null);
@@ -1295,7 +1378,19 @@
             ConversationStarters = _editStarters.Where(s => !string.IsNullOrWhiteSpace(s)).ToList(),
         };
         var json = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-        Snackbar.Add("Configuration copied to clipboard", Severity.Success);
+        try
+        {
+            var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"{(_editName ?? "assistant").Replace(' ', '-').ToLowerInvariant()}-config.json";
+            await JS.InvokeVoidAsync("eval",
+                $"var a=document.createElement('a');a.href='data:application/json;base64,{base64}';a.download='{fileName}';document.body.appendChild(a);a.click();a.remove();");
+            Snackbar.Add("Configuration exported", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OpenChat()
@@ -1375,6 +1470,13 @@
         "Sales" => Color.Error,
         "Customer Support" => Color.Tertiary,
         "Procurement" => Color.Secondary,
+        "WordPress" => Color.Info,
+        "Strapi" => Color.Dark,
+        "Joomla" => Color.Warning,
+        "Drupal" => Color.Info,
+        "Shopify" => Color.Success,
+        "Salesforce" => Color.Info,
+        "SAP" => Color.Dark,
         _ => Color.Primary,
     };
 
@@ -1389,6 +1491,13 @@
         "Procurement" => Icons.Material.Outlined.LocalShipping,
         "Marketing" => Icons.Material.Outlined.Campaign,
         "Engineering" => Icons.Material.Outlined.Engineering,
+        "WordPress" => Icons.Material.Outlined.Language,
+        "Strapi" => Icons.Material.Outlined.Hub,
+        "Joomla" => Icons.Material.Outlined.Web,
+        "Drupal" => Icons.Material.Outlined.AccountTree,
+        "Shopify" => Icons.Material.Outlined.ShoppingCart,
+        "Salesforce" => Icons.Material.Outlined.Cloud,
+        "SAP" => Icons.Material.Outlined.Business,
         _ => Icons.Material.Outlined.SmartToy,
     };
 

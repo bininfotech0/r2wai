@@ -28,6 +28,7 @@ services:
       - Authentication__Jwt__ExpirationMinutes=15
       - Authentication__Jwt__RefreshTokenExpirationDays=7
       - Security__EncryptionKey=${ENCRYPTION_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - AI__Provider=${AI_PROVIDER:-ollama}
       - AI__OpenAI__ApiKey=${OPENAI_API_KEY}
       - AI__Ollama__Endpoint=${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}

@@ -1,10 +1,15 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using R2WAI.Infrastructure.Persistence;
 
 #nullable disable
 
 namespace R2WAI.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(ApplicationDbContext))]
+    [Migration("20260626180000_AddMfaFields")]
     public partial class AddMfaFields : Migration
     {
         /// <inheritdoc />

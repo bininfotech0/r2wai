@@ -75,8 +75,6 @@
         {
             try
             {
-                var user = await Http.GetFromJsonAsync<UserEditDto>($"/api/v1/admin/users?page=1&pageSize=100");
-                // Find the user in the list
                 var allUsers = await Http.GetFromJsonAsync<UsersListResult>("/api/v1/admin/users");
                 var match = allUsers?.Items?.FirstOrDefault(u => u.Id.ToString() == EditId);
                 if (match is not null)

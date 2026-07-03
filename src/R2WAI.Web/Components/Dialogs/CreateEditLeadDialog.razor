@@ -1,0 +1,109 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Edit Lead</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form">
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" RequiredError="Name is required"
+                              Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_phone" Label="Phone" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_email" Label="Email" InputType="InputType.Email"
+                              Validation="@(new Func<string, string?>(ValidateEmail))" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_classOrGrade" Label="Class / Grade" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_interest" Label="Interest" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_notes" Label="Notes" Lines="3" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Guid LeadId { get; set; }
+    [Parameter] public string Name { get; set; } = string.Empty;
+    [Parameter] public string? Phone { get; set; }
+    [Parameter] public string? Email { get; set; }
+    [Parameter] public string? ClassOrGrade { get; set; }
+    [Parameter] public string? Interest { get; set; }
+    [Parameter] public string? Notes { get; set; }
+
+    private string _name = string.Empty;
+    private string? _phone;
+    private string? _email;
+    private string? _classOrGrade;
+    private string? _interest;
+    private string? _notes;
+    private bool _saving;
+    private MudForm _form = default!;
+
+    protected override void OnInitialized()
+    {
+        _name = Name;
+        _phone = Phone;
+        _email = Email;
+        _classOrGrade = ClassOrGrade;
+        _interest = Interest;
+        _notes = Notes;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex EmailRegex = new(
+        @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private string? ValidateEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return null;
+        return EmailRegex.IsMatch(email) ? null : "Please enter a valid email address";
+    }
+
+    private async Task Save()
+    {
+        await _form.Validate();
+        if (!_form.IsValid)
+            return;
+
+        _saving = true;
+        try
+        {
+            await Http.PutAsJsonAsync($"/api/v1/leads/{LeadId}", new
+            {
+                Name = _name,
+                Phone = _phone,
+                Email = _email,
+                ClassOrGrade = _classOrGrade,
+                Interest = _interest,
+                Notes = _notes,
+            });
+            Snackbar.Add("Lead updated", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

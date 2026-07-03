@@ -439,6 +439,14 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<bool>("VoiceEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("WebhookApiKeyHash")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("WebhookApiKeyPrefix")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<string>("WelcomeMessage")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -457,6 +465,51 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "Name");
 
                     b.ToTable("Chatbots", (string)null);
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.ChatbotChannel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChannelType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("ChatbotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ConnectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptedCredentials")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsConnected")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatbotId");
+
+                    b.HasIndex("TenantId", "ChatbotId", "ChannelType")
+                        .IsUnique();
+
+                    b.ToTable("ChatbotChannels", (string)null);
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.Conversation", b =>
@@ -705,6 +758,72 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("KnowledgeBaseId");
 
                     b.ToTable("KnowledgeBaseSources", (string)null);
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.Lead", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ChatbotId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClassOrGrade")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("Interest")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatbotId");
+
+                    b.HasIndex("TenantId", "CreatedAt");
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.ToTable("Leads", (string)null);
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.Message", b =>
@@ -1536,6 +1655,17 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("R2WAI.Domain.Entities.ChatbotChannel", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.Chatbot", "Chatbot")
+                        .WithMany()
+                        .HasForeignKey("ChatbotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Chatbot");
+                });
+
             modelBuilder.Entity("R2WAI.Domain.Entities.Conversation", b =>
                 {
                     b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
@@ -1609,6 +1739,24 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("KnowledgeBase");
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.Lead", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.Chatbot", "Chatbot")
+                        .WithMany()
+                        .HasForeignKey("ChatbotId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Chatbot");
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.Message", b =>

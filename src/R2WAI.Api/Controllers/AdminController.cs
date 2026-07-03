@@ -444,6 +444,81 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
         });
     }
 
+    [HttpGet("analytics/trends")]
+    public async Task<IActionResult> GetUsageTrends([FromQuery] int days = 30, CancellationToken ct = default)
+    {
+        days = Math.Clamp(days, 1, 90);
+        var sinceDate = DateTime.UtcNow.Date.AddDays(-(days - 1));
+        var since = sinceDate;
+
+        var convByDay = await dbContext.Conversations
+            .Where(c => c.CreatedAt >= sinceDate)
+            .GroupBy(c => c.CreatedAt.Date)
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        var wfByDay = await dbContext.WorkflowInstances
+            .Where(w => w.CreatedAt >= sinceDate)
+            .GroupBy(w => w.CreatedAt.Date)
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        var docByDay = await dbContext.Documents
+            .Where(d => d.CreatedAt >= sinceDate)
+            .GroupBy(d => d.CreatedAt.Date)
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+
+        var convLookup = convByDay.ToDictionary(x => x.Date, x => x.Count);
+        var wfLookup = wfByDay.ToDictionary(x => x.Date, x => x.Count);
+        var docLookup = docByDay.ToDictionary(x => x.Date, x => x.Count);
+
+        var trendDays = new List<object>();
+        for (var i = 0; i < days; i++)
+        {
+            var date = sinceDate.AddDays(i);
+            trendDays.Add(new
+            {
+                Date = date,
+                Conversations = convLookup.GetValueOrDefault(date),
+                Workflows = wfLookup.GetValueOrDefault(date),
+                Documents = docLookup.GetValueOrDefault(date),
+            });
+        }
+
+        var conversationsInRange = await dbContext.Conversations
+            .Where(c => c.ReferenceId != null && c.CreatedAt >= since && (c.Module == "chat" || c.Module == null))
+            .Select(c => new { c.Id, AssistantId = c.ReferenceId!.Value })
+            .ToListAsync(ct);
+        var conversationIds = conversationsInRange.Select(c => c.Id).ToList();
+
+        var messageCounts = await dbContext.Messages
+            .Where(m => conversationIds.Contains(m.ConversationId))
+            .GroupBy(m => m.ConversationId)
+            .Select(g => new { ConversationId = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+        var msgLookup = messageCounts.ToDictionary(x => x.ConversationId, x => x.Count);
+
+        var assistantIds = conversationsInRange.Select(c => c.AssistantId).Distinct().ToList();
+        var assistantNames = await dbContext.AssistantDefinitions
+            .Where(a => assistantIds.Contains(a.Id))
+            .Select(a => new { a.Id, a.Name })
+            .ToListAsync(ct);
+        var nameLookup = assistantNames.ToDictionary(a => a.Id, a => a.Name);
+
+        var topAssistants = conversationsInRange
+            .GroupBy(c => c.AssistantId)
+            .Select(g => new
+            {
+                Name = nameLookup.GetValueOrDefault(g.Key, "Unknown"),
+                Conversations = g.Count(),
+                Messages = g.Sum(c => msgLookup.GetValueOrDefault(c.Id, 0)),
+            })
+            .OrderByDescending(x => x.Conversations)
+            .Take(10)
+            .ToList();
+
+        return Ok(new { Days = trendDays, TopAssistants = topAssistants });
+    }
+
     private static bool IsAllowedEndpoint(string endpoint)
     {
         if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))

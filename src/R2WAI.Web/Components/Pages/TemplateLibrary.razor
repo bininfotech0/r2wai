@@ -442,7 +442,7 @@
             var response = await Http.PostAsJsonAsync("/api/v1/assistants", new
             {
                 Name = tmpl.Name,
-                Type = tmpl.Type,
+                Type = ToAssistantType(tmpl.Type),
                 Description = tmpl.Description,
                 SystemPrompt = tmpl.SystemPrompt
             });
@@ -480,6 +480,18 @@
             StateHasChanged();
         }
     }
+
+    // Template categories (e.g. "Steel", "Government", "Hospitality", "B2B", "Website Agent") are
+    // display/filter tags only — the backend AssistantType enum doesn't know about them, so anything
+    // outside its valid set must fall back to "General" or the create call 400s.
+    private static readonly HashSet<string> _validAssistantTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "General", "HR", "IT", "Procurement", "Finance", "Legal", "CoachingCenter",
+        "WordPress", "Strapi", "Joomla", "Drupal", "Shopify", "Salesforce", "SAP"
+    };
+
+    private static string ToAssistantType(string category) =>
+        _validAssistantTypes.Contains(category) ? category : "General";
 
     // ──────────────── Color & Icon Helpers ────────────────
     private static string GetWorkflowCategoryColor(string category) => category switch

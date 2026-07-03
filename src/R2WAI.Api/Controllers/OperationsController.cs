@@ -402,6 +402,105 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
 
     public record GenerateReportRequest(string Type, string? Period = "last30days");
 
+    [HttpGet("reports/download")]
+    public async Task<IActionResult> DownloadReport(
+        [FromQuery] string type,
+        [FromQuery] string format = "csv",
+        CancellationToken ct = default)
+    {
+        var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
+        if (currentUser.TenantId is null) return Unauthorized();
+        var tenantId = currentUser.TenantId.Value;
+        var since = DateTime.UtcNow.AddDays(-30);
+        var isJson = format.Equals("json", StringComparison.OrdinalIgnoreCase);
+
+        if (type.Equals("cost", StringComparison.OrdinalIgnoreCase))
+        {
+            var totalTokens = await dbContext.Messages
+                .Where(m => m.TenantId == tenantId && m.TokensUsed != null && m.CreatedAt >= since)
+                .SumAsync(m => (long?)m.TokensUsed, ct) ?? 0L;
+
+            var perAssistant = await dbContext.Conversations
+                .Where(c => c.TenantId == tenantId && c.ReferenceId != null && c.CreatedAt >= since)
+                .GroupBy(c => c.ReferenceId)
+                .Select(g => new { AssistantId = g.Key!.Value, Conversations = g.Count() })
+                .ToListAsync(ct);
+
+            var assistantIds = perAssistant.Select(r => r.AssistantId).ToList();
+            var names = await dbContext.AssistantDefinitions
+                .Where(a => assistantIds.Contains(a.Id))
+                .Select(a => new { a.Id, a.Name })
+                .ToListAsync(ct);
+            var nameLookup = names.ToDictionary(a => a.Id, a => a.Name);
+
+            if (isJson)
+            {
+                var json = JsonSerializer.Serialize(new
+                {
+                    type = "Cost",
+                    period = "Last 30 days",
+                    totalTokens,
+                    estimatedCost = Math.Round(totalTokens * 0.000002m, 4),
+                    assistantBreakdown = perAssistant.Select(r => new { r.AssistantId, Name = nameLookup.GetValueOrDefault(r.AssistantId, "Unknown"), r.Conversations })
+                }, new JsonSerializerOptions { WriteIndented = true });
+                return File(Encoding.UTF8.GetBytes(json), "application/json", "cost-report.json");
+            }
+
+            var csv = new StringBuilder();
+            csv.AppendLine("Assistant,Conversations");
+            foreach (var row in perAssistant)
+                csv.AppendLine($"{nameLookup.GetValueOrDefault(row.AssistantId, "Unknown")},{row.Conversations}");
+            csv.AppendLine();
+            csv.AppendLine($"Total Tokens,{totalTokens}");
+            csv.AppendLine($"Estimated Cost,{Math.Round(totalTokens * 0.000002m, 4)}");
+            return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "cost-report.csv");
+        }
+
+        if (type.Equals("assistant", StringComparison.OrdinalIgnoreCase))
+        {
+            var assistants = await dbContext.AssistantDefinitions
+                .Where(a => a.TenantId == tenantId && !a.IsDeleted)
+                .Select(a => new { a.Name, a.Type, a.PublishStatus, a.UsageCount, a.PublishedVersion, a.CreatedAt })
+                .OrderByDescending(a => a.UsageCount)
+                .ToListAsync(ct);
+
+            if (isJson)
+            {
+                var json = JsonSerializer.Serialize(assistants, new JsonSerializerOptions { WriteIndented = true });
+                return File(Encoding.UTF8.GetBytes(json), "application/json", "assistant-report.json");
+            }
+
+            var csv = new StringBuilder();
+            csv.AppendLine("Name,Type,PublishStatus,UsageCount,PublishedVersion,CreatedAt");
+            foreach (var a in assistants)
+                csv.AppendLine($"{a.Name},{a.Type},{a.PublishStatus},{a.UsageCount},{a.PublishedVersion},{a.CreatedAt:yyyy-MM-dd}");
+            return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "assistant-report.csv");
+        }
+
+        if (type.Equals("usage", StringComparison.OrdinalIgnoreCase))
+        {
+            var conversations = await dbContext.Conversations.Where(c => c.TenantId == tenantId && c.CreatedAt >= since).CountAsync(ct);
+            var workflows = await dbContext.WorkflowInstances.Where(w => w.CreatedAt >= since).CountAsync(ct);
+            var documents = await dbContext.Documents.Where(d => d.TenantId == tenantId && d.CreatedAt >= since).CountAsync(ct);
+
+            if (isJson)
+            {
+                var json = JsonSerializer.Serialize(new { period = "Last 30 days", conversations, workflows, documents },
+                    new JsonSerializerOptions { WriteIndented = true });
+                return File(Encoding.UTF8.GetBytes(json), "application/json", "usage-report.json");
+            }
+
+            var csv = new StringBuilder();
+            csv.AppendLine("Metric,Count");
+            csv.AppendLine($"Conversations,{conversations}");
+            csv.AppendLine($"Workflows,{workflows}");
+            csv.AppendLine($"Documents,{documents}");
+            return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "usage-report.csv");
+        }
+
+        return BadRequest(new { error = "Invalid report type. Use 'cost', 'assistant', or 'usage'." });
+    }
+
     [HttpGet("audit-logs/export")]
     [Authorize(Roles = "Admin,SystemAdmin")]
     public async Task<IActionResult> ExportAuditLogs(

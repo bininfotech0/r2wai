@@ -351,13 +351,45 @@ else
             _data = await Http.GetFromJsonAsync<UsageData>($"/api/v1/admin/analytics/usage?days={_days}");
             if (_data is not null)
             {
-                GenerateTrendData();
-                GenerateTopAssistants();
+                await LoadTrends();
                 BuildChartData();
             }
         }
         catch { _data = null; }
         finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task LoadTrends()
+    {
+        _trendData.Clear();
+        _topAssistants.Clear();
+        try
+        {
+            var trends = await Http.GetFromJsonAsync<UsageTrendsData>($"/api/v1/admin/analytics/trends?days={_days}");
+            if (trends is null) return;
+
+            _trendData = trends.Days.Select(d => new DayData
+            {
+                Date = d.Date,
+                Conversations = d.Conversations,
+                Workflows = d.Workflows,
+                Documents = d.Documents
+            }).ToList();
+
+            var items = trends.TopAssistants.Select(a => new TopAssistantItem
+            {
+                Name = a.Name,
+                Conversations = a.Conversations,
+                Messages = a.Messages
+            }).ToList();
+
+            var maxConv = items.Count > 0 ? items.Max(a => a.Conversations) : 0;
+            foreach (var item in items)
+                item.ActivityPercent = maxConv > 0 ? (double)item.Conversations / maxConv * 100 : 0;
+
+            _topAssistants = items;
+        }
+        catch { /* leave trend charts empty on failure */ }
     }
 
     private class UsageData
@@ -375,83 +407,23 @@ else
     private class ApprovalStats { public int Total { get; set; } public int Approved { get; set; } public int Pending { get; set; } }
     private class DocumentStats { public int Uploaded { get; set; } }
 
-    private void GenerateTrendData()
+    private class UsageTrendsData
     {
-        _trendData.Clear();
-        if (_data is null) return;
-
-        var rng = new Random(42);
-        var endDate = DateTime.Today;
-        var startDate = endDate.AddDays(-_days + 1);
-
-        var totalConv = _data.Conversations.Total;
-        var totalWf = _data.Workflows.Executions;
-        var totalDoc = _data.Documents.Uploaded;
-
-        var convDaily = DistributeWithVariance(totalConv, _days, rng);
-        var wfDaily = DistributeWithVariance(totalWf, _days, rng);
-        var docDaily = DistributeWithVariance(totalDoc, _days, rng);
-
-        for (int i = 0; i < _days; i++)
-        {
-            _trendData.Add(new DayData
-            {
-                Date = startDate.AddDays(i),
-                Conversations = convDaily[i],
-                Workflows = wfDaily[i],
-                Documents = docDaily[i]
-            });
-        }
+        public List<TrendDayDto> Days { get; set; } = new();
+        public List<TrendAssistantDto> TopAssistants { get; set; } = new();
     }
-
-    private static int[] DistributeWithVariance(int total, int days, Random rng)
+    private class TrendDayDto
     {
-        var values = new int[days];
-        if (total == 0) return values;
-
-        var avg = (double)total / days;
-        double sum = 0;
-        for (int i = 0; i < days; i++)
-        {
-            var factor = 0.3 + rng.NextDouble() * 1.4;
-            values[i] = Math.Max(0, (int)Math.Round(avg * factor));
-            sum += values[i];
-        }
-
-        if (sum > 0)
-        {
-            var scale = total / sum;
-            for (int i = 0; i < days; i++)
-                values[i] = Math.Max(0, (int)Math.Round(values[i] * scale));
-        }
-
-        return values;
+        public DateTime Date { get; set; }
+        public int Conversations { get; set; }
+        public int Workflows { get; set; }
+        public int Documents { get; set; }
     }
-
-    private void GenerateTopAssistants()
+    private class TrendAssistantDto
     {
-        _topAssistants.Clear();
-        if (_data is null || _data.Assistants.Total == 0) return;
-
-        var names = new[] { "HR Assistant", "Customer Support Bot", "IT Helpdesk", "Sales Analyst", "Onboarding Guide", "Legal Advisor" };
-        var rng = new Random(123);
-        var count = Math.Min(_data.Assistants.Active > 0 ? _data.Assistants.Active : _data.Assistants.Total, names.Length);
-        var totalConv = Math.Max(_data.Conversations.Total, count);
-
-        var items = new List<TopAssistantItem>();
-        for (int i = 0; i < count; i++)
-        {
-            var conv = Math.Max(1, (int)(totalConv * (0.4 - i * 0.07) * (0.8 + rng.NextDouble() * 0.4)));
-            var msgs = conv * (3 + rng.Next(5));
-            items.Add(new TopAssistantItem { Name = names[i], Conversations = conv, Messages = msgs });
-        }
-
-        items = items.OrderByDescending(a => a.Conversations).ToList();
-        var maxConv = items.Max(a => a.Conversations);
-        foreach (var item in items)
-            item.ActivityPercent = maxConv > 0 ? (double)item.Conversations / maxConv * 100 : 0;
-
-        _topAssistants = items;
+        public string Name { get; set; } = string.Empty;
+        public int Conversations { get; set; }
+        public int Messages { get; set; }
     }
 
     private void BuildChartData()

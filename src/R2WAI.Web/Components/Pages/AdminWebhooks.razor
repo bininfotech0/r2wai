@@ -74,8 +74,8 @@ else
                                ValueChanged="@(v => ToggleWebhook(context, v))" />
                 </MudTd>
                 <MudTd>
-                    <MudIconButton Icon="@Icons.Material.Outlined.History" Size="Size.Small"
-                                   OnClick="@(() => ViewHistory(context))" aria-label="View history" />
+                    <MudIconButton Icon="@Icons.Material.Outlined.Info" Size="Size.Small"
+                                   OnClick="@(() => ViewDetails(context))" aria-label="View details" />
                     <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small"
                                    OnClick="@(() => EditWebhook(context))" aria-label="Edit webhook" />
                     <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
@@ -129,6 +129,23 @@ else
 
     private async Task ToggleWebhook(WebhookItem webhook, bool isActive)
     {
+        if (!isActive)
+        {
+            var parameters = new DialogParameters<DeleteConfirmationDialog>
+            {
+                { x => x.ItemName, webhook.Name },
+                { x => x.Description, "Disabling this webhook will stop it from triggering workflows until re-enabled." },
+                { x => x.Title, "Disable Webhook" },
+                { x => x.ActionLabel, "Disable" },
+                { x => x.ActionIcon, Icons.Material.Filled.PowerOff },
+                { x => x.ActionColor, Color.Warning },
+                { x => x.Irreversible, false },
+            };
+            var confirmDialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Disable Webhook", parameters);
+            var confirmResult = await confirmDialog.Result;
+            if (confirmResult?.Canceled != false) return;
+        }
+
         try
         {
             await Http.PostAsJsonAsync($"/api/v1/admin/webhooks/{webhook.Id}/toggle", new { });
@@ -138,9 +155,13 @@ else
         catch { Snackbar.Add("Failed to toggle webhook.", Severity.Error); }
     }
 
-    private void ViewHistory(WebhookItem webhook)
+    private void ViewDetails(WebhookItem webhook)
     {
-        Snackbar.Add($"Total calls: {webhook.TotalCalls}", Severity.Info);
+        var lastCalled = webhook.LastCalledAt.HasValue ? webhook.LastCalledAt.Value.ToString("MMM dd, yyyy HH:mm") : "Never";
+        Snackbar.Add(
+            $"{webhook.Name} — {webhook.TriggerType} — {(webhook.IsActive ? "Active" : "Disabled")} — " +
+            $"{webhook.TotalCalls} total calls — last called {lastCalled}",
+            Severity.Info);
     }
 
     private async Task EditWebhook(WebhookItem webhook)

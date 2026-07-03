@@ -19,6 +19,8 @@ public sealed class Chatbot : BaseEntity<Guid>
     public string? WidgetSettings { get; private set; }
     public bool VoiceEnabled { get; private set; }
     public ChatbotStatus Status { get; private set; } = ChatbotStatus.Draft;
+    public string? WebhookApiKeyHash { get; private set; }
+    public string? WebhookApiKeyPrefix { get; private set; }
 
     public Tenant Tenant { get; private set; } = null!;
     public User User { get; private set; } = null!;
@@ -87,4 +89,10 @@ public sealed class Chatbot : BaseEntity<Guid>
         MarkAsModified();
     }
 
+    public void SetWebhookApiKey(string hash, string prefix)
+    {
+        WebhookApiKeyHash = hash;
+        WebhookApiKeyPrefix = prefix;
+        MarkAsModified();
+    }
 }

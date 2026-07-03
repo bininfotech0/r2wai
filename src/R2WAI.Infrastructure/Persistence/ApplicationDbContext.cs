@@ -33,6 +33,8 @@ public interface ITenantDbContext
     DbSet<WorkflowSchedule> WorkflowSchedules { get; }
     DbSet<WebhookEndpoint> WebhookEndpoints { get; }
     DbSet<ApiKey> ApiKeys { get; }
+    DbSet<Lead> Leads { get; }
+    DbSet<ChatbotChannel> ChatbotChannels { get; }
 }
 
 public class ApplicationDbContext : DbContext, ITenantDbContext
@@ -84,6 +86,8 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     public DbSet<WorkflowSchedule> WorkflowSchedules => Set<WorkflowSchedule>();
     public DbSet<WebhookEndpoint> WebhookEndpoints => Set<WebhookEndpoint>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+    public DbSet<Lead> Leads => Set<Lead>();
+    public DbSet<ChatbotChannel> ChatbotChannels => Set<ChatbotChannel>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

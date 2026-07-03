@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Assistants.Commands;
 using R2WAI.Application.Features.Assistants.Queries;
+using R2WAI.Domain.Enums;
 using R2WAI.Infrastructure.AI.Prompts;
 using R2WAI.Infrastructure.Persistence;
 
@@ -221,10 +222,13 @@ public class AssistantsController(
             if (cfg is not null && !string.IsNullOrWhiteSpace(cfg.Name))
             {
                 logger.LogInformation("AI generated assistant config: {Name} ({Type})", cfg.Name, cfg.Type);
+                var validatedType = cfg.Type is not null && Enum.TryParse<AssistantType>(cfg.Type, ignoreCase: true, out var parsedType)
+                    ? parsedType.ToString()
+                    : "General";
                 return Ok(new
                 {
                     name = cfg.Name,
-                    type = cfg.Type ?? "General",
+                    type = validatedType,
                     description = cfg.Description ?? string.Empty,
                     systemPrompt = cfg.SystemPrompt ?? string.Empty,
                     isAiGenerated = true

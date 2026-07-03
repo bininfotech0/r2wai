@@ -7,5 +7,13 @@ public enum AssistantType
     IT,
     Procurement,
     Finance,
-    Legal
+    Legal,
+    CoachingCenter,
+    WordPress,
+    Strapi,
+    Joomla,
+    Drupal,
+    Shopify,
+    Salesforce,
+    SAP
 }

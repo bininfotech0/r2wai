@@ -699,18 +699,19 @@
                         <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px;">
                             <div class="d-flex justify-space-between align-center">
                                 <div class="d-flex align-center gap-3">
-                                    <div class="wf-stat-icon @(schedule.IsEnabled ? "wf-stat-icon--success" : "wf-stat-icon--default")">
-                                        <MudIcon Icon="@GetTriggerIcon(schedule.TriggerType)" Size="Size.Small" />
+                                    <div class="wf-stat-icon @(schedule.IsActive ? "wf-stat-icon--success" : "wf-stat-icon--default")">
+                                        <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" />
                                     </div>
                                     <div>
                                         <div class="d-flex align-center gap-2">
-                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@schedule.WorkflowName</MudText>
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@schedule.Name</MudText>
                                             <MudChip T="string" Size="Size.Small"
-                                                     Color="@(schedule.IsEnabled ? Color.Success : Color.Default)"
+                                                     Color="@(schedule.IsActive ? Color.Success : Color.Default)"
                                                      Variant="Variant.Filled" Style="font-size: 0.6rem; height: 20px;">
-                                                @(schedule.IsEnabled ? "Active" : "Paused")
+                                                @(schedule.IsActive ? "Active" : "Paused")
                                             </MudChip>
                                         </div>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@schedule.WorkflowName</MudText>
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">
                                             @GetTriggerDescription(schedule)
                                         </MudText>
@@ -723,7 +724,7 @@
                                     </div>
                                 </div>
                                 <div class="d-flex gap-1">
-                                    <MudSwitch T="bool" Value="schedule.IsEnabled" Color="Color.Success" Size="Size.Small"
+                                    <MudSwitch T="bool" Value="schedule.IsActive" Color="Color.Success" Size="Size.Small"
                                                ValueChanged="@(val => ToggleSchedule(schedule, val))" />
                                     <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                                    OnClick="@(() => EditSchedule(schedule))" aria-label="Edit schedule" />
@@ -909,7 +910,7 @@
     {
         if (firstRender)
         {
-            await Task.WhenAll(LoadWorkflows(), LoadInstances(), LoadApprovals(), LoadIntegrations());
+            await Task.WhenAll(LoadWorkflows(), LoadInstances(), LoadApprovals(), LoadIntegrations(), LoadSchedules());
             StateHasChanged();
         }
     }
@@ -1212,22 +1213,8 @@
         _ => Icons.Material.Outlined.Extension,
     };
 
-    private static string GetTriggerIcon(string? type) => (type ?? "").ToLowerInvariant() switch
-    {
-        "cron" or "schedule" => Icons.Material.Outlined.Schedule,
-        "webhook" => Icons.Material.Outlined.Webhook,
-        "event" => Icons.Material.Outlined.NotificationsActive,
-        "manual" => Icons.Material.Outlined.TouchApp,
-        _ => Icons.Material.Outlined.Schedule,
-    };
-
-    private static string GetTriggerDescription(ScheduleDto schedule) => (schedule.TriggerType ?? "").ToLowerInvariant() switch
-    {
-        "cron" or "schedule" => $"Cron: {schedule.CronExpression ?? "Not set"}",
-        "webhook" => $"Webhook trigger",
-        "event" => $"Event: {schedule.EventName ?? "Not configured"}",
-        _ => "Manual trigger",
-    };
+    private static string GetTriggerDescription(ScheduleDto schedule) =>
+        $"{schedule.CronExpression ?? "Not set"}" + (string.IsNullOrEmpty(schedule.CronDescription) ? "" : $" — {schedule.CronDescription}");
 
     private async Task CloneWorkflow(WorkflowDto workflow)
     {
@@ -1310,33 +1297,56 @@
     }
 
     // --- Schedules ---
-    private void AddSchedule()
+    private async Task LoadSchedules()
     {
-        Snackbar.Add("Schedule configuration coming soon", Severity.Info);
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ScheduleListResult>("/api/v1/workflows/schedules");
+            _schedules = result?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load schedules.", Severity.Warning); }
     }
 
-    private void EditSchedule(ScheduleDto schedule)
+    private async Task AddSchedule()
     {
-        Snackbar.Add("Schedule editing coming soon", Severity.Info);
+        var dialog = await Dialog.ShowAsync<CreateEditScheduleDialog>("Create Schedule");
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadSchedules();
+    }
+
+    private async Task EditSchedule(ScheduleDto schedule)
+    {
+        var parameters = new DialogParameters<CreateEditScheduleDialog> { { x => x.EditId, schedule.Id.ToString() } };
+        var dialog = await Dialog.ShowAsync<CreateEditScheduleDialog>("Edit Schedule", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadSchedules();
     }
 
     private async Task ToggleSchedule(ScheduleDto schedule, bool enabled)
     {
-        schedule.IsEnabled = enabled;
-        Snackbar.Add($"Schedule {(enabled ? "activated" : "paused")}", Severity.Info);
-        await Task.CompletedTask;
+        try
+        {
+            await Http.PostAsJsonAsync($"/api/v1/workflows/schedules/{schedule.Id}/toggle", new { });
+            schedule.IsActive = enabled;
+            Snackbar.Add($"Schedule {(enabled ? "activated" : "paused")}", enabled ? Severity.Success : Severity.Warning);
+        }
+        catch { Snackbar.Add("Failed to toggle schedule.", Severity.Error); }
     }
 
     private async Task DeleteSchedule(ScheduleDto schedule)
     {
-        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, schedule.WorkflowName } };
-        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Delete Schedule", parameters);
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, schedule.Name } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
         var result = await dialog.Result;
         if (result?.Canceled != false) return;
 
-        _schedules.Remove(schedule);
-        Snackbar.Add("Schedule deleted", Severity.Success);
-        await Task.CompletedTask;
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/workflows/schedules/{schedule.Id}");
+            _schedules.Remove(schedule);
+            Snackbar.Add("Schedule deleted", Severity.Success);
+        }
+        catch { Snackbar.Add("Failed to delete schedule.", Severity.Error); }
     }
 
     // --- Integrations ---
@@ -1447,17 +1457,20 @@
         public string? Type { get; set; }
         public bool IsActive { get; set; }
     }
+    private class ScheduleListResult { public List<ScheduleDto>? Items { get; set; } }
+
     private class ScheduleDto
     {
         public Guid Id { get; set; }
         public Guid WorkflowId { get; set; }
         public string WorkflowName { get; set; } = string.Empty;
-        public string? TriggerType { get; set; }
+        public string Name { get; set; } = string.Empty;
         public string? CronExpression { get; set; }
-        public string? EventName { get; set; }
-        public bool IsEnabled { get; set; }
+        public string? CronDescription { get; set; }
+        public bool IsActive { get; set; }
         public DateTime? NextRunAt { get; set; }
         public DateTime? LastRunAt { get; set; }
+        public string? LastRunStatus { get; set; }
     }
     private class TestResult { public bool Success { get; set; } public string? Message { get; set; } }
 }

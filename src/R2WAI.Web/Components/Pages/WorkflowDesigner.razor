@@ -1164,7 +1164,7 @@ else
 
         try
         {
-            var response = await Http.PostAsync($"/api/v1/workflows/{WorkflowId}/execute", null);
+            var response = await Http.PostAsJsonAsync($"/api/v1/workflows/{WorkflowId}/execute", new { });
             if (response.IsSuccessStatusCode)
             {
                 var result = await response.Content.ReadFromJsonAsync<ExecuteResultDto>();

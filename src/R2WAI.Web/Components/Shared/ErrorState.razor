@@ -1,3 +1,7 @@
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
 <div class="d-flex flex-column align-center justify-center pa-8 error-shake" style="min-height: 250px;">
     <div class="empty-state-icon" style="background: linear-gradient(135deg, rgba(220, 38, 38, 0.08), rgba(220, 38, 38, 0.04));">
         <MudIcon Icon="@Icons.Material.Outlined.ErrorOutline" Size="Size.Large" Color="Color.Error" Style="opacity: 0.8;" />
@@ -17,7 +21,7 @@
         @if (ShowReportLink)
         {
             <MudButton Variant="Variant.Outlined" Color="Color.Default"
-                       StartIcon="@Icons.Material.Outlined.BugReport"
+                       StartIcon="@Icons.Material.Outlined.BugReport" OnClick="ReportIssue"
                        Style="border-radius: 10px;">
                 Report Issue
             </MudButton>
@@ -29,4 +33,18 @@
     [Parameter] public string? ErrorMessage { get; set; }
     [Parameter] public EventCallback OnRetry { get; set; }
     [Parameter] public bool ShowReportLink { get; set; } = true;
+
+    private async Task ReportIssue()
+    {
+        var details = $"Error: {ErrorMessage}\nPage: {new Uri(Navigation.Uri).PathAndQuery}\nTime: {DateTime.UtcNow:O}";
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", details);
+            Snackbar.Add("Error details copied to clipboard — paste them into your support ticket", Severity.Info);
+        }
+        catch
+        {
+            Snackbar.Add("Could not copy error details", Severity.Warning);
+        }
+    }
 }

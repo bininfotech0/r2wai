@@ -34,6 +34,12 @@ public class ChatbotConfiguration : IEntityTypeConfiguration<Chatbot>
             .HasConversion<string>()
             .HasMaxLength(50);
 
+        builder.Property(c => c.WebhookApiKeyHash)
+            .HasMaxLength(200);
+
+        builder.Property(c => c.WebhookApiKeyPrefix)
+            .HasMaxLength(20);
+
         builder.Property(c => c.CreatedAt).IsRequired();
         builder.Property(c => c.ModifiedAt);
 

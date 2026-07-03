@@ -592,30 +592,52 @@
         Snackbar.Add("Parameters reset", Severity.Info);
     }
 
-    private void CopyMessage(string content)
+    private async Task CopyMessage(string content)
     {
-        Snackbar.Add("Copied to clipboard", Severity.Success);
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", content);
+            Snackbar.Add("Copied to clipboard", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Copy failed", Severity.Warning);
+        }
     }
 
-    private void ExportConversation()
+    private async Task ExportConversation()
     {
-        var lines = new System.Text.StringBuilder();
-        lines.AppendLine($"# Playground Conversation: {_assistantName}");
-        lines.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm}");
-        lines.AppendLine($"Model: {_selectedModel}, Temperature: {_temperature:F1}, MaxTokens: {_maxTokens}, TopP: {_topP:F2}");
-        lines.AppendLine("---");
-        lines.AppendLine();
-
-        foreach (var msg in _messages)
+        try
         {
-            lines.AppendLine($"**{(msg.IsUser ? "User" : _assistantName)}** ({msg.Timestamp:HH:mm:ss}):");
-            lines.AppendLine(msg.Content);
-            if (!msg.IsUser && msg.TokenCount > 0)
-                lines.AppendLine($"_~{msg.TokenCount} tokens, {msg.ResponseTime}_");
+            var lines = new System.Text.StringBuilder();
+            lines.AppendLine($"# Playground Conversation: {_assistantName}");
+            lines.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm}");
+            lines.AppendLine($"Model: {_selectedModel}, Temperature: {_temperature:F1}, MaxTokens: {_maxTokens}, TopP: {_topP:F2}");
+            lines.AppendLine("---");
             lines.AppendLine();
-        }
 
-        Snackbar.Add("Conversation exported to clipboard", Severity.Success);
+            foreach (var msg in _messages)
+            {
+                lines.AppendLine($"**{(msg.IsUser ? "User" : _assistantName)}** ({msg.Timestamp:HH:mm:ss}):");
+                lines.AppendLine(msg.Content);
+                if (!msg.IsUser && msg.TokenCount > 0)
+                    lines.AppendLine($"_~{msg.TokenCount} tokens, {msg.ResponseTime}_");
+                lines.AppendLine();
+            }
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(lines.ToString());
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"playground-{_assistantName.Replace(' ', '-').ToLowerInvariant()}-{DateTime.Now:yyyyMMdd-HHmmss}.md";
+
+            await JS.InvokeVoidAsync("eval",
+                $"var a=document.createElement('a');a.href='data:text/markdown;base64,{base64}';a.download='{fileName}';document.body.appendChild(a);a.click();a.remove();");
+
+            Snackbar.Add("Conversation exported", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
     }
 
     // DTOs
