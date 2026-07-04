@@ -15,11 +15,56 @@
     </MudButton>
 </PageHeader>
 
+@if (!_loading && _chatbots.Count > 0)
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                <MudText Typo="Typo.h5" Style="font-weight: 700;">@_chatbots.Count</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Total Chatbots</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                <MudText Typo="Typo.h5" Style="font-weight: 700; color: var(--mud-palette-success);">@_chatbots.Count(c => c.Status.Equals("Active", StringComparison.OrdinalIgnoreCase))</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Active</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                <MudText Typo="Typo.h5" Style="font-weight: 700; color: var(--mud-palette-warning);">@_chatbots.Count(c => c.Status.Equals("Paused", StringComparison.OrdinalIgnoreCase))</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Paused</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                <MudText Typo="Typo.h5" Style="font-weight: 700; color: var(--mud-palette-info);">@_chatbots.Count(c => c.Status.Equals("Draft", StringComparison.OrdinalIgnoreCase))</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Draft</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
 <MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
-    <MudTextField @bind-Value="_searchTerm" Placeholder="Search chatbots..."
-                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                  Variant="Variant.Outlined" Margin="Margin.Dense"
-                  Immediate="true" DebounceInterval="300" />
+    <MudGrid>
+        <MudItem xs="12" sm="6">
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Search chatbots..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Immediate="true" DebounceInterval="300" />
+        </MudItem>
+        <MudItem xs="12" sm="6" Class="d-flex align-center gap-2 justify-end flex-wrap">
+            @foreach (var status in new[] { "All", "Active", "Paused", "Draft" })
+            {
+                <MudChip T="string" Size="Size.Small"
+                         Color="@(_statusFilter == status ? Color.Primary : Color.Default)"
+                         Variant="@(_statusFilter == status ? Variant.Filled : Variant.Outlined)"
+                         OnClick="@(() => _statusFilter = status)">
+                    @status
+                </MudChip>
+            }
+        </MudItem>
+    </MudGrid>
 </MudPaper>
 
 @if (_loading)
@@ -28,12 +73,24 @@
 }
 else if (!_filteredChatbots.Any())
 {
-    <EmptyState Icon="@Icons.Material.Outlined.SmartToy"
-                Title="No chatbots found"
-                Description="Create your first chatbot to deploy an enterprise conversational AI."
-                ActionText="New Chatbot"
-                OnAction="OpenCreateDialog"
-                MinHeight="300px" />
+    @if (_chatbots.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.SmartToy"
+                    Title="No chatbots found"
+                    Description="Create your first chatbot to deploy an enterprise conversational AI."
+                    ActionText="New Chatbot"
+                    OnAction="OpenCreateDialog"
+                    MinHeight="300px" />
+    }
+    else
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                    Title="No chatbots match your filters"
+                    Description="Try a different search term or status filter."
+                    ActionText="Clear filters"
+                    OnAction="@(() => { _searchTerm = string.Empty; _statusFilter = "All"; })"
+                    MinHeight="300px" />
+    }
 }
 else
 {
@@ -89,12 +146,21 @@ else
 @code {
     private List<ChatbotDto> _chatbots = new();
     private string _searchTerm = string.Empty;
+    private string _statusFilter = "All";
     private bool _loading = true;
 
-    private IEnumerable<ChatbotDto> _filteredChatbots =>
-        string.IsNullOrWhiteSpace(_searchTerm)
-            ? _chatbots
-            : _chatbots.Where(c => c.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+    private IEnumerable<ChatbotDto> _filteredChatbots
+    {
+        get
+        {
+            var list = _chatbots.AsEnumerable();
+            if (_statusFilter != "All")
+                list = list.Where(c => c.Status.Equals(_statusFilter, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(_searchTerm))
+                list = list.Where(c => c.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+            return list;
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await LoadChatbots(); }
 

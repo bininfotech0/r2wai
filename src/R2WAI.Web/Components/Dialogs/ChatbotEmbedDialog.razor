@@ -12,7 +12,9 @@
         </div>
     </TitleContent>
     <DialogContent>
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="mb-3">
+            <MudTabPanel Text="Website Embed" Icon="@Icons.Material.Filled.Public">
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4 mt-2">
             Add this chatbot to any website by copying one of the embed options below.
         </MudText>
 
@@ -108,10 +110,15 @@
                 <MudText Typo="Typo.caption" Color="Color.Tertiary" Style="font-size: 0.6rem;">Powered by R2WAI</MudText>
             </div>
         </MudPaper>
+            </MudTabPanel>
 
-        <MudDivider Class="my-4" />
-
-        <MudText Typo="Typo.h6" Class="mb-2">Deploy to Channels</MudText>
+            <MudTabPanel Text="Channels & API" BadgeData="@_connectedChannelCount" BadgeColor="Color.Success">
+        <div class="d-flex align-center gap-2 mb-2 mt-2">
+            <MudText Typo="Typo.h6">Deploy to Channels</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@(_connectedChannelCount > 0 ? Color.Success : Color.Default)" Variant="Variant.Filled">
+                @_connectedChannelCount of @_totalChannelCount connected
+            </MudChip>
+        </div>
         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
             Connect this chatbot to messaging platforms and external services.
         </MudText>
@@ -134,12 +141,12 @@
                         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
                             Register a Bot in Azure Bot Framework, then paste your credentials here.
                         </MudText>
-                        <MudTextField T="string" @bind-Value="_teamsBotAppId" Label="Bot App ID" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_teamsBotAppId" Label="Bot App ID" Margin="Margin.Dense" Class="mb-2" />
                         <MudTextField T="string" @bind-Value="_teamsBotAppPassword" Label="Bot App Password" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
-                        <MudTextField T="string" @bind-Value="_teamsTenantId" Label="Teams Tenant ID" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
+                                      InputType="@(_showTeamsSecret ? InputType.Text : InputType.Password)"
+                                      Adornment="Adornment.End" AdornmentIcon="@(_showTeamsSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      OnAdornmentClick="@(() => _showTeamsSecret = !_showTeamsSecret)" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_teamsTenantId" Label="Teams Tenant ID" Margin="Margin.Dense" Class="mb-2" />
                         <div class="d-flex gap-2 mt-2">
                             @if (_teamsConnected)
                             {
@@ -185,11 +192,12 @@
                             Create a Slack App at api.slack.com, enable Socket Mode, paste credentials.
                         </MudText>
                         <MudTextField T="string" @bind-Value="_slackBotToken" Label="Bot Token" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
+                                      InputType="@(_showSlackSecret ? InputType.Text : InputType.Password)"
+                                      Adornment="Adornment.End" AdornmentIcon="@(_showSlackSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      OnAdornmentClick="@(() => _showSlackSecret = !_showSlackSecret)" Class="mb-2" />
                         <MudTextField T="string" @bind-Value="_slackSigningSecret" Label="Signing Secret" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
-                        <MudTextField T="string" @bind-Value="_slackAppId" Label="App ID" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
+                                      InputType="@(_showSlackSecret ? InputType.Text : InputType.Password)" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_slackAppId" Label="App ID" Margin="Margin.Dense" Class="mb-2" />
                         <div class="d-flex gap-2 mt-2">
                             @if (_slackConnected)
                             {
@@ -234,12 +242,13 @@
                         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
                             Set up a Twilio WhatsApp sandbox or production number.
                         </MudText>
-                        <MudTextField T="string" @bind-Value="_whatsappAccountSid" Label="Twilio Account SID" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_whatsappAccountSid" Label="Twilio Account SID" Margin="Margin.Dense" Class="mb-2" />
                         <MudTextField T="string" @bind-Value="_whatsappAuthToken" Label="Auth Token" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
+                                      InputType="@(_showWhatsappSecret ? InputType.Text : InputType.Password)"
+                                      Adornment="Adornment.End" AdornmentIcon="@(_showWhatsappSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      OnAdornmentClick="@(() => _showWhatsappSecret = !_showWhatsappSecret)" Class="mb-2" />
                         <MudTextField T="string" @bind-Value="_whatsappNumber" Label="WhatsApp Number" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
+                                      Placeholder="+14155238886" Class="mb-2" />
                         <div class="d-flex gap-2 mt-2">
                             @if (_whatsappConnected)
                             {
@@ -284,12 +293,13 @@
                         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
                             Configure your Twilio SMS number for chatbot messaging.
                         </MudText>
-                        <MudTextField T="string" @bind-Value="_smsAccountSid" Label="Twilio Account SID" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
+                        <MudTextField T="string" @bind-Value="_smsAccountSid" Label="Twilio Account SID" Margin="Margin.Dense" Class="mb-2" />
                         <MudTextField T="string" @bind-Value="_smsAuthToken" Label="Auth Token" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
+                                      InputType="@(_showSmsSecret ? InputType.Text : InputType.Password)"
+                                      Adornment="Adornment.End" AdornmentIcon="@(_showSmsSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      OnAdornmentClick="@(() => _showSmsSecret = !_showSmsSecret)" Class="mb-2" />
                         <MudTextField T="string" @bind-Value="_smsPhoneNumber" Label="Phone Number" Margin="Margin.Dense"
-                                      InputType="InputType.Password" Class="mb-2" />
+                                      Placeholder="+15551234567" Class="mb-2" />
                         <div class="d-flex gap-2 mt-2">
                             @if (_smsConnected)
                             {
@@ -354,6 +364,8 @@
                 </MudPaper>
             </MudItem>
         </MudGrid>
+            </MudTabPanel>
+        </MudTabs>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Close">Close</MudButton>
@@ -379,10 +391,14 @@
 
     // Channel connection state
     private bool _channelConnecting;
+    private const int _totalChannelCount = 4;
+    private int _connectedChannelCount =>
+        new[] { _teamsConnected, _slackConnected, _whatsappConnected, _smsConnected }.Count(c => c);
 
     // Microsoft Teams
     private bool _teamsConfigOpen;
     private bool _teamsConnected;
+    private bool _showTeamsSecret;
     private string _teamsBotAppId = string.Empty;
     private string _teamsBotAppPassword = string.Empty;
     private string _teamsTenantId = string.Empty;
@@ -390,6 +406,7 @@
     // Slack
     private bool _slackConfigOpen;
     private bool _slackConnected;
+    private bool _showSlackSecret;
     private string _slackBotToken = string.Empty;
     private string _slackSigningSecret = string.Empty;
     private string _slackAppId = string.Empty;
@@ -397,6 +414,7 @@
     // WhatsApp
     private bool _whatsappConfigOpen;
     private bool _whatsappConnected;
+    private bool _showWhatsappSecret;
     private string _whatsappAccountSid = string.Empty;
     private string _whatsappAuthToken = string.Empty;
     private string _whatsappNumber = string.Empty;
@@ -404,6 +422,7 @@
     // SMS
     private bool _smsConfigOpen;
     private bool _smsConnected;
+    private bool _showSmsSecret;
     private string _smsAccountSid = string.Empty;
     private string _smsAuthToken = string.Empty;
     private string _smsPhoneNumber = string.Empty;
@@ -568,9 +587,16 @@
         try
         {
             var response = await Http.PostAsJsonAsync($"/api/v1/chatbots/{ChatbotId}/channels/{channel}", payload);
-            response.EnsureSuccessStatusCode();
-            onSuccess();
-            Snackbar.Add($"{channel} channel connected successfully!", Severity.Success);
+            if (response.IsSuccessStatusCode)
+            {
+                onSuccess();
+                Snackbar.Add($"{channel} channel connected successfully!", Severity.Success);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to connect {channel}: {error}", Severity.Error);
+            }
         }
         catch (Exception ex)
         {
@@ -590,9 +616,16 @@
         try
         {
             var response = await Http.DeleteAsync($"/api/v1/chatbots/{ChatbotId}/channels/{channel}");
-            response.EnsureSuccessStatusCode();
-            onSuccess();
-            Snackbar.Add($"{channel} channel disconnected.", Severity.Info);
+            if (response.IsSuccessStatusCode)
+            {
+                onSuccess();
+                Snackbar.Add($"{channel} channel disconnected.", Severity.Info);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Failed to disconnect {channel}: {error}", Severity.Error);
+            }
         }
         catch (Exception ex)
         {
