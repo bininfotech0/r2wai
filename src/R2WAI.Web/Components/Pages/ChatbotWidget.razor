@@ -160,7 +160,7 @@
         if (!firstRender) return;
         try
         {
-            var chatbot = await _httpClient!.GetFromJsonAsync<ChatbotInfo>($"/api/v1/chatbots/{ChatbotId}");
+            var chatbot = await _httpClient!.GetFromJsonAsync<ChatbotInfo>($"/api/v1/chatbots/{ChatbotId}/public-info");
             if (chatbot is not null)
             {
                 _title = Title ?? chatbot.Name;

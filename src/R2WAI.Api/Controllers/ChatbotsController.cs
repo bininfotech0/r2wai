@@ -115,9 +115,31 @@ public class ChatbotsController(
         });
     }
 
+    public record ChatbotPublicInfo(string Name, string? WelcomeMessage, bool VoiceEnabled);
+
+    // Anonymous: the embeddable widget (ChatbotWidget.razor) runs on external, unauthenticated
+    // websites and only needs enough to render its header/greeting — never the prompt template
+    // or internal config IDs, which GetById exposes to authenticated tenant users.
+    [HttpGet("{id:guid}/public-info")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetPublicInfo(Guid id, CancellationToken ct = default)
+    {
+        var chatbot = await dbContext.Chatbots
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == id, ct);
+
+        if (chatbot is null)
+            return NotFound(new { error = "Chatbot not found" });
+
+        return Ok(new ChatbotPublicInfo(chatbot.Name, chatbot.WelcomeMessage, chatbot.VoiceEnabled));
+    }
+
     public record ChatbotChatRequest(string Message);
 
+    // Anonymous for the same reason as GetPublicInfo above — this is the endpoint the public
+    // embed widget calls to actually send a message.
     [HttpPost("{id:guid}/chat")]
+    [AllowAnonymous]
     public async Task<IActionResult> Chat(Guid id, [FromBody] ChatbotChatRequest request, CancellationToken ct = default)
     {
         var chatbot = await dbContext.Chatbots
