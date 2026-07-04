@@ -32,8 +32,43 @@
     <MudTabPanel Text="Workflows" Icon="@Icons.Material.Outlined.AccountTree"
                  BadgeData="@_workflowTemplates.Count" BadgeColor="Color.Primary">
         <div class="pa-4">
-            <div class="d-flex gap-2 flex-wrap mb-4">
-                @foreach (var cat in _workflowCategories)
+            <div class="d-flex align-center gap-3 flex-wrap mb-3">
+                <MudSelect T="string" Value="_workflowGroupFilter" ValueChanged="@((string g) => SetWorkflowGroup(g))"
+                           Label="Browse by area" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                           Style="min-width: 260px;">
+                    <MudSelectItem Value="@AllGroupsLabel">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Apps" Size="Size.Small" Style="color: #6B7280;" />
+                            <span>All Categories</span>
+                        </div>
+                    </MudSelectItem>
+                    @foreach (var g in _workflowGroups)
+                    {
+                        <MudSelectItem Value="@g.Group">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@_groupIcons.GetValueOrDefault(g.Group, Icons.Material.Filled.Category)" Size="Size.Small" Style="@($"color: {_groupColors.GetValueOrDefault(g.Group, "#6B7280")};")" />
+                                <span>@g.Group</span>
+                            </div>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @(CurrentWorkflowChipCategories.Length - 1) categor@(CurrentWorkflowChipCategories.Length - 1 == 1 ? "y" : "ies")
+                    @(_workflowCategoryFilter != "All" ? $"· filtering by \"{_workflowCategoryFilter}\"" : "")
+                </MudText>
+                @if (_workflowCategoryFilter != "All" || _workflowGroupFilter != "Core & Industry" || !string.IsNullOrWhiteSpace(_searchTerm))
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.FilterAltOff"
+                               OnClick="@ClearWorkflowFilters">
+                        Clear filters
+                    </MudButton>
+                }
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap mb-4"
+                 style="@(_workflowGroupFilter == AllGroupsLabel ? "max-height: 130px; overflow-y: auto; padding-right: 4px;" : "")">
+                @foreach (var cat in CurrentWorkflowChipCategories)
                 {
                     <MudChip T="string" Size="Size.Small"
                              Color="@(_workflowCategoryFilter == cat ? Color.Primary : Color.Default)"
@@ -101,6 +136,10 @@
                 <div class="pa-8 text-center">
                     <MudIcon Icon="@Icons.Material.Outlined.SearchOff" Size="Size.Large" Color="Color.Secondary" Style="opacity: 0.3;" />
                     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">No workflow templates match your search.</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" Class="mt-2"
+                               StartIcon="@Icons.Material.Filled.FilterAltOff" OnClick="@ClearWorkflowFilters">
+                        Clear filters
+                    </MudButton>
                 </div>
             }
         </div>
@@ -110,8 +149,43 @@
     <MudTabPanel Text="Assistants" Icon="@Icons.Material.Outlined.SmartToy"
                  BadgeData="@_assistantTemplates.Count" BadgeColor="Color.Secondary">
         <div class="pa-4">
-            <div class="d-flex gap-2 flex-wrap mb-4">
-                @foreach (var cat in _assistantCategories)
+            <div class="d-flex align-center gap-3 flex-wrap mb-3">
+                <MudSelect T="string" Value="_assistantGroupFilter" ValueChanged="@((string g) => SetAssistantGroup(g))"
+                           Label="Browse by area" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                           Style="min-width: 260px;">
+                    <MudSelectItem Value="@AllGroupsLabel">
+                        <div class="d-flex align-center gap-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Apps" Size="Size.Small" Style="color: #6B7280;" />
+                            <span>All Categories</span>
+                        </div>
+                    </MudSelectItem>
+                    @foreach (var g in _assistantGroups)
+                    {
+                        <MudSelectItem Value="@g.Group">
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@_groupIcons.GetValueOrDefault(g.Group, Icons.Material.Filled.Category)" Size="Size.Small" Style="@($"color: {_groupColors.GetValueOrDefault(g.Group, "#6B7280")};")" />
+                                <span>@g.Group</span>
+                            </div>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @(CurrentAssistantChipCategories.Length - 1) categor@(CurrentAssistantChipCategories.Length - 1 == 1 ? "y" : "ies")
+                    @(_assistantCategoryFilter != "All" ? $"· filtering by \"{_assistantCategoryFilter}\"" : "")
+                </MudText>
+                @if (_assistantCategoryFilter != "All" || _assistantGroupFilter != "Core & Industry" || !string.IsNullOrWhiteSpace(_searchTerm))
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.FilterAltOff"
+                               OnClick="@ClearAssistantFilters">
+                        Clear filters
+                    </MudButton>
+                }
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap mb-4"
+                 style="@(_assistantGroupFilter == AllGroupsLabel ? "max-height: 130px; overflow-y: auto; padding-right: 4px;" : "")">
+                @foreach (var cat in CurrentAssistantChipCategories)
                 {
                     <MudChip T="string" Size="Size.Small"
                              Color="@(_assistantCategoryFilter == cat ? Color.Primary : Color.Default)"
@@ -180,6 +254,10 @@
                 <div class="pa-8 text-center">
                     <MudIcon Icon="@Icons.Material.Outlined.SearchOff" Size="Size.Large" Color="Color.Secondary" Style="opacity: 0.3;" />
                     <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-2">No assistant templates match your search.</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" Class="mt-2"
+                               StartIcon="@Icons.Material.Filled.FilterAltOff" OnClick="@ClearAssistantFilters">
+                        Clear filters
+                    </MudButton>
                 </div>
             }
         </div>
@@ -187,16 +265,81 @@
 </MudTabs>
 
 @code {
+    private const string AllGroupsLabel = "All Categories";
+
     private int _activeTab;
     private string _searchTerm = string.Empty;
     private string _workflowCategoryFilter = "All";
     private string _assistantCategoryFilter = "All";
+    private string _workflowGroupFilter = "Core & Industry";
+    private string _assistantGroupFilter = "Core & Industry";
     private string? _creatingTemplate;
     private HashSet<string> _usedWorkflowTemplates = new();
     private HashSet<string> _usedAssistantTemplates = new();
 
-    private static readonly string[] _workflowCategories = { "All", "Approval", "HR", "Finance", "IT", "Operations", "Steel", "Manufacturing", "Government", "Hospitality", "B2B" };
-    private static readonly string[] _assistantCategories = { "All", "HR", "IT", "Finance", "Legal", "Procurement", "General", "Steel", "Government", "Hospitality", "B2B", "Website Agent" };
+    // Business Need taxonomy, grouped so the filter UI shows a manageable set of
+    // chips at a time instead of one flat wall of 70+ categories.
+    private static readonly (string Group, string[] Categories)[] _businessNeedGroups = {
+        ("Sales", new[] { "Contract Management", "Forecasting", "Geolocation", "Lead & Opportunity Management", "Partner Management", "Quotes & Orders", "Sales Intelligence", "Sales Methodologies", "Sales Productivity" }),
+        ("Marketing", new[] { "Account-Based Marketing", "Campaign Management", "Event Management", "Feeds", "Loyalty", "Marketing Automation", "Marketing Intelligence", "Mass Emails", "Personalization", "Social Channels", "Surveys", "Testing & Segmentation", "Websites" }),
+        ("IT & Administration", new[] { "Admin & Developer Tools", "Audit & Compliance", "Augmented Reality (AR) & Virtual Reality (VR)", "Content Delivery Network (CDN)", "Content Management System (CMS)", "Data Backup & Storage", "Data Management", "Data Migration", "Developer Tools", "Information Management", "Integration", "IT Management", "Search & Recommendation", "Security", "Translation" }),
+        ("Customer Service", new[] { "Agent Productivity", "Case Management", "Field Service", "Route Planning", "Telephony" }),
+        ("Finance", new[] { "Accounting", "Compensation Management", "Grant Management", "Time & Expense" }),
+        ("Analytics", new[] { "Analytics & Site Monitoring", "Dashboards & Reports", "Data Cleansing", "Data Visualization" }),
+        ("Productivity", new[] { "Alerts", "Document Generation", "Document Management", "Email & Calendar Sync", "Process Management", "Project Management", "Time & Date" }),
+        ("Commerce", new[] { "Ecommerce", "Live Commerce", "Marketplace", "Payments Processing", "Point of Sale (POS) & In-Store", "Product Information Management (PIM)", "Ratings & Reviews", "Shipping, Fulfillment & Logistics", "Subscriptions", "Warranty & Returns Management" }),
+        ("Collaboration", new[] { "Chat & Web Conferencing", "Conversational Commerce" }),
+        ("Enterprise Resource Planning", new[] { "Human Resources", "Order & Inventory Management System", "People Management", "Punchout System", "Warehouse Management System (WMS)" }),
+    };
+
+    private static readonly string[] _businessNeedCategories = _businessNeedGroups.SelectMany(g => g.Categories).ToArray();
+
+    private static readonly string[] _workflowCoreCategories = { "Approval", "HR", "Finance", "IT", "Operations", "Steel", "Manufacturing", "Government", "Hospitality", "B2B" };
+    private static readonly string[] _assistantCoreCategories = { "HR", "IT", "Finance", "Legal", "Procurement", "General", "Steel", "Government", "Hospitality", "B2B", "Website Agent" };
+
+    private static readonly (string Group, string[] Categories)[] _workflowGroups =
+        new[] { ("Core & Industry", _workflowCoreCategories) }.Concat(_businessNeedGroups).ToArray();
+    private static readonly (string Group, string[] Categories)[] _assistantGroups =
+        new[] { ("Core & Industry", _assistantCoreCategories) }.Concat(_businessNeedGroups).ToArray();
+
+    private static readonly string[] _workflowCategories = new[] { "All" }.Concat(_workflowCoreCategories).Concat(_businessNeedCategories).ToArray();
+    private static readonly string[] _assistantCategories = new[] { "All" }.Concat(_assistantCoreCategories).Concat(_businessNeedCategories).ToArray();
+
+    private string[] CurrentWorkflowChipCategories =>
+        _workflowGroupFilter == AllGroupsLabel
+            ? _workflowCategories
+            : new[] { "All" }.Concat(_workflowGroups.First(g => g.Group == _workflowGroupFilter).Categories).ToArray();
+
+    private string[] CurrentAssistantChipCategories =>
+        _assistantGroupFilter == AllGroupsLabel
+            ? _assistantCategories
+            : new[] { "All" }.Concat(_assistantGroups.First(g => g.Group == _assistantGroupFilter).Categories).ToArray();
+
+    private void SetWorkflowGroup(string group)
+    {
+        _workflowGroupFilter = group;
+        _workflowCategoryFilter = "All";
+    }
+
+    private void SetAssistantGroup(string group)
+    {
+        _assistantGroupFilter = group;
+        _assistantCategoryFilter = "All";
+    }
+
+    private void ClearWorkflowFilters()
+    {
+        _workflowGroupFilter = "Core & Industry";
+        _workflowCategoryFilter = "All";
+        _searchTerm = string.Empty;
+    }
+
+    private void ClearAssistantFilters()
+    {
+        _assistantGroupFilter = "Core & Industry";
+        _assistantCategoryFilter = "All";
+        _searchTerm = string.Empty;
+    }
 
     // Combined count for the search summary
     private List<object> FilteredItems => _activeTab == 0
@@ -278,6 +421,100 @@
         new() { Name = "Quotation Management", Category = "B2B", StepCount = 4, Description = "B2B quote generation with approval and follow-up.", Steps = "Request Quote|Generate|Manager Approval|Send & Follow Up" },
         new() { Name = "Customer Feedback Loop", Category = "B2B", StepCount = 4, Description = "Collect, analyze, and act on B2B customer feedback.", Steps = "Survey Send|Collect Responses|AI Analysis|Action Plan" },
         new() { Name = "Partnership Agreement", Category = "B2B", StepCount = 4, Description = "B2B partnership setup with legal and commercial terms.", Steps = "Proposal|Legal Review|Commercial Terms|Sign & Activate" },
+
+        // ── Sales ──
+        new() { Name = "Contract Lifecycle Management", Category = "Contract Management", StepCount = 5, Description = "End-to-end contract creation, negotiation, and renewal tracking.", Steps = "Draft|Negotiate|Legal Review|Signature|Renewal Tracking" },
+        new() { Name = "Sales Forecast Rollup", Category = "Forecasting", StepCount = 4, Description = "Aggregate pipeline data into forecast categories with manager rollup.", Steps = "Collect Pipeline|Categorize|Manager Rollup|Publish Forecast" },
+        new() { Name = "Territory Route Assignment", Category = "Geolocation", StepCount = 3, Description = "Assign sales reps to territories based on geographic mapping.", Steps = "Map Territories|Assign Reps|Publish Routes" },
+        new() { Name = "Lead-to-Opportunity Conversion", Category = "Lead & Opportunity Management", StepCount = 5, Description = "Qualify inbound leads and convert to tracked sales opportunities.", Steps = "Capture Lead|Score|Qualify|Convert to Opportunity|Assign Owner" },
+        new() { Name = "Channel Partner Onboarding", Category = "Partner Management", StepCount = 5, Description = "Register and enable new channel partners for resale.", Steps = "Application|Background Check|Agreement Sign|Enablement Training|Activate" },
+        new() { Name = "Quote-to-Order Processing", Category = "Quotes & Orders", StepCount = 4, Description = "Generate quotes, gain approval, and convert to confirmed orders.", Steps = "Build Quote|Approval|Customer Acceptance|Convert to Order" },
+        new() { Name = "Account Intelligence Briefing", Category = "Sales Intelligence", StepCount = 3, Description = "Compile firmographic and buying-signal insights before outreach.", Steps = "Gather Signals|AI Analysis|Rep Briefing" },
+        new() { Name = "MEDDIC Deal Qualification", Category = "Sales Methodologies", StepCount = 4, Description = "Qualify opportunities using MEDDIC criteria before forecast commit.", Steps = "Metrics Capture|Champion ID|Decision Process Map|Commit Review" },
+        new() { Name = "Rep Activity Cadence", Category = "Sales Productivity", StepCount = 3, Description = "Automate call/email cadences to keep reps on quota-driving activity.", Steps = "Assign Cadence|Track Activity|Manager Coaching" },
+
+        // ── Marketing ──
+        new() { Name = "ABM Target Account Launch", Category = "Account-Based Marketing", StepCount = 4, Description = "Coordinate personalized multi-channel campaigns for named target accounts.", Steps = "Select Accounts|Build Personas|Launch Campaign|Sales Handoff" },
+        new() { Name = "Multi-Channel Campaign Launch", Category = "Campaign Management", StepCount = 5, Description = "Plan, approve, launch, and report on a marketing campaign.", Steps = "Plan|Budget Approval|Build Assets|Launch|Report Results" },
+        new() { Name = "Webinar & Event Lifecycle", Category = "Event Management", StepCount = 5, Description = "End-to-end event planning from registration to post-event follow-up.", Steps = "Plan Event|Open Registration|Promote|Host Event|Post-Event Follow-Up" },
+        new() { Name = "Product Feed Sync", Category = "Feeds", StepCount = 3, Description = "Validate and publish product data feeds to marketing channels.", Steps = "Validate Feed|Map Attributes|Publish to Channels" },
+        new() { Name = "Loyalty Tier Upgrade", Category = "Loyalty", StepCount = 4, Description = "Evaluate customer activity and process loyalty tier upgrades.", Steps = "Calculate Points|Tier Evaluation|Notify Customer|Apply Benefits" },
+        new() { Name = "Nurture Journey Automation", Category = "Marketing Automation", StepCount = 4, Description = "Automated lead nurture sequence triggered by engagement scoring.", Steps = "Trigger Event|Score Lead|Send Sequence|Sales Alert" },
+        new() { Name = "Campaign Performance Analysis", Category = "Marketing Intelligence", StepCount = 3, Description = "Analyze campaign performance data and surface optimization insights.", Steps = "Collect Data|AI Analysis|Recommend Actions" },
+        new() { Name = "Bulk Email Send Approval", Category = "Mass Emails", StepCount = 4, Description = "Compliance-checked mass email send with approval gate.", Steps = "Draft Email|Compliance Check|Manager Approval|Send" },
+        new() { Name = "Website Personalization Rule Setup", Category = "Personalization", StepCount = 3, Description = "Configure and deploy audience-based content personalization rules.", Steps = "Define Segment|Build Content Variant|Publish Rule" },
+        new() { Name = "Social Post Approval & Publish", Category = "Social Channels", StepCount = 4, Description = "Draft, review, and schedule social media posts across channels.", Steps = "Draft Post|Brand Review|Schedule|Publish" },
+        new() { Name = "Customer Survey Cycle", Category = "Surveys", StepCount = 4, Description = "Distribute surveys, collect responses, and analyze feedback.", Steps = "Design Survey|Distribute|Collect Responses|Analyze & Report" },
+        new() { Name = "A/B Test & Segment Rollout", Category = "Testing & Segmentation", StepCount = 4, Description = "Run A/B tests on segmented audiences and roll out the winning variant.", Steps = "Define Segments|Run A/B Test|Analyze Results|Roll Out Winner" },
+        new() { Name = "Website Page Publish Workflow", Category = "Websites", StepCount = 4, Description = "Draft, review, and publish new website pages with SEO checks.", Steps = "Draft Page|SEO Review|Approval|Publish" },
+
+        // ── IT & Administration ──
+        new() { Name = "Sandbox Environment Provisioning", Category = "Admin & Developer Tools", StepCount = 4, Description = "Provision and configure a new developer sandbox environment.", Steps = "Request|Approve|Provision|Configure Access" },
+        new() { Name = "Internal Audit Cycle", Category = "Audit & Compliance", StepCount = 5, Description = "Plan, execute, and remediate findings from an internal compliance audit.", Steps = "Schedule Audit|Collect Evidence|Review Findings|Remediation Plan|Sign-Off" },
+        new() { Name = "AR/VR Content Deployment", Category = "Augmented Reality (AR) & Virtual Reality (VR)", StepCount = 4, Description = "Build, test, and deploy AR/VR experiences to production.", Steps = "Build Asset|Device Testing|QA Review|Publish" },
+        new() { Name = "CDN Cache Purge & Deploy", Category = "Content Delivery Network (CDN)", StepCount = 3, Description = "Deploy static assets and purge CDN cache with verification.", Steps = "Deploy Assets|Purge Cache|Verify Delivery" },
+        new() { Name = "CMS Content Publish Approval", Category = "Content Management System (CMS)", StepCount = 4, Description = "Draft, review, and publish content through the CMS approval chain.", Steps = "Draft|Editorial Review|Approval|Publish" },
+        new() { Name = "Scheduled Backup Verification", Category = "Data Backup & Storage", StepCount = 3, Description = "Run scheduled backups and verify restore integrity.", Steps = "Run Backup|Verify Integrity|Archive Report" },
+        new() { Name = "Master Data Cleanup Cycle", Category = "Data Management", StepCount = 4, Description = "Identify, review, and merge duplicate or stale master data records.", Steps = "Identify Duplicates|Review|Merge Records|Publish Clean Data" },
+        new() { Name = "System Data Migration", Category = "Data Migration", StepCount = 5, Description = "Migrate data between systems with validation and rollback plan.", Steps = "Extract|Transform|Validate|Load|Reconcile" },
+        new() { Name = "Code Release Pipeline", Category = "Developer Tools", StepCount = 5, Description = "Build, test, and deploy code changes through a CI/CD pipeline.", Steps = "Code Review|Build|Automated Test|Staging Deploy|Production Release" },
+        new() { Name = "Document Classification & Retention", Category = "Information Management", StepCount = 4, Description = "Classify incoming documents and apply retention policy.", Steps = "Ingest|Classify|Apply Retention Policy|Archive" },
+        new() { Name = "Third-Party Integration Rollout", Category = "Integration", StepCount = 4, Description = "Configure, test, and enable a new third-party system integration.", Steps = "Configure Connector|Test Sync|Security Review|Enable" },
+        new() { Name = "IT Asset Lifecycle", Category = "IT Management", StepCount = 4, Description = "Track IT assets from procurement to decommissioning.", Steps = "Procure|Assign|Maintain|Decommission" },
+        new() { Name = "Search Index Rebuild", Category = "Search & Recommendation", StepCount = 3, Description = "Rebuild and validate search/recommendation indexes after data changes.", Steps = "Trigger Reindex|Validate Results|Publish Index" },
+        new() { Name = "Security Vulnerability Remediation", Category = "Security", StepCount = 5, Description = "Triage, patch, and verify fixes for reported security vulnerabilities.", Steps = "Triage|Risk Assessment|Patch|Verify Fix|Close Report" },
+        new() { Name = "Content Localization Workflow", Category = "Translation", StepCount = 4, Description = "Translate and localize content with linguistic QA before publish.", Steps = "Extract Strings|AI Translate|Linguistic QA|Publish" },
+
+        // ── Customer Service ──
+        new() { Name = "Agent Shift Handoff", Category = "Agent Productivity", StepCount = 3, Description = "Structured handoff of open cases between support shifts.", Steps = "Summarize Open Cases|Handoff Notes|Next Shift Acknowledge" },
+        new() { Name = "Support Case Escalation", Category = "Case Management", StepCount = 4, Description = "Route, triage, and escalate customer support cases by severity.", Steps = "Log Case|Triage|Assign/Escalate|Resolve & Close" },
+        new() { Name = "Field Technician Dispatch", Category = "Field Service", StepCount = 4, Description = "Schedule and dispatch field technicians for on-site service calls.", Steps = "Log Request|Schedule Technician|On-Site Service|Close Ticket" },
+        new() { Name = "Delivery Route Optimization", Category = "Route Planning", StepCount = 3, Description = "Optimize daily delivery/service routes based on stops and traffic.", Steps = "Collect Stops|Optimize Route|Dispatch Driver" },
+        new() { Name = "Inbound Call Routing Setup", Category = "Telephony", StepCount = 3, Description = "Configure IVR routing rules and escalation paths for inbound calls.", Steps = "Define IVR Menu|Configure Routing|Test & Publish" },
+
+        // ── Finance (Business Need) ──
+        new() { Name = "Month-End Close", Category = "Accounting", StepCount = 5, Description = "Reconcile ledgers and close the books at month end.", Steps = "Reconcile Accounts|Journal Entries|Manager Review|Close Period|Report" },
+        new() { Name = "Sales Commission Calculation", Category = "Compensation Management", StepCount = 4, Description = "Calculate and approve sales commissions each pay cycle.", Steps = "Import Sales Data|Calculate Commission|Manager Approval|Payout" },
+        new() { Name = "Grant Application & Disbursement", Category = "Grant Management", StepCount = 5, Description = "Review grant applications and manage fund disbursement and reporting.", Steps = "Application|Eligibility Review|Approval|Disbursement|Compliance Report" },
+        new() { Name = "Timesheet & Expense Submission", Category = "Time & Expense", StepCount = 4, Description = "Submit timesheets and expenses for manager and finance approval.", Steps = "Submit Timesheet|Manager Approval|Finance Review|Payroll Sync" },
+
+        // ── Analytics ──
+        new() { Name = "Site Uptime Incident Workflow", Category = "Analytics & Site Monitoring", StepCount = 4, Description = "Detect, alert, and resolve site performance or uptime incidents.", Steps = "Detect Anomaly|Alert On-Call|Investigate|Resolve & Report" },
+        new() { Name = "Executive Dashboard Refresh", Category = "Dashboards & Reports", StepCount = 3, Description = "Refresh, validate, and publish executive reporting dashboards.", Steps = "Refresh Data|Validate Metrics|Publish Dashboard" },
+        new() { Name = "Data Quality Cleansing Cycle", Category = "Data Cleansing", StepCount = 4, Description = "Detect, review, and correct data quality issues across records.", Steps = "Detect Issues|Review Rules|Apply Corrections|Verify Quality" },
+        new() { Name = "Custom Report Build & Share", Category = "Data Visualization", StepCount = 3, Description = "Build a custom visualization and share it with stakeholders.", Steps = "Build Visualization|Internal Review|Share with Stakeholders" },
+
+        // ── Productivity ──
+        new() { Name = "Threshold Alert Configuration", Category = "Alerts", StepCount = 3, Description = "Configure and test threshold-based alerts for key metrics.", Steps = "Define Threshold|Configure Alert|Test & Enable" },
+        new() { Name = "Automated Document Generation", Category = "Document Generation", StepCount = 3, Description = "Generate contracts or reports from templates and data merge.", Steps = "Select Template|Merge Data|Generate & Send" },
+        new() { Name = "Document Approval & Archival", Category = "Document Management", StepCount = 4, Description = "Route documents for approval and archive with version control.", Steps = "Upload|Review|Approve|Archive" },
+        new() { Name = "Meeting Scheduling Automation", Category = "Email & Calendar Sync", StepCount = 3, Description = "Auto-schedule meetings and sync invites across calendars.", Steps = "Find Availability|Send Invite|Sync Calendars" },
+        new() { Name = "Standard Operating Procedure Rollout", Category = "Process Management", StepCount = 4, Description = "Publish and train teams on a new standard operating procedure.", Steps = "Draft SOP|Review|Publish|Team Training" },
+        new() { Name = "Project Kickoff to Delivery", Category = "Project Management", StepCount = 5, Description = "Track a project from kickoff through milestones to delivery.", Steps = "Kickoff|Plan Milestones|Execute|Status Review|Delivery" },
+        new() { Name = "Recurring Task Scheduling", Category = "Time & Date", StepCount = 3, Description = "Set up and manage recurring scheduled tasks and reminders.", Steps = "Define Schedule|Assign Owner|Auto-Remind" },
+
+        // ── Commerce ──
+        new() { Name = "Order Fulfillment Pipeline", Category = "Ecommerce", StepCount = 5, Description = "Process online orders from payment through shipment confirmation.", Steps = "Order Received|Payment Verify|Pick & Pack|Ship|Confirm Delivery" },
+        new() { Name = "Live Shopping Event Setup", Category = "Live Commerce", StepCount = 4, Description = "Plan and run a live-streamed shopping event with real-time checkout.", Steps = "Plan Event|Product Setup|Go Live|Post-Event Sales Report" },
+        new() { Name = "Marketplace Seller Onboarding", Category = "Marketplace", StepCount = 5, Description = "Vet and onboard new sellers onto the marketplace platform.", Steps = "Application|Verification|Agreement Sign|Store Setup|Go Live" },
+        new() { Name = "Payment Dispute Resolution", Category = "Payments Processing", StepCount = 4, Description = "Investigate and resolve customer payment disputes and chargebacks.", Steps = "Log Dispute|Investigate|Decision|Refund or Deny" },
+        new() { Name = "In-Store Return Processing", Category = "Point of Sale (POS) & In-Store", StepCount = 3, Description = "Process in-store returns with refund or exchange at POS.", Steps = "Scan Item|Verify Eligibility|Refund/Exchange" },
+        new() { Name = "Product Catalog Publish", Category = "Product Information Management (PIM)", StepCount = 4, Description = "Enrich and publish product data to sales and ecommerce channels.", Steps = "Import Product Data|Enrich Attributes|Review|Publish to Channels" },
+        new() { Name = "Review Moderation Workflow", Category = "Ratings & Reviews", StepCount = 3, Description = "Moderate incoming customer reviews before publishing.", Steps = "Submit Review|Moderation Check|Publish or Reject" },
+        new() { Name = "Shipment Exception Handling", Category = "Shipping, Fulfillment & Logistics", StepCount = 4, Description = "Detect and resolve shipping delays or delivery exceptions.", Steps = "Detect Exception|Notify Customer|Investigate Carrier|Resolve" },
+        new() { Name = "Subscription Renewal Cycle", Category = "Subscriptions", StepCount = 4, Description = "Manage subscription renewal, dunning, and cancellation flow.", Steps = "Renewal Notice|Payment Attempt|Dunning if Failed|Renew or Cancel" },
+        new() { Name = "Warranty Claim Processing", Category = "Warranty & Returns Management", StepCount = 4, Description = "Validate and process customer warranty claims.", Steps = "Submit Claim|Verify Warranty|Approve/Deny|Repair or Replace" },
+
+        // ── Collaboration ──
+        new() { Name = "Internal Meeting Room Provisioning", Category = "Chat & Web Conferencing", StepCount = 3, Description = "Provision and configure a new team chat channel and meeting room.", Steps = "Request Channel|Configure Access|Notify Team" },
+        new() { Name = "Chatbot-Assisted Purchase Flow", Category = "Conversational Commerce", StepCount = 4, Description = "Guide a customer from chat inquiry to completed purchase.", Steps = "Chat Inquiry|Product Recommendation|Cart Build|Checkout" },
+
+        // ── Enterprise Resource Planning ──
+        new() { Name = "Employee Lifecycle Management (ERP)", Category = "Human Resources", StepCount = 4, Description = "Manage employee records across hire, transfer, and exit in the ERP.", Steps = "Hire Record|Role/Transfer Update|Compensation Sync|Exit Processing" },
+        new() { Name = "Inventory Replenishment", Category = "Order & Inventory Management System", StepCount = 4, Description = "Trigger and process purchase orders when inventory hits reorder point.", Steps = "Stock Level Check|Generate PO|Supplier Confirm|Receive Stock" },
+        new() { Name = "Org Structure Change Request", Category = "People Management", StepCount = 4, Description = "Process reporting line or org structure changes with HR approval.", Steps = "Submit Request|Manager Approval|HR Review|Update Org Chart" },
+        new() { Name = "Punchout Catalog Order", Category = "Punchout System", StepCount = 4, Description = "Route punchout catalog orders from buyer system into ERP for fulfillment.", Steps = "Punchout Session|Cart Return|PO Generation|Fulfillment" },
+        new() { Name = "Warehouse Pick-Pack-Ship", Category = "Warehouse Management System (WMS)", StepCount = 4, Description = "Coordinate picking, packing, and shipping within the warehouse.", Steps = "Pick Order|Pack|Quality Check|Ship" },
     };
 
     // ──────────────── Assistant/Agent Templates (55+) ────────────────
@@ -340,6 +577,100 @@
         new() { Name = "Onboarding & Setup Agent", Type = "Website Agent", Description = "Guides new users through product setup and first-time configuration.", SystemPrompt = "You are a product onboarding assistant. Guide new users through account setup, initial configuration, first-time features, and quick-start tutorials. Make the onboarding experience smooth and help users achieve their first success milestone quickly." },
         new() { Name = "Feedback & Survey Agent", Type = "Website Agent", Description = "Collects visitor feedback, NPS scores, and feature requests.", SystemPrompt = "You are a feedback collection assistant. Engage users to collect feedback about their experience, gather Net Promoter Score ratings, collect feature requests, and understand pain points. Be conversational and appreciative of their time. Summarize feedback themes." },
         new() { Name = "Multi-Language Support Agent", Type = "Website Agent", Description = "Provides website assistance in Hindi, English, and regional languages.", SystemPrompt = "You are a multilingual website assistant. Help visitors in their preferred language — English, Hindi, or other Indian languages. Detect the visitor's language preference and respond accordingly. Provide the same quality of assistance regardless of language. Support transliteration for regional language queries." },
+
+        // ── Sales ──
+        new() { Name = "Contract Management Assistant", Type = "Contract Management", Description = "Helps draft, review, and track sales contracts through signature.", SystemPrompt = "You are a contract management assistant. Help sales and legal teams draft contract terms, track redlines, monitor approval stages, and flag renewal or expiration dates." },
+        new() { Name = "Sales Forecasting Analyst", Type = "Forecasting", Description = "Analyzes pipeline data to project revenue and flag at-risk deals.", SystemPrompt = "You are a sales forecasting assistant. Analyze pipeline coverage, win rates, and deal stages to project revenue, flag at-risk deals, and help reps commit accurate forecasts." },
+        new() { Name = "Territory Mapping Assistant", Type = "Geolocation", Description = "Helps plan sales territories and optimize field rep routes.", SystemPrompt = "You are a geolocation assistant for sales teams. Help plan balanced territories, optimize field visit routes, and answer questions about account proximity and coverage." },
+        new() { Name = "Lead Qualification Assistant", Type = "Lead & Opportunity Management", Description = "Scores inbound leads and guides opportunity progression.", SystemPrompt = "You are a lead and opportunity management assistant. Help score and qualify inbound leads, recommend next steps, and guide opportunities through pipeline stages." },
+        new() { Name = "Partner Relationship Assistant", Type = "Partner Management", Description = "Supports channel partner enablement, deal registration, and communication.", SystemPrompt = "You are a partner management assistant. Help channel managers with partner enablement, deal registration, co-marketing requests, and partner performance questions." },
+        new() { Name = "Quoting Assistant", Type = "Quotes & Orders", Description = "Helps build accurate quotes and guides orders through approval.", SystemPrompt = "You are a quoting and order assistant. Help sales reps configure accurate price quotes, apply discount rules, and track orders through approval and fulfillment." },
+        new() { Name = "Sales Intelligence Analyst", Type = "Sales Intelligence", Description = "Surfaces account insights, buying signals, and competitive intel.", SystemPrompt = "You are a sales intelligence assistant. Surface firmographic data, buying signals, competitive positioning, and account insights to help reps prepare for outreach." },
+        new() { Name = "Deal Coaching Assistant", Type = "Sales Methodologies", Description = "Coaches reps through MEDDIC/SPIN-style deal qualification.", SystemPrompt = "You are a sales methodology coach. Help reps apply frameworks like MEDDIC or SPIN selling to qualify deals, identify champions, and prepare for deal reviews." },
+        new() { Name = "Sales Productivity Assistant", Type = "Sales Productivity", Description = "Helps reps prioritize activity and reduce administrative overhead.", SystemPrompt = "You are a sales productivity assistant. Help reps prioritize daily activities, draft follow-up emails, log call notes, and reduce time spent on administrative tasks." },
+
+        // ── Marketing ──
+        new() { Name = "ABM Strategy Assistant", Type = "Account-Based Marketing", Description = "Helps build personalized account-based marketing plays.", SystemPrompt = "You are an account-based marketing assistant. Help build target account lists, craft personalized messaging, and coordinate multi-channel ABM plays with sales." },
+        new() { Name = "Campaign Manager Assistant", Type = "Campaign Management", Description = "Plans, tracks, and reports on marketing campaigns.", SystemPrompt = "You are a campaign management assistant. Help plan campaign timelines, track budget and milestones, and summarize campaign performance for stakeholders." },
+        new() { Name = "Event Planning Assistant", Type = "Event Management", Description = "Coordinates event logistics from planning to follow-up.", SystemPrompt = "You are an event management assistant. Help plan webinars and events, coordinate registration and promotion, and draft post-event follow-up communications." },
+        new() { Name = "Data Feed Assistant", Type = "Feeds", Description = "Helps validate and troubleshoot marketing data feed issues.", SystemPrompt = "You are a data feed assistant. Help validate product and content feed formats, troubleshoot sync errors, and ensure attribute mapping is correct across channels." },
+        new() { Name = "Loyalty Program Assistant", Type = "Loyalty", Description = "Answers loyalty program questions and helps manage tier rules.", SystemPrompt = "You are a loyalty program assistant. Help configure tier rules, answer member questions about points and rewards, and identify at-risk loyal customers." },
+        new() { Name = "Marketing Automation Assistant", Type = "Marketing Automation", Description = "Helps design and troubleshoot automated nurture journeys.", SystemPrompt = "You are a marketing automation assistant. Help design nurture journeys, set up trigger-based workflows, and troubleshoot automation rule issues." },
+        new() { Name = "Marketing Intelligence Analyst", Type = "Marketing Intelligence", Description = "Analyzes campaign and channel data for optimization insights.", SystemPrompt = "You are a marketing intelligence assistant. Analyze campaign, channel, and attribution data to surface optimization opportunities and answer performance questions." },
+        new() { Name = "Email Campaign Assistant", Type = "Mass Emails", Description = "Helps draft, review, and schedule mass email sends.", SystemPrompt = "You are a mass email assistant. Help draft subject lines and copy, check compliance with opt-in rules, and schedule sends for optimal engagement." },
+        new() { Name = "Personalization Assistant", Type = "Personalization", Description = "Helps configure audience segments and personalized content rules.", SystemPrompt = "You are a personalization assistant. Help define audience segments, recommend content variants, and troubleshoot personalization rule conflicts." },
+        new() { Name = "Social Media Assistant", Type = "Social Channels", Description = "Drafts and schedules social content across channels.", SystemPrompt = "You are a social media assistant. Help draft on-brand posts, suggest optimal posting times, and monitor engagement across social channels." },
+        new() { Name = "Survey Design Assistant", Type = "Surveys", Description = "Helps design surveys and interpret response data.", SystemPrompt = "You are a survey assistant. Help design clear survey questions, choose the right distribution channel, and summarize response trends and sentiment." },
+        new() { Name = "A/B Testing Assistant", Type = "Testing & Segmentation", Description = "Helps design experiments and interpret test results.", SystemPrompt = "You are an A/B testing and segmentation assistant. Help design experiments, calculate statistical significance, and recommend which variant to roll out." },
+        new() { Name = "Website Content Assistant", Type = "Websites", Description = "Helps draft, optimize, and publish website content.", SystemPrompt = "You are a website content assistant. Help draft page copy, suggest SEO improvements, and guide content through the publishing workflow." },
+
+        // ── IT & Administration ──
+        new() { Name = "Admin Tools Assistant", Type = "Admin & Developer Tools", Description = "Helps administrators configure org settings and developer tooling.", SystemPrompt = "You are an admin and developer tools assistant. Help administrators configure org settings, manage sandboxes, and troubleshoot developer tooling issues." },
+        new() { Name = "Audit & Compliance Assistant", Type = "Audit & Compliance", Description = "Guides teams through audit prep and compliance checklists.", SystemPrompt = "You are an audit and compliance assistant. Help prepare audit evidence, maintain compliance checklists, and track remediation of findings." },
+        new() { Name = "AR/VR Support Assistant", Type = "Augmented Reality (AR) & Virtual Reality (VR)", Description = "Helps troubleshoot and configure AR/VR experiences.", SystemPrompt = "You are an AR/VR assistant. Help configure device settings, troubleshoot rendering issues, and guide teams through publishing AR/VR content." },
+        new() { Name = "CDN Operations Assistant", Type = "Content Delivery Network (CDN)", Description = "Helps diagnose CDN caching and delivery performance issues.", SystemPrompt = "You are a CDN operations assistant. Help diagnose caching, latency, and delivery issues, and guide cache purge and configuration changes." },
+        new() { Name = "CMS Support Assistant", Type = "Content Management System (CMS)", Description = "Helps authors manage content within the CMS.", SystemPrompt = "You are a CMS support assistant. Help content authors publish pages, manage templates, and troubleshoot CMS permission or workflow issues." },
+        new() { Name = "Backup & Storage Assistant", Type = "Data Backup & Storage", Description = "Answers questions about backup schedules and restore procedures.", SystemPrompt = "You are a data backup and storage assistant. Help explain backup schedules, guide restore procedures, and flag storage capacity concerns." },
+        new() { Name = "Data Management Assistant", Type = "Data Management", Description = "Helps maintain data quality and master data standards.", SystemPrompt = "You are a data management assistant. Help identify duplicate records, enforce data quality standards, and guide master data cleanup efforts." },
+        new() { Name = "Data Migration Assistant", Type = "Data Migration", Description = "Guides teams through data migration planning and validation.", SystemPrompt = "You are a data migration assistant. Help plan extract-transform-load steps, define validation rules, and troubleshoot migration discrepancies." },
+        new() { Name = "Developer Support Assistant", Type = "Developer Tools", Description = "Helps developers with tooling, CI/CD, and release questions.", SystemPrompt = "You are a developer tools assistant. Help troubleshoot build pipelines, explain CI/CD steps, and guide developers through release processes." },
+        new() { Name = "Information Management Assistant", Type = "Information Management", Description = "Helps classify and manage document retention policy.", SystemPrompt = "You are an information management assistant. Help classify documents, apply retention policies, and answer questions about records management." },
+        new() { Name = "Integration Support Assistant", Type = "Integration", Description = "Helps configure and troubleshoot system integrations.", SystemPrompt = "You are an integration assistant. Help configure connectors, troubleshoot sync failures, and explain data mapping between integrated systems." },
+        new() { Name = "IT Asset & Service Assistant", Type = "IT Management", Description = "Helps track IT assets and manage service requests.", SystemPrompt = "You are an IT management assistant. Help track IT assets, manage service request tickets, and answer questions about IT policies and SLAs." },
+        new() { Name = "Search & Recommendation Assistant", Type = "Search & Recommendation", Description = "Helps tune search relevance and recommendation rules.", SystemPrompt = "You are a search and recommendation assistant. Help tune search relevance ranking, configure recommendation rules, and diagnose indexing issues." },
+        new() { Name = "Security Assistant", Type = "Security", Description = "Helps triage vulnerabilities and answer security policy questions.", SystemPrompt = "You are a security assistant. Help triage reported vulnerabilities, explain security policies, and guide teams through remediation and access review." },
+        new() { Name = "Localization Assistant", Type = "Translation", Description = "Helps manage translation workflows and linguistic QA.", SystemPrompt = "You are a translation and localization assistant. Help manage translation workflows, flag linguistic QA issues, and track localization coverage by language." },
+
+        // ── Customer Service ──
+        new() { Name = "Agent Productivity Assistant", Type = "Agent Productivity", Description = "Helps support agents work cases faster with suggested responses.", SystemPrompt = "You are an agent productivity assistant. Help support agents find knowledge articles, draft responses, and summarize case history quickly." },
+        new() { Name = "Case Management Assistant", Type = "Case Management", Description = "Helps triage and route customer support cases.", SystemPrompt = "You are a case management assistant. Help triage incoming cases by severity, recommend routing, and draft resolution summaries." },
+        new() { Name = "Field Service Assistant", Type = "Field Service", Description = "Helps dispatch technicians and track on-site service jobs.", SystemPrompt = "You are a field service assistant. Help schedule technician visits, check parts availability, and track on-site job status and completion." },
+        new() { Name = "Route Planning Assistant", Type = "Route Planning", Description = "Helps optimize delivery and service routes.", SystemPrompt = "You are a route planning assistant. Help optimize daily delivery or service routes based on stop locations, time windows, and traffic conditions." },
+        new() { Name = "Telephony Support Assistant", Type = "Telephony", Description = "Helps configure IVR flows and troubleshoot call routing.", SystemPrompt = "You are a telephony assistant. Help configure IVR menus, troubleshoot call routing issues, and explain escalation paths for inbound calls." },
+
+        // ── Finance (Business Need) ──
+        new() { Name = "Accounting Assistant", Type = "Accounting", Description = "Helps with reconciliations, journal entries, and close tasks.", SystemPrompt = "You are an accounting assistant. Help with account reconciliations, journal entry review, and month-end close checklist tracking." },
+        new() { Name = "Compensation Assistant", Type = "Compensation Management", Description = "Answers questions about commission and compensation plans.", SystemPrompt = "You are a compensation management assistant. Help explain commission plan rules, calculate payout estimates, and flag compensation discrepancies." },
+        new() { Name = "Grant Management Assistant", Type = "Grant Management", Description = "Helps manage grant applications, disbursement, and reporting.", SystemPrompt = "You are a grant management assistant. Help review grant applications, track disbursement schedules, and prepare compliance reporting." },
+        new() { Name = "Time & Expense Assistant", Type = "Time & Expense", Description = "Helps employees submit timesheets and expense reports correctly.", SystemPrompt = "You are a time and expense assistant. Help employees submit accurate timesheets and expense reports, and explain reimbursement policy." },
+
+        // ── Analytics ──
+        new() { Name = "Site Monitoring Assistant", Type = "Analytics & Site Monitoring", Description = "Helps interpret site performance alerts and incidents.", SystemPrompt = "You are a site monitoring assistant. Help interpret uptime and performance alerts, summarize incident timelines, and suggest next diagnostic steps." },
+        new() { Name = "Reporting Assistant", Type = "Dashboards & Reports", Description = "Helps build and interpret dashboards and reports.", SystemPrompt = "You are a dashboards and reporting assistant. Help build report queries, explain dashboard metrics, and summarize trends for stakeholders." },
+        new() { Name = "Data Cleansing Assistant", Type = "Data Cleansing", Description = "Helps identify and fix data quality issues.", SystemPrompt = "You are a data cleansing assistant. Help identify duplicate, incomplete, or inconsistent records and recommend cleansing rules." },
+        new() { Name = "Data Visualization Assistant", Type = "Data Visualization", Description = "Helps design clear charts and visual reports.", SystemPrompt = "You are a data visualization assistant. Help choose the right chart type, design clear visualizations, and explain what the data is showing." },
+
+        // ── Productivity ──
+        new() { Name = "Alerting Assistant", Type = "Alerts", Description = "Helps configure and tune threshold-based alerts.", SystemPrompt = "You are an alerting assistant. Help configure threshold-based alerts, tune sensitivity to reduce noise, and explain alert conditions." },
+        new() { Name = "Document Generation Assistant", Type = "Document Generation", Description = "Helps generate contracts and reports from templates.", SystemPrompt = "You are a document generation assistant. Help select the right template, merge data fields accurately, and generate polished documents quickly." },
+        new() { Name = "Document Management Assistant", Type = "Document Management", Description = "Helps organize, version, and route documents for approval.", SystemPrompt = "You are a document management assistant. Help organize files, track version history, and route documents through approval workflows." },
+        new() { Name = "Scheduling Assistant", Type = "Email & Calendar Sync", Description = "Helps find meeting availability and manage calendar sync.", SystemPrompt = "You are a scheduling assistant. Help find meeting availability across calendars, send invites, and resolve scheduling conflicts." },
+        new() { Name = "Process Management Assistant", Type = "Process Management", Description = "Helps document and roll out standard operating procedures.", SystemPrompt = "You are a process management assistant. Help document standard operating procedures, identify process bottlenecks, and support rollout to teams." },
+        new() { Name = "Project Management Assistant", Type = "Project Management", Description = "Helps track project milestones, risks, and status.", SystemPrompt = "You are a project management assistant. Help track milestones, flag at-risk tasks, summarize status updates, and prepare stakeholder reports." },
+        new() { Name = "Task Scheduling Assistant", Type = "Time & Date", Description = "Helps manage recurring tasks and reminders.", SystemPrompt = "You are a time and date assistant. Help set up recurring tasks, manage deadlines, and send timely reminders to task owners." },
+
+        // ── Commerce ──
+        new() { Name = "Ecommerce Support Assistant", Type = "Ecommerce", Description = "Helps customers track orders and resolve checkout issues.", SystemPrompt = "You are an ecommerce assistant. Help customers track orders, resolve checkout or payment issues, and answer product availability questions." },
+        new() { Name = "Live Commerce Assistant", Type = "Live Commerce", Description = "Helps plan and run live shopping events.", SystemPrompt = "You are a live commerce assistant. Help plan live shopping event runs of show, prepare product talking points, and monitor real-time sales during the stream." },
+        new() { Name = "Marketplace Seller Assistant", Type = "Marketplace", Description = "Helps onboard and support marketplace sellers.", SystemPrompt = "You are a marketplace assistant. Help onboard new sellers, explain listing requirements, and troubleshoot payout or fee questions." },
+        new() { Name = "Payments Assistant", Type = "Payments Processing", Description = "Helps investigate payment failures and disputes.", SystemPrompt = "You are a payments processing assistant. Help investigate failed transactions, explain dispute and chargeback processes, and guide refund decisions." },
+        new() { Name = "POS Support Assistant", Type = "Point of Sale (POS) & In-Store", Description = "Helps store staff process transactions and returns.", SystemPrompt = "You are a point-of-sale assistant. Help store staff process transactions, handle returns and exchanges, and troubleshoot POS terminal issues." },
+        new() { Name = "PIM Data Assistant", Type = "Product Information Management (PIM)", Description = "Helps enrich and validate product catalog data.", SystemPrompt = "You are a product information management assistant. Help enrich product attributes, validate catalog completeness, and prepare data for channel publishing." },
+        new() { Name = "Review Moderation Assistant", Type = "Ratings & Reviews", Description = "Helps moderate and respond to customer reviews.", SystemPrompt = "You are a ratings and reviews assistant. Help moderate incoming reviews for policy compliance and draft thoughtful responses to customer feedback." },
+        new() { Name = "Logistics Support Assistant", Type = "Shipping, Fulfillment & Logistics", Description = "Helps track shipments and resolve delivery exceptions.", SystemPrompt = "You are a shipping and logistics assistant. Help track shipment status, investigate delivery exceptions, and communicate delays to customers." },
+        new() { Name = "Subscription Management Assistant", Type = "Subscriptions", Description = "Helps manage renewals, upgrades, and cancellations.", SystemPrompt = "You are a subscription management assistant. Help customers manage renewals, plan upgrades or downgrades, and process cancellation requests." },
+        new() { Name = "Warranty & Returns Assistant", Type = "Warranty & Returns Management", Description = "Helps validate warranty claims and process returns.", SystemPrompt = "You are a warranty and returns assistant. Help validate warranty coverage, guide customers through the claims process, and process repair or replacement decisions." },
+
+        // ── Collaboration ──
+        new() { Name = "Collaboration Assistant", Type = "Chat & Web Conferencing", Description = "Helps set up chat channels and web conferencing meetings.", SystemPrompt = "You are a collaboration assistant. Help set up chat channels, schedule web conferences, and troubleshoot access or connectivity issues." },
+        new() { Name = "Conversational Commerce Assistant", Type = "Conversational Commerce", Description = "Guides customers from chat inquiry to completed purchase.", SystemPrompt = "You are a conversational commerce assistant. Guide customers from product inquiry through recommendation to a completed purchase within the chat." },
+
+        // ── Enterprise Resource Planning ──
+        new() { Name = "HR ERP Assistant", Type = "Human Resources", Description = "Helps manage employee records across the HR lifecycle in the ERP.", SystemPrompt = "You are an HR ERP assistant. Help manage employee records, process role and compensation changes, and guide hire-to-exit lifecycle steps within the ERP." },
+        new() { Name = "Inventory Management Assistant", Type = "Order & Inventory Management System", Description = "Helps monitor stock levels and trigger replenishment.", SystemPrompt = "You are an order and inventory management assistant. Help monitor stock levels, trigger reorder points, and track purchase orders through receipt." },
+        new() { Name = "People Management Assistant", Type = "People Management", Description = "Helps process org structure and reporting line changes.", SystemPrompt = "You are a people management assistant. Help process reporting line changes, org structure updates, and answer manager questions about team structure." },
+        new() { Name = "Punchout System Assistant", Type = "Punchout System", Description = "Helps troubleshoot punchout catalog ordering issues.", SystemPrompt = "You are a punchout system assistant. Help troubleshoot punchout session errors, explain cart return issues, and guide purchase order generation from punchout carts." },
+        new() { Name = "Warehouse Operations Assistant", Type = "Warehouse Management System (WMS)", Description = "Helps coordinate picking, packing, and shipping operations.", SystemPrompt = "You are a warehouse management assistant. Help coordinate pick-pack-ship operations, track inventory locations, and flag quality check issues." },
     };
 
     private List<WorkflowTemplate> FilteredWorkflowTemplates
@@ -493,6 +824,44 @@
     private static string ToAssistantType(string category) =>
         _validAssistantTypes.Contains(category) ? category : "General";
 
+    // ──────────────── Group Color & Icon Palette ────────────────
+    // Individual categories only have explicit colors below for the small legacy set;
+    // everything else (including all 74 Business Need subcategories) is colored by
+    // its top-level group so the 127-template grid stays visually scannable instead
+    // of collapsing into one flat gray.
+    private static readonly Dictionary<string, string> _groupColors = new()
+    {
+        ["Core & Industry"] = "#6B7280",
+        ["Sales"] = "#0EA5E9",
+        ["Marketing"] = "#F43F5E",
+        ["IT & Administration"] = "#6366F1",
+        ["Customer Service"] = "#14B8A6",
+        ["Finance"] = "#EAB308",
+        ["Analytics"] = "#8B5CF6",
+        ["Productivity"] = "#F97316",
+        ["Commerce"] = "#22C55E",
+        ["Collaboration"] = "#06B6D4",
+        ["Enterprise Resource Planning"] = "#D946EF",
+    };
+
+    private static readonly Dictionary<string, string> _groupIcons = new()
+    {
+        ["Core & Industry"] = Icons.Material.Filled.Category,
+        ["Sales"] = Icons.Material.Filled.TrendingUp,
+        ["Marketing"] = Icons.Material.Filled.Campaign,
+        ["IT & Administration"] = Icons.Material.Filled.Dns,
+        ["Customer Service"] = Icons.Material.Filled.SupportAgent,
+        ["Finance"] = Icons.Material.Filled.AccountBalance,
+        ["Analytics"] = Icons.Material.Filled.Analytics,
+        ["Productivity"] = Icons.Material.Filled.Bolt,
+        ["Commerce"] = Icons.Material.Filled.ShoppingCart,
+        ["Collaboration"] = Icons.Material.Filled.Groups,
+        ["Enterprise Resource Planning"] = Icons.Material.Filled.Business,
+    };
+
+    private static string GroupForCategory((string Group, string[] Categories)[] groups, string category) =>
+        groups.FirstOrDefault(g => g.Categories.Contains(category)).Group ?? "Core & Industry";
+
     // ──────────────── Color & Icon Helpers ────────────────
     private static string GetWorkflowCategoryColor(string category) => category switch
     {
@@ -501,7 +870,7 @@
         "Finance" => "#EAB308",
         "IT" => "#3B82F6",
         "Operations" => "#F97316",
-        _ => "#6B7280"
+        _ => _groupColors.GetValueOrDefault(GroupForCategory(_workflowGroups, category), "#6B7280")
     };
 
     private static string GetWorkflowCategoryIcon(string category) => category switch
@@ -511,7 +880,7 @@
         "Finance" => Icons.Material.Filled.AccountBalance,
         "IT" => Icons.Material.Filled.Computer,
         "Operations" => Icons.Material.Filled.Settings,
-        _ => Icons.Material.Filled.AccountTree
+        _ => _groupIcons.GetValueOrDefault(GroupForCategory(_workflowGroups, category), Icons.Material.Filled.AccountTree)
     };
 
     private static string GetAssistantTypeColor(string type) => type switch
@@ -522,7 +891,7 @@
         "Legal" => "#7C3AED",
         "Procurement" => "#F97316",
         "General" => "#10B981",
-        _ => "#6B7280"
+        _ => _groupColors.GetValueOrDefault(GroupForCategory(_assistantGroups, type), "#6B7280")
     };
 
     private static string GetAssistantTypeIcon(string type) => type switch
@@ -533,7 +902,7 @@
         "Legal" => Icons.Material.Filled.Gavel,
         "Procurement" => Icons.Material.Filled.ShoppingCart,
         "General" => Icons.Material.Filled.SmartToy,
-        _ => Icons.Material.Filled.SmartToy
+        _ => _groupIcons.GetValueOrDefault(GroupForCategory(_assistantGroups, type), Icons.Material.Filled.SmartToy)
     };
 
     // DTOs
