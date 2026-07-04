@@ -21,10 +21,10 @@ public class ApprovalPolicyConfiguration : IEntityTypeConfiguration<ApprovalPoli
             .HasMaxLength(100);
 
         builder.Property(ap => ap.ApproverRoles)
-            .HasColumnType("jsonb");
+            .HasMaxLength(1000);
 
         builder.Property(ap => ap.EscalationRoles)
-            .HasColumnType("jsonb");
+            .HasMaxLength(1000);
 
         builder.Property(ap => ap.MinApprovers)
             .HasDefaultValue(1);

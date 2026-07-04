@@ -684,6 +684,100 @@
         </div>
     </MudTabPanel>
 
+    @* Approval Policies Tab *@
+    <MudTabPanel Text="Policies" Icon="@Icons.Material.Outlined.Rule">
+        <div class="pa-4 animate-slide-in">
+            <div class="d-flex justify-space-between align-center mb-3">
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Approval Policies</MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="AddPolicy">
+                    New Policy
+                </MudButton>
+            </div>
+
+            @if (_policies.Count > 0)
+            {
+                <MudTextField @bind-Value="_policySearchTerm" Placeholder="Search policies..."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                              Immediate="true" DebounceInterval="300" />
+            }
+
+            @if (_policies.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.Rule" Title="No approval policies configured"
+                            Description="Define who can approve requests for each workflow type, how many approvers are needed, and when to escalate."
+                            ActionText="Create Policy"
+                            OnAction="AddPolicy"
+                            MinHeight="250px" />
+            }
+            else if (!FilteredPolicies.Any())
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.SearchOff" Title="No policies match your search"
+                            Description="Try a different search term."
+                            ActionText="Clear search"
+                            OnAction="@(() => _policySearchTerm = string.Empty)"
+                            MinHeight="250px" />
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var policy in FilteredPolicies)
+                    {
+                        <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                            <div class="d-flex justify-space-between align-center">
+                                <div class="d-flex align-center gap-3">
+                                    <div class="wf-stat-icon @(policy.IsActive ? "wf-stat-icon--success" : "wf-stat-icon--default")">
+                                        <MudIcon Icon="@Icons.Material.Outlined.Rule" Size="Size.Small" />
+                                    </div>
+                                    <div>
+                                        <div class="d-flex align-center gap-2">
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@policy.Name</MudText>
+                                            <MudChip T="string" Size="Size.Small"
+                                                     Color="@(policy.IsActive ? Color.Success : Color.Default)"
+                                                     Variant="Variant.Filled" Style="font-size: 0.6rem; height: 20px;">
+                                                @(policy.IsActive ? "Active" : "Paused")
+                                            </MudChip>
+                                            @if (!string.IsNullOrWhiteSpace(policy.WorkflowType))
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                         Style="font-size: 0.6rem; height: 20px;">
+                                                    @policy.WorkflowType
+                                                </MudChip>
+                                            }
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(policy.Description))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">@policy.Description</MudText>
+                                        }
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            Approvers: @(string.IsNullOrWhiteSpace(policy.ApproverRoles) ? "Any" : policy.ApproverRoles)
+                                            · Min required: @policy.MinApprovers
+                                        </MudText>
+                                        @if (policy.EscalationMinutes is > 0)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                Escalates after @policy.EscalationMinutes min@(string.IsNullOrWhiteSpace(policy.EscalationRoles) ? "" : $" to {policy.EscalationRoles}")
+                                            </MudText>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <MudSwitch T="bool" Value="policy.IsActive" Color="Color.Success" Size="Size.Small"
+                                               ValueChanged="@(val => TogglePolicy(policy, val))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   OnClick="@(() => EditPolicy(policy))" aria-label="Edit policy" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => DeletePolicy(policy))" aria-label="Delete policy" />
+                                </div>
+                            </div>
+                        </MudPaper>
+                    }
+                </div>
+            }
+        </div>
+    </MudTabPanel>
+
     @* Schedules Tab *@
     <MudTabPanel Text="Schedules" Icon="@Icons.Material.Outlined.Schedule">
         <div class="pa-4 animate-slide-in">
@@ -695,6 +789,14 @@
                 </MudButton>
             </div>
 
+            @if (_schedules.Count > 0)
+            {
+                <MudTextField @bind-Value="_scheduleSearchTerm" Placeholder="Search schedules..."
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                              Immediate="true" DebounceInterval="300" />
+            }
+
             @if (_schedules.Count == 0)
             {
                 <EmptyState Icon="@Icons.Material.Outlined.Schedule" Title="No schedules configured"
@@ -703,10 +805,18 @@
                             OnAction="AddSchedule"
                             MinHeight="250px" />
             }
+            else if (!FilteredSchedules.Any())
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.SearchOff" Title="No schedules match your search"
+                            Description="Try a different search term."
+                            ActionText="Clear search"
+                            OnAction="@(() => _scheduleSearchTerm = string.Empty)"
+                            MinHeight="250px" />
+            }
             else
             {
                 <div class="d-flex flex-column gap-3">
-                    @foreach (var schedule in _schedules)
+                    @foreach (var schedule in FilteredSchedules)
                     {
                         <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
                             <div class="d-flex justify-space-between align-center">
@@ -849,6 +959,23 @@
 
     // Schedules
     private List<ScheduleDto> _schedules = new();
+    private string _scheduleSearchTerm = string.Empty;
+
+    private IEnumerable<ScheduleDto> FilteredSchedules =>
+        string.IsNullOrWhiteSpace(_scheduleSearchTerm)
+            ? _schedules
+            : _schedules.Where(s => s.Name.Contains(_scheduleSearchTerm, StringComparison.OrdinalIgnoreCase)
+                                  || s.WorkflowName.Contains(_scheduleSearchTerm, StringComparison.OrdinalIgnoreCase));
+
+    // Approval Policies
+    private List<PolicyDto> _policies = new();
+    private string _policySearchTerm = string.Empty;
+
+    private IEnumerable<PolicyDto> FilteredPolicies =>
+        string.IsNullOrWhiteSpace(_policySearchTerm)
+            ? _policies
+            : _policies.Where(p => p.Name.Contains(_policySearchTerm, StringComparison.OrdinalIgnoreCase)
+                                 || (p.WorkflowType?.Contains(_policySearchTerm, StringComparison.OrdinalIgnoreCase) ?? false));
 
     private List<WorkflowDto> FilteredWorkflows
     {
@@ -922,7 +1049,7 @@
     {
         if (firstRender)
         {
-            await Task.WhenAll(LoadWorkflows(), LoadInstances(), LoadApprovals(), LoadIntegrations(), LoadSchedules());
+            await Task.WhenAll(LoadWorkflows(), LoadInstances(), LoadApprovals(), LoadIntegrations(), LoadSchedules(), LoadPolicies());
             StateHasChanged();
         }
     }
@@ -1361,6 +1488,59 @@
         catch { Snackbar.Add("Failed to delete schedule.", Severity.Error); }
     }
 
+    // --- Approval Policies ---
+    private async Task LoadPolicies()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<PolicyListResult>("/api/v1/approvals/policies");
+            _policies = result?.Items ?? new();
+        }
+        catch { Snackbar.Add("Failed to load approval policies.", Severity.Warning); }
+    }
+
+    private async Task AddPolicy()
+    {
+        var dialog = await Dialog.ShowAsync<CreateEditApprovalPolicyDialog>("Create Approval Policy");
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadPolicies();
+    }
+
+    private async Task EditPolicy(PolicyDto policy)
+    {
+        var parameters = new DialogParameters<CreateEditApprovalPolicyDialog> { { x => x.EditId, policy.Id.ToString() } };
+        var dialog = await Dialog.ShowAsync<CreateEditApprovalPolicyDialog>("Edit Approval Policy", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadPolicies();
+    }
+
+    private async Task TogglePolicy(PolicyDto policy, bool enabled)
+    {
+        try
+        {
+            await Http.PostAsJsonAsync($"/api/v1/approvals/policies/{policy.Id}/toggle", new { });
+            policy.IsActive = enabled;
+            Snackbar.Add($"Policy {(enabled ? "activated" : "paused")}", enabled ? Severity.Success : Severity.Warning);
+        }
+        catch { Snackbar.Add("Failed to toggle policy.", Severity.Error); }
+    }
+
+    private async Task DeletePolicy(PolicyDto policy)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, policy.Name } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/approvals/policies/{policy.Id}");
+            _policies.Remove(policy);
+            Snackbar.Add("Policy deleted", Severity.Success);
+        }
+        catch { Snackbar.Add("Failed to delete policy.", Severity.Error); }
+    }
+
     // --- Integrations ---
     private async Task LoadIntegrations()
     {
@@ -1485,4 +1665,19 @@
         public string? LastRunStatus { get; set; }
     }
     private class TestResult { public bool Success { get; set; } public string? Message { get; set; } }
+
+    private class PolicyListResult { public List<PolicyDto>? Items { get; set; } }
+
+    private class PolicyDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? WorkflowType { get; set; }
+        public string? ApproverRoles { get; set; }
+        public int MinApprovers { get; set; }
+        public int? EscalationMinutes { get; set; }
+        public string? EscalationRoles { get; set; }
+        public bool IsActive { get; set; }
+    }
 }

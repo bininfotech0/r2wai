@@ -8,6 +8,12 @@
 
 <PageHeader Title="Security" Subtitle="Password policies, session management, and authentication" />
 
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
 <MudGrid Spacing="3" Class="admin-page">
     <MudItem xs="12" md="6">
         <MudPaper Elevation="0" Class="pa-4 hover-lift" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
@@ -64,8 +70,10 @@
         </div>
     </MudItem>
 </MudGrid>
+}
 
 @code {
+    private bool _loading = true;
     private int _minPasswordLength = 8;
     private bool _requireUppercase = true;
     private bool _requireDigit = true;
@@ -93,7 +101,11 @@
             }
         }
         catch { }
-        StateHasChanged();
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
     }
 
     private async Task SaveSettings()

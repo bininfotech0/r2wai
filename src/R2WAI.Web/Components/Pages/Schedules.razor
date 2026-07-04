@@ -30,8 +30,23 @@ else if (_schedules.Count == 0)
 }
 else
 {
+    <MudTextField @bind-Value="_searchTerm" Placeholder="Search schedules..."
+                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-4"
+                  Immediate="true" DebounceInterval="300" />
+
+    if (!FilteredSchedules.Any())
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                    Title="No schedules match your search"
+                    Description="Try a different search term."
+                    ActionText="Clear search"
+                    OnAction="@(() => _searchTerm = string.Empty)" />
+    }
+    else
+    {
     <MudGrid Spacing="3" Class="stagger-in">
-        @foreach (var schedule in _schedules)
+        @foreach (var schedule in FilteredSchedules)
         {
             <MudItem xs="12" sm="6" md="4">
                 <MudCard Elevation="0" Class="@($"studio-card studio-card--secondary {(schedule.IsActive ? "animate-glow" : "")}")">
@@ -95,11 +110,19 @@ else
             </MudItem>
         }
     </MudGrid>
+    }
 }
 
 @code {
     private bool _loading = true;
     private List<ScheduleItem> _schedules = new();
+    private string _searchTerm = string.Empty;
+
+    private IEnumerable<ScheduleItem> FilteredSchedules =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _schedules
+            : _schedules.Where(s => s.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                                  || s.WorkflowName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {

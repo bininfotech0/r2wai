@@ -15,6 +15,16 @@
     </MudButton>
 </PageHeader>
 
+@if (!_loading && _webhooks.Count > 0)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+        <MudTextField @bind-Value="_searchTerm" Placeholder="Search webhooks..."
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Immediate="true" DebounceInterval="300" />
+    </MudPaper>
+}
+
 @if (_loading)
 {
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
@@ -28,10 +38,18 @@ else if (_webhooks.Count == 0)
                 ActionIcon="@Icons.Material.Filled.Add"
                 OnAction="OpenCreateDialog" />
 }
+else if (!FilteredWebhooks.Any())
+{
+    <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                Title="No webhooks match your search"
+                Description="Try a different search term."
+                ActionText="Clear search"
+                OnAction="@(() => _searchTerm = string.Empty)" />
+}
 else
 {
     <MudPaper Elevation="0" Class="stagger-in" Style="border: 1px solid var(--mud-palette-divider);">
-        <MudTable Items="_webhooks" Dense="true" Hover="true">
+        <MudTable Items="FilteredWebhooks" Dense="true" Hover="true">
             <HeaderContent>
                 <MudTh>Name</MudTh>
                 <MudTh>Endpoint</MudTh>
@@ -88,7 +106,14 @@ else
 
 @code {
     private bool _loading = true;
+    private string _searchTerm = string.Empty;
     private List<WebhookItem> _webhooks = new();
+
+    private IEnumerable<WebhookItem> FilteredWebhooks =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _webhooks
+            : _webhooks.Where(w => w.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                                 || w.EndpointUrl.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {

@@ -24,6 +24,7 @@ EXPOSE 8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENV ASPNETCORE_URLS=http://+:8080
 COPY --from=publish /app/publish .
+RUN mkdir -p /app/App_Data/Storage /app/Logs && chown -R appuser:appuser /app
 USER appuser
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1

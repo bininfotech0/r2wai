@@ -8,6 +8,12 @@
 
 <PageHeader Title="Content Moderation Settings" Subtitle="Configure AI content safety rules, blocked keywords, and response templates" />
 
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
 <MudGrid Class="admin-page" Spacing="3">
     @* ───── Moderation Level ───── *@
     <MudItem xs="12" md="6">
@@ -205,8 +211,11 @@
         </MudButton>
     </MudItem>
 </MudGrid>
+}
 
 @code {
+    private bool _loading = true;
+
     // Moderation level
     private string _moderationLevel = "Medium";
 
@@ -421,6 +430,10 @@
             }
         }
         catch { }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private class ModerationSettingsResponse

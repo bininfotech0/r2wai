@@ -28,6 +28,7 @@ public class UpdateKnowledgeBaseCommandHandler(
         var kb = await kbRepo.GetByIdAsync(command.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(KnowledgeBase), command.Id);
 
+        kb.UpdateDetails(command.Name, command.Description);
         kb.UpdateStatus(KnowledgeBaseStatus.Active);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

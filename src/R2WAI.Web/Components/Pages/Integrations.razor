@@ -168,7 +168,7 @@
     private HashSet<string> _installedConnectors = new();
     private string? _installingConnector;
 
-    private static readonly string[] _allCategories = { "All", "CRM", "Communication", "Storage", "DevOps", "Finance", "HR" };
+    private static readonly string[] _allCategories = { "All", "CRM", "Communication", "Storage", "DevOps", "Finance", "HR", "AI Automation" };
 
     private static readonly List<ConnectorTemplate> _marketplaceConnectors = new()
     {
@@ -219,6 +219,18 @@
                  Description = "Manage employee records, time-off requests, and HR reporting." },
         new() { Name = "Workday", Category = "HR", Endpoint = "https://{tenant}.workday.com/api", AuthType = "OAuth2",
                  Description = "Integrate with Workday for HR, payroll, and talent management." },
+
+        // AI Automation
+        new() { Name = "n8n", Category = "AI Automation", Endpoint = "https://{your-instance}.app.n8n.cloud/webhook", AuthType = "ApiKey",
+                 Description = "Trigger and manage n8n workflow automations via webhooks and the n8n REST API." },
+        new() { Name = "Dify", Category = "AI Automation", Endpoint = "https://api.dify.ai/v1", AuthType = "Bearer",
+                 Description = "Connect to Dify AI app workflows and agents for LLM-powered automation." },
+        new() { Name = "Langflow", Category = "AI Automation", Endpoint = "https://{your-instance}/api/v1", AuthType = "ApiKey",
+                 Description = "Integrate with Langflow flows for visual LLM pipeline execution." },
+        new() { Name = "Flowise", Category = "AI Automation", Endpoint = "https://{your-instance}/api/v1/prediction/{flow-id}", AuthType = "ApiKey",
+                 Description = "Call Flowise chatflows and agent flows for low-code LLM orchestration." },
+        new() { Name = "MCP Servers", Category = "AI Automation", Endpoint = "https://{your-mcp-server}/sse", AuthType = "Bearer",
+                 Description = "Connect to Model Context Protocol (MCP) servers to expose external tools and resources." },
     };
 
     private List<ConnectorTemplate> FilteredConnectors
@@ -332,6 +344,7 @@
         "Finance" => "Http",
         "HR" => "Http",
         "CRM" => "Http",
+        "AI Automation" => "Http",
         _ => "Http"
     };
 
@@ -343,6 +356,7 @@
         "DevOps" => "#F97316",
         "Finance" => "#EAB308",
         "HR" => "#EC4899",
+        "AI Automation" => "#14B8A6",
         _ => "#6B7280"
     };
 
@@ -354,6 +368,7 @@
         "DevOps" => Icons.Material.Filled.Code,
         "Finance" => Icons.Material.Filled.AccountBalance,
         "HR" => Icons.Material.Filled.Badge,
+        "AI Automation" => Icons.Material.Filled.Hub,
         _ => Icons.Material.Filled.Extension
     };
 
