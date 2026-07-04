@@ -150,12 +150,24 @@ else
         </TemplateColumn>
     </Columns>
     <NoRecordsContent>
-        <EmptyState Icon="@Icons.Material.Outlined.Description"
-                    Title="No documents found"
-                    Description="Upload your first document to start building knowledge."
-                    ActionText="Upload Document"
-                    OnAction="OpenUploadDialog"
-                    MinHeight="300px" />
+        @if (_documents.Count == 0)
+        {
+            <EmptyState Icon="@Icons.Material.Outlined.Description"
+                        Title="No documents found"
+                        Description="Upload your first document to start building knowledge."
+                        ActionText="Upload Document"
+                        OnAction="OpenUploadDialog"
+                        MinHeight="300px" />
+        }
+        else
+        {
+            <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                        Title="No documents match your search"
+                        Description="Try a different search term."
+                        ActionText="Clear search"
+                        OnAction="@(() => _searchTerm = string.Empty)"
+                        MinHeight="300px" />
+        }
     </NoRecordsContent>
 </MudDataGrid>
 }

@@ -31,10 +31,22 @@
 }
 else if (!_filteredLeads.Any())
 {
-    <EmptyState Icon="@Icons.Material.Outlined.ContactMail"
-                Title="No leads yet"
-                Description="Leads captured from chatbot conversations will show up here."
-                MinHeight="300px" />
+    @if (_leads.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.ContactMail"
+                    Title="No leads yet"
+                    Description="Leads captured from chatbot conversations will show up here."
+                    MinHeight="300px" />
+    }
+    else
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                    Title="No leads match your filters"
+                    Description="Try a different search term or status filter."
+                    ActionText="Clear filters"
+                    OnAction="@(() => { _searchTerm = string.Empty; _statusFilter = string.Empty; })"
+                    MinHeight="300px" />
+    }
 }
 else
 {

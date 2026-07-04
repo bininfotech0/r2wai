@@ -266,7 +266,12 @@ else
         var parameters = new DialogParameters<DeleteConfirmationDialog>
         {
             { x => x.ItemName, key.Name },
-            { x => x.Description, $"This will {action} the API key. Any systems using this key will {(key.IsActive ? "lose access" : "regain access")}." }
+            { x => x.Description, $"This will {action} the API key. Any systems using this key will {(key.IsActive ? "lose access" : "regain access")}." },
+            { x => x.Title, $"Confirm {action}" },
+            { x => x.ActionLabel, key.IsActive ? "Deactivate" : "Activate" },
+            { x => x.ActionIcon, key.IsActive ? Icons.Material.Filled.PowerOff : Icons.Material.Filled.PowerSettingsNew },
+            { x => x.ActionColor, key.IsActive ? Color.Warning : Color.Success },
+            { x => x.Irreversible, false },
         };
         var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>($"Confirm {action}", parameters);
         var result = await dialog.Result;
@@ -293,7 +298,12 @@ else
         var parameters = new DialogParameters<DeleteConfirmationDialog>
         {
             { x => x.ItemName, key.Name },
-            { x => x.Description, "Regenerating will invalidate the current key. Any systems using this key will need to be updated." }
+            { x => x.Description, "Regenerating will invalidate the current key. Any systems using this key will need to be updated." },
+            { x => x.Title, "Confirm Regenerate" },
+            { x => x.ActionLabel, "Regenerate" },
+            { x => x.ActionIcon, Icons.Material.Filled.Refresh },
+            { x => x.ActionColor, Color.Warning },
+            { x => x.Irreversible, false },
         };
         var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Regenerate", parameters);
         var result = await dialog.Result;

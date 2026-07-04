@@ -49,7 +49,7 @@ else
             var isOverdue = approval.DueAt.HasValue && approval.DueAt < DateTime.UtcNow;
             var parsedData = ParseData(approval.Data);
             <MudPaper Elevation="0" Class="pa-4"
-                      Style="@($"border: 1px solid var(--mud-palette-divider); border-left: 4px solid var(--mud-palette-{(isOverdue ? "error" : approval.EscalationLevel > 0 ? "warning" : "info")}); border-radius: 10px;")">
+                      Style="@($"border: 1px solid var(--mud-palette-divider); border-left: 4px solid var(--mud-palette-{(isOverdue ? "error" : approval.EscalationLevel > 0 ? "warning" : "info")}); border-radius: 12px;")">
                 <div class="d-flex justify-space-between align-start gap-4">
                     <div style="flex: 1; min-width: 0;">
                         <div class="d-flex align-center gap-2 mb-1 flex-wrap">

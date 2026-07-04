@@ -187,12 +187,24 @@
             }
             else if (FilteredAssistants.Count == 0)
             {
-                <EmptyState Icon="@Icons.Material.Filled.SmartToy"
-                            Title="No assistants yet"
-                            Description="Create your first AI assistant to get started."
-                            ActionText="New Assistant"
-                            OnAction="ShowCreator"
-                            MinHeight="200px" />
+                @if (_assistants.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Filled.SmartToy"
+                                Title="No assistants yet"
+                                Description="Create your first AI assistant to get started."
+                                ActionText="New Assistant"
+                                OnAction="ShowCreator"
+                                MinHeight="200px" />
+                }
+                else
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                                Title="No assistants match your filters"
+                                Description="Try a different search term or status filter."
+                                ActionText="Clear filters"
+                                OnAction="@(() => { _searchTerm = string.Empty; _filter = "All"; })"
+                                MinHeight="200px" />
+                }
             }
             else
             {
@@ -1273,7 +1285,7 @@
         };
         var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Unpublish", parameters);
         var result = await dialog.Result;
-        if (result?.Canceled == true) return;
+        if (result?.Canceled != false) return;
 
         try
         {
@@ -1299,7 +1311,7 @@
         };
         var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Archive", parameters);
         var result = await dialog.Result;
-        if (result?.Canceled == true) return;
+        if (result?.Canceled != false) return;
 
         try
         {
@@ -1320,7 +1332,7 @@
         };
         var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
         var result = await dialog.Result;
-        if (result?.Canceled == true) return;
+        if (result?.Canceled != false) return;
 
         try
         {

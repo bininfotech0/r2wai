@@ -133,7 +133,11 @@
 }
 else if (_workflow is null)
 {
-    <MudAlert Severity="Severity.Error">Workflow not found.</MudAlert>
+    <EmptyState Icon="@Icons.Material.Outlined.SearchOff" Title="Workflow not found"
+                Description="It may have been deleted or you may not have access to it."
+                ActionText="Back to Workflows"
+                OnAction="@(() => Navigation.NavigateTo("/workflow-studio"))"
+                MinHeight="300px" />
 }
 else
 {

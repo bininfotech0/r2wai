@@ -169,7 +169,8 @@ else
                         <PropertyColumn Property="x => x.Model" Title="Model" />
                     </Columns>
                     <NoRecordsContent>
-                        <MudText Align="Align.Center" Class="pa-4" Color="Color.Secondary">No assistants configured.</MudText>
+                        <EmptyState Icon="@Icons.Material.Outlined.SmartToy" Title="No assistants configured"
+                                    Description="Create an assistant to see it listed here." MinHeight="150px" />
                     </NoRecordsContent>
                 </MudDataGrid>
             </MudPaper>

@@ -2,10 +2,11 @@
 @attribute [Authorize]
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
+@inject IDialogService Dialog
 
 <PageTitle>R2WAI - Profile</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4 gradient-text">My Profile</MudText>
+<PageHeader Title="My Profile" Subtitle="Manage your account details, security, and preferences" />
 
 <MudPaper Class="pa-6 animate-slide-in" Elevation="0" MaxWidth="600px" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
     <MudGrid>
@@ -388,6 +389,20 @@
 
     private async Task DisableMfa()
     {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, "multi-factor authentication" },
+            { x => x.Description, "This will reduce your account's security. You can re-enable MFA at any time." },
+            { x => x.Title, "Disable MFA" },
+            { x => x.ActionLabel, "Disable" },
+            { x => x.ActionIcon, Icons.Material.Filled.LockOpen },
+            { x => x.ActionColor, Color.Warning },
+            { x => x.Irreversible, false },
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Disable MFA", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
         _mfaProcessing = true;
         try
         {

@@ -15,13 +15,13 @@
 </PageHeader>
 
 <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);" Class="admin-page animate-slide-in">
-    <MudDataGrid T="UserDto" Items="_users" Hover="true" Dense="true" Loading="_loading" Elevation="0">
+    <MudDataGrid T="UserDto" Items="FilteredUsers" Hover="true" Dense="true" Loading="_loading" Elevation="0">
         <ToolBarContent>
             <MudTextField @bind-Value="_search" Placeholder="Search users..." Immediate="true" DebounceInterval="300"
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 300px;" />
             <MudSpacer />
-            <MudText Typo="Typo.caption" Color="Color.Secondary">@_users.Count users</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@FilteredUsers.Count() of @_users.Count users</MudText>
         </ToolBarContent>
         <Columns>
             <TemplateColumn Title="User" SortBy="@(x => x.Email)">
@@ -57,8 +57,17 @@
             </TemplateColumn>
         </Columns>
         <NoRecordsContent>
-            <EmptyState Icon="@Icons.Material.Outlined.PeopleAlt" Title="No users found"
-                        Description="Invite users to start collaborating." MinHeight="200px" />
+            @if (_users.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.PeopleAlt" Title="No users found"
+                            Description="Invite users to start collaborating." MinHeight="200px" />
+            }
+            else
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.SearchOff" Title="No users match your search"
+                            Description="Try a different name or email." ActionText="Clear search"
+                            OnAction="@(() => _search = string.Empty)" MinHeight="200px" />
+            }
         </NoRecordsContent>
     </MudDataGrid>
 </MudPaper>
@@ -67,6 +76,13 @@
     private List<UserDto> _users = new();
     private bool _loading = true;
     private string _search = string.Empty;
+
+    private IEnumerable<UserDto> FilteredUsers =>
+        string.IsNullOrWhiteSpace(_search)
+            ? _users
+            : _users.Where(u => u.Email.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                              || u.FirstName.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                              || u.LastName.Contains(_search, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

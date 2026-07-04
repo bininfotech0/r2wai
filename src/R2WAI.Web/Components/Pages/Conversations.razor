@@ -140,13 +140,25 @@ else if (!FilteredConversations.Any())
                       Variant="Variant.Outlined" Margin="Margin.Dense"
                       Immediate="true" DebounceInterval="300" />
     </MudPaper>
-    <EmptyState Icon="@Icons.Material.Outlined.ChatBubbleOutline"
-                Title="No conversations yet"
-                Description="Start chatting with an assistant to see your history here."
-                ActionText="Start a Chat"
-                ActionIcon="@Icons.Material.Filled.Chat"
-                OnAction="StartNewChat"
-                MinHeight="300px" />
+    @if (_conversations.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.ChatBubbleOutline"
+                    Title="No conversations yet"
+                    Description="Start chatting with an assistant to see your history here."
+                    ActionText="Start a Chat"
+                    ActionIcon="@Icons.Material.Filled.Chat"
+                    OnAction="StartNewChat"
+                    MinHeight="300px" />
+    }
+    else
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                    Title="No conversations match your search"
+                    Description="Try a different title or assistant name."
+                    ActionText="Clear search"
+                    OnAction="@(() => _searchTerm = string.Empty)"
+                    MinHeight="300px" />
+    }
 }
 else
 {
@@ -621,7 +633,7 @@ else
         };
         var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
         var result = await dialog.Result;
-        if (result?.Canceled == true) return;
+        if (result?.Canceled != false) return;
 
         try
         {

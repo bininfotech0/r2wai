@@ -32,12 +32,24 @@ else if (_hasError)
 }
 else if (!_filteredKnowledgeBases.Any())
 {
-    <EmptyState Icon="@Icons.Material.Outlined.MenuBook"
-                Title="No knowledge bases found"
-                Description="Create your first knowledge base to start indexing documents for RAG."
-                ActionText="New Knowledge Base"
-                OnAction="OpenCreateDialog"
-                MinHeight="300px" />
+    @if (_knowledgeBases.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.MenuBook"
+                    Title="No knowledge bases found"
+                    Description="Create your first knowledge base to start indexing documents for RAG."
+                    ActionText="New Knowledge Base"
+                    OnAction="OpenCreateDialog"
+                    MinHeight="300px" />
+    }
+    else
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                    Title="No knowledge bases match your search"
+                    Description="Try a different search term."
+                    ActionText="Clear search"
+                    OnAction="@(() => _searchTerm = string.Empty)"
+                    MinHeight="300px" />
+    }
 }
 else
 {

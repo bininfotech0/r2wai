@@ -140,7 +140,7 @@
 }
 
 <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" @bind-ActivePanelIndex="_activeTab"
-         Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px;">
+         Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
 
     @* Workflows Tab *@
     <MudTabPanel Text="Workflows" Icon="@Icons.Material.Outlined.AccountTree"
@@ -197,12 +197,24 @@
         }
         else if (FilteredWorkflows.Count == 0)
         {
-            <EmptyState Icon="@Icons.Material.Outlined.AccountTree"
-                        Title="No workflows yet"
-                        Description="Create your first workflow manually or use AI to generate one."
-                        ActionText="AI Generate"
-                        OnAction="@(() => _showGenerator = true)"
-                        MinHeight="300px" />
+            @if (_workflows.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.AccountTree"
+                            Title="No workflows yet"
+                            Description="Create your first workflow manually or use AI to generate one."
+                            ActionText="AI Generate"
+                            OnAction="@(() => _showGenerator = true)"
+                            MinHeight="300px" />
+            }
+            else
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                            Title="No workflows match your filters"
+                            Description="Try a different status or type filter."
+                            ActionText="Clear filters"
+                            OnAction="@(() => { _statusFilter = "All"; _typeFilter = "All"; })"
+                            MinHeight="300px" />
+            }
         }
         else if (_viewAsList)
         {
@@ -696,7 +708,7 @@
                 <div class="d-flex flex-column gap-3">
                     @foreach (var schedule in _schedules)
                     {
-                        <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px;">
+                        <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
                             <div class="d-flex justify-space-between align-center">
                                 <div class="d-flex align-center gap-3">
                                     <div class="wf-stat-icon @(schedule.IsActive ? "wf-stat-icon--success" : "wf-stat-icon--default")">
@@ -1068,7 +1080,7 @@
         var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, workflow.Name } };
         var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
         var result = await dialog.Result;
-        if (result?.Canceled == true) return;
+        if (result?.Canceled != false) return;
 
         try
         {

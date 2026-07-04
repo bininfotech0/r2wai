@@ -3,6 +3,7 @@
 @attribute [Authorize]
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 
 <PageTitle>R2WAI - Permission Matrix</PageTitle>
 
@@ -28,9 +29,12 @@
 }
 else if (_roles.Count == 0)
 {
-    <MudAlert Severity="Severity.Warning" Class="mt-4">
-        No roles found. Create roles in Admin → Roles before configuring permissions.
-    </MudAlert>
+    <EmptyState Icon="@Icons.Material.Outlined.Shield"
+                Title="No roles found"
+                Description="Create roles in Admin → Roles before configuring permissions."
+                ActionText="Go to Roles"
+                OnAction="@(() => Navigation.NavigateTo("/admin/roles"))"
+                MinHeight="300px" />
 }
 else
 {

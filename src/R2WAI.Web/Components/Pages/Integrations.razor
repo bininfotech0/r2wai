@@ -26,7 +26,7 @@
 </MudPaper>
 
 @* ──────────────────── Connector Marketplace ──────────────────── *@
-<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px;">
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
     <div class="d-flex justify-space-between align-center mb-2">
         <div>
             <MudText Typo="Typo.h6" Style="font-weight: 700;">Connector Marketplace</MudText>
@@ -51,7 +51,7 @@
         @foreach (var connector in FilteredConnectors)
         {
             <MudItem xs="12" sm="6" md="3">
-                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px; height: 100%; display: flex; flex-direction: column;">
+                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; height: 100%; display: flex; flex-direction: column;">
                     <div class="d-flex align-center gap-3 mb-3">
                         <MudAvatar Size="Size.Medium" Style="@($"background-color: {GetCategoryColor(connector.Category)}; color: white;")">
                             <MudIcon Icon="@GetCategoryIcon(connector.Category)" Size="Size.Small" />
@@ -92,8 +92,14 @@
     </MudGrid>
 </MudPaper>
 
-@* ──────────────────── Existing DataGrid ──────────────────── *@
-<MudDataGrid T="IntegrationDto" Items="_integrations" Hover="true" Dense="true" Loading="_loading" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+@* ──────────────────── Installed Integrations ──────────────────── *@
+<MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+<MudDataGrid T="IntegrationDto" Items="FilteredIntegrations" Hover="true" Dense="true" Loading="_loading" Elevation="0">
+    <ToolBarContent>
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Installed Integrations</MudText>
+        <MudSpacer />
+        <MudText Typo="Typo.caption" Color="Color.Secondary">@FilteredIntegrations.Count() of @_integrations.Count</MudText>
+    </ToolBarContent>
     <Columns>
         <PropertyColumn Property="x => x.Name" Title="Name" />
         <PropertyColumn Property="x => x.Type" Title="Type" />
@@ -137,14 +143,20 @@
         </TemplateColumn>
     </Columns>
     <NoRecordsContent>
-        <div class="d-flex flex-column align-center pa-6 gap-3">
-            <MudIcon Icon="@Icons.Material.Outlined.Extension" Size="Size.Large" Color="Color.Primary" Style="opacity: 0.5;" />
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
-                No integrations installed yet. Browse the Connector Marketplace above to add your first integration.
-            </MudText>
-        </div>
+        @if (_integrations.Count == 0)
+        {
+            <EmptyState Icon="@Icons.Material.Outlined.Extension" Title="No integrations installed yet"
+                        Description="Browse the Connector Marketplace above to add your first integration." MinHeight="200px" />
+        }
+        else
+        {
+            <EmptyState Icon="@Icons.Material.Outlined.SearchOff" Title="No integrations match your search"
+                        Description="Try a different name." ActionText="Clear search"
+                        OnAction="@(() => _searchTerm = string.Empty)" MinHeight="200px" />
+        }
     </NoRecordsContent>
 </MudDataGrid>
+</MudPaper>
 
 @code {
     private List<IntegrationDto> _integrations = new();
@@ -223,6 +235,12 @@
             return list.ToList();
         }
     }
+
+    private IEnumerable<IntegrationDto> FilteredIntegrations =>
+        string.IsNullOrWhiteSpace(_searchTerm)
+            ? _integrations
+            : _integrations.Where(i => i.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase)
+                                     || i.Type.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await LoadIntegrations(); }
 
