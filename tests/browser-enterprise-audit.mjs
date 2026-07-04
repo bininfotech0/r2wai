@@ -737,7 +737,6 @@ async function runBrowserPageChecks(page) {
     { name: 'Conversations', path: '/conversations' },
     { name: 'Conversation Detail', path: '/conversations' },
     { name: 'Inbox', path: '/inbox' },
-    { name: 'Proposals', path: '/proposals' },
     { name: 'Operations', path: '/operations' },
     { name: 'AI Operations', path: '/operations/ai' },
     { name: 'Usage Analytics', path: '/operations/analytics' },

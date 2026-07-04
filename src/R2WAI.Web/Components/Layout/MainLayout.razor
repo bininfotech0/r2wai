@@ -120,7 +120,7 @@
         <MudNavMenu>
             <MudNavLink Href="/" Icon="@Icons.Material.Outlined.SpaceDashboard" Match="NavLinkMatch.All">Home</MudNavLink>
 
-            <MudNavGroup Title="Studio" Icon="@Icons.Material.Outlined.AutoAwesome" Expanded="true" HideExpandIcon="false"
+            <MudNavGroup Title="Studio" Icon="@Icons.Material.Outlined.AutoAwesome" Expanded="_studioExpanded" ExpandedChanged="@(v => _studioExpanded = v)" HideExpandIcon="false"
                          Style="color: rgba(255,255,255,0.65);">
                 <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">Assistants</MudNavLink>
                 <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
@@ -132,7 +132,7 @@
                 <MudNavLink Href="/templates" Icon="@Icons.Material.Outlined.DashboardCustomize">Templates</MudNavLink>
             </MudNavGroup>
 
-            <MudNavGroup Title="Workspace" Icon="@Icons.Material.Outlined.WorkOutline" Expanded="true" HideExpandIcon="false"
+            <MudNavGroup Title="Workspace" Icon="@Icons.Material.Outlined.WorkOutline" Expanded="_workspaceExpanded" ExpandedChanged="@(v => _workspaceExpanded = v)" HideExpandIcon="false"
                          Style="color: rgba(255,255,255,0.65);">
                 <MudNavLink Href="/inbox" Icon="@Icons.Material.Outlined.Inbox">
                     <div class="d-flex justify-space-between align-center" style="width: 100%;">
@@ -149,11 +149,9 @@
                 <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
                 <MudNavLink Href="/workflow-studio/approvals" Icon="@Icons.Material.Outlined.TaskAlt">Approvals</MudNavLink>
                 <MudNavLink Href="/documents" Icon="@Icons.Material.Outlined.Description">Documents</MudNavLink>
-                <MudNavLink Href="/proposals" Icon="@Icons.Material.Outlined.RequestPage">Proposals</MudNavLink>
-                <MudNavLink Href="/leads" Icon="@Icons.Material.Outlined.ContactMail">Leads</MudNavLink>
             </MudNavGroup>
 
-            <MudNavGroup Title="Monitor" Icon="@Icons.Material.Outlined.MonitorHeart" Expanded="false" HideExpandIcon="false"
+            <MudNavGroup Title="Monitor" Icon="@Icons.Material.Outlined.MonitorHeart" Expanded="_monitorExpanded" ExpandedChanged="@(v => _monitorExpanded = v)" HideExpandIcon="false"
                          Style="color: rgba(255,255,255,0.65);">
                 <MudNavLink Href="/operations" Icon="@Icons.Material.Outlined.Dashboard">Dashboard</MudNavLink>
                 <MudNavLink Href="/operations/ai" Icon="@Icons.Material.Outlined.Psychology">AI Ops</MudNavLink>
@@ -163,7 +161,7 @@
                 <MudNavLink Href="/operations/errors" Icon="@Icons.Material.Outlined.BugReport">Errors</MudNavLink>
             </MudNavGroup>
 
-            <MudNavGroup Title="Settings" Icon="@Icons.Material.Outlined.Settings" Expanded="false" HideExpandIcon="false"
+            <MudNavGroup Title="Settings" Icon="@Icons.Material.Outlined.Settings" Expanded="_settingsExpanded" ExpandedChanged="@(v => _settingsExpanded = v)" HideExpandIcon="false"
                          Style="color: rgba(255,255,255,0.65);">
                 <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users</MudNavLink>
                 <MudNavLink Href="/admin/roles" Icon="@Icons.Material.Outlined.Shield">Roles</MudNavLink>
@@ -235,6 +233,14 @@
     private CommandPalette? _commandPalette;
     private DotNetObjectReference<MainLayout>? _dotNetRef;
 
+    // Studio/Workspace default open since they're the most-used areas; Monitor/Settings
+    // default closed but auto-expand when the current route lands inside them, so the
+    // active nav link is never hidden behind a collapsed group with no "you are here" cue.
+    private bool _studioExpanded = true;
+    private bool _workspaceExpanded = true;
+    private bool _monitorExpanded;
+    private bool _settingsExpanded;
+
     private int _unreadCount => _notifications.Count(n => !n.IsRead);
 
     [CascadingParameter]
@@ -245,7 +251,17 @@
         Navigation.LocationChanged += OnLocationChanged;
         ThemeService.OnChange += StateHasChanged;
         Http.OnSessionExpired += HandleSessionExpired;
+        UpdateActiveGroupExpansion();
         UpdateBreadcrumbs();
+    }
+
+    private void UpdateActiveGroupExpansion()
+    {
+        var path = new Uri(Navigation.Uri).AbsolutePath;
+        if (path.StartsWith("/operations", StringComparison.OrdinalIgnoreCase))
+            _monitorExpanded = true;
+        if (path.StartsWith("/admin", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/settings", StringComparison.OrdinalIgnoreCase))
+            _settingsExpanded = true;
     }
 
     private void HandleSessionExpired()
@@ -373,6 +389,7 @@
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         _isNavigating = true;
+        UpdateActiveGroupExpansion();
         InvokeAsync(StateHasChanged);
 
         _ = Task.Delay(400).ContinueWith(_ => InvokeAsync(() =>
@@ -429,10 +446,8 @@
             ["inbox"] = "Inbox",
             ["templates"] = "Templates",
             ["content-moderation"] = "Moderation",
-            ["proposals"] = "Proposals",
             ["webhooks"] = "Webhooks",
             ["api-keys"] = "API Keys",
-            ["leads"] = "Leads",
         };
 
         foreach (var segment in segments)

@@ -286,27 +286,6 @@ public static class ApplicationDbContextSeed
             invoiceWorkflow, leaveWorkflow, onboardingWorkflow,
             demoBookingWorkflow, feeReminderWorkflow, resultBroadcastWorkflow);
 
-        // --- Sample Leads (coaching center demo) ---
-        var sampleLead1 = new Lead(
-            Guid.Parse("00000000-0000-0000-0000-000000000601"),
-            DefaultTenantId, "Aarav Kumar", admissionsChatbot.Id,
-            "+91-98765-43210", null, "Class 10", "JEE Foundation batch", "chatbot");
-        sampleLead1.UpdateStatus(LeadStatus.DemoScheduled);
-
-        var sampleLead2 = new Lead(
-            Guid.Parse("00000000-0000-0000-0000-000000000602"),
-            DefaultTenantId, "Priya Singh", admissionsChatbot.Id,
-            "+91-91234-56780", null, "Class 12", "NEET batch fees", "chatbot");
-        sampleLead2.UpdateStatus(LeadStatus.New);
-
-        var sampleLead3 = new Lead(
-            Guid.Parse("00000000-0000-0000-0000-000000000603"),
-            DefaultTenantId, "Rohit Mahato", admissionsChatbot.Id,
-            "+91-99887-76655", null, "JSSC Aspirant", "JSSC/JPSC batch admission", "chatbot");
-        sampleLead3.UpdateStatus(LeadStatus.Enrolled);
-
-        context.Leads.AddRange(sampleLead1, sampleLead2, sampleLead3);
-
         // --- Demo Approval Policy ---
         var approvalPolicy = new ApprovalPolicy(
             Guid.Parse("00000000-0000-0000-0000-000000000301"),
