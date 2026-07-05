@@ -24,6 +24,7 @@ public class SendMessageCommandValidator : AbstractValidator<SendMessageCommand>
 
 public class SendMessageCommandHandler(
     IRepository<Conversation> conversationRepo,
+    IRepository<Message> messageRepo,
     IUnitOfWork unitOfWork,
     ICurrentUserService currentUser,
     IAIService aiService,
@@ -55,6 +56,7 @@ public class SendMessageCommandHandler(
 
         var userMessage = conversation.AddMessage(
             Guid.NewGuid(), null, MessageRole.User, command.Content);
+        await messageRepo.AddAsync(userMessage, cancellationToken);
 
         if (command.Attachments?.Count > 0)
         {
@@ -106,6 +108,7 @@ public class SendMessageCommandHandler(
             var aiResponse = responseBuffer.ToString();
             var assistantMessage = conversation.AddMessage(
                 Guid.NewGuid(), userMessage.Id, MessageRole.Assistant, aiResponse);
+            await messageRepo.AddAsync(assistantMessage, cancellationToken);
             assistantMessage.UpdateStatus(MessageStatus.Completed);
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
