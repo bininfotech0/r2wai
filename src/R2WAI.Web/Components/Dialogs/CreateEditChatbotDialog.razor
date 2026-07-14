@@ -6,6 +6,7 @@
         <MudText Typo="Typo.h6">@(_isEdit ? "Edit Chatbot" : "Create Chatbot")</MudText>
     </TitleContent>
     <DialogContent>
+        <MudForm @ref="_form">
         <MudGrid>
             @* Setup guide — shown on create when prerequisites may be missing *@
             @if (!_isEdit && (_models.Count == 0 || _knowledgeBases.Count == 0))
@@ -29,7 +30,8 @@
             }
 
             <MudItem xs="12">
-                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" RequiredError="Name is required"
+                              Validation="@(new Func<string, string>(ValidateName))" Variant="Variant.Outlined" />
             </MudItem>
             <MudItem xs="12">
                 <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
@@ -86,6 +88,7 @@
                 </MudText>
             </MudItem>
         </MudGrid>
+        </MudForm>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
@@ -110,6 +113,7 @@
     private bool _voiceEnabled;
     private bool _saving;
     private bool _modelMissing;
+    private MudForm _form = default!;
     private List<KbOption> _knowledgeBases = new();
     private List<ModelOption> _models = new();
 
@@ -145,13 +149,18 @@
         }
     }
 
+    private static string ValidateName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Name is required";
+        return null!;
+    }
+
     private async Task Save()
     {
-        if (string.IsNullOrWhiteSpace(_name))
-        {
-            Snackbar.Add("Name is required", Severity.Warning);
+        await _form.Validate();
+        if (!_form.IsValid)
             return;
-        }
 
         _modelMissing = _modelConfigurationId is null;
         if (_modelMissing)

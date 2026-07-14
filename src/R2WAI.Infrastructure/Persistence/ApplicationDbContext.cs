@@ -127,7 +127,6 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        var userId = _currentUserService.UserId;
         var utcNow = _dateTimeService.UtcNow;
 
         foreach (var entry in ChangeTracker.Entries<BaseEntity<Guid>>())
@@ -136,19 +135,11 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
             {
                 case EntityState.Added:
                     entry.Entity.GetType().GetProperty("CreatedAt")?.SetValue(entry.Entity, utcNow);
-                    if (entry.Entity is BaseAuditableEntity<Guid> auditable)
-                    {
-                        auditable.GetType().GetProperty("CreatedBy")?.SetValue(auditable, userId?.ToString());
-                    }
                     break;
 
                 case EntityState.Modified:
                     entry.Property(nameof(BaseEntity<Guid>.CreatedAt)).IsModified = false;
                     entry.Entity.GetType().GetProperty("ModifiedAt")?.SetValue(entry.Entity, utcNow);
-                    if (entry.Entity is BaseAuditableEntity<Guid> modAuditable)
-                    {
-                        modAuditable.GetType().GetProperty("ModifiedBy")?.SetValue(modAuditable, userId?.ToString());
-                    }
                     break;
             }
         }

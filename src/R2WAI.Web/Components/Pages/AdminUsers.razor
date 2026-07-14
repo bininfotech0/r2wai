@@ -15,15 +15,31 @@
 </PageHeader>
 
 <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);" Class="admin-page animate-slide-in">
-    <MudDataGrid T="UserDto" Items="FilteredUsers" Hover="true" Dense="true" Loading="_loading" Elevation="0">
+    @if (_selectedUsers.Count > 0)
+    {
+        <div class="d-flex align-center gap-2 pa-3">
+            <MudText Typo="Typo.body2" Style="font-weight: 600;">@_selectedUsers.Count selected</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="BulkDeleteUsers">
+                Delete Selected
+            </MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       OnClick="@(() => _selectedUsers.Clear())">
+                Clear
+            </MudButton>
+        </div>
+    }
+    <MudDataGrid T="UserDto" Items="_users" Hover="true" Dense="true" Loading="_loading" Elevation="0"
+                 MultiSelection="true" @bind-SelectedItems="_selectedUsers">
         <ToolBarContent>
-            <MudTextField @bind-Value="_search" Placeholder="Search users..." Immediate="true" DebounceInterval="300"
+            <MudTextField T="string" Value="_search" ValueChanged="OnSearchChanged" Placeholder="Search users..." Immediate="true" DebounceInterval="300"
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                           Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 300px;" />
             <MudSpacer />
-            <MudText Typo="Typo.caption" Color="Color.Secondary">@FilteredUsers.Count() of @_users.Count users</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@_users.Count of @_totalCount users</MudText>
         </ToolBarContent>
         <Columns>
+            <SelectColumn T="UserDto" />
             <TemplateColumn Title="User" SortBy="@(x => x.Email)">
                 <CellTemplate>
                     <div class="d-flex align-center gap-2">
@@ -66,23 +82,30 @@
             {
                 <EmptyState Icon="@Icons.Material.Outlined.SearchOff" Title="No users match your search"
                             Description="Try a different name or email." ActionText="Clear search"
-                            OnAction="@(() => _search = string.Empty)" MinHeight="200px" />
+                            OnAction="@(() => OnSearchChanged(string.Empty))" MinHeight="200px" />
             }
         </NoRecordsContent>
     </MudDataGrid>
+    @if (_hasMore && !_loading)
+    {
+        <div class="d-flex justify-center pa-3">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                       OnClick="LoadMore" StartIcon="@Icons.Material.Filled.ExpandMore">
+                Load More (@(_totalCount - _users.Count) remaining)
+            </MudButton>
+        </div>
+    }
 </MudPaper>
 
 @code {
     private List<UserDto> _users = new();
+    private HashSet<UserDto> _selectedUsers = new();
     private bool _loading = true;
     private string _search = string.Empty;
-
-    private IEnumerable<UserDto> FilteredUsers =>
-        string.IsNullOrWhiteSpace(_search)
-            ? _users
-            : _users.Where(u => u.Email.Contains(_search, StringComparison.OrdinalIgnoreCase)
-                              || u.FirstName.Contains(_search, StringComparison.OrdinalIgnoreCase)
-                              || u.LastName.Contains(_search, StringComparison.OrdinalIgnoreCase));
+    private int _page = 1;
+    private const int _pageSize = 20;
+    private int _totalCount;
+    private bool _hasMore;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -91,15 +114,37 @@
 
     private async Task LoadData()
     {
+        _page = 1;
+        _users.Clear();
+        await LoadDataPage();
+    }
+
+    private async Task LoadDataPage()
+    {
         _loading = true;
         StateHasChanged();
         try
         {
-            var result = await Http.GetFromJsonAsync<UsersResult>("/api/v1/admin/users");
-            _users = result?.Items ?? new();
+            var search = string.IsNullOrWhiteSpace(_search) ? "" : $"&search={Uri.EscapeDataString(_search)}";
+            var result = await Http.GetFromJsonAsync<UsersResult>($"/api/v1/admin/users?page={_page}&pageSize={_pageSize}{search}");
+            _users.AddRange(result?.Items ?? new());
+            _totalCount = result?.TotalCount ?? _users.Count;
+            _hasMore = _users.Count < _totalCount;
         }
         catch { Snackbar.Add("Failed to load users", Severity.Warning); }
         finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task LoadMore()
+    {
+        _page++;
+        await LoadDataPage();
+    }
+
+    private async Task OnSearchChanged(string value)
+    {
+        _search = value;
+        await LoadData();
     }
 
     private async Task OpenCreateUserDialog()
@@ -137,7 +182,30 @@
         catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
     }
 
-    private class UsersResult { public List<UserDto> Items { get; set; } = new(); }
+    private async Task BulkDeleteUsers()
+    {
+        var ids = _selectedUsers.Select(u => u.Id).ToArray();
+        if (ids.Length == 0) return;
+
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, $"{ids.Length} user{(ids.Length == 1 ? "" : "s")}" }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.PostAsJsonAsync("/api/v1/admin/users/bulk-delete", new { Ids = ids });
+            Snackbar.Add($"{ids.Length} user{(ids.Length == 1 ? "" : "s")} deleted", Severity.Success);
+            _selectedUsers.Clear();
+            await LoadData();
+        }
+        catch (Exception ex) { Snackbar.Add($"Bulk delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    private class UsersResult { public List<UserDto> Items { get; set; } = new(); public int TotalCount { get; set; } }
     private class UserDto
     {
         public Guid Id { get; set; }

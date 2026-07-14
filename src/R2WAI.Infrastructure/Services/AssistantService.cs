@@ -116,7 +116,7 @@ public class AssistantService : IAssistantService
         }
 
         var context = string.Join("\n\n", contextParts);
-        return await _aiService.ChatAsync(message, context, systemPrompt, ct);
+        return await _aiService.ChatAsync(message, context, systemPrompt, enableTools: true, ct: ct);
     }
 
     public async Task<PagedResult<AssistantDto>> GetAssistantsAsync(Guid tenantId, int page, int pageSize, CancellationToken ct = default)
@@ -163,6 +163,12 @@ public class AssistantService : IAssistantService
         Tools = assistant.Tools,
         Settings = assistant.Settings,
         IsActive = assistant.IsActive,
+        PublishStatus = assistant.PublishStatus.ToString(),
+        PublishedVersion = assistant.PublishedVersion,
+        PublishedAt = assistant.PublishedAt,
+        Tags = assistant.Tags,
+        AvatarUrl = assistant.AvatarUrl,
+        UsageCount = assistant.UsageCount,
         CreatedAt = assistant.CreatedAt
     };
 }

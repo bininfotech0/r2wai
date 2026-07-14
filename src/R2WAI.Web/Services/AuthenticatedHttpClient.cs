@@ -21,7 +21,10 @@ public class AuthenticatedHttpClient
     public AuthenticatedHttpClient(IHttpClientFactory factory, CircuitTokenProvider tokenProvider, TokenStorageService tokenStorage)
     {
         _http = factory.CreateClient("R2WAI");
-        _http.Timeout = TimeSpan.FromSeconds(30);
+        // 5 minutes to match the server-side AI streaming budget (ChatController/AssistantsController/
+        // ChatbotsController all cap generation at 5 minutes) — 30s was aborting normal chat/copilot
+        // responses mid-generation and surfacing as a misleading "stopped" message.
+        _http.Timeout = TimeSpan.FromMinutes(5);
         _tokenProvider = tokenProvider;
         _tokenStorage = tokenStorage;
     }
@@ -169,6 +172,15 @@ public class AuthenticatedHttpClient
         var response = await _http.PostAsync(url, content);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
             return await HandleUnauthorizedAsync(() => _http.PostAsync(url, content), response);
+        return response;
+    }
+
+    public async Task<HttpResponseMessage> PostAsync(string url, HttpContent? content, CancellationToken ct)
+    {
+        await EnsureTokenAsync();
+        var response = await _http.PostAsync(url, content, ct);
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+            return await HandleUnauthorizedAsync(() => _http.PostAsync(url, content, ct), response);
         return response;
     }
 

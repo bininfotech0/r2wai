@@ -10,6 +10,7 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace R2WAI.Infrastructure.AI;
 
@@ -20,6 +21,27 @@ public class SemanticKernelService : IAIService
     private readonly IServiceProvider _serviceProvider;
     private static readonly ConcurrentDictionary<string, (Kernel Kernel, DateTime CreatedAt)> _kernels = new();
     private static readonly TimeSpan KernelMaxAge = TimeSpan.FromHours(1);
+
+    // Some models (notably smaller/local ones via Ollama) don't reliably emit real structured
+    // tool_calls -- instead they print a function-call-shaped JSON object as plain assistant
+    // text, which Semantic Kernel has no way to intercept. This detects that leaked shape so we
+    // never surface raw JSON to the end user. Different models use different key names for the
+    // call's payload ("arguments", "parameters", "params", "input" have all been observed in
+    // the wild), so match on the structural shape rather than one specific key name.
+    private static readonly Regex LeakedToolCallPattern = new(
+        @"^\s*\{\s*""name""\s*:\s*""[^""]+""\s*,\s*""(arguments|parameters|params|input)""\s*:",
+        RegexOptions.Compiled);
+    private const string LeakedToolCallFallback =
+        "I tried to use a tool to answer that, but this model doesn't support tool calls reliably. Could you rephrase your question, or try again with a different AI model?";
+
+    private string SanitizeLeakedToolCall(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content) || !LeakedToolCallPattern.IsMatch(content))
+            return content;
+
+        _logger.LogWarning("Model emitted a leaked pseudo tool-call instead of a real function call: {ToolCallText}", content);
+        return LeakedToolCallFallback;
+    }
 
     public SemanticKernelService(
         IConfiguration configuration,
@@ -118,9 +140,9 @@ public class SemanticKernelService : IAIService
         return result.ToString();
     }
 
-    public async Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, CancellationToken ct = default)
+    public async Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, CancellationToken ct = default)
     {
-        var kernel = GetOrCreateKernel();
+        var kernel = GetOrCreateKernel(enableTools);
 
         var chatCompletion = kernel.Services.GetService<IChatCompletionService>();
         if (chatCompletion is null)
@@ -144,15 +166,16 @@ public class SemanticKernelService : IAIService
         var result = await chatCompletion.GetChatMessageContentAsync(chatHistory, new OpenAIPromptExecutionSettings
         {
             MaxTokens = 4096,
-            Temperature = 0.7
+            Temperature = 0.7,
+            FunctionChoiceBehavior = enableTools ? FunctionChoiceBehavior.Auto() : null
         }, kernel, ct);
 
-        return result.Content ?? string.Empty;
+        return SanitizeLeakedToolCall(result.Content ?? string.Empty);
     }
 
-    public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, [EnumeratorCancellation] CancellationToken ct = default)
+    public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var kernel = GetOrCreateKernel();
+        var kernel = GetOrCreateKernel(enableTools);
 
         var chatCompletion = kernel.Services.GetService<IChatCompletionService>();
         if (chatCompletion is null)
@@ -177,14 +200,70 @@ public class SemanticKernelService : IAIService
         var streamingResult = chatCompletion.GetStreamingChatMessageContentsAsync(chatHistory, new OpenAIPromptExecutionSettings
         {
             MaxTokens = 4096,
-            Temperature = 0.7
+            Temperature = 0.7,
+            FunctionChoiceBehavior = enableTools ? FunctionChoiceBehavior.Auto() : null
         }, kernel, ct);
+
+        // Buffer the start of the reply to detect a leaked pseudo tool-call (see
+        // SanitizeLeakedToolCall) before committing to streaming raw chunks to the caller.
+        // Legitimate natural-language replies essentially never start with '{', so we can bail
+        // out on the very first non-whitespace character in the common case; only a reply that
+        // actually starts with '{' pays the cost of buffering further, up to probeCap, to give
+        // the pattern room to match past a plugin/function name of realistic length (e.g.
+        // "AssistantPlugin-get_assistant_context" alone is ~40 chars).
+        const int probeCap = 200;
+        var probeBuffer = new StringBuilder();
+        var toolCallBuffer = new StringBuilder();
+        bool? isLeakedToolCall = null;
 
         await foreach (var chunk in streamingResult)
         {
-            if (chunk.Content is not null)
+            if (chunk.Content is null)
+                continue;
+
+            if (isLeakedToolCall is null)
+            {
+                probeBuffer.Append(chunk.Content);
+                var probeSoFar = probeBuffer.ToString();
+                var trimmedStart = probeSoFar.TrimStart();
+
+                if (trimmedStart.Length == 0)
+                    continue; // only whitespace seen so far, keep buffering
+
+                if (trimmedStart[0] != '{')
+                {
+                    isLeakedToolCall = false;
+                    yield return probeSoFar;
+                    continue;
+                }
+
+                if (LeakedToolCallPattern.IsMatch(probeSoFar))
+                {
+                    isLeakedToolCall = true;
+                    toolCallBuffer.Append(probeSoFar);
+                    continue;
+                }
+
+                if (probeSoFar.Length < probeCap)
+                    continue; // starts with '{' but not conclusive yet -- keep buffering
+
+                // Reached the cap without matching -- treat as ordinary text (e.g. a reply that
+                // legitimately starts with a JSON-like example) and flush what we've buffered.
+                isLeakedToolCall = false;
+                yield return probeSoFar;
+                continue;
+            }
+
+            if (isLeakedToolCall == true)
+                toolCallBuffer.Append(chunk.Content);
+            else
                 yield return chunk.Content;
         }
+
+        if (isLeakedToolCall == true)
+            yield return SanitizeLeakedToolCall(toolCallBuffer.ToString());
+        else if (isLeakedToolCall is null && probeBuffer.Length > 0)
+            yield return SanitizeLeakedToolCall(probeBuffer.ToString());
     }
 
     public async Task<IReadOnlyList<float>> GenerateEmbeddingAsync(string text, CancellationToken ct = default)
@@ -246,11 +325,18 @@ public class SemanticKernelService : IAIService
         return sb.ToString();
     }
 
-    private Kernel GetOrCreateKernel()
+    private Kernel GetOrCreateKernel(bool enableTools = false)
     {
         var baseKernel = GetOrCreateBaseKernel();
 
         var kernel = baseKernel.Clone();
+
+        // Plugins (and therefore autonomous function-calling) are only attached when the
+        // caller explicitly opts in. This keeps mutating tools (start_workflow,
+        // submit_approval_request, notify_approver) unreachable from anonymous/public
+        // surfaces like the embeddable chatbot widget, which always calls with enableTools: false.
+        if (!enableTools)
+            return kernel;
 
         try
         {
@@ -265,6 +351,9 @@ public class SemanticKernelService : IAIService
 
             var assistantPlugin = _serviceProvider.GetRequiredService<AI.Plugins.AssistantPlugin>();
             kernel.Plugins.AddFromObject(assistantPlugin);
+
+            var auditFilter = _serviceProvider.GetRequiredService<AiFunctionAuditFilter>();
+            kernel.FunctionInvocationFilters.Add(auditFilter);
         }
         catch (Exception ex)
         {
@@ -307,6 +396,21 @@ public class SemanticKernelService : IAIService
                 builder.AddOpenAIEmbeddingGenerator(embeddingModel, ollamaClient);
 
                 _logger.LogInformation("AI provider: Ollama at {Endpoint}, model: {Model}", ollamaEndpoint, ollamaModel);
+            }
+            else if (provider == "zai")
+            {
+                // Z.ai models (e.g. GLM-5.2) via any OpenAI-compatible hosted endpoint
+                // (e.g. NVIDIA NIM: https://integrate.api.nvidia.com/v1). No embedding
+                // model is configured here — these are chat/reasoning models, not embedders.
+                var zaiApiKey = _configuration["AI:ZAI:ApiKey"]
+                    ?? throw new InvalidOperationException("AI:ZAI:ApiKey must be configured when using the zai provider.");
+                var zaiEndpoint = _configuration["AI:ZAI:Endpoint"] ?? "https://integrate.api.nvidia.com/v1";
+                var zaiModel = _configuration["AI:ZAI:ModelId"] ?? "z-ai/glm-5.2";
+
+                var zaiClient = new OpenAIClient(new ApiKeyCredential(zaiApiKey), new OpenAIClientOptions { Endpoint = new Uri(zaiEndpoint) });
+                builder.AddOpenAIChatCompletion(zaiModel, zaiClient);
+
+                _logger.LogInformation("AI provider: Z.ai at {Endpoint}, model: {Model}", zaiEndpoint, zaiModel);
             }
             else
             {

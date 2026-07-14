@@ -10,6 +10,7 @@ public class WorkflowPlugin
 {
     private readonly IApprovalService _approvalService;
     private readonly IWorkflowService _workflowService;
+    private readonly IWorkflowBridge _workflowBridge;
     private readonly ICurrentUserService _currentUser;
     private readonly INotificationService _notificationService;
     private readonly ILogger<WorkflowPlugin> _logger;
@@ -17,15 +18,71 @@ public class WorkflowPlugin
     public WorkflowPlugin(
         IApprovalService approvalService,
         IWorkflowService workflowService,
+        IWorkflowBridge workflowBridge,
         ICurrentUserService currentUser,
         INotificationService notificationService,
         ILogger<WorkflowPlugin> logger)
     {
         _approvalService = approvalService;
         _workflowService = workflowService;
+        _workflowBridge = workflowBridge;
         _currentUser = currentUser;
         _notificationService = notificationService;
         _logger = logger;
+    }
+
+    [KernelFunction("start_workflow")]
+    [Description("Start (run) a workflow by name or ID. Use this to trigger business process automation on the user's behalf.")]
+    [return: Description("The result of starting the workflow, including its instance ID")]
+    public async Task<string> StartWorkflowAsync(
+        [Description("The workflow's name (fuzzy match) or its exact GUID")] string workflowNameOrId,
+        [Description("Optional JSON data/context to pass into the workflow")] string? data = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var tenantId = _currentUser.TenantId ?? throw new InvalidOperationException("User tenant not found");
+            var userId = _currentUser.UserId ?? throw new InvalidOperationException("User ID not found");
+
+            Guid workflowId;
+            string workflowName;
+
+            if (Guid.TryParse(workflowNameOrId, out var parsedId))
+            {
+                var workflow = await _workflowService.GetWorkflowByIdAsync(parsedId, ct);
+                workflowId = workflow.Id;
+                workflowName = workflow.Name;
+            }
+            else
+            {
+                var matches = await _workflowService.GetWorkflowsAsync(tenantId, 1, 100, ct);
+                var match = matches.Items.FirstOrDefault(w =>
+                    string.Equals(w.Name, workflowNameOrId, StringComparison.OrdinalIgnoreCase))
+                    ?? matches.Items.FirstOrDefault(w =>
+                    w.Name.Contains(workflowNameOrId, StringComparison.OrdinalIgnoreCase));
+
+                if (match is null)
+                    return $"No workflow found matching '{workflowNameOrId}'. Ask the user to confirm the workflow name.";
+
+                workflowId = match.Id;
+                workflowName = match.Name;
+            }
+
+            var (elsaInstanceId, workflowInstanceId) = await _workflowBridge.StartWorkflowAsync(
+                workflowId, tenantId, userId, data, ct);
+
+            _logger.LogInformation(
+                "AI started workflow {WorkflowId} ({WorkflowName}) -> instance {InstanceId}",
+                workflowId, workflowName, workflowInstanceId);
+
+            return $"Started workflow '{workflowName}'. Workflow instance ID: {workflowInstanceId} (run: {elsaInstanceId}). " +
+                   "If any step requires human approval, it will pause there until approved.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to start workflow '{WorkflowNameOrId}'", workflowNameOrId);
+            return $"Error starting workflow: {ex.Message}";
+        }
     }
 
     [KernelFunction("submit_approval_request")]

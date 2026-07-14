@@ -1,5 +1,4 @@
 @page "/assistant-studio/knowledge"
-@page "/knowledgebases"
 @attribute [Authorize]
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
@@ -8,6 +7,11 @@
 <PageTitle>R2WAI - Knowledge Bases</PageTitle>
 
 <PageHeader Title="Knowledge Bases" Subtitle="Manage RAG knowledge collections and documents">
+    <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" Class="mr-2"
+               StartIcon="@(_selectMode ? Icons.Material.Filled.Close : Icons.Material.Outlined.CheckBox)"
+               OnClick="ToggleSelectMode">
+        @(_selectMode ? "Cancel" : "Select")
+    </MudButton>
     <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
                Class="btn-gradient"
                StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
@@ -15,8 +19,23 @@
     </MudButton>
 </PageHeader>
 
+@if (_selectMode && _selectedIds.Count > 0)
+{
+    <div class="d-flex align-center gap-2 mb-3">
+        <MudText Typo="Typo.body2" Style="font-weight: 600;">@_selectedIds.Count selected</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="BulkDeleteKnowledgeBases">
+            Delete Selected
+        </MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                   OnClick="@(() => _selectedIds.Clear())">
+            Clear
+        </MudButton>
+    </div>
+}
+
 <MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
-    <MudTextField @bind-Value="_searchTerm" Placeholder="Search knowledge bases..."
+    <MudTextField T="string" Value="_searchTerm" ValueChanged="OnSearchChanged" Placeholder="Search knowledge bases..."
                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                   Variant="Variant.Outlined" Margin="Margin.Dense"
                   Immediate="true" DebounceInterval="300" />
@@ -24,15 +43,15 @@
 
 @if (_loading)
 {
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-4" />
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Cards" />
 }
 else if (_hasError)
 {
     <ErrorState ErrorMessage="@_error" OnRetry="LoadKnowledgeBases" />
 }
-else if (!_filteredKnowledgeBases.Any())
+else if (_knowledgeBases.Count == 0)
 {
-    @if (_knowledgeBases.Count == 0)
+    @if (string.IsNullOrWhiteSpace(_searchTerm))
     {
         <EmptyState Icon="@Icons.Material.Outlined.MenuBook"
                     Title="No knowledge bases found"
@@ -47,19 +66,24 @@ else if (!_filteredKnowledgeBases.Any())
                     Title="No knowledge bases match your search"
                     Description="Try a different search term."
                     ActionText="Clear search"
-                    OnAction="@(() => _searchTerm = string.Empty)"
+                    OnAction="@(() => OnSearchChanged(string.Empty))"
                     MinHeight="300px" />
     }
 }
 else
 {
     <MudGrid Spacing="3" Class="stagger-in">
-        @foreach (var kb in _filteredKnowledgeBases)
+        @foreach (var kb in _knowledgeBases)
         {
             <MudItem xs="12" sm="6" md="4">
                 <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%;">
                     <div class="d-flex justify-space-between align-center mb-3">
                         <div class="d-flex align-center gap-2">
+                            @if (_selectMode)
+                            {
+                                <MudCheckBox T="bool" Value="@_selectedIds.Contains(kb.Id)"
+                                             ValueChanged="@(v => ToggleSelected(kb.Id, v))" Dense="true" />
+                            }
                             <div class="icon-container icon-container--primary">
                                 <MudIcon Icon="@Icons.Material.Outlined.MenuBook" Color="Color.Primary" Size="Size.Small" />
                             </div>
@@ -95,6 +119,16 @@ else
             </MudItem>
         }
     </MudGrid>
+
+    @if (_hasMore && !_loading)
+    {
+        <div class="d-flex justify-center pa-3">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                       OnClick="LoadMore" StartIcon="@Icons.Material.Filled.ExpandMore">
+                Load More (@(_totalCount - _knowledgeBases.Count) remaining)
+            </MudButton>
+        </div>
+    }
 }
 
 @code {
@@ -103,22 +137,45 @@ else
     private bool _loading = true;
     private bool _hasError;
     private string _error = string.Empty;
+    private int _page = 1;
+    private const int _pageSize = 20;
+    private int _totalCount;
+    private bool _hasMore;
+    private bool _selectMode;
+    private HashSet<Guid> _selectedIds = new();
 
-    private IEnumerable<KnowledgeBaseDto> _filteredKnowledgeBases =>
-        string.IsNullOrWhiteSpace(_searchTerm)
-            ? _knowledgeBases
-            : _knowledgeBases.Where(kb => kb.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+    private void ToggleSelectMode()
+    {
+        _selectMode = !_selectMode;
+        _selectedIds.Clear();
+    }
+
+    private void ToggleSelected(Guid id, bool selected)
+    {
+        if (selected) _selectedIds.Add(id);
+        else _selectedIds.Remove(id);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await LoadKnowledgeBases(); }
 
     private async Task LoadKnowledgeBases()
     {
+        _page = 1;
+        _knowledgeBases.Clear();
+        await LoadKnowledgeBasesPage();
+    }
+
+    private async Task LoadKnowledgeBasesPage()
+    {
         _loading = true;
         _hasError = false;
         try
         {
-            var result = await Http.GetFromJsonAsync<KnowledgeBasesResult>("/api/v1/knowledgebases");
-            _knowledgeBases = result?.Items ?? new();
+            var search = string.IsNullOrWhiteSpace(_searchTerm) ? "" : $"&search={Uri.EscapeDataString(_searchTerm)}";
+            var result = await Http.GetFromJsonAsync<KnowledgeBasesResult>($"/api/v1/knowledgebases?page={_page}&pageSize={_pageSize}{search}");
+            _knowledgeBases.AddRange(result?.Items ?? new());
+            _totalCount = result?.TotalCount ?? _knowledgeBases.Count;
+            _hasMore = _knowledgeBases.Count < _totalCount;
         }
         catch (Exception ex)
         {
@@ -127,6 +184,18 @@ else
             Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error);
         }
         finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task LoadMore()
+    {
+        _page++;
+        await LoadKnowledgeBasesPage();
+    }
+
+    private async Task OnSearchChanged(string value)
+    {
+        _searchTerm = value;
+        await LoadKnowledgeBases();
     }
 
     private async Task OpenCreateDialog()
@@ -179,8 +248,32 @@ else
         catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
     }
 
+    private async Task BulkDeleteKnowledgeBases()
+    {
+        var ids = _selectedIds.ToArray();
+        if (ids.Length == 0) return;
 
-    private class KnowledgeBasesResult { public List<KnowledgeBaseDto> Items { get; set; } = new(); }
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, $"{ids.Length} knowledge base{(ids.Length == 1 ? "" : "s")}" }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.PostAsJsonAsync("/api/v1/knowledgebases/bulk-delete", new { Ids = ids });
+            Snackbar.Add($"{ids.Length} knowledge base{(ids.Length == 1 ? "" : "s")} deleted", Severity.Success);
+            _selectedIds.Clear();
+            _selectMode = false;
+            await LoadKnowledgeBases();
+        }
+        catch (Exception ex) { Snackbar.Add($"Bulk delete failed: {ex.Message}", Severity.Error); }
+    }
+
+
+    private class KnowledgeBasesResult { public List<KnowledgeBaseDto> Items { get; set; } = new(); public int TotalCount { get; set; } }
     private class KnowledgeBaseDto
     {
         public Guid Id { get; set; }

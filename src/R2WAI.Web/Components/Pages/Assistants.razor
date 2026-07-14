@@ -1,5 +1,4 @@
 @page "/assistant-studio"
-@page "/assistants"
 @attribute [Authorize]
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
@@ -47,7 +46,7 @@
                             </MudAvatar>
                             <div>
                                 <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@tmpl.Name</MudText>
-                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.6rem; height: 18px;">@tmpl.Type</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.6875rem; height: 18px;">@tmpl.Type</MudChip>
                             </div>
                         </div>
                         <MudText Typo="Typo.caption" Color="Color.Secondary" Style="line-height: 1.5;">@tmpl.Description</MudText>
@@ -55,7 +54,7 @@
                             @foreach (var cap in tmpl.Capabilities.Take(3))
                             {
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                                         Style="font-size: 0.55rem; height: 20px;">@cap</MudChip>
+                                         Style="font-size: 0.6875rem; height: 20px;">@cap</MudChip>
                             }
                         </div>
                     </MudPaper>
@@ -229,10 +228,10 @@
                                 <div style="flex: 1; min-width: 0;">
                                     <MudText Typo="Typo.subtitle2" Style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-weight: 600;">@assistant.Name</MudText>
                                     <div class="d-flex align-center gap-1">
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.65rem;">@assistant.Type</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6875rem;">@assistant.Type</MudText>
                                         @if (assistant.UsageCount > 0)
                                         {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6rem;">· @assistant.UsageCount uses</MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6875rem;">· @assistant.UsageCount uses</MudText>
                                         }
                                     </div>
                                 </div>
@@ -262,7 +261,7 @@
                       Style="min-height: 500px; border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-lg);">
                 <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Style="font-size: 4rem; opacity: 0.15; color: var(--r2-primary);" />
                 <MudText Typo="Typo.h5" Color="Color.Secondary" Class="mt-4" Style="font-weight: 600;">Select an assistant</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Tertiary" Class="mt-2 mb-4">
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2 mb-4">
                     Choose from the list or create a new one to get started
                 </MudText>
                 <div class="d-flex gap-2">
@@ -339,12 +338,12 @@
                                 @if (_selectedAssistant.PublishedVersion > 0)
                                 {
                                     <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined"
-                                             Style="font-size: 0.6rem;">v@(_selectedAssistant.PublishedVersion)</MudChip>
+                                             Style="font-size: 0.6875rem;">v@(_selectedAssistant.PublishedVersion)</MudChip>
                                 }
                                 @if (_hasUnsavedChanges)
                                 {
                                     <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled"
-                                             Style="font-size: 0.55rem; height: 18px;">Unsaved</MudChip>
+                                             Style="font-size: 0.6875rem; height: 18px;">Unsaved</MudChip>
                                 }
                             </div>
                             <div class="d-flex align-center gap-2 mt-1">
@@ -680,7 +679,7 @@
                                     <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@_editName</MudText>
                                 </div>
                                 <div class="d-flex gap-1">
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.6rem; height: 18px;">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.6875rem; height: 18px;">
                                         @_testMessages.Count messages
                                     </MudChip>
                                     @if (_testMessages.Count > 0)
@@ -1200,10 +1199,17 @@
                 _selectedAssistant.AvatarUrl = detail.AvatarUrl;
                 _selectedAssistant.UsageCount = detail.UsageCount;
 
-                if (detail.Tools is not null)
+                if (!string.IsNullOrWhiteSpace(detail.Tools))
                 {
-                    foreach (var tool in _availableTools)
-                        tool.IsEnabled = detail.Tools.Contains(tool.ToolType, StringComparer.OrdinalIgnoreCase);
+                    List<string>? enabledToolTypes = null;
+                    try { enabledToolTypes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(detail.Tools); }
+                    catch (System.Text.Json.JsonException) { /* malformed/legacy Tools value, treat as none enabled */ }
+
+                    if (enabledToolTypes is not null)
+                    {
+                        foreach (var tool in _availableTools)
+                            tool.IsEnabled = enabledToolTypes.Contains(tool.ToolType, StringComparer.OrdinalIgnoreCase);
+                    }
                 }
             }
             await LoadDocuments();
@@ -1546,7 +1552,7 @@
         public string? SystemPrompt { get; set; }
         public Guid? KnowledgeBaseId { get; set; }
         public Guid? ModelConfigurationId { get; set; }
-        public List<string>? Tools { get; set; }
+        public string? Tools { get; set; }
         public string? PublishStatus { get; set; }
         public int PublishedVersion { get; set; }
         public DateTime? PublishedAt { get; set; }

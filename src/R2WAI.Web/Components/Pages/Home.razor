@@ -67,7 +67,7 @@
                     @foreach (var result in group)
                     {
                         <MudPaper Elevation="0" Class="pa-3 mb-2 search-result-item" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px; cursor: pointer;"
-                                  @onclick="@(() => Navigation.NavigateTo("/knowledgebases"))">
+                                  @onclick="@(() => Navigation.NavigateTo("/assistant-studio/knowledge"))">
                             <MudText Typo="Typo.body2" Style="line-height: 1.5;">@((MarkupString)HighlightSearchTerm(result.Content, _lastSearchQuery))</MudText>
                             @if (!string.IsNullOrEmpty(result.SourceName))
                             {
@@ -126,34 +126,22 @@
             </MudText>
         </MudPaper>
     </MudItem>
-    <MudItem xs="12" sm="6" md="4">
-        <MudPaper Class="pa-4 action-card" Elevation="0" @onclick="@(() => Navigation.NavigateTo("/operations"))">
-            <div class="d-flex align-center gap-3 mb-2">
-                <div class="icon-container icon-container--secondary">
-                    <MudIcon Icon="@Icons.Material.Outlined.PlayCircle" Color="Color.Secondary" Size="Size.Small" />
+    <MudItem xs="12" sm="6" md="8">
+        <MudPaper Class="pa-4 action-card" Elevation="0" @onclick="@(() => Navigation.NavigateTo("/operations"))"
+                  Style="height: 100%;">
+            <div class="d-flex align-center justify-space-between flex-wrap gap-3" style="height: 100%;">
+                <div class="d-flex align-center gap-4 flex-wrap">
+                    <div class="d-flex align-center gap-2">
+                        <span class="health-dot health-dot--@(_healthStatus == "Healthy" ? "healthy" : "degraded")"></span>
+                        <MudText Typo="Typo.body1" Style="font-weight: 700;">@_healthStatus</MudText>
+                    </div>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">@_activeWorkflows active workflows</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">@_completedToday completed today</MudText>
                 </div>
-                <div>
-                    <MudText Typo="Typo.h5" Style="font-weight: 800; letter-spacing: -0.02em;" Class="animate-count">@_activeWorkflows</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 500;">Active Workflows</MudText>
-                </div>
-            </div>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">@_completedToday completed today</MudText>
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" sm="6" md="4">
-        <MudPaper Class="pa-4 action-card" Elevation="0" @onclick="@(() => Navigation.NavigateTo("/operations"))">
-            <div class="d-flex align-center gap-3 mb-2">
-                <div class="icon-container icon-container--success">
-                    <MudIcon Icon="@Icons.Material.Outlined.MonitorHeart" Color="Color.Tertiary" Size="Size.Small" />
-                </div>
-                <div>
-                    <MudText Typo="Typo.h5" Style="font-weight: 800; letter-spacing: -0.02em;" Class="animate-count">@_healthStatus</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 500;">System Health</MudText>
-                </div>
-            </div>
-            <div class="d-flex gap-2 align-center">
-                <span class="health-dot health-dot--@(_healthStatus == "Healthy" ? "healthy" : "degraded")"></span>
-                <MudText Typo="Typo.caption" Color="Color.Secondary">All services operational</MudText>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                           EndIcon="@Icons.Material.Filled.ArrowForward">
+                    View Operations Hub
+                </MudButton>
             </div>
         </MudPaper>
     </MudItem>
@@ -204,7 +192,7 @@
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">@activity.EntityType</MudText>
                                 </div>
                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
-                                         Style="font-size: 0.65rem;">
+                                         Style="font-size: 0.6875rem;">
                                     @FormatTimeAgo(activity.Timestamp)
                                 </MudChip>
                             </div>
@@ -222,7 +210,7 @@
                 <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
                           Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
                           @onclick="@(() => Navigation.NavigateTo("/assistant-studio"))">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;">Assistants</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">Assistants</MudText>
                     <div class="d-flex justify-space-between align-center mt-1">
                         <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalAssistants</MudText>
                         <SparklineChart Data="@GenerateSparkline(_totalAssistants)" Color="#7C3AED" Width="80" Height="28" />
@@ -233,7 +221,7 @@
                 <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
                           Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
                           @onclick="@(() => Navigation.NavigateTo("/workflow-studio"))">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;">Workflows</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">Workflows</MudText>
                     <div class="d-flex justify-space-between align-center mt-1">
                         <MudText Typo="Typo.h4" Color="Color.Secondary" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalWorkflows</MudText>
                         <SparklineChart Data="@GenerateSparkline(_totalWorkflows)" Color="#3B82F6" Width="80" Height="28" />
@@ -244,7 +232,7 @@
                 <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
                           Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
                           @onclick="@(() => Navigation.NavigateTo("/documents"))">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;">Documents</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">Documents</MudText>
                     <div class="d-flex justify-space-between align-center mt-1">
                         <MudText Typo="Typo.h4" Color="Color.Tertiary" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalDocuments</MudText>
                         <SparklineChart Data="@GenerateSparkline(_totalDocuments)" Color="#10B981" Width="80" Height="28" />
@@ -255,7 +243,7 @@
                 <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
                           Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
                           @onclick="@(() => Navigation.NavigateTo("/assistant-studio/knowledge"))">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;">Knowledge Bases</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">Knowledge Bases</MudText>
                     <div class="d-flex justify-space-between align-center mt-1">
                         <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalKnowledgeBases</MudText>
                         <SparklineChart Data="@GenerateSparkline(_totalKnowledgeBases)" Color="#6B7280" Width="80" Height="28" />
@@ -398,7 +386,7 @@
             var result = await Http.GetFromJsonAsync<ApprovalsResult>("/api/v1/approvals/pending");
             _pendingApprovals = result?.Items?.Count ?? 0;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add("Could not load approvals.", Severity.Warning);
         }

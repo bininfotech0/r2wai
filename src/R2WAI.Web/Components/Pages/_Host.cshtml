@@ -18,7 +18,7 @@
     <base href="~/" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link href="css/app.css" rel="stylesheet" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
@@ -156,6 +156,9 @@
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="_framework/blazor.server.js" autostart="false"></script>
     <script>
+        window.r2waiHardRedirect = function (url) {
+            window.location.href = url;
+        };
         function hideSplash() {
             var splash = document.getElementById('r2-splash');
             if (splash && !splash.dataset.hidden) {

@@ -25,10 +25,10 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
     }
 
     [HttpGet("users")]
-    public async Task<IActionResult> GetUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<IActionResult> GetUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, CancellationToken ct = default)
     {
         (page, pageSize) = ClampPagination(page, pageSize);
-        var query = new GetUsersQuery { Page = page, PageSize = pageSize };
+        var query = new GetUsersQuery { Page = page, PageSize = pageSize, Search = search };
         var result = await mediator.Send(query, ct);
         return Ok(result);
     }
@@ -54,6 +54,15 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
     {
         var command = new DeleteUserCommand { Id = id };
         await mediator.Send(command, ct);
+        return NoContent();
+    }
+
+    public record BulkDeleteRequest(Guid[] Ids);
+
+    [HttpPost("users/bulk-delete")]
+    public async Task<IActionResult> BulkDeleteUsers([FromBody] BulkDeleteRequest request, CancellationToken ct = default)
+    {
+        await mediator.Send(new BulkDeleteUsersCommand { Ids = request.Ids }, ct);
         return NoContent();
     }
 
@@ -156,10 +165,10 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
     }
 
     [HttpGet("models")]
-    public async Task<IActionResult> GetModels([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+    public async Task<IActionResult> GetModels([FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] string? search = null, CancellationToken ct = default)
     {
         (page, pageSize) = ClampPagination(page, pageSize);
-        var query = new GetModelsQuery { Page = page, PageSize = pageSize };
+        var query = new GetModelsQuery { Page = page, PageSize = pageSize, Search = search };
         var result = await mediator.Send(query, ct);
         return Ok(result);
     }
@@ -185,6 +194,13 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
     {
         var command = new DeleteModelCommand { Id = id };
         await mediator.Send(command, ct);
+        return NoContent();
+    }
+
+    [HttpPost("models/bulk-delete")]
+    public async Task<IActionResult> BulkDeleteModels([FromBody] BulkDeleteRequest request, CancellationToken ct = default)
+    {
+        await mediator.Send(new BulkDeleteModelsCommand { Ids = request.Ids }, ct);
         return NoContent();
     }
 
@@ -252,7 +268,7 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
                 var ollamaClient = new OpenAIClient(new ApiKeyCredential("ollama"), new OpenAIClientOptions { Endpoint = ollamaUri });
                 builder.AddOpenAIChatCompletion(model.ModelId, ollamaClient);
             }
-            else if (provider is "openai" or "azureopenai" or "deepseek" or "together" or "fireworks" or "groq" or "perplexity" or "xai" or "openrouter" or "sambanova" or "cerebras" or "github" or "ai21" or "mistral" or "novita" or "replicate")
+            else if (provider is "openai" or "azureopenai" or "deepseek" or "togetherai" or "fireworksai" or "groq" or "perplexity" or "xai" or "openrouter" or "sambanova" or "cerebras" or "githubmodels" or "ai21labs" or "mistral" or "novitaai" or "replicate" or "nvidianim")
             {
                 if (string.IsNullOrEmpty(apiKey))
                     return UnprocessableEntity(new { success = false, message = "No API key configured for this model." });
@@ -279,7 +295,8 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
                         ["ai21labs"] = "https://api.ai21.com/studio/v1",
                         ["mistral"] = "https://api.mistral.ai/v1",
                         ["novitaai"] = "https://api.novita.ai/v3/openai",
-                        ["replicate"] = "https://api.replicate.com/v1"
+                        ["replicate"] = "https://api.replicate.com/v1",
+                        ["nvidianim"] = "https://integrate.api.nvidia.com/v1"
                     };
 
                     if (defaultEndpoints.TryGetValue(provider, out var ep))
@@ -529,7 +546,7 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
 
         var host = uri.Host;
 
-        if (host is "localhost" or "127.0.0.1" or "0.0.0.0" or "::1")
+        if (host is "localhost" or "127.0.0.1" or "0.0.0.0" or "::1" or "host.docker.internal")
             return true;
 
         if (System.Net.IPAddress.TryParse(host, out var ip))

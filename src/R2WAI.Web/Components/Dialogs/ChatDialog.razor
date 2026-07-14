@@ -15,12 +15,12 @@
             @if (_streaming)
             {
                 <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
-                         Style="font-size: 0.6rem; height: 18px; animation: pulse-soft 1.5s infinite;">streaming</MudChip>
+                         Style="font-size: 0.6875rem; height: 18px; animation: pulse-soft 1.5s infinite;">streaming</MudChip>
             }
             @if (_voiceChatActive)
             {
                 <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled"
-                         Style="font-size: 0.6rem; height: 18px; animation: pulse-soft 1.5s infinite;">
+                         Style="font-size: 0.6875rem; height: 18px; animation: pulse-soft 1.5s infinite;">
                     <MudIcon Icon="@Icons.Material.Filled.GraphicEq" Size="Size.Small" Style="font-size: 12px; margin-right: 2px;" />voice
                 </MudChip>
             }
@@ -53,7 +53,7 @@
                                             [@citation.Index] @citation.SourceName
                                         </MudText>
                                         <MudChip T="string" Size="Size.Small" Color="Color.Default"
-                                                 Style="font-size: 0.6rem; height: 16px;">
+                                                 Style="font-size: 0.6875rem; height: 16px;">
                                             @citation.Score.ToString("P0") match
                                         </MudChip>
                                     </div>
@@ -178,7 +178,7 @@
                             <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small"
                                      Color="@(_voiceChatActive ? Color.Success : Color.Default)" Style="font-size: 14px;" />
                             <MudText Typo="Typo.caption" Color="@(_voiceChatActive ? Color.Success : Color.Secondary)"
-                                     Style="font-size: 0.65rem; font-weight: 600;">
+                                     Style="font-size: 0.6875rem; font-weight: 600;">
                                 Voice Chat @(_voiceChatActive ? "ON" : "OFF")
                             </MudText>
                         </div>

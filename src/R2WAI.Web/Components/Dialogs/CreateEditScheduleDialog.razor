@@ -6,14 +6,16 @@
         <MudText Typo="Typo.h6">@(_isEdit ? "Edit Schedule" : "Create Schedule")</MudText>
     </TitleContent>
     <DialogContent>
+        <MudForm @ref="_form">
         <MudGrid>
             <MudItem xs="12">
-                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" RequiredError="Name is required"
+                              Validation="@(new Func<string, string>(ValidateName))" Variant="Variant.Outlined" />
             </MudItem>
             @if (!_isEdit)
             {
                 <MudItem xs="12">
-                    <MudSelect T="Guid?" @bind-Value="_workflowId" Label="Workflow" Required="true" Variant="Variant.Outlined">
+                    <MudSelect T="Guid?" @bind-Value="_workflowId" Label="Workflow" Required="true" RequiredError="Please select a workflow" Variant="Variant.Outlined">
                         @foreach (var wf in _workflows)
                         {
                             <MudSelectItem T="Guid?" Value="@wf.Id">@wf.Name</MudSelectItem>
@@ -22,7 +24,8 @@
                 </MudItem>
             }
             <MudItem xs="12">
-                <MudTextField @bind-Value="_cronExpression" Label="Cron Expression" Required="true" Variant="Variant.Outlined"
+                <MudTextField @bind-Value="_cronExpression" Label="Cron Expression" Required="true" RequiredError="Cron expression is required"
+                              Validation="@(new Func<string, string>(ValidateCron))" Variant="Variant.Outlined"
                               HelperText="Standard cron format: minute hour day month weekday" />
             </MudItem>
             <MudItem xs="12">
@@ -39,6 +42,7 @@
                               HelperText="Human-readable description of the schedule (e.g., 'Every weekday at 9:00 AM')" />
             </MudItem>
         </MudGrid>
+        </MudForm>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
@@ -60,6 +64,7 @@
     private string _cronDescription = string.Empty;
     private bool _saving;
     private List<WorkflowOption> _workflows = new();
+    private MudForm _form = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -99,16 +104,30 @@
         StateHasChanged();
     }
 
+    private static string ValidateName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Name is required";
+        return null!;
+    }
+
+    private static string ValidateCron(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Cron expression is required";
+        if (value.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).Length != 5)
+            return "Must be 5 space-separated fields (minute hour day month weekday)";
+        return null!;
+    }
+
     private async Task Save()
     {
-        if (string.IsNullOrWhiteSpace(_name))
-        {
-            Snackbar.Add("Name is required", Severity.Warning);
+        await _form.Validate();
+        if (!_form.IsValid)
             return;
-        }
-        if (string.IsNullOrWhiteSpace(_cronExpression))
+        if (!_isEdit && !_workflowId.HasValue)
         {
-            Snackbar.Add("Cron expression is required", Severity.Warning);
+            Snackbar.Add("Please select a workflow", Severity.Warning);
             return;
         }
 
@@ -123,12 +142,6 @@
             }
             else
             {
-                if (!_workflowId.HasValue)
-                {
-                    Snackbar.Add("Please select a workflow", Severity.Warning);
-                    _saving = false;
-                    return;
-                }
                 await Http.PostAsJsonAsync("/api/v1/workflows/schedules",
                     new { WorkflowId = _workflowId.Value, Name = _name, CronExpression = _cronExpression, CronDescription = _cronDescription });
                 Snackbar.Add("Schedule created", Severity.Success);

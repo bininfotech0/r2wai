@@ -1,5 +1,4 @@
 @page "/workflow-studio"
-@page "/workflows"
 @attribute [Authorize]
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
@@ -147,7 +146,7 @@
                  BadgeData="@(_workflows.Count > 0 ? _workflows.Count.ToString() : null)" BadgeColor="Color.Primary">
         <div class="d-flex justify-space-between align-center pa-4 animate-slide-in flex-wrap gap-2">
             <div class="d-flex align-center gap-3 flex-wrap">
-                <MudTextField @bind-Value="_workflowSearch" Placeholder="Search workflows..."
+                <MudTextField T="string" Value="_workflowSearch" ValueChanged="OnWorkflowSearchChanged" Placeholder="Search workflows..."
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                               Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 240px; max-width: 300px;"
                               Immediate="true" DebounceInterval="300" />
@@ -220,10 +219,26 @@
         {
             @* ── List View ── *@
             <div class="pa-4 animate-slide-in">
+                @if (_selectedWorkflows.Count > 0)
+                {
+                    <div class="d-flex align-center gap-2 mb-2">
+                        <MudText Typo="Typo.body2" Style="font-weight: 600;">@_selectedWorkflows.Count selected</MudText>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="BulkDeleteWorkflows">
+                            Delete Selected
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                   OnClick="@(() => _selectedWorkflows.Clear())">
+                            Clear
+                        </MudButton>
+                    </div>
+                }
                 <MudDataGrid T="WorkflowDto" Items="FilteredWorkflows" Hover="true" Dense="true" Elevation="0"
+                             MultiSelection="true" @bind-SelectedItems="_selectedWorkflows"
                              Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; overflow: hidden;"
                              RowClick="@((DataGridRowClickEventArgs<WorkflowDto> args) => Navigation.NavigateTo($"/workflow-studio/designer/{args.Item.Id}"))">
                     <Columns>
+                        <SelectColumn T="WorkflowDto" />
                         <TemplateColumn Title="Workflow" SortBy="x => x.Name">
                             <CellTemplate>
                                 <div class="d-flex align-center gap-2">
@@ -399,12 +414,12 @@
                                     @if (!string.IsNullOrEmpty(wf.Type))
                                     {
                                         <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
-                                                 Style="font-size: 0.65rem; height: 22px;">
+                                                 Style="font-size: 0.6875rem; height: 22px;">
                                             @wf.Type
                                         </MudChip>
                                     }
                                     <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
-                                             Style="font-size: 0.65rem; height: 22px;">
+                                             Style="font-size: 0.6875rem; height: 22px;">
                                         @wf.StepCount step@(wf.StepCount != 1 ? "s" : "")
                                     </MudChip>
                                 </div>
@@ -478,6 +493,16 @@
                     </MudItem>
                 }
             </MudGrid>
+        }
+
+        @if (_wfHasMore && !_loadingWorkflows && !_hasError)
+        {
+            <div class="d-flex justify-center pa-4">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                           OnClick="LoadMoreWorkflows" StartIcon="@Icons.Material.Filled.ExpandMore">
+                    Load More (@(_wfTotalCount - _workflows.Count) remaining)
+                </MudButton>
+            </div>
         }
     </MudTabPanel>
 
@@ -637,7 +662,7 @@
                                         @if (isOverdue)
                                         {
                                             <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled"
-                                                     Style="font-size: 0.6rem; height: 18px;">
+                                                     Style="font-size: 0.6875rem; height: 18px;">
                                                 OVERDUE
                                             </MudChip>
                                         }
@@ -735,13 +760,13 @@
                                             <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@policy.Name</MudText>
                                             <MudChip T="string" Size="Size.Small"
                                                      Color="@(policy.IsActive ? Color.Success : Color.Default)"
-                                                     Variant="Variant.Filled" Style="font-size: 0.6rem; height: 20px;">
+                                                     Variant="Variant.Filled" Style="font-size: 0.6875rem; height: 20px;">
                                                 @(policy.IsActive ? "Active" : "Paused")
                                             </MudChip>
                                             @if (!string.IsNullOrWhiteSpace(policy.WorkflowType))
                                             {
                                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
-                                                         Style="font-size: 0.6rem; height: 20px;">
+                                                         Style="font-size: 0.6875rem; height: 20px;">
                                                     @policy.WorkflowType
                                                 </MudChip>
                                             }
@@ -829,7 +854,7 @@
                                             <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@schedule.Name</MudText>
                                             <MudChip T="string" Size="Size.Small"
                                                      Color="@(schedule.IsActive ? Color.Success : Color.Default)"
-                                                     Variant="Variant.Filled" Style="font-size: 0.6rem; height: 20px;">
+                                                     Variant="Variant.Filled" Style="font-size: 0.6875rem; height: 20px;">
                                                 @(schedule.IsActive ? "Active" : "Paused")
                                             </MudChip>
                                         </div>
@@ -941,6 +966,11 @@
 
     // Workflows
     private List<WorkflowDto> _workflows = new();
+    private HashSet<WorkflowDto> _selectedWorkflows = new();
+    private int _wfPage = 1;
+    private const int _wfPageSize = 20;
+    private int _wfTotalCount;
+    private bool _wfHasMore;
     private bool _loadingWorkflows = true;
     private bool _hasError;
     private string _error = string.Empty;
@@ -1150,12 +1180,23 @@
     // --- Workflows ---
     private async Task LoadWorkflows()
     {
+        _wfPage = 1;
+        _workflows.Clear();
+        await LoadWorkflowsPage();
+    }
+
+    private async Task LoadWorkflowsPage()
+    {
         _loadingWorkflows = true;
         _hasError = false;
         try
         {
-            var result = await Http.GetFromJsonAsync<ListResult<WorkflowDto>>("/api/v1/workflows");
-            _workflows = result?.Items ?? new();
+            var search = string.IsNullOrWhiteSpace(_workflowSearch) ? "" : $"&search={Uri.EscapeDataString(_workflowSearch)}";
+            var result = await Http.GetFromJsonAsync<ListResult<WorkflowDto>>(
+                $"/api/v1/workflows?page={_wfPage}&pageSize={_wfPageSize}{search}");
+            _workflows.AddRange(result?.Items ?? new());
+            _wfTotalCount = result?.TotalCount ?? _workflows.Count;
+            _wfHasMore = _workflows.Count < _wfTotalCount;
         }
         catch (Exception ex)
         {
@@ -1164,6 +1205,18 @@
             Snackbar.Add($"Failed to load workflows: {ex.Message}", Severity.Error);
         }
         finally { _loadingWorkflows = false; }
+    }
+
+    private async Task LoadMoreWorkflows()
+    {
+        _wfPage++;
+        await LoadWorkflowsPage();
+    }
+
+    private async Task OnWorkflowSearchChanged(string value)
+    {
+        _workflowSearch = value;
+        await LoadWorkflows();
     }
 
     private async Task OpenCreateWorkflowDialog()
@@ -1216,6 +1269,29 @@
             await LoadWorkflows();
         }
         catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task BulkDeleteWorkflows()
+    {
+        var ids = _selectedWorkflows.Select(w => w.Id).ToArray();
+        if (ids.Length == 0) return;
+
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, $"{ids.Length} workflow{(ids.Length == 1 ? "" : "s")}" }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.PostAsJsonAsync("/api/v1/workflows/bulk-delete", new { Ids = ids });
+            Snackbar.Add($"{ids.Length} workflow{(ids.Length == 1 ? "" : "s")} deleted", Severity.Success);
+            _selectedWorkflows.Clear();
+            await LoadWorkflows();
+        }
+        catch (Exception ex) { Snackbar.Add($"Bulk delete failed: {ex.Message}", Severity.Error); }
     }
 
     private async Task PublishWorkflow(WorkflowDto workflow)
@@ -1601,7 +1677,7 @@
     }
 
     // DTOs
-    private class ListResult<T> { public List<T> Items { get; set; } = new(); }
+    private class ListResult<T> { public List<T> Items { get; set; } = new(); public int TotalCount { get; set; } }
     private class WorkflowDto
     {
         public Guid Id { get; set; }

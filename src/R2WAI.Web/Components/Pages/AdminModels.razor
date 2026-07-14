@@ -54,9 +54,9 @@
 @* Search & Filter Bar *@
 <MudPaper Elevation="0" Class="pa-3 mb-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
     <div class="d-flex align-center gap-3 flex-wrap">
-        <MudTextField @bind-Value="_searchText" Placeholder="Search models..." Variant="Variant.Outlined"
+        <MudTextField T="string" Value="_searchText" ValueChanged="OnSearchChanged" Placeholder="Search models..." Variant="Variant.Outlined"
                       Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                      Immediate="true" Style="max-width: 300px;" />
+                      Immediate="true" DebounceInterval="300" Style="max-width: 300px;" />
         <MudChipSet T="string" @bind-SelectedValue="_selectedProvider" SelectionMode="SelectionMode.SingleSelection"
                     CheckMark="false" Variant="Variant.Text" Color="Color.Primary">
             <MudChip T="string" Value="@("All")" Default="true">All</MudChip>
@@ -78,7 +78,7 @@
 
 @if (_loading)
 {
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Cards" />
 }
 else if (FilteredModels.Count == 0 && _models.Count > 0)
 {
@@ -249,8 +249,23 @@ else if (_showGridView)
 else
 {
     @* Table View *@
+    @if (_selectedModels.Count > 0)
+    {
+        <div class="d-flex align-center gap-2 mb-2">
+            <MudText Typo="Typo.body2" Style="font-weight: 600;">@_selectedModels.Count selected</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="BulkDeleteModels">
+                Delete Selected
+            </MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                       OnClick="@(() => _selectedModels.Clear())">
+                Clear
+            </MudButton>
+        </div>
+    }
     <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; overflow: hidden;">
         <MudTable Items="FilteredModels" Hover="true" Dense="true" Breakpoint="Breakpoint.None"
+                  MultiSelection="true" @bind-SelectedItems="_selectedModels"
                   Style="table-layout: fixed;">
             <HeaderContent>
                 <MudTh Style="width: 220px;">Model</MudTh>
@@ -272,7 +287,7 @@ else
                             <MudText Typo="Typo.body2" Style="font-weight: 600;">@context.Name</MudText>
                             @if (context.IsDefault)
                             {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Style="font-size: 0.625rem; height: 18px;">Default</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Style="font-size: 0.6875rem; height: 18px;">Default</MudChip>
                             }
                         </div>
                     </div>
@@ -347,6 +362,16 @@ else
     </MudPaper>
 }
 
+@if (_hasMore && !_loading)
+{
+    <div class="d-flex justify-center pa-3">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                   OnClick="LoadMore" StartIcon="@Icons.Material.Filled.ExpandMore">
+            Load More (@(_totalCount - _models.Count) remaining)
+        </MudButton>
+    </div>
+}
+
 @code {
     private List<ModelDto> _models = new();
     private bool _loading = true;
@@ -356,12 +381,13 @@ else
     private string _selectedProvider = "All";
     private Dictionary<Guid, string> _testStates = new();
     private Dictionary<Guid, string> _testErrors = new();
+    private HashSet<ModelDto> _selectedModels = new();
+    private int _page = 1;
+    private const int _pageSize = 50;
+    private int _totalCount;
+    private bool _hasMore;
 
     private List<ModelDto> FilteredModels => _models
-        .Where(m => string.IsNullOrEmpty(_searchText) ||
-                    m.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
-                    m.ModelId.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
-                    m.Provider.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
         .Where(m => _selectedProvider == "All" || m.Provider == _selectedProvider)
         .ToList();
 
@@ -372,15 +398,37 @@ else
 
     private async Task LoadData()
     {
+        _page = 1;
+        _models.Clear();
+        await LoadDataPage();
+    }
+
+    private async Task LoadDataPage()
+    {
         _loading = true;
         StateHasChanged();
         try
         {
-            var result = await Http.GetFromJsonAsync<ModelsResult>("/api/v1/admin/models");
-            _models = result?.Items ?? new();
+            var search = string.IsNullOrWhiteSpace(_searchText) ? "" : $"&search={Uri.EscapeDataString(_searchText)}";
+            var result = await Http.GetFromJsonAsync<ModelsResult>($"/api/v1/admin/models?page={_page}&pageSize={_pageSize}{search}");
+            _models.AddRange(result?.Items ?? new());
+            _totalCount = result?.TotalCount ?? _models.Count;
+            _hasMore = _models.Count < _totalCount;
         }
         catch { Snackbar.Add("Failed to load models", Severity.Warning); }
         finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task LoadMore()
+    {
+        _page++;
+        await LoadDataPage();
+    }
+
+    private async Task OnSearchChanged(string value)
+    {
+        _searchText = value;
+        await LoadData();
     }
 
     private async Task OpenCreateModelDialog()
@@ -533,6 +581,30 @@ else
         catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
     }
 
+    private async Task BulkDeleteModels()
+    {
+        var ids = _selectedModels.Select(m => m.Id).ToArray();
+        if (ids.Length == 0) return;
+
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, $"{ids.Length} model{(ids.Length == 1 ? "" : "s")}" },
+            { x => x.Description, "Assistants using these models will need reconfiguration. This cannot be undone." }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.PostAsJsonAsync("/api/v1/admin/models/bulk-delete", new { Ids = ids });
+            Snackbar.Add($"{ids.Length} model{(ids.Length == 1 ? "" : "s")} deleted", Severity.Success);
+            _selectedModels.Clear();
+            await LoadData();
+        }
+        catch (Exception ex) { Snackbar.Add($"Bulk delete failed: {ex.Message}", Severity.Error); }
+    }
+
     private static string GetProviderIcon(string provider) => provider switch
     {
         "OpenAI" => Icons.Material.Outlined.AutoAwesome,
@@ -556,6 +628,7 @@ else
         "SambaNova" => Icons.Material.Outlined.Hub,
         "TogetherAI" => Icons.Material.Outlined.Groups,
         "xAI" => Icons.Material.Outlined.BrightnessHigh,
+        "NvidiaNIM" => Icons.Material.Outlined.DeveloperBoard,
         _ => Icons.Material.Outlined.SmartToy
     };
 
@@ -582,10 +655,11 @@ else
         "SambaNova" => "#0891b2",
         "TogetherAI" => "#2563eb",
         "xAI" => "#141414",
+        "NvidiaNIM" => "#76b900",
         _ => "#6b7280"
     };
 
-    private class ModelsResult { public List<ModelDto> Items { get; set; } = new(); }
+    private class ModelsResult { public List<ModelDto> Items { get; set; } = new(); public int TotalCount { get; set; } }
     private class TestResult { public bool Success { get; set; } public string? Message { get; set; } }
     private class ModelDto
     {

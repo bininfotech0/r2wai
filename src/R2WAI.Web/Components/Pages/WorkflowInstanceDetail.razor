@@ -123,14 +123,14 @@ else
                                     @if (_steps.Any(s => s.Status == "Completed"))
                                     {
                                         <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined"
-                                                 Style="font-size: 0.6rem; height: 18px;">
+                                                 Style="font-size: 0.6875rem; height: 18px;">
                                             @_steps.Count(s => s.Status == "Completed") passed
                                         </MudChip>
                                     }
                                     @if (_steps.Any(s => s.Status == "Failed"))
                                     {
                                         <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
-                                                 Style="font-size: 0.6rem; height: 18px;">
+                                                 Style="font-size: 0.6875rem; height: 18px;">
                                             @_steps.Count(s => s.Status == "Failed") failed
                                         </MudChip>
                                     }
@@ -241,7 +241,7 @@ else
                                                 @if (!string.IsNullOrEmpty(step.StepType))
                                                 {
                                                     <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
-                                                             Style="font-size: 0.6rem; height: 18px;">
+                                                             Style="font-size: 0.6875rem; height: 18px;">
                                                         @step.StepType
                                                     </MudChip>
                                                 }

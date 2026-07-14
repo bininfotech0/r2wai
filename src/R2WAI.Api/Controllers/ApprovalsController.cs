@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using R2WAI.Api.Services;
+using R2WAI.Application.Common.Interfaces;
 using R2WAI.Infrastructure.Persistence;
 using R2WAI.Infrastructure.Services;
 

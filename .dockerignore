@@ -2,9 +2,13 @@
 .github
 **/bin/
 **/obj/
+**/node_modules/
+**/.vs/
+**/.vscode/
 src/R2WAI.Api/Logs/
 README.md
 ROADMAP.md
 ARCHITECTURE.md
 docs/
 k8s/
+tests/

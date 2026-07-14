@@ -387,7 +387,7 @@ else
             var result = await Http.GetFromJsonAsync<ApprovalsResult>("/api/v1/approvals/pending");
             _pendingApprovalCount = result?.Items?.Count ?? 0;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             Snackbar.Add("Could not load pending approvals.", Severity.Warning);
         }

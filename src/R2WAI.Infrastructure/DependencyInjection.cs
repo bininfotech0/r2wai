@@ -95,6 +95,7 @@ public static class DependencyInjection
         services.AddScoped<RAGPlugin>();
         services.AddScoped<WorkflowPlugin>();
         services.AddScoped<AssistantPlugin>();
+        services.AddScoped<AiFunctionAuditFilter>();
 
         services.AddScoped<IVectorStoreService, PgVectorService>();
 
@@ -125,7 +126,6 @@ public static class DependencyInjection
         services.AddScoped<JwtService>();
         services.AddSingleton<TotpService>();
         services.AddScoped<EntraIdAuthService>();
-        services.AddScoped<AuthorizationService>();
 
         services.AddSignalR();
         services.AddScoped<INotificationService, NotificationService>();

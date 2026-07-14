@@ -15,7 +15,7 @@
 
     @if (_notifications.Count == 0)
     {
-        <MudText Align="Align.Center" Class="pa-4" Typo="Typo.body2" Color="Color.Tertiary">
+        <MudText Align="Align.Center" Class="pa-4" Typo="Typo.body2" Color="Color.Secondary">
             No notifications
         </MudText>
     }
@@ -34,8 +34,8 @@
                                      Style="@(notification.IsRead ? "" : "font-weight: bold;")">
                                 @notification.Title
                             </MudText>
-                            <MudText Typo="Typo.body2" Color="Color.Tertiary">@notification.Message</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">@notification.Message</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 @FormatTimestamp(notification.Timestamp)
                             </MudText>
                         </div>

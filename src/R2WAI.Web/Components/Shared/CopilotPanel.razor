@@ -1,7 +1,11 @@
+@using R2WAI.Web.Services
+@using Microsoft.AspNetCore.SignalR.Client
 @inject NavigationManager Navigation
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
+@inject IConfiguration Configuration
+@inject TokenStorageService TokenStorage
 @implements IAsyncDisposable
 
 @if (IsOpen)
@@ -10,7 +14,14 @@
     <div class="copilot-header pa-3 d-flex justify-space-between align-center"
          style="border-bottom: 1px solid var(--mud-palette-divider);">
         <div class="d-flex align-center gap-2">
-            <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Color="Color.Primary" Size="Size.Small" />
+            @if (_sttSupported || _ttsSupported)
+            {
+                <VoiceOrb State="OrbState" Size="26" />
+            }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Color="Color.Primary" Size="Size.Small" />
+            }
             <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">R2WAI Copilot</MudText>
         </div>
         <MudIconButton Icon="@Icons.Material.Outlined.Close" Size="Size.Small" OnClick="Close" aria-label="Close copilot" />
@@ -23,6 +34,7 @@
         </MudText>
     </div>
 
+    <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">@_liveAnnouncement</div>
     <div class="copilot-messages pa-3" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
         @if (_messages.Count == 0)
         {
@@ -32,24 +44,17 @@
                     Ask me anything about R2WAI
                 </MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
-                    I can create assistants, build workflows, search knowledge, and more.
+                    I can answer questions and point you to the right place — assistants, workflows, knowledge bases, and more.
                 </MudText>
                 <div class="d-flex flex-column gap-2 mt-4">
-                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default" FullWidth="true"
-                               OnClick="@(() => SendSuggestion("Create an HR onboarding assistant"))"
-                               Style="border-radius: 8px; text-transform: none; justify-content: flex-start;">
-                        "Create an HR onboarding assistant"
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default" FullWidth="true"
-                               OnClick="@(() => SendSuggestion("Show me pending approvals"))"
-                               Style="border-radius: 8px; text-transform: none; justify-content: flex-start;">
-                        "Show me pending approvals"
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default" FullWidth="true"
-                               OnClick="@(() => SendSuggestion("What workflows failed today?"))"
-                               Style="border-radius: 8px; text-transform: none; justify-content: flex-start;">
-                        "What workflows failed today?"
-                    </MudButton>
+                    @foreach (var suggestion in GetContextSuggestions())
+                    {
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default" FullWidth="true"
+                                   OnClick="@(() => SendSuggestion(suggestion))"
+                                   Style="border-radius: 8px; text-transform: none; justify-content: flex-start;">
+                            "@suggestion"
+                        </MudButton>
+                    }
                 </div>
             </div>
         }
@@ -57,10 +62,11 @@
         {
             @foreach (var msg in _messages)
             {
-                <div class="@($"copilot-message copilot-message--{(msg.IsUser ? "user" : "assistant")}")">
+                <div class="@($"copilot-message copilot-message--{(msg.IsUser ? "user" : msg.IsError ? "error" : "assistant")}")">
                     @if (!msg.IsUser)
                     {
-                        <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Size="Size.Small" Color="Color.Primary"
+                        <MudIcon Icon="@(msg.IsError ? Icons.Material.Outlined.ErrorOutline : Icons.Material.Outlined.AutoAwesome)"
+                                 Size="Size.Small" Color="@(msg.IsError ? Color.Warning : Color.Primary)"
                                  Style="margin-right: 8px; margin-top: 2px;" />
                     }
                     <div style="flex: 1;">
@@ -68,18 +74,30 @@
                         {
                             <MudText Typo="Typo.body2">@msg.Content</MudText>
                         }
+                        else if (msg.IsError)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Warning">@msg.Content</MudText>
+                        }
                         else
                         {
                             <MarkdownRenderer Content="@msg.Content" Style="font-size: 0.875rem;" />
                         }
-                        <div class="d-flex align-center gap-1 mt-1">
-                            @if (!msg.IsUser && _ttsSupported)
+                        <div class="d-flex align-center gap-1 mt-1 flex-wrap">
+                            @if (!msg.IsUser && !msg.IsError && _ttsSupported)
                             {
                                 <MudIconButton Icon="@(_speakingMessageIndex == _messages.IndexOf(msg) ? Icons.Material.Filled.StopCircle : Icons.Material.Filled.VolumeUp)"
                                                Size="Size.Small" Color="@(_speakingMessageIndex == _messages.IndexOf(msg) ? Color.Primary : Color.Default)"
                                                OnClick="@(() => ToggleSpeakMessage(msg))"
                                                Style="width: 22px; height: 22px; opacity: 0.6;"
                                                aria-label="Read aloud" />
+                            }
+                            @if (msg.IsError && !string.IsNullOrEmpty(msg.RetryText))
+                            {
+                                <MudButton Variant="Variant.Text" Color="Color.Warning" Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Refresh"
+                                           OnClick="@(() => RetryMessage(msg.RetryText!))" Style="border-radius: 8px;">
+                                    Try again
+                                </MudButton>
                             }
                             @foreach (var action in msg.Actions)
                             {
@@ -99,6 +117,17 @@
                     <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Size="Size.Small" Color="Color.Primary"
                              Style="margin-right: 8px; margin-top: 2px;" />
                     <MudProgressCircular Size="Size.Small" Color="Color.Primary" Indeterminate="true" />
+                </div>
+            }
+
+            @if (_isStreaming)
+            {
+                <div class="d-flex justify-start">
+                    <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.StopCircle" OnClick="StopGenerating"
+                               Style="border-radius: 8px; margin-left: 28px;">
+                        Stop
+                    </MudButton>
                 </div>
             }
         }
@@ -121,11 +150,13 @@
                 <MudIconButton Icon="@(_isListening ? Icons.Material.Filled.MicOff : Icons.Material.Filled.Mic)"
                                Color="@(_isListening ? Color.Error : Color.Default)"
                                OnClick="ToggleVoiceInput" Size="Size.Small"
+                               Disabled="@(_isThinking || _isStreaming)"
                                Style="@(_isListening ? "animation: pulse-soft 1.5s infinite;" : "")"
                                aria-label="@(_isListening ? "Stop voice input" : "Voice input")" />
             }
             <MudTextField @bind-Value="_input" Placeholder="@(_isListening ? "Speak now..." : "Ask R2WAI anything...")"
                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Disabled="@(_isThinking || _isStreaming)"
                           Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Send"
                           AdornmentColor="Color.Primary" OnAdornmentClick="SendMessage"
                           OnKeyUp="HandleKeyUp" Immediate="true"
@@ -139,13 +170,22 @@
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
 
+    private const string ConversationStorageKey = "r2wai_copilot_conversation_id";
+
     private string _input = string.Empty;
     private bool _isThinking;
     private bool _isStreaming;
     private List<CopilotMessage> _messages = new();
 
-    private IJSObjectReference? _voiceModule;
-    private DotNetObjectReference<CopilotPanel>? _dotNetRef;
+    private Guid? _conversationId;
+    private ChatSessionService? _chatSession;
+    private CancellationTokenSource? _sendCts;
+    private string _streamBuffer = string.Empty;
+    private CopilotMessage? _activeStreamingMessage;
+    private string _liveAnnouncement = string.Empty;
+    private bool _hydrated;
+
+    private VoiceSession? _voice;
     private bool _sttSupported;
     private bool _ttsSupported;
     private bool _isListening;
@@ -153,20 +193,47 @@
     private int _speakingMessageIndex = -1;
     private bool _voiceInitialized;
 
+    private VoiceOrb.OrbState OrbState =>
+        _isListening ? VoiceOrb.OrbState.Listening :
+        (_isThinking || _isStreaming) ? VoiceOrb.OrbState.Thinking :
+        _speakingMessageIndex >= 0 ? VoiceOrb.OrbState.Speaking :
+        VoiceOrb.OrbState.Idle;
+
     private async Task InitVoice()
     {
         if (_voiceInitialized) return;
         try
         {
-            _voiceModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/voice.js");
-            _dotNetRef = DotNetObjectReference.Create(this);
-            var support = await _voiceModule.InvokeAsync<VoiceSupport>("isSupported");
-            _sttSupported = support.Stt;
-            _ttsSupported = support.Tts;
+            _voice = new VoiceSession(JS);
+            await _voice.InitAsync();
+            _voice.TranscriptReceived += OnVoiceTranscript;
+            _voice.StatusChanged += OnVoiceStatusChanged;
+            _voice.SpeakDone += OnVoiceSpeakDone;
+            _sttSupported = _voice.SttSupported;
+            _ttsSupported = _voice.TtsSupported;
             _voiceInitialized = true;
             StateHasChanged();
         }
         catch { }
+    }
+
+    private bool _wasOpen;
+
+    // MainLayout drives visibility via @bind-IsOpen, which sets the IsOpen parameter directly
+    // rather than calling Open() — so the "just opened" side effects (voice init, hydrating the
+    // saved conversation) have to be detected here, not only in Open()/Toggle() below.
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            _wasOpen = true;
+            _ = InitVoice();
+            _ = HydrateConversationAsync();
+        }
+        else if (!IsOpen)
+        {
+            _wasOpen = false;
+        }
     }
 
     public void Open()
@@ -175,6 +242,7 @@
         IsOpenChanged.InvokeAsync(true);
         StateHasChanged();
         _ = InitVoice();
+        _ = HydrateConversationAsync();
     }
 
     public void Close()
@@ -201,104 +269,193 @@
         await SendMessage();
     }
 
+    private async Task RetryMessage(string userMessage)
+    {
+        await SendUserText(userMessage);
+    }
+
     private async Task SendMessage()
     {
         if (string.IsNullOrWhiteSpace(_input)) return;
 
         var userMessage = _input.Trim();
-        _messages.Add(new CopilotMessage { Content = userMessage, IsUser = true });
         _input = string.Empty;
+        await SendUserText(userMessage);
+    }
+
+    private async Task SendUserText(string userMessage)
+    {
+        _messages.Add(new CopilotMessage { Content = userMessage, IsUser = true });
         _isThinking = true;
         StateHasChanged();
 
+        _sendCts = new CancellationTokenSource();
+        var cancelToken = _sendCts.Token;
+        CopilotMessage? streamingMsg = null;
+
         try
         {
-            var streamMessage = $"[Context: user is on {GetCurrentPageName()} page] {userMessage}";
-            var response = await Http.PostAsJsonAsync("/api/v1/chat/stream", new
+            var conversationId = await EnsureConversationAsync();
+            if (conversationId is null)
             {
-                Message = streamMessage
-            });
-
-            if (response.IsSuccessStatusCode && response.Content.Headers.ContentType?.MediaType == "text/event-stream")
-            {
-                _isThinking = false;
-                _isStreaming = true;
-                var streamingMsg = new CopilotMessage { Content = "", IsUser = false };
-                _messages.Add(streamingMsg);
-                StateHasChanged();
-
-                using var stream = await response.Content.ReadAsStreamAsync();
-                using var reader = new System.IO.StreamReader(stream);
-
-                while (!reader.EndOfStream)
-                {
-                    var line = await reader.ReadLineAsync();
-                    if (string.IsNullOrEmpty(line)) continue;
-                    if (!line.StartsWith("data: ")) continue;
-
-                    var data = line["data: ".Length..];
-                    if (data == "[DONE]") break;
-
-                    try
-                    {
-                        var chunk = System.Text.Json.JsonSerializer.Deserialize<StreamChunk>(data);
-                        if (chunk?.content is not null)
-                        {
-                            streamingMsg.Content += chunk.content;
-                            await InvokeAsync(StateHasChanged);
-                        }
-                    }
-                    catch { }
-                }
-
-                streamingMsg.Actions = GetContextualActions(userMessage);
-                _isStreaming = false;
+                AddErrorMessage(userMessage, "R2WAI Copilot couldn't start a conversation. Please try again.");
+                return;
             }
-            else if (response.IsSuccessStatusCode)
+
+            await EnsureHubConnectionAsync();
+            await JoinConversationGroupAsync(conversationId.Value);
+
+            _isThinking = false;
+            _isStreaming = true;
+            _streamBuffer = string.Empty;
+            streamingMsg = new CopilotMessage { Content = string.Empty, IsUser = false };
+            _activeStreamingMessage = streamingMsg;
+            _messages.Add(streamingMsg);
+            StateHasChanged();
+
+            var result = await _chatSession!.SendMessageAsync(conversationId.Value, userMessage, cancelToken);
+
+            if (result.Success)
             {
-                var result = await response.Content.ReadFromJsonAsync<CopilotChatResponse>();
-                _messages.Add(new CopilotMessage
+                streamingMsg.Content = !string.IsNullOrEmpty(result.Content) ? result.Content : _streamBuffer;
+                streamingMsg.Actions = GetContextualActions(userMessage);
+                _liveAnnouncement = streamingMsg.Content.Length <= 160 ? streamingMsg.Content : streamingMsg.Content[..160] + "…";
+            }
+            else if (result.Cancelled)
+            {
+                if (cancelToken.IsCancellationRequested)
                 {
-                    Content = result?.Reply ?? "I processed your request.",
-                    IsUser = false,
-                    Actions = GetContextualActions(userMessage)
-                });
+                    // Actually cancelled via the Stop button.
+                    streamingMsg.Content = string.IsNullOrEmpty(_streamBuffer)
+                        ? "_Stopped before responding._"
+                        : $"{_streamBuffer}\n\n_[Stopped by user]_";
+                    _liveAnnouncement = "Response stopped.";
+                }
+                else
+                {
+                    // Timed out for some other reason (e.g. the assistant took too long) — this is a
+                    // failure, not something the user asked for, so don't claim it was a user stop.
+                    _messages.Remove(streamingMsg);
+                    streamingMsg = null;
+                    AddErrorMessage(userMessage, "R2WAI Copilot took too long to respond. Please try again.");
+                }
             }
             else
             {
-                _messages.Add(new CopilotMessage
-                {
-                    Content = GetSmartResponse(userMessage),
-                    IsUser = false,
-                    Actions = GetContextualActions(userMessage)
-                });
+                _messages.Remove(streamingMsg);
+                streamingMsg = null;
+                AddErrorMessage(userMessage, $"R2WAI Copilot couldn't respond ({result.ErrorMessage}). Please try again.");
             }
         }
-        catch
+        catch (Exception)
         {
-            if (_isStreaming)
-            {
-                _isStreaming = false;
-            }
-            else
-            {
-                _messages.Add(new CopilotMessage
-                {
-                    Content = GetSmartResponse(userMessage),
-                    IsUser = false,
-                    Actions = GetContextualActions(userMessage)
-                });
-            }
+            if (streamingMsg is not null) _messages.Remove(streamingMsg);
+            AddErrorMessage(userMessage, "R2WAI Copilot couldn't respond — check your connection and try again.");
         }
         finally
         {
             _isThinking = false;
             _isStreaming = false;
+            _activeStreamingMessage = null;
+            _sendCts?.Dispose();
+            _sendCts = null;
             StateHasChanged();
         }
     }
 
-    private record StreamChunk(string? content);
+    private void StopGenerating() => _sendCts?.Cancel();
+
+    private void AddErrorMessage(string originalUserText, string errorText)
+    {
+        _messages.Add(new CopilotMessage
+        {
+            Content = errorText,
+            IsUser = false,
+            IsError = true,
+            RetryText = originalUserText
+        });
+        _liveAnnouncement = errorText;
+    }
+
+    private async Task<Guid?> EnsureConversationAsync()
+    {
+        if (_conversationId.HasValue) return _conversationId;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/chat/conversations", new { Title = "Copilot", Module = "copilot" });
+            if (!response.IsSuccessStatusCode) return null;
+
+            var created = await response.Content.ReadFromJsonAsync<ConversationCreatedResult>();
+            if (created is null) return null;
+
+            _conversationId = created.Id;
+            try { await JS.InvokeVoidAsync("localStorage.setItem", ConversationStorageKey, created.Id.ToString()); }
+            catch { }
+
+            return created.Id;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task HydrateConversationAsync()
+    {
+        if (_hydrated) return;
+        _hydrated = true;
+
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", ConversationStorageKey);
+            if (string.IsNullOrEmpty(saved) || !Guid.TryParse(saved, out var id)) return;
+
+            var result = await Http.GetFromJsonAsync<PagedMessagesResult>($"/api/v1/chat/conversations/{id}/messages?pageSize=100");
+            if (result is null)
+            {
+                try { await JS.InvokeVoidAsync("localStorage.removeItem", ConversationStorageKey); }
+                catch { }
+                return;
+            }
+
+            _conversationId = id;
+            _messages = result.Items.Select(m => new CopilotMessage
+            {
+                Content = m.Content,
+                IsUser = m.Role.Equals("user", StringComparison.OrdinalIgnoreCase)
+            }).ToList();
+
+            await EnsureHubConnectionAsync();
+            await JoinConversationGroupAsync(id);
+
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    private async Task EnsureHubConnectionAsync()
+    {
+        if (_chatSession is null)
+        {
+            _chatSession = new ChatSessionService(Http, Configuration, Navigation, TokenStorage);
+            _chatSession.OnChunk += chunk =>
+            {
+                _streamBuffer += chunk;
+                if (_activeStreamingMessage is not null)
+                    _activeStreamingMessage.Content = _streamBuffer;
+                InvokeAsync(StateHasChanged);
+            };
+        }
+
+        await _chatSession.ConnectAsync();
+    }
+
+    private async Task JoinConversationGroupAsync(Guid conversationId)
+    {
+        if (_chatSession is null) return;
+        await _chatSession.JoinConversationAsync(conversationId);
+    }
 
     private List<CopilotAction> GetContextualActions(string input)
     {
@@ -343,10 +500,22 @@
         };
     }
 
+    private List<string> GetContextSuggestions() => GetCurrentPageName() switch
+    {
+        "AI Assistant Studio" or "AI Studio" => new() { "Create an HR onboarding assistant", "How do I connect a knowledge base?" },
+        "Workflow Studio" => new() { "What workflows failed today?", "Create an approval workflow" },
+        "Operations Center" or "Operations" => new() { "Show me today's error rate", "Which workflows are stuck?" },
+        "Inbox" => new() { "Summarize my pending approvals", "Which approvals are overdue?" },
+        "Administration" or "User Management" => new() { "How do I add a new user?", "Show me the AI model configuration" },
+        _ => new() { "Create an HR onboarding assistant", "Show me pending approvals", "What workflows failed today?" }
+    };
+
     private class CopilotMessage
     {
         public string Content { get; set; } = string.Empty;
         public bool IsUser { get; set; }
+        public bool IsError { get; set; }
+        public string? RetryText { get; set; }
         public List<CopilotAction> Actions { get; set; } = new();
     }
 
@@ -356,51 +525,25 @@
         public string? Url { get; set; }
     }
 
-    private string GetSmartResponse(string input)
-    {
-        var lower = input.ToLowerInvariant();
-        if (lower.Contains("create") && lower.Contains("assistant"))
-            return "I can help you create an assistant! Head to the AI Assistant Studio where you can describe what you need and I'll generate the configuration for you.";
-        if (lower.Contains("approval") || lower.Contains("pending"))
-            return "You can view and manage pending approvals in your Inbox. Each approval shows the workflow name, requester, and due date.";
-        if (lower.Contains("workflow") && (lower.Contains("fail") || lower.Contains("error")))
-            return "Check the Operations Hub for failed workflows. You can see step-by-step execution details and retry failed steps.";
-        if (lower.Contains("upload") || lower.Contains("document"))
-            return "You can upload documents in the Documents section. Supported formats include PDF, DOCX, XLSX, TXT, and more. Documents are automatically processed and indexed for knowledge search.";
-        if (lower.Contains("search") || lower.Contains("find"))
-            return "Use the Command Palette (Ctrl+K) for quick navigation, or search across your knowledge bases from the Home page command bar.";
-        if (lower.Contains("model") || lower.Contains("openai") || lower.Contains("ollama"))
-            return "Configure AI models in Settings > AI Models. You can set up OpenAI, Azure OpenAI, or Ollama providers and test connections before using them.";
-        return "I can help you navigate R2WAI, create assistants, manage workflows, and search your knowledge bases. What would you like to do?";
-    }
-
-    private class CopilotChatResponse
-    {
-        public string? Reply { get; set; }
-        public Guid ConversationId { get; set; }
-    }
-
     private async Task ToggleVoiceInput()
     {
+        if (_voice is null) return;
+
         if (_isListening)
         {
-            if (_voiceModule is not null)
-            {
-                _isListening = false;
-                _interimTranscript = string.Empty;
-                await _voiceModule.InvokeVoidAsync("stopListening");
-                StateHasChanged();
-            }
+            _isListening = false;
+            _interimTranscript = string.Empty;
+            await _voice.StopListening();
+            StateHasChanged();
         }
-        else if (_voiceModule is not null && _dotNetRef is not null)
+        else
         {
             _interimTranscript = string.Empty;
-            await _voiceModule.InvokeAsync<bool>("startListening", _dotNetRef, "OnVoiceResult", "OnVoiceStatus", "en-US");
+            await _voice.StartListening();
         }
     }
 
-    [JSInvokable]
-    public void OnVoiceResult(string transcript, bool isFinal)
+    private void OnVoiceTranscript(string transcript, bool isFinal)
     {
         if (isFinal)
         {
@@ -415,8 +558,7 @@
         InvokeAsync(StateHasChanged);
     }
 
-    [JSInvokable]
-    public void OnVoiceStatus(string status)
+    private void OnVoiceStatusChanged(string status)
     {
         _isListening = status == "listening";
         if (status == "not-allowed")
@@ -426,12 +568,12 @@
 
     private async Task ToggleSpeakMessage(CopilotMessage msg)
     {
-        if (_voiceModule is null || _dotNetRef is null) return;
+        if (_voice is null) return;
         var idx = _messages.IndexOf(msg);
 
         if (_speakingMessageIndex == idx)
         {
-            await _voiceModule.InvokeVoidAsync("stopSpeaking");
+            await _voice.StopSpeaking();
             _speakingMessageIndex = -1;
             StateHasChanged();
             return;
@@ -439,11 +581,10 @@
 
         _speakingMessageIndex = idx;
         StateHasChanged();
-        await _voiceModule.InvokeAsync<bool>("speak", msg.Content, "en-US", 1.0, 1.0, _dotNetRef, "OnSpeakDone");
+        await _voice.Speak(msg.Content);
     }
 
-    [JSInvokable]
-    public void OnSpeakDone()
+    private void OnVoiceSpeakDone()
     {
         _speakingMessageIndex = -1;
         InvokeAsync(StateHasChanged);
@@ -451,28 +592,42 @@
 
     public async ValueTask DisposeAsync()
     {
-        if (_voiceModule is not null)
+        if (_voice is not null)
         {
-            try { await _voiceModule.InvokeVoidAsync("dispose"); } catch { }
-            await _voiceModule.DisposeAsync();
+            _voice.TranscriptReceived -= OnVoiceTranscript;
+            _voice.StatusChanged -= OnVoiceStatusChanged;
+            _voice.SpeakDone -= OnVoiceSpeakDone;
+            await _voice.DisposeAsync();
         }
-        _dotNetRef?.Dispose();
+
+        _sendCts?.Cancel();
+        _sendCts?.Dispose();
+
+        if (_chatSession is not null)
+        {
+            try { await _chatSession.DisposeAsync(); }
+            catch { }
+        }
     }
 
-    private class VoiceSupport
-    {
-        public bool Stt { get; set; }
-        public bool Tts { get; set; }
-    }
-
-    private class AssistantsResult
-    {
-        public List<AssistantItem>? Items { get; set; }
-    }
-
-    private class AssistantItem
+    private class ConversationCreatedResult
     {
         public Guid Id { get; set; }
-        public string Name { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
     }
+
+    private class PagedMessagesResult
+    {
+        public List<MessageItem> Items { get; set; } = new();
+        public int TotalCount { get; set; }
+    }
+
+    private class MessageItem
+    {
+        public Guid Id { get; set; }
+        public string Role { get; set; } = string.Empty;
+        public string Content { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+    }
+
 }

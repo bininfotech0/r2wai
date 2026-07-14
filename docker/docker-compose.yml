@@ -23,7 +23,7 @@ services:
       - "5000:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ConnectionStrings__DefaultConnection=Host=postgres;Database=r2wai;Username=r2wai;Password=${DB_PASSWORD}
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=r2wai;Username=r2wai;Password=${DB_PASSWORD};Include Error Detail=true
       - Authentication__Jwt__SecretKey=${JWT_SECRET}
       - Authentication__Jwt__ExpirationMinutes=15
       - Authentication__Jwt__RefreshTokenExpirationDays=7

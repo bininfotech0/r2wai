@@ -1,6 +1,6 @@
 # R2WAI — Enterprise AI Work Execution Platform
 
-> AI-powered platform for RFP response generation, knowledge management, enterprise chatbots, document processing, and automated workflows.
+> AI-powered platform for knowledge management, enterprise chatbots, document processing, and automated approval workflows.
 
 ---
 
@@ -9,7 +9,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Client Layer                               │
-│    Blazor Server App   │   Elsa Studio   │   API Clients      │
+│         Blazor Server App        │        API Clients         │
 ├─────────────────────────────────────────────────────────────┤
 │                   API Gateway (nginx / AFD)                   │
 ├─────────────────────────────────────────────────────────────┤
@@ -23,10 +23,12 @@
 │    Entities   │   Value Objects   │   Enums   │   Events      │
 ├─────────────────────────────────────────────────────────────┤
 │        Infrastructure Layer (R2WAI.Infrastructure)           │
-│    EF Core   │   Semantic Kernel   │   Qdrant   │   Redis     │
-│    MinIO     │   Azure AD          │   SignalR                │
+│  EF Core   │  Semantic Kernel  │  pgvector  │  Redis (opt.)   │
+│  MinIO (opt.)  │  Azure Entra ID  │  SignalR                  │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+Dependencies point inward (Clean Architecture): `Web → Api → Application → Domain`, with `Infrastructure` implementing `Application`'s interfaces against `Domain`. Workflow execution is backed by the [Elsa](https://elsa-workflows.github.io/elsa-documentation/) 3.x engine, embedded directly in `R2WAI.Api` — there is no separate workflow-designer service.
 
 ## Technology Stack
 
@@ -34,64 +36,49 @@
 |---|---|
 | **Backend** | .NET 10, ASP.NET Core, C# |
 | **Frontend** | Blazor Server, MudBlazor |
-| **Real-Time** | SignalR (WebSocket) |
-| **AI** | Semantic Kernel, OpenAI / Azure OpenAI |
+| **Real-Time** | SignalR (WebSocket), Server-Sent Events (AI streaming) |
+| **AI** | Semantic Kernel, OpenAI / Ollama / Z.ai (OpenAI-compatible) |
+| **Workflow Engine** | Elsa 3.x (embedded in the API) |
 | **Database** | PostgreSQL 16 (EF Core) |
-| **Cache** | Redis 7 |
-| **Vector Store** | Qdrant |
-| **Object Storage** | MinIO |
-| **Auth** | JWT, Azure Entra ID |
+| **Vector Store** | pgvector (PostgreSQL extension) |
+| **Cache** | Redis (optional — falls back to in-memory) |
+| **Object Storage** | Local disk or MinIO (configurable) |
+| **Auth** | JWT, Azure Entra ID, TOTP MFA |
 | **CI/CD** | GitHub Actions |
-| **Container** | Docker, Kubernetes (AKS) |
-| **Monitoring** | Serilog, Prometheus, Grafana |
+| **Container** | Docker (Docker Compose) |
+| **Monitoring** | Serilog, OpenTelemetry |
 
 ## Features
 
-- **AI Assistant Studio** — Create domain-specific assistants (HR, IT, Finance, Legal, Procurement) with natural language or templates, powered by configurable LLMs
-- **RAG Knowledge Bases** — Upload documents (PDF, DOCX, XLSX), process and embed them with pgvector, and enable semantic search with source citations
-- **Workflow Automation** — Design and execute multi-step business workflows with Elsa 3.x, including approval chains, scheduling, and visual process tracking
-- **Approval Engine** — Policy-based approval routing with multi-level chains, SLA tracking, escalation, and real-time notifications
-- **Enterprise Chatbots** — Build embeddable website chatbots backed by AI assistants and knowledge bases
-- **Integrations Marketplace** — Connect 20+ external systems (Salesforce, Slack, Jira, GitHub, etc.) with REST API connectors and OAuth2 support
-- **Operations Center** — Monitor platform health, view AI usage analytics, generate cost/usage/compliance/assistant reports, and track audit logs
-- **Multi-Tenancy** — Isolated workspaces with role-based access control, configurable permissions, and feature flags per tenant
-- **Real-Time Streaming** — SSE-based chat streaming and SignalR live activity feeds
-- **Enterprise Audit Trail** — Immutable audit logging for all mutations with correlation tracking and CSV/JSON export
+- **AI Assistants** — Create domain-specific assistants (HR, IT, Finance, Legal, Procurement) with configurable LLM providers, instructions, and attached knowledge bases
+- **RAG Knowledge Bases** — Upload documents, process and embed them with pgvector, and enable semantic search with source citations
+- **Workflow Automation** — Design and execute multi-step business workflows on the Elsa engine, including approval chains, scheduling, and transform/notification steps
+- **Approval Engine** — Policy-based multi-level approval routing with SLA tracking, escalation, and real-time notifications
+- **Enterprise Chatbots** — Build embeddable, multi-channel website chatbots backed by AI assistants and knowledge bases (anonymous visitors never get tool-calling access — see Security notes below)
+- **Integrations** — Configure external system connections (REST APIs, email) callable by AI assistants via the tool framework
+- **Operations Center** — Monitor platform health, view AI usage, generate reports, and track the immutable audit trail
+- **Multi-Tenancy** — Isolated workspaces enforced via EF Core global query filters, with role-based access control
+- **Real-Time Streaming** — SSE-based chat streaming and SignalR live activity/notification feeds
+- **Voice** — Voice-enabled chat sessions for chatbots and assistants
 
-## Step-by-Step User Guide
+## Security notes
 
-A walkthrough for end users (not developers) of the deployed application, organized by the four top-level areas of the app: **Studio** (build), **Workspace** (daily use), **Monitor** (oversight), **Settings** (admin).
-
-1. **Sign in** — Log in with email/password or SSO (Azure Entra ID); complete MFA if your tenant requires it.
-2. **Upload documents** (*Workspace → Documents*) — Drag-and-drop or select files (PDF, DOCX, XLSX, PPTX, TXT, CSV, MD, images; up to 50 MB each, 20 at a time). Status moves Uploading → Processing → Ready. Once ready, you can summarize, extract from, compare, or ask questions about a document.
-3. **Organize a Knowledge Base** (*Studio → Knowledge Bases*) — Group related documents together; this is the searchable RAG collection an assistant draws on, with source citations.
-4. **Create an AI Assistant** (*Studio → Assistants*) — Describe it in plain language (e.g. "Create an HR assistant that helps with onboarding") or start from a template (HR, IT, Finance, Legal, Procurement). Attach a Knowledge Base, set tone/instructions and model, test it in the Playground, then publish.
-5. **Chat with an assistant** (*Workspace → Conversations*) — Pick an assistant and chat in real time (streaming responses); history is searchable and exportable.
-6. **Automate a process** (*Studio → Workflows*) — Build visually, generate from a natural-language description, or start from a template (Invoice Approval, Leave Request, Expense Report, Employee Onboarding). Define approval steps, escalation rules, and SLA timers, then activate it.
-7. **Handle approvals** (*Workspace → Inbox / Approvals*) — Review items routed to you with full context (requester, amount, due date); approve, reject, or comment. Overdue and escalated items are flagged.
-8. **Deploy a chatbot** (*Studio → Chatbots*, optional) — Wrap an assistant + knowledge base into an embeddable widget for your website; grab the embed code.
-9. **Track leads** (*Workspace → Leads*, optional) — Prospects captured by your chatbots and assistants during conversations show up here with contact info, interest, and source; search, filter, and update their status as they move through your pipeline.
-10. **Generate an RFP response** (*Workspace → Proposals*, optional) — Paste in RFP requirements and get an AI-drafted response built from your knowledge base and templates, then edit it.
-11. **Monitor health** (*Monitor*) — Dashboard KPIs, AI usage/cost, analytics, reports, and the immutable audit trail (who did what, when).
-12. **Administer the tenant** (*Settings*, admin only) — Manage users, roles and permissions, security/MFA, AI model providers and API keys, webhooks, and content moderation.
-
-## Screenshots
-
-| Dashboard | Assistant Studio | Workflow Builder |
-|-----------|-----------------|-----------------|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Assistants](docs/screenshots/assistants.png) | ![Workflows](docs/screenshots/workflows.png) |
+- Anonymous chatbot-widget traffic is served with Semantic Kernel's mutating tool plugins (workflow start, approval actions) explicitly disabled — see `SemanticKernelService.GetOrCreateKernel(enableTools)` and its callers in `ChatbotsController`.
+- Multi-tenancy is enforced at the data layer (EF Core global query filters keyed on `TenantId`), not just in application logic.
+- JWT is the primary auth scheme; Elsa's own workflow engine shares the same signing key rather than registering a competing scheme.
 
 ## Quick Start
 
 ### Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- [PostgreSQL 16](https://www.postgresql.org/) (or use Docker)
-- [Docker](https://www.docker.com/) (for infrastructure services)
+- [Docker](https://www.docker.com/) (for PostgreSQL/pgvector, or run your own Postgres 16+ with the `pgvector` extension)
+
+### Local development
 
 ```bash
-# 1. Start infrastructure
-docker compose -f docker/docker-compose.yml up -d postgres redis qdrant minio
+# 1. Start Postgres (pgvector-enabled)
+docker compose -f docker/docker-compose.yml up -d postgres
 
 # 2. Start backend
 cd src/R2WAI.Api
@@ -102,54 +89,67 @@ cd src/R2WAI.Web
 dotnet run
 ```
 
-- **API**: `http://localhost:5000` — Swagger at `/swagger`
-- **Web App**: `http://localhost:3001` / `https://localhost:3000`
-- **MinIO Console**: `http://localhost:9001` (`minioadmin` / `minioadmin`)
-- **Qdrant Dashboard**: `http://localhost:6333/dashboard`
+- **API**: Swagger UI at `/swagger` (Development/Staging only)
+- **Web App**: Blazor Server UI
+- Redis and MinIO are optional — the app falls back to in-memory cache and local disk storage when they're not configured (`Cache:Redis:ConnectionString`, `Storage:Provider` in `appsettings.json`)
+
+### Full stack via Docker Compose
+
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
+
+Brings up `r2wai-web`, `r2wai-api`, and `postgres` (the `pgvector/pgvector:pg16` image). See `docker/.env.example` for required environment variables.
 
 ## Project Structure
 
 ```
 R2WAI/
 ├── src/
-│   ├── R2WAI.Api/                # ASP.NET Core API (Controllers, Hubs, Middleware)
-│   ├── R2WAI.Application/        # CQRS commands, queries, DTOs, mappings
-│   ├── R2WAI.Domain/             # Entities, value objects, enums, events
-│   └── R2WAI.Infrastructure/     # EF Core, Semantic Kernel, Qdrant, Redis, MinIO
-├── src/R2WAI.Web/                # Blazor Server app with MudBlazor
-│   ├── Components/               # Layouts, pages, and shared UI
-│   ├── Authentication/           # JWT auth state and API handler
-│   ├── Services/                 # Web app services
-│   └── wwwroot/                  # Static assets
-├── docker/                       # Dockerfiles and docker-compose
-├── k8s/                          # Kubernetes manifests (kustomize)
+│   ├── R2WAI.Api/                # ASP.NET Core API (Controllers, Hubs, Middleware, Elsa activities)
+│   ├── R2WAI.Application/        # CQRS commands/queries, DTOs, interfaces, validation behaviors
+│   ├── R2WAI.Domain/             # Entities, value objects, enums, domain events (no external deps)
+│   ├── R2WAI.Infrastructure/     # EF Core, Semantic Kernel, pgvector, storage, cache, auth
+│   └── R2WAI.Web/                # Blazor Server app with MudBlazor
+│       ├── Components/           # Layouts, pages, dialogs, shared UI
+│       ├── Authentication/       # JWT auth state
+│       ├── Services/             # Web app services (HTTP clients, chat/voice sessions)
+│       └── wwwroot/              # Static assets
+├── tests/                        # xUnit test projects (one per src project) + Playwright/browser e2e scripts
+├── docker/                       # Dockerfiles, docker-compose, backup/restore scripts
 ├── .github/workflows/            # CI/CD pipelines
-└── docs/                         # Documentation
-    ├── api/                      # API reference
-    ├── deployment/               # Deployment guide
-    └── development/              # Developer setup guide
+└── docs/                         # Documentation (API reference, deployment, development guides)
 ```
+
+> Kubernetes manifests are not part of this repo — Docker Compose is the deployment target (per `docs/implementation/MVP-IMPLEMENTATION-PLAN.md`). `docs/deployment/DEPLOYMENT.md` still describes a `kubectl`/`k8s/` flow from an earlier plan; treat that section as aspirational, not current.
 
 ## Documentation
 
 | Document | Description |
 |---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture, design decisions, data model |
-| [ROADMAP.md](ROADMAP.md) | 24-week development roadmap with milestones |
-| [docs/api/API.md](docs/api/API.md) | Complete API reference with endpoints and examples |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture and design decisions |
+| [docs/api/API.md](docs/api/API.md) | API reference with endpoints and examples |
 | [docs/deployment/DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md) | Production deployment guide |
+| [docs/deployment/RUNBOOK.md](docs/deployment/RUNBOOK.md) | Operational runbook |
 | [docs/development/DEVELOPMENT.md](docs/development/DEVELOPMENT.md) | Local development setup and common commands |
+
+> Some documents in `docs/` are point-in-time snapshots (dated in their own headers) rather than living docs — check the date before relying on specifics.
 
 ## Feature Modules
 
+Application-layer feature areas (`src/R2WAI.Application/Features/`), each with its own controller in `R2WAI.Api/Controllers/`:
+
 - **Chat** — Real-time AI chat with streaming, conversation management
 - **Documents** — Upload, process, summarize, extract, compare
-- **Knowledge Bases** — RAG-powered semantic search with source citations
-- **Chatbots** — Embeddable website chatbots with training
-- **Proposals** — AI-driven RFP response generation
-- **Workflows** — Automated approval and action workflows
-- **Assistants** — Domain-specific enterprise assistants (HR, IT, Procurement, Finance, Legal)
-- **Admin** — User/role management, audit logs, analytics, model config
+- **KnowledgeBases** — RAG-powered semantic search with source citations
+- **Chatbots** — Embeddable, multi-channel website chatbots
+- **Workflows** — Automated approval and action workflows (Elsa-backed)
+- **Assistants** — Domain-specific enterprise assistants
+- **Integrations** — External system connections and the tool framework
+- **Admin** — User/role management, model configuration, audit logs
+- **Operations** — Health monitoring, usage analytics, reporting
+
+Additional controllers not tied to an Application feature folder: `Auth`, `ApiKeys`, `Schedules`, `Webhooks`.
 
 ## Deployment
 
@@ -159,35 +159,29 @@ R2WAI/
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-### Kubernetes
-
-```bash
-kubectl apply -k k8s/
-```
-
-See [docs/deployment/DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md) for full production deployment guide.
+Docker Compose is the current deployment target — see [docs/deployment/DEPLOYMENT.md](docs/deployment/DEPLOYMENT.md) for the full guide.
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |---|---|---|
 | `ConnectionStrings__DefaultConnection` | PostgreSQL connection string | Required |
-| `ConnectionStrings__Redis` | Redis connection string | `localhost:6379` |
-| `Jwt__Secret` | JWT signing key (min 32 chars) | Required |
-| `Jwt__Issuer` | JWT issuer | `R2WAI` |
-| `OpenAI__ApiKey` | OpenAI API key for AI features | Optional |
-| `OpenAI__Model` | Default model ID | `gpt-4o` |
+| `ConnectionStrings__Redis` / `Cache__Redis__ConnectionString` | Redis connection string | Unset → in-memory cache |
+| `Authentication__Jwt__SecretKey` | JWT signing key (min 32 chars) | Required |
+| `Authentication__Jwt__Issuer` | JWT issuer | `R2WAI` |
+| `AI__Provider` | AI provider (`openai`, `ollama`, or `zai`) | `openai` |
+| `AI__OpenAI__ApiKey` | OpenAI API key | Required if provider is `openai` |
 | `Storage__Provider` | Storage backend (`Local` or `MinIO`) | `Local` |
 | `Authentication__EntraId__TenantId` | Azure Entra ID tenant for SSO | Optional |
 
-See [docker/.env.example](docker/.env.example) for a complete list.
+See `docker/.env.example` and `docker/.env.production.example` for complete lists.
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`feat/your-feature`)
 3. Commit with [Conventional Commits](https://www.conventionalcommits.org/)
-4. Open a pull request to `develop`
+4. Open a pull request
 
 See [docs/development/DEVELOPMENT.md](docs/development/DEVELOPMENT.md) for setup instructions and coding conventions.
 

@@ -99,7 +99,7 @@ public class SendMessageCommandHandler(
 
             var responseBuffer = new System.Text.StringBuilder();
             
-            await foreach (var chunk in aiService.StreamChatAsync(command.Content, history, null, cancellationToken))
+            await foreach (var chunk in aiService.StreamChatAsync(command.Content, history, null, enableTools: true, ct: cancellationToken))
             {
                 responseBuffer.Append(chunk);
                 await streamingService.SendStreamChunkAsync(command.ConversationId, chunk, cancellationToken);

@@ -4,6 +4,7 @@ public record GetModelsQuery : IRequest<PagedResult<ModelConfigDto>>, IAuthorize
 {
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 50;
+    public string? Search { get; init; }
     public string[] RequiredRoles => ["Admin", "SystemAdmin"];
 }
 
@@ -15,9 +16,12 @@ public class GetModelsQueryHandler(
     public async Task<PagedResult<ModelConfigDto>> Handle(GetModelsQuery query, CancellationToken cancellationToken)
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
+        var searchTerm = query.Search?.ToLower();
 
         var all = await modelRepo.FindAsync(
-            m => m.TenantId == tenantId && m.IsActive, cancellationToken);
+            m => m.TenantId == tenantId && m.IsActive
+              && (string.IsNullOrEmpty(searchTerm) || m.Name.ToLower().Contains(searchTerm)),
+            cancellationToken);
         var filtered = all.OrderByDescending(m => m.IsDefault)
                           .ThenBy(m => m.Name)
                           .ToList();

@@ -3,6 +3,7 @@
 @layout R2WAI.Web.Components.Layout.WidgetLayout
 @attribute [AllowAnonymous]
 @implements IAsyncDisposable
+@using R2WAI.Web.Services
 @inject IConfiguration Configuration
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
@@ -12,17 +13,25 @@
 <div style="@GetContainerStyle()">
     <div style="@GetHeaderStyle()">
         <div class="d-flex align-center gap-2" style="flex: 1;">
-            <MudIcon Icon="@Icons.Material.Filled.ChatBubble" Style="color: white;" />
+            @if (_voiceConfigEnabled)
+            {
+                <VoiceOrb State="OrbState" Size="28" />
+            }
+            else
+            {
+                <MudIcon Icon="@Icons.Material.Filled.ChatBubble" Style="color: white;" />
+            }
             <MudText Typo="Typo.subtitle1" Style="color: white;">@_title</MudText>
             @if (_voiceChatActive)
             {
-                <span style="background: rgba(255,255,255,0.2); border-radius: 12px; padding: 2px 8px; font-size: 0.6rem; color: white; display: flex; align-items: center; gap: 4px; animation: pulse-soft 1.5s infinite;">
+                <span style="background: rgba(255,255,255,0.2); border-radius: 12px; padding: 2px 8px; font-size: 0.6875rem; color: white; display: flex; align-items: center; gap: 4px; animation: pulse-soft 1.5s infinite;">
                     <MudIcon Icon="@Icons.Material.Filled.GraphicEq" Style="color: white; font-size: 12px;" /> Voice
                 </span>
             }
         </div>
     </div>
 
+    <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">@_liveAnnouncement</div>
     <div style="flex: 1; overflow-y: auto; padding: 16px;" id="widget-chat-container">
         @if (!string.IsNullOrEmpty(_welcomeMessage))
         {
@@ -34,20 +43,32 @@
         @foreach (var msg in _messages)
         {
             <div class="d-flex @(msg.IsUser ? "justify-end" : "justify-start") mb-2">
-                <MudPaper Class="pa-3" Elevation="@(msg.IsUser ? 0 : 1)"
-                          Style="@($"max-width: 80%; border-radius: 12px; {(msg.IsUser ? $"background: {_color}; color: white;" : "")}")">
-                    <MudText Typo="Typo.body2" Style="@(msg.IsUser ? "color: white;" : "")">@msg.Content</MudText>
-                    @if (!msg.IsUser && _voiceConfigEnabled && _ttsSupported)
+                <div style="max-width: 80%;">
+                    <MudPaper Class="pa-3" Elevation="@(msg.IsUser ? 0 : 1)"
+                              Style="@($"border-radius: 12px; {(msg.IsUser ? $"background: {_color}; color: white;" : "")}")">
+                        <MudText Typo="Typo.body2" Style="@(msg.IsUser ? "color: white;" : "")">@msg.Content</MudText>
+                        @if (!msg.IsUser && _voiceConfigEnabled && _ttsSupported)
+                        {
+                            <div class="d-flex justify-end mt-1">
+                                <MudIconButton Icon="@(_speakingMessageIndex == _messages.IndexOf(msg) ? Icons.Material.Filled.StopCircle : Icons.Material.Filled.VolumeUp)"
+                                               Size="Size.Small" Color="@(_speakingMessageIndex == _messages.IndexOf(msg) ? Color.Primary : Color.Default)"
+                                               OnClick="@(() => ToggleSpeakMessage(msg))"
+                                               Style="width: 22px; height: 22px; opacity: 0.5;"
+                                               aria-label="Read aloud" />
+                            </div>
+                        }
+                    </MudPaper>
+                    @if (!msg.IsUser && msg.Citations?.Count > 0)
                     {
-                        <div class="d-flex justify-end mt-1">
-                            <MudIconButton Icon="@(_speakingMessageIndex == _messages.IndexOf(msg) ? Icons.Material.Filled.StopCircle : Icons.Material.Filled.VolumeUp)"
-                                           Size="Size.Small" Color="@(_speakingMessageIndex == _messages.IndexOf(msg) ? Color.Primary : Color.Default)"
-                                           OnClick="@(() => ToggleSpeakMessage(msg))"
-                                           Style="width: 22px; height: 22px; opacity: 0.5;"
-                                           aria-label="Read aloud" />
-                        </div>
+                        <MudPaper Elevation="0" Class="pa-2 mt-1" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px; background: var(--mud-palette-background);">
+                            <MudText Typo="Typo.caption" Style="font-weight: 700;" Color="Color.Primary">Sources</MudText>
+                            @foreach (var citation in msg.Citations)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="display: block;">@citation.SourceName</MudText>
+                            }
+                        </MudPaper>
                     }
-                </MudPaper>
+                </div>
             </div>
         }
 
@@ -55,10 +76,17 @@
         {
             <div class="d-flex justify-start mb-2">
                 <MudPaper Class="pa-3" Elevation="1" Style="max-width: 80%; border-radius: 12px;">
-                    <div class="d-flex align-center gap-2">
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Thinking...</MudText>
-                    </div>
+                    @if (!string.IsNullOrEmpty(_streamingContent))
+                    {
+                        <MudText Typo="Typo.body2">@_streamingContent</MudText>
+                    }
+                    else
+                    {
+                        <div class="d-flex align-center gap-2">
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Thinking...</MudText>
+                        </div>
+                    }
                 </MudPaper>
             </div>
         }
@@ -100,7 +128,7 @@
                 <MudIcon Icon="@Icons.Material.Filled.RecordVoiceOver" Size="Size.Small"
                          Color="@(_voiceChatActive ? Color.Success : Color.Default)" Style="font-size: 13px;" />
                 <MudText Typo="Typo.caption" Color="@(_voiceChatActive ? Color.Success : Color.Secondary)"
-                         Style="font-size: 0.6rem; font-weight: 600;">
+                         Style="font-size: 0.6875rem; font-weight: 600;">
                     Voice Chat @(_voiceChatActive ? "ON" : "OFF")
                 </MudText>
             </div>
@@ -109,7 +137,7 @@
         {
             <span></span>
         }
-        <MudText Typo="Typo.caption" Color="Color.Tertiary" Style="font-size: 0.6rem;">Powered by R2WAI</MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6875rem;">Powered by R2WAI</MudText>
     </div>
 </div>
 
@@ -125,19 +153,26 @@
     private string _welcomeMessage = "Hello! How can I help you today?";
     private string _input = string.Empty;
     private bool _sending;
+    private string _liveAnnouncement = string.Empty;
+    private string _streamingContent = string.Empty;
     private List<ChatMessage> _messages = new();
     private HttpClient? _httpClient;
 
     private bool _voiceConfigEnabled;
 
-    private IJSObjectReference? _voiceModule;
-    private DotNetObjectReference<ChatbotWidget>? _dotNetRef;
+    private VoiceSession? _voice;
     private bool _sttSupported;
     private bool _ttsSupported;
     private bool _isListening;
     private bool _voiceChatActive;
     private string _interimTranscript = string.Empty;
     private int _speakingMessageIndex = -1;
+
+    private VoiceOrb.OrbState OrbState =>
+        _isListening ? VoiceOrb.OrbState.Listening :
+        _sending ? VoiceOrb.OrbState.Thinking :
+        _speakingMessageIndex >= 0 ? VoiceOrb.OrbState.Speaking :
+        VoiceOrb.OrbState.Idle;
 
     protected override void OnInitialized()
     {
@@ -173,11 +208,13 @@
 
         try
         {
-            _voiceModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/voice.js");
-            _dotNetRef = DotNetObjectReference.Create(this);
-            var support = await _voiceModule.InvokeAsync<VoiceSupport>("isSupported");
-            _sttSupported = support.Stt;
-            _ttsSupported = support.Tts;
+            _voice = new VoiceSession(JS);
+            await _voice.InitAsync();
+            _voice.TranscriptReceived += OnVoiceTranscript;
+            _voice.StatusChanged += OnVoiceStatusChanged;
+            _voice.SpeakDone += OnVoiceSpeakDone;
+            _sttSupported = _voice.SttSupported;
+            _ttsSupported = _voice.TtsSupported;
             StateHasChanged();
         }
         catch { }
@@ -203,43 +240,42 @@
 
     private async Task StartListening()
     {
-        if (_voiceModule is null || _dotNetRef is null) return;
+        if (_voice is null) return;
         _interimTranscript = string.Empty;
-        await _voiceModule.InvokeAsync<bool>("startListening", _dotNetRef, "OnVoiceResult", "OnVoiceStatus", "en-US");
+        await _voice.StartListening();
     }
 
     private async Task StopListening()
     {
-        if (_voiceModule is null) return;
+        if (_voice is null) return;
         _isListening = false;
         _interimTranscript = string.Empty;
-        await _voiceModule.InvokeVoidAsync("stopListening");
+        await _voice.StopListening();
         StateHasChanged();
     }
 
-    [JSInvokable]
-    public async Task OnVoiceResult(string transcript, bool isFinal)
+    private void OnVoiceTranscript(string transcript, bool isFinal)
     {
         if (isFinal)
         {
             _input = transcript;
             _interimTranscript = string.Empty;
             _isListening = false;
-            StateHasChanged();
-            if (_voiceChatActive)
+            InvokeAsync(async () =>
             {
-                await SendMessage();
-            }
+                StateHasChanged();
+                if (_voiceChatActive)
+                    await SendMessage();
+            });
         }
         else
         {
             _interimTranscript = transcript;
-            await InvokeAsync(StateHasChanged);
+            InvokeAsync(StateHasChanged);
         }
     }
 
-    [JSInvokable]
-    public void OnVoiceStatus(string status)
+    private void OnVoiceStatusChanged(string status)
     {
         _isListening = status == "listening";
         if (status == "not-allowed")
@@ -249,12 +285,12 @@
 
     private async Task ToggleSpeakMessage(ChatMessage msg)
     {
-        if (_voiceModule is null || _dotNetRef is null) return;
+        if (_voice is null) return;
         var idx = _messages.IndexOf(msg);
 
         if (_speakingMessageIndex == idx)
         {
-            await _voiceModule.InvokeVoidAsync("stopSpeaking");
+            await _voice.StopSpeaking();
             _speakingMessageIndex = -1;
             StateHasChanged();
             return;
@@ -262,19 +298,18 @@
 
         _speakingMessageIndex = idx;
         StateHasChanged();
-        await _voiceModule.InvokeAsync<bool>("speak", msg.Content, "en-US", 1.0, 1.0, _dotNetRef, "OnSpeakDone");
+        await _voice.Speak(msg.Content);
     }
 
-    [JSInvokable]
-    public async Task OnSpeakDone()
+    private void OnVoiceSpeakDone()
     {
         _speakingMessageIndex = -1;
-        await InvokeAsync(StateHasChanged);
-
-        if (_voiceChatActive)
+        InvokeAsync(async () =>
         {
-            await InvokeAsync(StartListening);
-        }
+            StateHasChanged();
+            if (_voiceChatActive)
+                await StartListening();
+        });
     }
 
     private async Task ToggleVoiceChatMode()
@@ -291,9 +326,9 @@
 
     private async Task StartVoiceChatMode()
     {
-        if (_voiceModule is null) return;
+        if (_voice is null) return;
         _voiceChatActive = true;
-        await _voiceModule.InvokeVoidAsync("setVoiceChatMode", true);
+        await _voice.SetVoiceChatMode(true);
         Snackbar.Add("Voice Chat mode enabled!", Severity.Success);
         StateHasChanged();
         await StartListening();
@@ -301,9 +336,9 @@
 
     private async Task StopVoiceChatMode()
     {
-        if (_voiceModule is null) return;
+        if (_voice is null) return;
         _voiceChatActive = false;
-        await _voiceModule.InvokeVoidAsync("setVoiceChatMode", false);
+        await _voice.SetVoiceChatMode(false);
         _isListening = false;
         _interimTranscript = string.Empty;
         StateHasChanged();
@@ -323,41 +358,103 @@
         _messages.Add(new ChatMessage { IsUser = true, Content = userMsg });
         _input = string.Empty;
         _sending = true;
+        _streamingContent = string.Empty;
         StateHasChanged();
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"/api/v1/chatbots/{ChatbotId}/chat",
+            var response = await _httpClient.PostAsJsonAsync($"/api/v1/chatbots/{ChatbotId}/chat/stream",
                 new { Message = userMsg });
 
-            if (response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<ChatResponse>();
-                _messages.Add(new ChatMessage { IsUser = false, Content = result?.Reply ?? "I couldn't process that." });
+                _messages.Add(new ChatMessage
+                {
+                    IsUser = false,
+                    Content = response.StatusCode == System.Net.HttpStatusCode.InternalServerError
+                        ? "The AI service is currently unavailable. Please contact an administrator to configure the AI provider."
+                        : "Sorry, I'm having trouble responding right now."
+                });
+                return;
             }
-            else
+
+            using var stream = await response.Content.ReadAsStreamAsync();
+            using var reader = new System.IO.StreamReader(stream);
+
+            List<CitationInfo>? citations = null;
+            var fullContent = new System.Text.StringBuilder();
+
+            while (!reader.EndOfStream)
             {
-                _messages.Add(new ChatMessage { IsUser = false, Content = response.StatusCode == System.Net.HttpStatusCode.InternalServerError
-                    ? "The AI service is currently unavailable. Please contact an administrator to configure the AI provider."
-                    : "Sorry, I'm having trouble responding right now." });
+                var line = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!line.StartsWith("event: ")) continue;
+
+                var eventType = line[7..];
+                var dataLine = await reader.ReadLineAsync();
+                if (dataLine is null || !dataLine.StartsWith("data: ")) continue;
+                var data = dataLine[6..];
+
+                if (eventType == "chunk")
+                {
+                    try
+                    {
+                        var chunk = System.Text.Json.JsonSerializer.Deserialize<ChunkData>(data,
+                            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (chunk?.Content is not null)
+                        {
+                            fullContent.Append(chunk.Content);
+                            _streamingContent = fullContent.ToString();
+                            StateHasChanged();
+                        }
+                    }
+                    catch { }
+                }
+                else if (eventType == "citations")
+                {
+                    try
+                    {
+                        var citationData = System.Text.Json.JsonSerializer.Deserialize<CitationsData>(data,
+                            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        citations = citationData?.Citations;
+                    }
+                    catch { }
+                }
+                else if (eventType == "done" || eventType == "error")
+                {
+                    break;
+                }
             }
+
+            var content = fullContent.ToString();
+            var newMsg = new ChatMessage
+            {
+                IsUser = false,
+                Content = string.IsNullOrEmpty(content) ? "I couldn't process that." : content,
+                Citations = citations
+            };
+            _messages.Add(newMsg);
+            _liveAnnouncement = newMsg.Content.Length <= 160 ? newMsg.Content : newMsg.Content[..160] + "…";
         }
         catch
         {
-            _messages.Add(new ChatMessage { IsUser = false, Content = "Connection error. Please try again." });
+            const string errorText = "Connection error. Please try again.";
+            _messages.Add(new ChatMessage { IsUser = false, Content = errorText });
+            _liveAnnouncement = errorText;
         }
         finally
         {
             _sending = false;
+            _streamingContent = string.Empty;
             StateHasChanged();
         }
 
         var lastMsg = _messages.LastOrDefault(m => !m.IsUser);
-        if (_voiceChatActive && lastMsg is not null && _voiceModule is not null && _dotNetRef is not null)
+        if (_voiceChatActive && lastMsg is not null && _voice is not null)
         {
             _speakingMessageIndex = _messages.IndexOf(lastMsg);
             StateHasChanged();
-            await _voiceModule.InvokeAsync<bool>("speak", lastMsg.Content, "en-US", 1.0, 1.0, _dotNetRef, "OnSpeakDone");
+            await _voice.Speak(lastMsg.Content);
         }
     }
 
@@ -377,27 +474,33 @@
     public async ValueTask DisposeAsync()
     {
         _httpClient?.Dispose();
-        if (_voiceModule is not null)
+        if (_voice is not null)
         {
-            try { await _voiceModule.InvokeVoidAsync("dispose"); } catch { }
-            await _voiceModule.DisposeAsync();
+            _voice.TranscriptReceived -= OnVoiceTranscript;
+            _voice.StatusChanged -= OnVoiceStatusChanged;
+            _voice.SpeakDone -= OnVoiceSpeakDone;
+            await _voice.DisposeAsync();
         }
-        _dotNetRef?.Dispose();
-    }
-
-    private class VoiceSupport
-    {
-        public bool Stt { get; set; }
-        public bool Tts { get; set; }
     }
 
     private class ChatMessage
     {
         public bool IsUser { get; set; }
         public string Content { get; set; } = string.Empty;
+        public List<CitationInfo>? Citations { get; set; }
     }
 
-    private class ChatResponse { public string Reply { get; set; } = string.Empty; }
+    private class CitationInfo
+    {
+        public string SourceName { get; set; } = string.Empty;
+        public string Content { get; set; } = string.Empty;
+        public float Score { get; set; }
+        public int Index { get; set; }
+    }
+
+    private class ChunkData { public string? Content { get; set; } }
+    private class CitationsData { public List<CitationInfo>? Citations { get; set; } }
+
     private class ChatbotInfo
     {
         public string Name { get; set; } = string.Empty;

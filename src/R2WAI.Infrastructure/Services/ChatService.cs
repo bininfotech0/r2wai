@@ -134,7 +134,7 @@ public class ChatService : IChatService
         var responseMessageId = Guid.NewGuid();
         var conversationGroup = $"conversation_{conversationId}";
 
-        await foreach (var chunk in _aiService.StreamChatAsync(content, history, null, ct))
+        await foreach (var chunk in _aiService.StreamChatAsync(content, history, null, enableTools: true, ct: ct))
         {
             responseBuffer.Append(chunk);
             await _streaming.SendStreamChunkAsync(conversationId, chunk, ct);

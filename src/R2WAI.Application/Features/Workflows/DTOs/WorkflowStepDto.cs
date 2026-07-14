@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace R2WAI.Application.Features.Workflows.DTOs;
 
 public class WorkflowStepDto
@@ -6,6 +8,8 @@ public class WorkflowStepDto
     public string Name { get; init; } = string.Empty;
     public string? AssignedRole { get; init; }
     public string? Action { get; init; }
+    public string? Type { get; init; }
+    public JsonElement? Config { get; init; }
     public WorkflowStepStatus Status { get; init; }
     public string? Comments { get; init; }
     public DateTime? CompletedAt { get; init; }

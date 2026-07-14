@@ -1,0 +1,110 @@
+@page "/power"
+@attribute [AllowAnonymous]
+@layout R2WAI.Web.Components.Layout.AuthLayout
+
+<PageTitle>R2WAI Power</PageTitle>
+
+<div class="power-page">
+    <nav class="power-nav">
+        <div class="d-flex align-center gap-3">
+            <div style="width: 40px; height: 40px; border-radius: 12px; background: var(--r2-gradient-primary); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3); flex-shrink: 0;">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color: white; font-size: 1.25rem;" />
+            </div>
+            <MudText Typo="Typo.h5" Style="font-weight: 700; color: white;">R2WAI</MudText>
+        </div>
+        <MudButton Variant="Variant.Outlined" Href="/login" Style="border-radius: 10px; border-color: rgba(255,255,255,0.25); color: white;">
+            Sign In
+        </MudButton>
+    </nav>
+
+    <div class="power-hero">
+        <div class="power-orb" aria-hidden="true"></div>
+        <div class="power-hero-badge">R2WAI PLATFORM</div>
+        <MudText Typo="Typo.h2" Style="font-weight: 800; color: white; letter-spacing: -0.02em; line-height: 1.15;" Class="mt-4">
+            R2WAI Power
+        </MudText>
+        <MudText Typo="Typo.h6" Style="color: rgba(255,255,255,0.65); font-weight: 400; max-width: 640px; line-height: 1.6;" Class="mt-4">
+            Four pillars that turn conversation into completed work — speak naturally, let AI decide, see it come alive, and watch repetitive tasks disappear.
+        </MudText>
+        <div class="d-flex gap-3 mt-8 flex-wrap justify-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Href="/register"
+                       Class="btn-gradient" Style="border-radius: 10px; font-weight: 600; height: 48px; padding: 0 28px;">
+                Get Started
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Size="Size.Large" Href="/login"
+                       Style="border-radius: 10px; font-weight: 600; height: 48px; padding: 0 28px; border-color: rgba(255,255,255,0.25); color: white;">
+                Sign In
+            </MudButton>
+        </div>
+    </div>
+
+    <div class="power-section">
+        <div class="power-feature-grid">
+            @foreach (var feature in _features)
+            {
+                <div class="power-feature-card">
+                    <div class="power-feature-icon" style="background: @feature.Gradient;">
+                        <MudIcon Icon="@feature.Icon" Style="color: white; font-size: 1.75rem;" />
+                    </div>
+                    <MudText Typo="Typo.h6" Style="font-weight: 700; color: white;" Class="mt-4">@feature.Title</MudText>
+                    <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.6); line-height: 1.6;" Class="mt-2">
+                        @feature.Description
+                    </MudText>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="power-section power-tech-section">
+        <MudText Typo="Typo.h4" Align="Align.Center" Style="font-weight: 700; color: white;">Tech Stack</MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Style="color: rgba(255,255,255,0.55); max-width: 560px; margin: 12px auto 0;">
+            Built on a modern, enterprise-grade foundation.
+        </MudText>
+        <div class="power-tech-grid">
+            @foreach (var group in _techStack)
+            {
+                <div class="power-tech-group">
+                    <MudText Typo="Typo.overline" Style="color: rgba(255,255,255,0.4); letter-spacing: 0.08em;">@group.Category</MudText>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        @foreach (var item in group.Items)
+                        {
+                            <span class="power-tech-pill">@item</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="power-footer">
+        <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.35);">
+            &copy; @DateTime.UtcNow.Year R2WAI &mdash; Enterprise AI Work Execution Platform
+        </MudText>
+    </div>
+</div>
+
+@code {
+    private sealed record Feature(string Icon, string Gradient, string Title, string Description);
+    private sealed record TechGroup(string Category, string[] Items);
+
+    private readonly List<Feature> _features = new()
+    {
+        new(Icons.Material.Filled.RecordVoiceOver, "linear-gradient(135deg, #7C3AED, #6D28D9)",
+            "Voice Assistance", "Integrated voice recognition for hands-free interactions."),
+        new(Icons.Material.Filled.Psychology, "linear-gradient(135deg, #4F46E5, #3B82F6)",
+            "AI Responses", "Real-time, streaming AI answers grounded in your knowledge base."),
+        new(Icons.Material.Filled.ViewInAr, "linear-gradient(135deg, #3B82F6, #10B981)",
+            "3D User Interface", "Dynamic and visually appealing UI built."),
+        new(Icons.Material.Filled.AutoMode, "linear-gradient(135deg, #10B981, #7C3AED)",
+            "Task Automation", "Streamlines repetitive tasks for increased productivity."),
+    };
+
+    private readonly List<TechGroup> _techStack = new()
+    {
+        new("Platform", new[] { ".NET 10", "ASP.NET Core", "Blazor Server", "MudBlazor", "SignalR" }),
+        new("AI", new[] { "Semantic Kernel", "OpenAI", "Azure OpenAI", "Ollama" }),
+        new("Automation", new[] { "Elsa Workflows 3", "Scheduling", "Human Approvals" }),
+        new("Data", new[] { "PostgreSQL 16", "pgvector", "EF Core", "Redis", "Qdrant", "MinIO" }),
+        new("Operations", new[] { "Docker", "Kubernetes", "Serilog", "Prometheus", "Grafana" }),
+    };
+}

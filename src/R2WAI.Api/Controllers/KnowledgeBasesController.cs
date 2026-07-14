@@ -20,9 +20,9 @@ public class KnowledgeBasesController(IMediator mediator, ILogger<KnowledgeBases
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetList([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<IActionResult> GetList([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, CancellationToken ct = default)
     {
-        var query = new GetKnowledgeBasesQuery { Page = page, PageSize = pageSize };
+        var query = new GetKnowledgeBasesQuery { Page = page, PageSize = pageSize, Search = search };
         var result = await mediator.Send(query, ct);
         return Ok(result);
     }
@@ -48,6 +48,15 @@ public class KnowledgeBasesController(IMediator mediator, ILogger<KnowledgeBases
     {
         var command = new DeleteKnowledgeBaseCommand { Id = id };
         await mediator.Send(command, ct);
+        return NoContent();
+    }
+
+    public record BulkDeleteRequest(Guid[] Ids);
+
+    [HttpPost("bulk-delete")]
+    public async Task<IActionResult> BulkDelete([FromBody] BulkDeleteRequest request, CancellationToken ct = default)
+    {
+        await mediator.Send(new BulkDeleteKnowledgeBasesCommand { Ids = request.Ids }, ct);
         return NoContent();
     }
 

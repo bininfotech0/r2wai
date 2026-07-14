@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: r2wai
-  labels:
-    name: r2wai
-    environment: production
-    managed-by: kustomize

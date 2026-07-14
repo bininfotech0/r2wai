@@ -4,6 +4,7 @@ public record GetKnowledgeBasesQuery : IRequest<PagedResult<KnowledgeBaseDto>>
 {
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
+    public string? Search { get; init; }
 }
 
 public class GetKnowledgeBasesQueryHandler(
@@ -14,9 +15,12 @@ public class GetKnowledgeBasesQueryHandler(
     public async Task<PagedResult<KnowledgeBaseDto>> Handle(GetKnowledgeBasesQuery query, CancellationToken cancellationToken)
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
+        var searchTerm = query.Search?.ToLower();
 
         var filtered = await kbRepo.FindAsync(
-            kb => kb.TenantId == tenantId && !kb.IsDeleted, cancellationToken);
+            kb => kb.TenantId == tenantId && !kb.IsDeleted
+              && (string.IsNullOrEmpty(searchTerm) || kb.Name.ToLower().Contains(searchTerm)),
+            cancellationToken);
 
         var ordered = filtered.OrderByDescending(kb => kb.CreatedAt);
         var total = ordered.Count();

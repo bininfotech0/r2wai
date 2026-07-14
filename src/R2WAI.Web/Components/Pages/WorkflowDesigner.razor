@@ -4,6 +4,7 @@
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject ILogger<WorkflowDesigner> Logger
 
 <PageTitle>R2WAI - Workflow Designer</PageTitle>
 
@@ -275,7 +276,15 @@ else
                         </MudSelectItem>
                     </MudSelect>
                     <MudTextField @bind-Value="_editingStep.AssignedRole" Label="Assigned Role (optional)"
-                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2" />
+                    <MudSelect T="string" MultiSelection="true" @bind-SelectedValues="_editingStep.Config.NextSteps"
+                               Label="Next step(s)" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                               HelperText="Leave empty to run the next step in order. Select more than one to run steps in parallel; steps with multiple incoming next-steps wait for all of them.">
+                        @foreach (var other in _steps.Where(s => s != _editingStep))
+                        {
+                            <MudSelectItem T="string" Value="@other.Name">@other.Name</MudSelectItem>
+                        }
+                    </MudSelect>
 
                     <MudDivider Class="mb-3" />
 
@@ -556,7 +565,7 @@ else
                                 @if (!string.IsNullOrEmpty(step.AssignedRole))
                                 {
                                     <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mt-1"
-                                             Style="font-size: 0.65rem;">@step.AssignedRole</MudChip>
+                                             Style="font-size: 0.6875rem;">@step.AssignedRole</MudChip>
                                 }
                             </MudPaper>
                         </div>
@@ -611,7 +620,7 @@ else
                     <div class="d-flex align-center gap-2">
                         <MudIcon Icon="@Icons.Material.Outlined.AccountTree" Size="Size.Small" Color="Color.Primary" />
                         <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">Visual Canvas</MudText>
-                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.65rem; height: 20px;">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Style="font-size: 0.6875rem; height: 20px;">
                             @_steps.Count step@(_steps.Count != 1 ? "s" : "")
                         </MudChip>
                     </div>
@@ -808,7 +817,7 @@ else
                 {
                     <div style="position: relative;">
                         <div class="wf-minimap">
-                            <MudText Typo="Typo.caption" Style="font-size: 0.6rem; opacity: 0.7; margin-bottom: 2px;">@_steps.Count steps</MudText>
+                            <MudText Typo="Typo.caption" Style="font-size: 0.6875rem; opacity: 0.7; margin-bottom: 2px;">@_steps.Count steps</MudText>
                             @for (int i = 0; i < _steps.Count; i++)
                             {
                                 var step = _steps[i];
@@ -1235,7 +1244,10 @@ else
             }
             await InvokeAsync(StateHasChanged);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to poll step statuses for instance {InstanceId}", _instanceId);
+        }
         finally { _isPolling = false; }
     }
 
@@ -1339,6 +1351,7 @@ else
                 {
                     Name = s.Name,
                     Action = s.Action,
+                    Type = s.Action,
                     AssignedRole = s.AssignedRole,
                     Order = i,
                     Config = s.Config
@@ -1405,6 +1418,9 @@ else
         public string? TransformOperation { get; set; } = "extract";
         public string? TransformExpression { get; set; }
         public string? TransformOutput { get; set; }
+
+        // Flow (which step(s) run after this one; empty = next step in order)
+        public IReadOnlyCollection<string> NextSteps { get; set; } = new List<string>();
 
         // Common
         public int TimeoutMinutes { get; set; }

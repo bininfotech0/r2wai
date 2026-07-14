@@ -4,6 +4,7 @@ public record GetUsersQuery : IRequest<PagedResult<UserDto>>, IAuthorizedRequest
 {
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
+    public string? Search { get; init; }
     public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
 }
 
@@ -15,9 +16,15 @@ public class GetUsersQueryHandler(
     public async Task<PagedResult<UserDto>> Handle(GetUsersQuery query, CancellationToken cancellationToken)
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
+        var searchTerm = query.Search?.ToLower();
 
         var filtered = await userRepo.FindAsync(
-            u => u.TenantId == tenantId && !u.IsDeleted, cancellationToken);
+            u => u.TenantId == tenantId && !u.IsDeleted
+              && (string.IsNullOrEmpty(searchTerm)
+                  || u.Email.ToLower().Contains(searchTerm)
+                  || u.FirstName.ToLower().Contains(searchTerm)
+                  || u.LastName.ToLower().Contains(searchTerm)),
+            cancellationToken);
 
         var ordered = filtered.OrderByDescending(u => u.CreatedAt);
         var total = ordered.Count();

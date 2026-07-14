@@ -114,7 +114,7 @@
                Breakpoint="Breakpoint.Md" Variant="DrawerVariant.Responsive" aria-label="Main navigation">
         <div class="pa-4 pb-2">
             <MudText Typo="Typo.h6" Style="color: #FFFFFF; font-weight: 800; letter-spacing: -0.03em;">R2WAI</MudText>
-            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3); font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase;">AI Work Platform</MudText>
+            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.3); font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase;">AI Work Platform</MudText>
         </div>
 
         <MudNavMenu>
@@ -122,14 +122,14 @@
 
             <MudNavGroup Title="Studio" Icon="@Icons.Material.Outlined.AutoAwesome" Expanded="_studioExpanded" ExpandedChanged="@(v => _studioExpanded = v)" HideExpandIcon="false"
                          Style="color: rgba(255,255,255,0.65);">
+                <MudNavLink Href="/templates" Icon="@Icons.Material.Outlined.DashboardCustomize">Templates</MudNavLink>
                 <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">Assistants</MudNavLink>
                 <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
                 <MudNavLink Href="/workflow-studio" Icon="@Icons.Material.Outlined.AccountTree">Workflows</MudNavLink>
-                <MudNavLink Href="/workflow-studio/schedules" Icon="@Icons.Material.Outlined.Schedule">Schedules</MudNavLink>
                 <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Chatbots</MudNavLink>
-                <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Extension">Integrations</MudNavLink>
                 <MudNavLink Href="/assistant-studio/tools" Icon="@Icons.Material.Outlined.Build">Tools</MudNavLink>
-                <MudNavLink Href="/templates" Icon="@Icons.Material.Outlined.DashboardCustomize">Templates</MudNavLink>
+                <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Extension">Integrations</MudNavLink>
+                <MudNavLink Href="/workflow-studio/schedules" Icon="@Icons.Material.Outlined.Schedule">Schedules</MudNavLink>
             </MudNavGroup>
 
             <MudNavGroup Title="Workspace" Icon="@Icons.Material.Outlined.WorkOutline" Expanded="_workspaceExpanded" ExpandedChanged="@(v => _workspaceExpanded = v)" HideExpandIcon="false"
@@ -140,14 +140,14 @@
                         @if (_pendingApprovalCount > 0)
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Error"
-                                     Style="height: 20px; font-size: 0.65rem; min-width: 20px; font-weight: 700;">
+                                     Style="height: 20px; font-size: 0.6875rem; min-width: 20px; font-weight: 700;">
                                 @_pendingApprovalCount
                             </MudChip>
                         }
                     </div>
                 </MudNavLink>
-                <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
                 <MudNavLink Href="/workflow-studio/approvals" Icon="@Icons.Material.Outlined.TaskAlt">Approvals</MudNavLink>
+                <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
                 <MudNavLink Href="/documents" Icon="@Icons.Material.Outlined.Description">Documents</MudNavLink>
             </MudNavGroup>
 
@@ -167,18 +167,18 @@
                 <MudNavLink Href="/admin/roles" Icon="@Icons.Material.Outlined.Shield">Roles</MudNavLink>
                 <MudNavLink Href="/admin/permissions" Icon="@Icons.Material.Outlined.VerifiedUser">Permissions</MudNavLink>
                 <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
-                <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">AI Models</MudNavLink>
-                <MudNavLink Href="/admin/webhooks" Icon="@Icons.Material.Outlined.Webhook">Webhooks</MudNavLink>
-                <MudNavLink Href="/admin/api-keys" Icon="@Icons.Material.Outlined.Key">API Keys</MudNavLink>
-                <MudNavLink Href="/admin/content-moderation" Icon="@Icons.Material.Outlined.Security">Moderation</MudNavLink>
                 <MudNavLink Href="/settings/tenant" Icon="@Icons.Material.Outlined.Domain">Tenant</MudNavLink>
+                <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">AI Models</MudNavLink>
+                <MudNavLink Href="/admin/api-keys" Icon="@Icons.Material.Outlined.Key">API Keys</MudNavLink>
+                <MudNavLink Href="/admin/webhooks" Icon="@Icons.Material.Outlined.Webhook">Webhooks</MudNavLink>
+                <MudNavLink Href="/admin/content-moderation" Icon="@Icons.Material.Outlined.Security">Moderation</MudNavLink>
             </MudNavGroup>
         </MudNavMenu>
 
         <MudSpacer />
         <div class="pa-4 pt-2" style="border-top: 1px solid rgba(255,255,255,0.06);">
             <MudText Typo="Typo.caption" Align="Align.Center"
-                     Style="color: rgba(255,255,255,0.2); font-size: 0.625rem; letter-spacing: 0.05em;">
+                     Style="color: rgba(255,255,255,0.2); font-size: 0.6875rem; letter-spacing: 0.05em;">
                 R2WAI @(Configuration["App:Version"] ?? "v2.0")
             </MudText>
         </div>
@@ -205,7 +205,7 @@
     <a href="/inbox" class="mobile-bottom-nav-item @(IsActiveRoute("/inbox") ? "active" : "")" style="position: relative;">
         @if (_pendingApprovalCount > 0)
         {
-            <span style="position: absolute; top: 2px; right: calc(50% - 16px); background: linear-gradient(135deg, #EF4444, #DC2626); color: white; font-size: 0.5625rem; font-weight: 700; border-radius: 99px; padding: 1px 5px; min-width: 16px; text-align: center; animation: pulse-soft 2s infinite; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);">@_pendingApprovalCount</span>
+            <span style="position: absolute; top: 2px; right: calc(50% - 16px); background: linear-gradient(135deg, #EF4444, #DC2626); color: white; font-size: 0.6875rem; font-weight: 700; border-radius: 99px; padding: 1px 5px; min-width: 16px; text-align: center; animation: pulse-soft 2s infinite; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);">@_pendingApprovalCount</span>
         }
         <MudIcon Icon="@(IsActiveRoute("/inbox") ? Icons.Material.Filled.Inbox : Icons.Material.Outlined.Inbox)" Class="mobile-nav-icon" />
         <span class="mobile-nav-label">Inbox</span>
@@ -416,6 +416,9 @@
         {
             ["assistant-studio"] = "Studio",
             ["workflow-studio"] = "Studio",
+            ["assistants"] = "Assistants",
+            ["workflows"] = "Workflows",
+            ["knowledgebases"] = "Knowledge",
             ["operations"] = "Monitor",
             ["settings"] = "Settings",
             ["admin"] = "Settings",

@@ -1,5 +1,4 @@
 @page "/workflow-studio/approvals"
-@page "/approvals"
 @attribute [Authorize]
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
@@ -56,17 +55,17 @@ else
                             <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@approval.WorkflowName</MudText>
                             @if (approval.ApprovalLevel > 0)
                             {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Style="font-size: 0.65rem;">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined" Style="font-size: 0.6875rem;">
                                     Step @approval.ApprovalLevel
                                 </MudChip>
                             }
                             @if (isOverdue)
                             {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Style="font-size: 0.65rem;">Overdue</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Style="font-size: 0.6875rem;">Overdue</MudChip>
                             }
                             @if (approval.EscalationLevel > 0)
                             {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Style="font-size: 0.65rem;">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Style="font-size: 0.6875rem;">
                                     Escalated L@(approval.EscalationLevel)
                                 </MudChip>
                             }
@@ -82,7 +81,7 @@ else
                                 @foreach (var kv in parsedData.Take(5))
                                 {
                                     <div>
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em;">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.04em;">
                                             @FormatKey(kv.Key)
                                         </MudText>
                                         <MudText Typo="Typo.body2" Style="font-weight: 600; font-size: 0.82rem;">@kv.Value</MudText>

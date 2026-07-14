@@ -181,9 +181,16 @@ public class ChatHub : Hub
                 }
             }
 
-            var systemPrompt = assistant.SystemPrompt ?? "You are a helpful AI assistant.";
+            var systemPrompt = (assistant.SystemPrompt ?? "You are a helpful AI assistant.")
+                + $"\n\n[Assistant context: your assistant ID is {assistant.Id}, your name is \"{assistant.Name}\"" +
+                  (!string.IsNullOrWhiteSpace(assistant.Description)
+                      ? $", and your purpose is: {assistant.Description}"
+                      : $", and you are a {assistant.Type} assistant") +
+                  ". This is everything you need to know about yourself — you do not need to call get_assistant_context " +
+                  "to answer questions about what you do or who you are. If you need an assistant ID for some other tool, " +
+                  "use the ID above directly, never guess or leave it blank.]";
 
-            await foreach (var chunk in _aiService.StreamChatAsync(message, context, systemPrompt, Context.ConnectionAborted))
+            await foreach (var chunk in _aiService.StreamChatAsync(message, context, systemPrompt, enableTools: true, ct: Context.ConnectionAborted))
             {
                 await Clients.Caller.SendAsync("ReceiveStreamChunk", new
                 {

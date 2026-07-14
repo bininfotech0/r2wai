@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using R2WAI.Api.Services;
+using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Workflows.Commands;
 using R2WAI.Application.Features.Workflows.Queries;
 using R2WAI.Infrastructure.Persistence;
@@ -81,6 +82,15 @@ public class WorkflowsController(
         return NoContent();
     }
 
+    public record BulkDeleteRequest(Guid[] Ids);
+
+    [HttpPost("bulk-delete")]
+    public async Task<IActionResult> BulkDelete([FromBody] BulkDeleteRequest request, CancellationToken ct = default)
+    {
+        await mediator.Send(new BulkDeleteWorkflowsCommand { Ids = request.Ids }, ct);
+        return NoContent();
+    }
+
     [HttpPost("{id:guid}/execute")]
     public async Task<IActionResult> Execute(Guid id, [FromBody] ExecuteWorkflowCommand command, CancellationToken ct = default)
     {
@@ -89,19 +99,10 @@ public class WorkflowsController(
 
         try
         {
-            var (elsaInstanceId, _) = await workflowBridge.StartWorkflowAsync(
-                id, CurrentTenantId, CurrentUserId, command.Data, ct);
+            var (elsaInstanceId, instanceId) = await workflowBridge.StartWorkflowAsync(
+                id, CurrentTenantId, CurrentUserId, command.Data, ct, existingInstanceId: result.Id);
 
-            var workflowInstance = await dbContext.WorkflowInstances
-                .FirstOrDefaultAsync(wi => wi.Id == result.Id, ct);
-
-            if (workflowInstance is not null)
-            {
-                workflowInstance.SetElsaInstanceId(elsaInstanceId);
-                await dbContext.SaveChangesAsync(ct);
-            }
-
-            return Accepted(new { instance = result, elsaInstanceId, status = "running" });
+            return Accepted(new { instanceId, instance = result, elsaInstanceId, status = "running" });
         }
         catch (Exception ex)
         {

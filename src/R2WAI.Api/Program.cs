@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OpenTelemetry.Logs;
@@ -21,10 +22,11 @@ using R2WAI.Application.Common;
 using R2WAI.Infrastructure;
 using R2WAI.Infrastructure.Persistence;
 using Elsa.Extensions;
+using Elsa.Mediator;
 using Elsa.Persistence.EFCore.Extensions;
 using Elsa.Persistence.EFCore.Modules.Management;
 using Elsa.Persistence.EFCore.Modules.Runtime;
-using FastEndpoints;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -47,20 +49,37 @@ builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 var elsaConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var jwtSecret = builder.Configuration["Authentication:Jwt:SecretKey"]
+    ?? throw new InvalidOperationException("JWT SecretKey is not configured");
+var jwtIssuer = builder.Configuration["Authentication:Jwt:Issuer"] ?? "R2WAI";
+var jwtAudience = builder.Configuration["Authentication:Jwt:Audience"] ?? "R2WAI-API";
 
 if (!string.IsNullOrEmpty(elsaConnectionString) && !builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddElsa(elsa =>
     {
+        // The migrations for Elsa's own persistence are compiled into Elsa.Persistence.EFCore.PostgreSql,
+        // a different assembly than the DbContext types themselves -- EF Core's default "migrations live
+        // in the DbContext's own assembly" lookup finds nothing there, so RunMigrations silently no-ops
+        // unless the migrations assembly is passed explicitly.
+        var elsaMigrationsAssembly = typeof(Elsa.Persistence.EFCore.Extensions.PostgreSqlProvidersExtensions).Assembly;
+
         elsa.UseWorkflowManagement(mgmt =>
         {
-            mgmt.UseWorkflowDefinitions(ef => ef.UseEntityFrameworkCore(db => db.UsePostgreSql(elsaConnectionString)));
-            mgmt.UseWorkflowInstances(ef => ef.UseEntityFrameworkCore(db => db.UsePostgreSql(elsaConnectionString)));
+            mgmt.UseEntityFrameworkCore(ef =>
+            {
+                ef.UsePostgreSql(elsaMigrationsAssembly, elsaConnectionString);
+                ef.RunMigrations = true;
+            });
         });
 
         elsa.UseWorkflowRuntime(runtime =>
         {
-            runtime.UseEntityFrameworkCore(db => db.UsePostgreSql(elsaConnectionString));
+            runtime.UseEntityFrameworkCore(db =>
+            {
+                db.UsePostgreSql(elsaMigrationsAssembly, elsaConnectionString);
+                db.RunMigrations = true;
+            });
         });
 
         elsa
@@ -69,18 +88,14 @@ if (!string.IsNullOrEmpty(elsaConnectionString) && !builder.Environment.IsEnviro
             .UseEmail()
             .UseJavaScript()
             .AddActivity<ApprovalStepActivity>()
-            .AddActivity<InvokeSemanticKernelActivity>();
+            .AddActivity<InvokeSemanticKernelActivity>()
+            .AddActivity<TransformStepActivity>();
     });
+
+    builder.Services.AddNotificationHandler<R2WAI.Api.Workflows.StepStatusNotificationHandler>();
 }
-if (!builder.Environment.IsEnvironment("Testing"))
-    builder.Services.AddFastEndpoints();
 builder.Services.AddSingleton<R2WAI.Api.Hubs.IWorkflowStatusService, R2WAI.Api.Hubs.WorkflowStatusService>();
 builder.Services.AddHostedService<R2WAI.Infrastructure.Services.EscalationBackgroundService>();
-
-var jwtSecret = builder.Configuration["Authentication:Jwt:SecretKey"]
-    ?? throw new InvalidOperationException("JWT SecretKey is not configured");
-var jwtIssuer = builder.Configuration["Authentication:Jwt:Issuer"] ?? "R2WAI";
-var jwtAudience = builder.Configuration["Authentication:Jwt:Audience"] ?? "R2WAI-API";
 
 builder.Services.AddAuthentication(options =>
 {
@@ -180,7 +195,12 @@ else
 }
 
 builder.Services.AddAntiforgery();
+builder.Services.AddSingleton<HttpContextPropagationHubFilter>();
 builder.Services.AddSignalR();
+builder.Services.AddOptions<HubOptions>().Configure<HttpContextPropagationHubFilter>((options, filter) =>
+{
+    options.AddFilter(filter);
+});
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<TenantAuthorizationFilter>();
@@ -328,9 +348,6 @@ app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthorization();
 
-if (!string.IsNullOrEmpty(elsaConnectionString) && !app.Environment.IsEnvironment("Testing"))
-    app.UseWorkflowsApi();
-
 app.UseStaticFiles();
 app.UseAntiforgery();
 
@@ -410,6 +427,24 @@ try
         catch (Exception dbEx)
         {
             Log.Warning(dbEx, "Database initialization failed — API will start without a database. Ensure PostgreSQL is running.");
+        }
+
+        if (!string.IsNullOrEmpty(elsaConnectionString))
+        {
+            try
+            {
+                Log.Information("Applying Elsa persistence migrations...");
+                using var elsaScope = app.Services.CreateScope();
+
+                await elsaScope.ServiceProvider.GetRequiredService<ManagementElsaDbContext>().Database.MigrateAsync();
+                await elsaScope.ServiceProvider.GetRequiredService<RuntimeElsaDbContext>().Database.MigrateAsync();
+
+                Log.Information("Elsa persistence migrations applied.");
+            }
+            catch (Exception elsaDbEx)
+            {
+                Log.Warning(elsaDbEx, "Elsa persistence migration failed — workflow definitions/instances/bookmarks may not persist.");
+            }
         }
     }
     Log.Information("Starting R2WAI API");

@@ -140,7 +140,7 @@ public class ChatController(IMediator mediator, IAIService aiService, ILogger<Ch
         var encoding = Encoding.UTF8;
 
         await foreach (var chunk in aiService.StreamChatAsync(
-            request.Message, request.ConversationHistory, request.SystemPrompt, streamCt))
+            request.Message, request.ConversationHistory, request.SystemPrompt, enableTools: true, ct: streamCt))
         {
             var sseData = $"data: {System.Text.Json.JsonSerializer.Serialize(new { content = chunk })}\n\n";
             await writer.WriteAsync(encoding.GetBytes(sseData), streamCt);

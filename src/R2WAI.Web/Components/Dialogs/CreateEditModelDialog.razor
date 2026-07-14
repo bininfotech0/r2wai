@@ -9,16 +9,19 @@
         </div>
     </TitleContent>
     <DialogContent>
+        <MudForm @ref="_form">
         <MudGrid Spacing="2">
             <MudItem xs="12">
                 <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 600;">Basic Information</MudText>
             </MudItem>
             <MudItem xs="12">
-                <MudTextField @bind-Value="_name" Label="Display Name" Required="true" Variant="Variant.Outlined"
+                <MudTextField @bind-Value="_name" Label="Display Name" Required="true" RequiredError="Display name is required"
+                              Validation="@(new Func<string, string>(ValidateName))" Variant="Variant.Outlined"
                               Placeholder="e.g. GPT-4o Production" />
             </MudItem>
             <MudItem xs="12" sm="6">
-                <MudSelect T="string" Value="_provider" Label="Provider" Required="true" Variant="Variant.Outlined"
+                <MudSelect T="string" Value="_provider" Label="Provider" Required="true" RequiredError="Provider is required"
+                           Variant="Variant.Outlined"
                            ValueChanged="OnProviderChanged">
                     <MudSelectItem T="string" Value="@("OpenAI")">OpenAI</MudSelectItem>
                     <MudSelectItem T="string" Value="@("AzureOpenAI")">Azure OpenAI</MudSelectItem>
@@ -40,13 +43,15 @@
                     <MudSelectItem T="string" Value="@("SambaNova")">SambaNova</MudSelectItem>
                     <MudSelectItem T="string" Value="@("TogetherAI")">Together AI</MudSelectItem>
                     <MudSelectItem T="string" Value="@("xAI")">xAI (Grok)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("NvidiaNIM")">NVIDIA NIM</MudSelectItem>
                     <MudSelectItem T="string" Value="@("Ollama")">Ollama (Local)</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6">
                 @if (_provider == "Ollama")
                 {
-                    <MudAutocomplete T="string" @bind-Value="_modelId" Label="Model ID" Required="true"
+                    <MudAutocomplete T="string" @bind-Value="_modelId" Label="Model ID" Required="true" RequiredError="Model ID is required"
+                                     Validation="@(new Func<string, string>(ValidateName))"
                                      Variant="Variant.Outlined" Placeholder="@GetModelIdPlaceholder()"
                                      HelperText="@GetModelIdHelperText()"
                                      SearchFunc="SearchOllamaModels" Strict="false"
@@ -54,9 +59,21 @@
                                      AdornmentIcon="@Icons.Material.Outlined.Search"
                                      Adornment="Adornment.Start" AdornmentColor="Color.Default" />
                 }
+                else if (_provider == "NvidiaNIM")
+                {
+                    <MudAutocomplete T="string" @bind-Value="_modelId" Label="Model ID" Required="true" RequiredError="Model ID is required"
+                                     Validation="@(new Func<string, string>(ValidateName))"
+                                     Variant="Variant.Outlined" Placeholder="@GetModelIdPlaceholder()"
+                                     HelperText="@GetModelIdHelperText()"
+                                     SearchFunc="SearchNvidiaNimModels" Strict="false"
+                                     ResetValueOnEmptyText="false" CoerceText="true" CoerceValue="true"
+                                     AdornmentIcon="@Icons.Material.Outlined.Search"
+                                     Adornment="Adornment.Start" AdornmentColor="Color.Default" />
+                }
                 else
                 {
-                    <MudTextField @bind-Value="_modelId" Label="Model ID" Required="true"
+                    <MudTextField @bind-Value="_modelId" Label="Model ID" Required="true" RequiredError="Model ID is required"
+                                  Validation="@(new Func<string, string>(ValidateName))"
                                   HelperText="@GetModelIdHelperText()" Variant="Variant.Outlined"
                                   Placeholder="@GetModelIdPlaceholder()" />
                 }
@@ -107,18 +124,21 @@
             <MudItem xs="12" sm="4">
                 <MudTooltip Text="Maximum number of tokens the model can generate per response.">
                     <MudNumericField @bind-Value="_maxTokens" Label="Max Tokens" Min="1" Max="200000"
+                                     Validation="@(new Func<int?, string>(ValidateMaxTokens))"
                                      HelperText="1–200,000" Variant="Variant.Outlined" />
                 </MudTooltip>
             </MudItem>
             <MudItem xs="12" sm="4">
                 <MudTooltip Text="Controls randomness. 0 = deterministic, 1 = balanced, 2 = creative.">
                     <MudNumericField @bind-Value="_temperature" Label="Temperature" Min="0.0" Max="2.0" Step="0.1"
+                                     Validation="@(new Func<double?, string>(v => ValidateRange(v, 0.0, 2.0)))"
                                      HelperText="0.0–2.0" Variant="Variant.Outlined" />
                 </MudTooltip>
             </MudItem>
             <MudItem xs="12" sm="4">
                 <MudTooltip Text="Nucleus sampling. Controls diversity by limiting cumulative probability.">
                     <MudNumericField @bind-Value="_topP" Label="Top P" Min="0.0" Max="1.0" Step="0.05"
+                                     Validation="@(new Func<double?, string>(v => ValidateRange(v, 0.0, 1.0)))"
                                      HelperText="0.0–1.0" Variant="Variant.Outlined" />
                 </MudTooltip>
             </MudItem>
@@ -131,6 +151,7 @@
                 </MudText>
             </MudItem>
         </MudGrid>
+        </MudForm>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
@@ -162,6 +183,7 @@
     private double? _topP;
     private bool _isDefault;
     private bool _saving;
+    private MudForm _form = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -193,6 +215,8 @@
         _provider = provider;
         if (provider == "Ollama" && string.IsNullOrEmpty(_endpoint))
             _endpoint = "http://localhost:11434";
+        else if (provider == "NvidiaNIM" && string.IsNullOrEmpty(_endpoint))
+            _endpoint = "https://integrate.api.nvidia.com/v1";
     }
 
     private string GetModelIdHelperText() => _provider switch
@@ -217,6 +241,7 @@
         "SambaNova" => "e.g. Meta-Llama-3.1-405B-Instruct",
         "TogetherAI" => "e.g. meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
         "xAI" => "e.g. grok-2, grok-3",
+        "NvidiaNIM" => "e.g. z-ai/glm-5.2, meta/llama-3.1-8b-instruct",
         "Ollama" => "e.g. llama3, mistral, codellama",
         _ => "Model identifier"
     };
@@ -243,6 +268,7 @@
         "SambaNova" => "Meta-Llama-3.1-405B-Instruct",
         "TogetherAI" => "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
         "xAI" => "grok-2",
+        "NvidiaNIM" => "z-ai/glm-5.2",
         "Ollama" => "llama3",
         _ => ""
     };
@@ -269,6 +295,7 @@
         "SambaNova" => "https://api.sambanova.ai",
         "TogetherAI" => "https://api.together.xyz",
         "xAI" => "https://api.x.ai",
+        "NvidiaNIM" => "https://integrate.api.nvidia.com/v1",
         "Ollama" => "http://localhost:11434",
         _ => "Leave blank for default endpoint"
     };
@@ -276,6 +303,7 @@
     private string GetEndpointHelperText() => _provider switch
     {
         "AzureOpenAI" => "Required. Your Azure OpenAI resource URL",
+        "NvidiaNIM" => "Default: https://integrate.api.nvidia.com/v1 — hosts many vendors' models (Z.ai, Meta, DeepSeek, Qwen, ...) behind one API",
         "Ollama" => "Default: http://localhost:11434 — must be reachable from the R2WAI server",
         _ => "Optional. Leave blank for provider's default endpoint"
     };
@@ -310,13 +338,55 @@
         return Task.FromResult(results);
     }
 
+    // A handful of strong, general-purpose, agentic/tool-calling-capable models from
+    // NVIDIA NIM's catalog (https://build.nvidia.com) — all reachable through the same
+    // OpenAI-compatible endpoint and API key. Free-text entry also works for any other
+    // model id in the catalog; these are just discoverable starting points.
+    private static readonly string[] _nvidiaNimModels =
+    [
+        "z-ai/glm-5.2",
+        "meta/llama-3.1-8b-instruct",
+        "meta/llama-3.3-70b-instruct",
+        "deepseek-ai/deepseek-v4-flash",
+        "qwen/qwen3.5-122b-a10b",
+    ];
+
+    private Task<IEnumerable<string>> SearchNvidiaNimModels(string value, CancellationToken _)
+    {
+        var results = string.IsNullOrWhiteSpace(value)
+            ? _nvidiaNimModels
+            : _nvidiaNimModels.Where(m => m.Contains(value, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(results);
+    }
+
+    private static string ValidateName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "This field is required";
+        if (value.Trim().Length < 2)
+            return "Must be at least 2 characters";
+        return null!;
+    }
+
+    private static string ValidateMaxTokens(int? value)
+    {
+        if (value is null) return "Max Tokens is required";
+        if (value < 1 || value > 200000) return "Must be between 1 and 200,000";
+        return null!;
+    }
+
+    private static string ValidateRange(double? value, double min, double max)
+    {
+        if (value is null) return null!;
+        if (value < min || value > max) return $"Must be between {min:0.0} and {max:0.0}";
+        return null!;
+    }
+
     private async Task Save()
     {
-        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_provider) || string.IsNullOrWhiteSpace(_modelId))
-        {
-            Snackbar.Add("Name, Provider, and Model ID are required", Severity.Warning);
+        await _form.Validate();
+        if (!_form.IsValid)
             return;
-        }
 
         _saving = true;
         try

@@ -6,9 +6,11 @@
         <MudText Typo="Typo.h6">@(_isEdit ? "Edit Approval Policy" : "Create Approval Policy")</MudText>
     </TitleContent>
     <DialogContent>
+        <MudForm @ref="_form">
         <MudGrid>
             <MudItem xs="12">
-                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" RequiredError="Name is required"
+                              Validation="@(new Func<string, string>(ValidateName))" Variant="Variant.Outlined" />
             </MudItem>
             <MudItem xs="12">
                 <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
@@ -38,6 +40,7 @@
                               HelperText="Comma-separated" Variant="Variant.Outlined" />
             </MudItem>
         </MudGrid>
+        </MudForm>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
@@ -61,6 +64,7 @@
     private int? _escalationMinutes;
     private string _escalationRoles = string.Empty;
     private bool _saving;
+    private MudForm _form = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -84,13 +88,18 @@
         }
     }
 
+    private static string ValidateName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "Name is required";
+        return null!;
+    }
+
     private async Task Save()
     {
-        if (string.IsNullOrWhiteSpace(_name))
-        {
-            Snackbar.Add("Name is required", Severity.Warning);
+        await _form.Validate();
+        if (!_form.IsValid)
             return;
-        }
 
         _saving = true;
         try
