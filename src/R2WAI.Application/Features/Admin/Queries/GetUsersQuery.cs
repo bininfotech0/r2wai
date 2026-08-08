@@ -39,3 +39,29 @@ public class GetUsersQueryHandler(
         };
     }
 }
+
+public record GetUserByIdQuery : IRequest<UserDto>, IAuthorizedRequest
+{
+    public Guid Id { get; init; }
+    public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
+}
+
+public class GetUserByIdQueryHandler(
+    IRepository<User> userRepo,
+    ICurrentUserService currentUser,
+    IMapper mapper) : IRequestHandler<GetUserByIdQuery, UserDto>
+{
+    public async Task<UserDto> Handle(GetUserByIdQuery query, CancellationToken cancellationToken)
+    {
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
+
+        var user = await userRepo.FirstOrDefaultAsync(
+            u => u.Id == query.Id && u.TenantId == tenantId && !u.IsDeleted,
+            cancellationToken);
+
+        if (user is null)
+            throw new NotFoundException(nameof(User), query.Id);
+
+        return mapper.Map<UserDto>(user);
+    }
+}

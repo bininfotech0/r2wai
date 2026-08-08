@@ -1,4 +1,5 @@
 @* Markdown Editor with formatting toolbar — no JS dependencies *@
+@using Markdig
 
 <div class="md-editor @(Focused ? "md-editor--focused" : "")" style="@Style">
     @* Toolbar *@
@@ -150,38 +151,36 @@
         await ValueChanged.InvokeAsync(Value);
     }
 
+    // Same pipeline + sanitization as MarkdownRenderer.razor, so live preview here matches what
+    // readers actually see rendered elsewhere (this used to be a hand-rolled regex chain that
+    // broke on nested formatting and didn't support links/tables at all).
+    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .UseSoftlineBreakAsHardlineBreak()
+        .Build();
+
+    private static readonly System.Text.RegularExpressions.Regex ScriptTagRegex = new(
+        @"<script[\s>].*?</script>|<script[^>]*/>|javascript:|on\w+\s*=",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex DangerousTagRegex = new(
+        @"<(iframe|object|embed|form|input|textarea|button|select|meta|link|base)\b[^>]*>",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
     private static string RenderMarkdown(string? markdown)
     {
         if (string.IsNullOrWhiteSpace(markdown)) return string.Empty;
 
-        var html = System.Net.WebUtility.HtmlEncode(markdown);
-
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"```([\s\S]*?)```",
-            m => $"<pre><code>{m.Groups[1].Value.Trim()}</code></pre>");
-
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*(.+?)\*", "<em>$1</em>");
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"`(.+?)`", "<code>$1</code>");
-
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"^## (.+)$", "<h4>$1</h4>",
-            System.Text.RegularExpressions.RegexOptions.Multiline);
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"^# (.+)$", "<h3>$1</h3>",
-            System.Text.RegularExpressions.RegexOptions.Multiline);
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"^### (.+)$", "<h5>$1</h5>",
-            System.Text.RegularExpressions.RegexOptions.Multiline);
-
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"^&gt; (.+)$", "<blockquote>$1</blockquote>",
-            System.Text.RegularExpressions.RegexOptions.Multiline);
-
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"^- (.+)$", "<li>$1</li>",
-            System.Text.RegularExpressions.RegexOptions.Multiline);
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"(<li>.*</li>)", "<ul>$1</ul>");
-
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"^---$", "<hr/>",
-            System.Text.RegularExpressions.RegexOptions.Multiline);
-
-        html = html.Replace("\n", "<br/>");
-
-        return html;
+        try
+        {
+            var html = Markdown.ToHtml(markdown, Pipeline);
+            html = ScriptTagRegex.Replace(html, string.Empty);
+            html = DangerousTagRegex.Replace(html, string.Empty);
+            return html;
+        }
+        catch
+        {
+            return System.Net.WebUtility.HtmlEncode(markdown);
+        }
     }
 }

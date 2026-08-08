@@ -18,6 +18,11 @@ public class GenericRepository<T> : IRepository<T> where T : BaseEntity<Guid>
         return await _dbSet.FindAsync([id], cancellationToken);
     }
 
+    public virtual async Task<T?> GetByIdAsync(Guid id, Expression<Func<T, object>> include, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet.Include(include).FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+    }
+
     public virtual async Task<IReadOnlyList<T>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _dbSet.ToListAsync(cancellationToken);

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using R2WAI.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
@@ -46,8 +47,6 @@ public class PostgresIntegrationTests : IAsyncLifetime
                 builder.UseEnvironment("Testing");
                 builder.UseSetting("Authentication:Jwt:SecretKey",
                     "TestingSecretKeyForIntegrationTestsThatIsLongEnough!");
-                builder.UseSetting("Security:EncryptionKey",
-                    Convert.ToBase64String(new byte[32]));
                 builder.UseSetting("ConnectionStrings:Redis", "");
                 builder.UseSetting("Cache:Redis:ConnectionString", "");
                 builder.UseSetting("ConnectionStrings:DefaultConnection",
@@ -83,6 +82,14 @@ public class PostgresIntegrationTests : IAsyncLifetime
                     });
                     services.AddScoped<ITenantDbContext>(sp =>
                         sp.GetRequiredService<ApplicationDbContext>());
+
+                    // The real EncryptionService deliberately refuses a config-supplied key outside
+                    // Development (it must come from the ENCRYPTION_KEY env var in real deployments --
+                    // that guard is intentional hardening, not something to weaken for a test). These
+                    // tests don't exercise field encryption, so swap in a no-op double instead of
+                    // fighting that guard with a fake env var.
+                    services.RemoveAll<R2WAI.Application.Common.Interfaces.IEncryptionService>();
+                    services.AddSingleton<R2WAI.Application.Common.Interfaces.IEncryptionService, NoOpEncryptionService>();
                 });
             });
 
@@ -175,8 +182,8 @@ public class PostgresIntegrationTests : IAsyncLifetime
         var client = await GetAuthClientAsync();
         var response = await client.GetAsync("/api/v1/admin/users");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"STATUS={(int)response.StatusCode} BODY={body}");
         Assert.Contains("admin@r2wai.io", body);
     }
 
@@ -371,4 +378,10 @@ public class PostgresIntegrationTests : IAsyncLifetime
         var status = doc.RootElement.GetProperty("status").GetString();
         Assert.Equal("healthy", status);
     }
+}
+
+file sealed class NoOpEncryptionService : R2WAI.Application.Common.Interfaces.IEncryptionService
+{
+    public string Encrypt(string plainText) => plainText;
+    public string Decrypt(string cipherText) => cipherText;
 }

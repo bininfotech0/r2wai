@@ -22,7 +22,10 @@ builder.Services.AddMudServices(config =>
     config.SnackbarConfiguration.ShowTransitionDuration = 300;
     config.SnackbarConfiguration.SnackbarVariant = MudBlazor.Variant.Filled;
 });
-builder.Services.AddSingleton<ThemeService>();
+// Scoped, not singleton: IsDarkMode is a per-user preference. A singleton here meant every
+// connected user shared one ThemeService instance server-wide -- one person toggling dark
+// mode flipped the theme for every other concurrently connected user's circuit too.
+builder.Services.AddScoped<ThemeService>();
 
 builder.Services.AddScoped<TokenStorageService>();
 builder.Services.AddScoped<CircuitTokenProvider>();

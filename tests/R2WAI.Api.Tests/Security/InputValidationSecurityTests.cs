@@ -115,8 +115,13 @@ public class InputValidationSecurityTests : IntegrationTestBase
             Password = sqlPayload
         });
 
+        // 429 is also a valid "rejected" outcome here: this theory's 3 cases run against the
+        // same shared test user, so a prior case's failed attempt (or another test in this run)
+        // can trip the brute-force lockout (see AuthController's LoginAttemptTracker) before this
+        // one even reaches credential validation. That's the lockout working as intended, not a
+        // gap in SQL-injection handling.
         Assert.True(
-            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized,
+            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.TooManyRequests,
             $"SQL injection attempt should be rejected, got {(int)response.StatusCode}");
     }
 

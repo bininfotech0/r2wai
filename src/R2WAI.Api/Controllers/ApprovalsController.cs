@@ -95,10 +95,9 @@ public class ApprovalsController(
         CancellationToken ct = default)
     {
         (page, pageSize) = ClampPagination(page, pageSize);
-        var pending = await approvalService.GetPendingForRoleAsync(CurrentTenantId, role, ct);
-        var totalCount = pending.Count;
-        var paged = pending.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-        return Ok(new { items = paged, totalCount, page, pageSize });
+        var (items, totalCount) = await approvalService.GetPendingPagedAsync(
+            CurrentTenantId, null, role, page, pageSize, ct);
+        return Ok(new { items, totalCount, page, pageSize });
     }
 
     [HttpGet("policies")]

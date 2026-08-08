@@ -75,8 +75,7 @@
         {
             try
             {
-                var allUsers = await Http.GetFromJsonAsync<UsersListResult>("/api/v1/admin/users");
-                var match = allUsers?.Items?.FirstOrDefault(u => u.Id.ToString() == EditId);
+                var match = await Http.GetFromJsonAsync<UserEditDto>($"/api/v1/admin/users/{EditId}");
                 if (match is not null)
                 {
                     _email = match.Email;
@@ -147,7 +146,6 @@
 
     private class RolesResult { public List<RoleOption> Items { get; set; } = new(); }
     private class RoleOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
-    private class UsersListResult { public List<UserEditDto> Items { get; set; } = new(); }
     private class UserEditDto
     {
         public Guid Id { get; set; }

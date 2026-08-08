@@ -36,6 +36,7 @@ public class AddSourceCommandHandler(
             command.ReferenceId, command.Url, command.Content);
 
         kb.AddSource(source);
+        await sourceRepo.AddAsync(source, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return mapper.Map<KnowledgeBaseSourceDto>(source);

@@ -33,6 +33,13 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
         return Ok(result);
     }
 
+    [HttpGet("users/{id:guid}")]
+    public async Task<IActionResult> GetUserById(Guid id, CancellationToken ct = default)
+    {
+        var result = await mediator.Send(new GetUserByIdQuery { Id = id }, ct);
+        return Ok(result);
+    }
+
     [HttpPost("users")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserCommand command, CancellationToken ct = default)
     {

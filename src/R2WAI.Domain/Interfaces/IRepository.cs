@@ -6,6 +6,7 @@ namespace R2WAI.Domain.Interfaces;
 public interface IRepository<T> where T : BaseEntity<Guid>
 {
     Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<T?> GetByIdAsync(Guid id, Expression<Func<T, object>> include, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<T>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<T>> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
     Task<T?> FirstOrDefaultAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);

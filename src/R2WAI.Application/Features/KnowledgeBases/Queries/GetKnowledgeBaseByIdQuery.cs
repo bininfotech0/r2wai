@@ -11,7 +11,7 @@ public class GetKnowledgeBaseByIdQueryHandler(
 {
     public async Task<KnowledgeBaseDto> Handle(GetKnowledgeBaseByIdQuery query, CancellationToken cancellationToken)
     {
-        var kb = await kbRepo.GetByIdAsync(query.Id, cancellationToken)
+        var kb = await kbRepo.GetByIdAsync(query.Id, k => k.Sources, cancellationToken)
             ?? throw new NotFoundException(nameof(KnowledgeBase), query.Id);
 
         if (kb.IsDeleted)

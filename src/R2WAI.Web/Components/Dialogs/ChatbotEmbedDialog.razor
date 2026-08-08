@@ -482,10 +482,15 @@
         var pos = _position == "bottom-right" ? "right:20px" : "left:20px";
         var encodedColor = Uri.EscapeDataString(_primaryColor);
         var encodedTitle = Uri.EscapeDataString(_widgetTitle);
+        // HTML-encoding (which also entity-encodes quotes) makes the title safe both as an
+        // HTML attribute value and, since no raw quote/angle-bracket survives, as the payload
+        // inside the single-quoted JS string literal below — a title like `">' <script>...`
+        // would otherwise break out of both contexts in the generated embed snippet.
+        var safeTitle = System.Net.WebUtility.HtmlEncode(_widgetTitle);
 
         _directLink = $"{webBase}/chatbot/{ChatbotId}";
 
-        _iframeEmbed = $"<iframe src=\"{widgetUrl}\" width=\"{_width}\" height=\"{_height}\" style=\"border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);\" allow=\"microphone\" title=\"{_widgetTitle}\"></iframe>";
+        _iframeEmbed = $"<iframe src=\"{widgetUrl}\" width=\"{_width}\" height=\"{_height}\" style=\"border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);\" allow=\"microphone\" title=\"{safeTitle}\"></iframe>";
 
         _scriptEmbed = "<script>\n"
             + "(function() {\n"
@@ -493,7 +498,7 @@
             + "  w.id = 'r2wai-chatbot';\n"
             + $"  w.innerHTML = '<iframe src=\"{widgetUrl}?position={_position}&color={encodedColor}&title={encodedTitle}\" "
             + $"style=\"border:none;width:{_width}px;height:{_height}px;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.2);\" "
-            + $"allow=\"microphone\" title=\"{_widgetTitle}\"></iframe>';\n"
+            + $"allow=\"microphone\" title=\"{safeTitle}\"></iframe>';\n"
             + $"  w.style.cssText = 'position:fixed;{pos};bottom:20px;z-index:99999;';\n"
             + "  var btn = document.createElement('div');\n"
             + $"  btn.style.cssText = 'position:fixed;{pos};bottom:20px;z-index:99998;width:56px;height:56px;border-radius:50%;"

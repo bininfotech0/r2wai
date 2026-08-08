@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace R2WAI.Infrastructure.Cache;
 
-public class RedisCacheService : ICacheService
+public class RedisCacheService : ICacheService, IDisposable
 {
     private readonly ConnectionMultiplexer _redis;
     private readonly IDatabase _database;
@@ -17,7 +17,17 @@ public class RedisCacheService : ICacheService
         var connectionString = configuration["Cache:Redis:ConnectionString"]
             ?? configuration.GetConnectionString("Redis")
             ?? "localhost:6379";
-        _redis = ConnectionMultiplexer.Connect(connectionString);
+
+        // AbortOnConnectFail = false: every read/write below already has its own try/catch and
+        // falls back gracefully (RateLimitingMiddleware falls back to an in-memory limiter on any
+        // cache exception). Without this, ConnectionMultiplexer.Connect() throws synchronously the
+        // moment Redis is unreachable -- since this service is a singleton, that exception surfaces
+        // on the *next* DI resolution too, so a Redis blip took down every request in the app
+        // (confirmed live: this is exactly what was happening in the test environment, where no
+        // Redis is running at all) instead of degrading to the local fallback as intended.
+        var options = ConfigurationOptions.Parse(connectionString);
+        options.AbortOnConnectFail = false;
+        _redis = ConnectionMultiplexer.Connect(options);
         _database = _redis.GetDatabase();
     }
 
@@ -72,5 +82,11 @@ public class RedisCacheService : ICacheService
         {
             return false;
         }
+    }
+
+    public void Dispose()
+    {
+        _redis.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

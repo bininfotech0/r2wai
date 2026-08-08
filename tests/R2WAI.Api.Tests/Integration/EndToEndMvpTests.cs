@@ -367,9 +367,13 @@ public class EndToEndMvpTests : IClassFixture<R2WAIWebApplicationFactory>
     public async Task CrossCutting_WebhookTrigger_NoMatchingWorkflow_ReturnsNonSuccess()
     {
         var response = await _client.PostAsJsonAsync("/api/v1/workflows/webhook/nonexistent-slug", new { data = "test" });
+        // 503 is also a valid non-success outcome: WorkflowsController.WebhookTrigger fails closed
+        // with 503 when Webhooks:Secret isn't configured at all (correct behavior -- it must not
+        // silently accept unauthenticated webhook calls), which is exactly this test environment's
+        // config, before it ever gets to checking whether the slug matches a workflow.
         Assert.True(
-            response.StatusCode == HttpStatusCode.NotFound || response.StatusCode == HttpStatusCode.InternalServerError,
-            $"Expected 404 or 500 but got {response.StatusCode}");
+            response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.InternalServerError or HttpStatusCode.ServiceUnavailable,
+            $"Expected 404, 500, or 503 but got {response.StatusCode}");
     }
 
     [Fact]

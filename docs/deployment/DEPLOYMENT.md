@@ -40,6 +40,27 @@ User ──► Cloudflare/Azure Front Door ──► AKS Cluster
 
 ## Docker Deployment
 
+### Configure environment
+
+`docker-compose.yml` reads secrets and config from `docker/.env`, which is
+**not checked in** and does not exist until you create it. The API refuses
+to start in production mode without a real `JWT_SECRET`/`DB_PASSWORD`/
+`ENCRYPTION_KEY` (placeholder or unexpanded values fail startup validation
+by design). Copy the example and fill it in:
+
+```bash
+cp docker/.env.example docker/.env
+# generate real secrets, e.g.:
+#   JWT_SECRET=$(openssl rand -base64 48)
+#   ENCRYPTION_KEY=$(openssl rand -base64 32)
+#   DB_PASSWORD=$(openssl rand -hex 16)
+```
+
+If you rotate `DB_PASSWORD` after the Postgres volume already exists, the
+database keeps the old password and the API will fail with authentication
+errors until you reset the volume (`docker compose -f docker/docker-compose.yml down -v`)
+or match the new password against the existing database instead.
+
 ### Build images
 
 ```bash

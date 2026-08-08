@@ -6,6 +6,7 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Microsoft.SemanticKernel.Plugins.Core;
 using OpenAI;
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -98,7 +99,7 @@ public class SemanticKernelService : IAIService
     public async Task<string> SummarizeTextAsync(string text, int maxLength = 500, CancellationToken ct = default)
     {
         var kernel = GetOrCreateKernel();
-        var prompt = $"Summarize the following text in {maxLength} characters or less:\n\n{text}";
+        var prompt = $"Summarize the following text in {maxLength} characters or less:\n\n{TruncateInputText(text)}";
 
         var function = kernel.CreateFunctionFromPrompt(prompt, new OpenAIPromptExecutionSettings
         {
@@ -113,7 +114,7 @@ public class SemanticKernelService : IAIService
     public async Task<string> ExtractDataAsync(string text, string schema, CancellationToken ct = default)
     {
         var kernel = GetOrCreateKernel();
-        var prompt = $"Extract data from the following text according to this schema: {schema}\n\nText:\n{text}";
+        var prompt = $"Extract data from the following text according to this schema: {schema}\n\nText:\n{TruncateInputText(text)}";
 
         var function = kernel.CreateFunctionFromPrompt(prompt, new OpenAIPromptExecutionSettings
         {
@@ -128,7 +129,7 @@ public class SemanticKernelService : IAIService
     public async Task<string> CompareDocumentsAsync(string sourceText, string targetText, CancellationToken ct = default)
     {
         var kernel = GetOrCreateKernel();
-        var prompt = $"Compare the following two documents and provide a detailed analysis of similarities and differences:\n\nDocument 1:\n{sourceText}\n\nDocument 2:\n{targetText}";
+        var prompt = $"Compare the following two documents and provide a detailed analysis of similarities and differences:\n\nDocument 1:\n{TruncateInputText(sourceText)}\n\nDocument 2:\n{TruncateInputText(targetText)}";
 
         var function = kernel.CreateFunctionFromPrompt(prompt, new OpenAIPromptExecutionSettings
         {
@@ -159,7 +160,7 @@ public class SemanticKernelService : IAIService
             chatHistory.AddSystemMessage("You are R2WAI, an intelligent enterprise AI assistant specialized in work execution, approvals, and document intelligence.");
 
         if (!string.IsNullOrEmpty(conversationHistory))
-            chatHistory.AddUserMessage(conversationHistory);
+            chatHistory.AddUserMessage(TruncateInputText(conversationHistory, keepEnd: true));
 
         chatHistory.AddUserMessage(message);
 
@@ -193,7 +194,7 @@ public class SemanticKernelService : IAIService
             chatHistory.AddSystemMessage("You are R2WAI, an intelligent enterprise AI assistant specialized in work execution, approvals, and document intelligence.");
 
         if (!string.IsNullOrEmpty(conversationHistory))
-            chatHistory.AddUserMessage(conversationHistory);
+            chatHistory.AddUserMessage(TruncateInputText(conversationHistory, keepEnd: true));
 
         chatHistory.AddUserMessage(message);
 
@@ -297,7 +298,7 @@ public class SemanticKernelService : IAIService
     public async Task<string> AnswerQuestionAsync(string question, string context, CancellationToken ct = default)
     {
         var kernel = GetOrCreateKernel();
-        var prompt = $"Answer the question based on the provided context.\n\nContext:\n{context}\n\nQuestion: {question}\n\nAnswer:";
+        var prompt = $"Answer the question based on the provided context.\n\nContext:\n{TruncateInputText(context)}\n\nQuestion: {question}\n\nAnswer:";
 
         var function = kernel.CreateFunctionFromPrompt(prompt, new OpenAIPromptExecutionSettings
         {
@@ -317,7 +318,7 @@ public class SemanticKernelService : IAIService
             sb.AppendLine($"System: {systemPrompt}");
 
         if (!string.IsNullOrEmpty(context))
-            sb.AppendLine($"Context:\n{context}");
+            sb.AppendLine($"Context:\n{TruncateInputText(context)}");
 
         sb.AppendLine($"\nUser: {prompt}");
         sb.AppendLine("\nAssistant:");
@@ -325,18 +326,42 @@ public class SemanticKernelService : IAIService
         return sb.ToString();
     }
 
+    // No tokenizer is wired up, so this is a coarse ~4-chars-per-token estimate -- deliberately
+    // generous rather than exact, just enough to stop unbounded RAG context/chat history from
+    // growing a prompt without limit (cost blowup and, on some providers, an outright request
+    // failure once the model's context window is exceeded). RAG context is relevance-ranked
+    // top-first, so it's truncated from the end; chat history matters most in its most recent
+    // turns, so it's truncated from the start.
+    private const int MaxInputChars = 24_000; // ~6k tokens
+
+    private static string TruncateInputText(string? text, bool keepEnd = false)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= MaxInputChars)
+            return text ?? string.Empty;
+
+        return keepEnd
+            ? "[earlier content truncated]...\n" + text[^MaxInputChars..]
+            : text[..MaxInputChars] + "\n...[truncated]";
+    }
+
     private Kernel GetOrCreateKernel(bool enableTools = false)
     {
         var baseKernel = GetOrCreateBaseKernel();
-
-        var kernel = baseKernel.Clone();
 
         // Plugins (and therefore autonomous function-calling) are only attached when the
         // caller explicitly opts in. This keeps mutating tools (start_workflow,
         // submit_approval_request, notify_approver) unreachable from anonymous/public
         // surfaces like the embeddable chatbot widget, which always calls with enableTools: false.
+        // Nothing is mutated on the returned kernel in that case, so the shared base kernel can
+        // be returned directly -- cloning it on every request (the common case: every anonymous
+        // chatbot message, every summarize/generate/embed call) was pure per-request overhead.
         if (!enableTools)
-            return kernel;
+            return baseKernel;
+
+        // The tools path attaches plugins resolved from THIS request's DI scope (they close
+        // over scoped services like ICurrentUserService/DbContext), so this kernel can't be
+        // cached/reused across requests -- it must be a fresh clone every time.
+        var kernel = baseKernel.Clone();
 
         try
         {
@@ -391,7 +416,7 @@ public class SemanticKernelService : IAIService
                 var embeddingModel = _configuration["AI:Ollama:EmbeddingModel"] ?? ollamaModel;
                 var ollamaV1 = new Uri($"{ollamaEndpoint.TrimEnd('/')}/v1");
 
-                var ollamaClient = new OpenAIClient(new ApiKeyCredential("ollama"), new OpenAIClientOptions { Endpoint = ollamaV1 });
+                var ollamaClient = new OpenAIClient(new ApiKeyCredential("ollama"), new OpenAIClientOptions { Endpoint = ollamaV1, RetryPolicy = new ClientRetryPolicy(3) });
                 builder.AddOpenAIChatCompletion(ollamaModel, ollamaClient);
                 builder.AddOpenAIEmbeddingGenerator(embeddingModel, ollamaClient);
 
@@ -407,7 +432,7 @@ public class SemanticKernelService : IAIService
                 var zaiEndpoint = _configuration["AI:ZAI:Endpoint"] ?? "https://integrate.api.nvidia.com/v1";
                 var zaiModel = _configuration["AI:ZAI:ModelId"] ?? "z-ai/glm-5.2";
 
-                var zaiClient = new OpenAIClient(new ApiKeyCredential(zaiApiKey), new OpenAIClientOptions { Endpoint = new Uri(zaiEndpoint) });
+                var zaiClient = new OpenAIClient(new ApiKeyCredential(zaiApiKey), new OpenAIClientOptions { Endpoint = new Uri(zaiEndpoint), RetryPolicy = new ClientRetryPolicy(3) });
                 builder.AddOpenAIChatCompletion(zaiModel, zaiClient);
 
                 _logger.LogInformation("AI provider: Z.ai at {Endpoint}, model: {Model}", zaiEndpoint, zaiModel);
@@ -420,17 +445,13 @@ public class SemanticKernelService : IAIService
 
                 if (!string.IsNullOrEmpty(apiKey))
                 {
+                    var clientOptions = new OpenAIClientOptions { RetryPolicy = new ClientRetryPolicy(3) };
                     if (!string.IsNullOrEmpty(endpoint))
-                    {
-                        var client = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = new Uri(endpoint) });
-                        builder.AddOpenAIChatCompletion(modelId, client);
-                        builder.AddOpenAIEmbeddingGenerator("text-embedding-3-small", client);
-                    }
-                    else
-                    {
-                        builder.AddOpenAIChatCompletion(modelId, apiKey);
-                        builder.AddOpenAIEmbeddingGenerator("text-embedding-3-small", apiKey);
-                    }
+                        clientOptions.Endpoint = new Uri(endpoint);
+
+                    var client = new OpenAIClient(new ApiKeyCredential(apiKey), clientOptions);
+                    builder.AddOpenAIChatCompletion(modelId, client);
+                    builder.AddOpenAIEmbeddingGenerator("text-embedding-3-small", client);
 
                     _logger.LogInformation("AI provider: OpenAI, model: {Model}", modelId);
                 }
