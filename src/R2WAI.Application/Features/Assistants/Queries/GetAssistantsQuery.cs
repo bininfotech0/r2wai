@@ -5,6 +5,7 @@ public record GetAssistantsQuery : IRequest<PagedResult<AssistantDto>>
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
     public string? Search { get; init; }
+    public Guid? ApplicationId { get; init; }
 }
 
 public class GetAssistantsQueryHandler(
@@ -18,7 +19,8 @@ public class GetAssistantsQueryHandler(
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
 
         var hasSearch = !string.IsNullOrEmpty(query.Search);
-        if (!hasSearch)
+        var hasApplicationFilter = query.ApplicationId.HasValue;
+        if (!hasSearch && !hasApplicationFilter)
         {
             var cacheKey = $"assistants:{tenantId}:p{query.Page}:s{query.PageSize}";
             var cached = await cache.GetAsync<PagedResult<AssistantDto>>(cacheKey, cancellationToken);
@@ -28,7 +30,8 @@ public class GetAssistantsQueryHandler(
         var searchTerm = query.Search?.ToLower();
         var filtered = await assistantRepo.FindAsync(
             a => a.TenantId == tenantId && !a.IsDeleted
-              && (string.IsNullOrEmpty(searchTerm) || a.Name.ToLower().Contains(searchTerm)),
+              && (string.IsNullOrEmpty(searchTerm) || a.Name.ToLower().Contains(searchTerm))
+              && (!hasApplicationFilter || a.ApplicationId == query.ApplicationId),
             cancellationToken);
 
         var ordered = filtered.OrderByDescending(a => a.CreatedAt);
@@ -43,7 +46,7 @@ public class GetAssistantsQueryHandler(
             PageSize = query.PageSize,
         };
 
-        if (!hasSearch)
+        if (!hasSearch && !hasApplicationFilter)
             await cache.SetAsync($"assistants:{tenantId}:p{query.Page}:s{query.PageSize}", result, TimeSpan.FromMinutes(2), cancellationToken);
 
         return result;

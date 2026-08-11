@@ -5,6 +5,7 @@ public record GetKnowledgeBasesQuery : IRequest<PagedResult<KnowledgeBaseDto>>
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
     public string? Search { get; init; }
+    public Guid? ApplicationId { get; init; }
 }
 
 public class GetKnowledgeBasesQueryHandler(
@@ -19,7 +20,8 @@ public class GetKnowledgeBasesQueryHandler(
 
         var filtered = await kbRepo.FindAsync(
             kb => kb.TenantId == tenantId && !kb.IsDeleted
-              && (string.IsNullOrEmpty(searchTerm) || kb.Name.ToLower().Contains(searchTerm)),
+              && (string.IsNullOrEmpty(searchTerm) || kb.Name.ToLower().Contains(searchTerm))
+              && (!query.ApplicationId.HasValue || kb.ApplicationId == query.ApplicationId),
             cancellationToken);
 
         var ordered = filtered.OrderByDescending(kb => kb.CreatedAt);

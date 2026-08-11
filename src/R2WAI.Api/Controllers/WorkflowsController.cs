@@ -51,12 +51,22 @@ public class WorkflowsController(
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetList([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, CancellationToken ct = default)
+    public async Task<IActionResult> GetList([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, [FromQuery] Guid? applicationId = null, CancellationToken ct = default)
     {
-        var query = new GetWorkflowsQuery { Page = page, PageSize = pageSize, Search = search };
+        var query = new GetWorkflowsQuery { Page = page, PageSize = pageSize, Search = search, ApplicationId = applicationId };
         var result = await mediator.Send(query, ct);
         return Ok(result);
     }
+
+    [HttpPost("{id:guid}/application")]
+    public async Task<IActionResult> AssignApplication(Guid id, [FromBody] AssignApplicationRequest request, CancellationToken ct = default)
+    {
+        var command = new AssignWorkflowApplicationCommand { Id = id, ApplicationId = request.ApplicationId };
+        var result = await mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    public record AssignApplicationRequest(Guid? ApplicationId);
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default)

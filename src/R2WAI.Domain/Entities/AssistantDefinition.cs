@@ -6,6 +6,7 @@ namespace R2WAI.Domain.Entities;
 public sealed class AssistantDefinition : BaseEntity<Guid>
 {
     public Guid TenantId { get; private set; }
+    public Guid? ApplicationId { get; private set; }
     public string Name { get; private set; }
     public string? Description { get; private set; }
     public AssistantType Type { get; private set; }
@@ -25,6 +26,7 @@ public sealed class AssistantDefinition : BaseEntity<Guid>
     public Tenant Tenant { get; private set; } = null!;
     public ModelConfiguration? ModelConfiguration { get; private set; }
     public KnowledgeBase? KnowledgeBase { get; private set; }
+    public ConnectedApplication? Application { get; private set; }
 
     private AssistantDefinition() { }
 
@@ -110,6 +112,12 @@ public sealed class AssistantDefinition : BaseEntity<Guid>
     public void LinkKnowledgeBase(Guid knowledgeBaseId)
     {
         KnowledgeBaseId = knowledgeBaseId;
+        MarkAsModified();
+    }
+
+    public void AssignApplication(Guid? applicationId)
+    {
+        ApplicationId = applicationId;
         MarkAsModified();
     }
 }

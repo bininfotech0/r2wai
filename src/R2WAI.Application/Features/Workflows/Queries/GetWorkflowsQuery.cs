@@ -5,6 +5,7 @@ public record GetWorkflowsQuery : IRequest<PagedResult<WorkflowDto>>
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
     public string? Search { get; init; }
+    public Guid? ApplicationId { get; init; }
 }
 
 public class GetWorkflowsQueryHandler(
@@ -19,7 +20,8 @@ public class GetWorkflowsQueryHandler(
 
         var filtered = await workflowRepo.FindAsync(
             w => w.TenantId == tenantId && !w.IsDeleted
-              && (string.IsNullOrEmpty(searchTerm) || w.Name.ToLower().Contains(searchTerm)),
+              && (string.IsNullOrEmpty(searchTerm) || w.Name.ToLower().Contains(searchTerm))
+              && (!query.ApplicationId.HasValue || w.ApplicationId == query.ApplicationId),
             cancellationToken);
 
         var ordered = filtered.OrderByDescending(w => w.CreatedAt);

@@ -184,7 +184,7 @@
                     </div>
                     <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" FullWidth="true"
                                EndIcon="@Icons.Material.Filled.ArrowForward"
-                               OnClick="@(() => Navigation.NavigateTo("/applications"))">
+                               OnClick="@(() => Navigation.NavigateTo($"/applications/{app.Id}"))">
                         Review
                     </MudButton>
                 </MudPaper>

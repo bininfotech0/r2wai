@@ -74,7 +74,8 @@ else
         @foreach (var app in _filteredApplications)
         {
             <MudItem xs="12" sm="6" md="4">
-                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; height: 100%;">
+                <MudPaper Elevation="0" Class="pa-4 application-card" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; height: 100%; cursor: pointer;"
+                          @onclick="@(() => Navigation.NavigateTo($"/applications/{app.Id}"))">
                     <div class="d-flex justify-space-between align-center mb-3">
                         <div class="d-flex align-center gap-2">
                             <div class="icon-container icon-container--primary">

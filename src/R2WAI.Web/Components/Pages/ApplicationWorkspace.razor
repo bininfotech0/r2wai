@@ -1,0 +1,384 @@
+@page "/applications/{Id:guid}"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>R2WAI - @(_application?.Name ?? "Application")</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-4" />
+}
+else if (_application is null)
+{
+    <ErrorState Title="Application not found" Description="This application may have been removed." />
+}
+else
+{
+    <div class="d-flex justify-space-between align-start flex-wrap gap-3 mb-5">
+        <div>
+            <div class="d-flex align-center gap-2">
+                <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;">@_application.Name</MudText>
+                <StatusBadge Status="@_application.Status" />
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@GetDepartmentName() &middot; @_application.Environment</MudText>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            @if (_application.Status == "Draft" || _application.Status == "Configuring" || _application.Status == "Testing")
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" Disabled="_actionInProgress"
+                           OnClick="@(() => ChangeStatus("Publish"))">
+                    Publish
+                </MudButton>
+            }
+            @if (_application.Status == "Published")
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Warning" Disabled="_actionInProgress"
+                           OnClick="@(() => ChangeStatus("Disable"))">
+                    Disable
+                </MudButton>
+            }
+            @if (_application.Status == "Disabled")
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Success" Disabled="_actionInProgress"
+                           OnClick="@(() => ChangeStatus("Enable"))">
+                    Enable
+                </MudButton>
+            }
+            @if (_application.Status != "Archived")
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" Disabled="_actionInProgress"
+                           OnClick="@(() => ChangeStatus("Archive"))">
+                    Archive
+                </MudButton>
+            }
+        </div>
+    </div>
+
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">
+        <MudTabPanel Text="Overview">
+            <div class="pt-4">
+                <MudGrid Class="mb-4">
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                            <MudText Typo="Typo.h5" Style="font-weight: 700;">@_apis.Count</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">APIs</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                            <MudText Typo="Typo.h5" Style="font-weight: 700;">@_assistants.Count</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Assistants</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                            <MudText Typo="Typo.h5" Style="font-weight: 700;">@_knowledgeBases.Count</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Knowledge Bases</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                            <MudText Typo="Typo.h5" Style="font-weight: 700;">@_workflows.Count</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Workflows</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                <MudText Typo="Typo.subtitle1" Class="mb-2" Style="font-weight: 700;">Details</MudText>
+                <MudPaper Elevation="0" Class="pa-4 mb-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                    <div class="d-flex justify-space-between py-1"><MudText Typo="Typo.body2" Color="Color.Secondary">Code</MudText><MudText Typo="Typo.body2" Style="font-weight: 600;">@_application.Code</MudText></div>
+                    <div class="d-flex justify-space-between py-1"><MudText Typo="Typo.body2" Color="Color.Secondary">Description</MudText><MudText Typo="Typo.body2" Style="font-weight: 600;">@(_application.Description ?? "—")</MudText></div>
+                    <div class="d-flex justify-space-between py-1"><MudText Typo="Typo.body2" Color="Color.Secondary">URL</MudText><MudText Typo="Typo.body2" Style="font-weight: 600;">@(_application.BaseUrl ?? "—")</MudText></div>
+                    <div class="d-flex justify-space-between py-1"><MudText Typo="Typo.body2" Color="Color.Secondary">Created</MudText><MudText Typo="Typo.body2" Style="font-weight: 600;">@_application.CreatedAt.ToString("yyyy-MM-dd")</MudText></div>
+                    @if (_application.PublishedAt is not null)
+                    {
+                        <div class="d-flex justify-space-between py-1"><MudText Typo="Typo.body2" Color="Color.Secondary">Published</MudText><MudText Typo="Typo.body2" Style="font-weight: 600;">@_application.PublishedAt.Value.ToString("yyyy-MM-dd")</MudText></div>
+                    }
+                </MudPaper>
+
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">APIs</MudText>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => _showAddApiForm = !_showAddApiForm)">
+                        Add API
+                    </MudButton>
+                </div>
+
+                @if (_showAddApiForm)
+                {
+                    <MudPaper Elevation="0" Class="pa-4 mb-4" Style="border: 1px dashed var(--mud-palette-divider); border-radius: 12px;">
+                        <MudGrid>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_apiName" Label="API Name" Required="true" Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="string" @bind-Value="_apiAuthScheme" Label="Authentication" Variant="Variant.Outlined">
+                                    <MudSelectItem T="string" Value="@("None")">None</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("ApiKey")">API Key</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("OAuth2")">OAuth 2.0</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Jwt")">JWT</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("EntraId")">Entra ID</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="_apiBaseUrl" Label="API Base URL" Required="true" Variant="Variant.Outlined" />
+                            </MudItem>
+                        </MudGrid>
+                        <div class="d-flex justify-end gap-2 mt-3">
+                            <MudButton Variant="Variant.Text" OnClick="@(() => _showAddApiForm = false)">Cancel</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_actionInProgress" OnClick="AddApi">Add API</MudButton>
+                        </div>
+                    </MudPaper>
+                }
+
+                @if (_apis.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.Api" Title="No APIs yet"
+                                Description="Add the APIs this application exposes so capabilities can be built on top of them."
+                                MinHeight="140px" />
+                }
+                else
+                {
+                    <MudTable Items="_apis" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                        <HeaderContent>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Base URL</MudTh>
+                            <MudTh>Auth</MudTh>
+                            <MudTh Style="text-align:right;">Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Name">@context.Name</MudTd>
+                            <MudTd DataLabel="Base URL">@context.BaseUrl</MudTd>
+                            <MudTd DataLabel="Auth">@context.AuthScheme</MudTd>
+                            <MudTd Style="text-align:right;">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteApi(context))" aria-label="Remove" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </div>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Build">
+            <div class="pt-4">
+                <LinkableSection Title="Assistants" Icon="@Icons.Material.Outlined.SmartToy"
+                                  Linked="_assistants" AllOptions="_allAssistants"
+                                  ManageUrl="/assistant-studio" ManageLabel="Manage in Assistants"
+                                  OnLink="@(id => LinkItem("assistants", id))" OnUnlink="@(id => UnlinkItem("assistants", id))" />
+
+                <LinkableSection Title="Knowledge Bases" Icon="@Icons.Material.Outlined.MenuBook"
+                                  Linked="_knowledgeBases" AllOptions="_allKnowledgeBases"
+                                  ManageUrl="/assistant-studio/knowledge" ManageLabel="Manage in Knowledge"
+                                  OnLink="@(id => LinkItem("knowledgebases", id))" OnUnlink="@(id => UnlinkItem("knowledgebases", id))" />
+
+                <LinkableSection Title="Workflows" Icon="@Icons.Material.Outlined.AccountTree"
+                                  Linked="_workflows" AllOptions="_allWorkflows"
+                                  ManageUrl="/workflow-studio" ManageLabel="Manage in Workflows"
+                                  OnLink="@(id => LinkItem("workflows", id))" OnUnlink="@(id => UnlinkItem("workflows", id))" />
+            </div>
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ApplicationDetail? _application;
+    private bool _loading = true;
+    private bool _actionInProgress;
+
+    private List<DepartmentOption> _departments = new();
+    private List<ApiItem> _apis = new();
+    private bool _showAddApiForm;
+    private string _apiName = string.Empty;
+    private string _apiBaseUrl = string.Empty;
+    private string _apiAuthScheme = "None";
+
+    private List<LinkableSection.LinkedItem> _assistants = new();
+    private List<LinkableSection.LinkedItem> _knowledgeBases = new();
+    private List<LinkableSection.LinkedItem> _workflows = new();
+    private List<LinkableSection.LinkedItem> _allAssistants = new();
+    private List<LinkableSection.LinkedItem> _allKnowledgeBases = new();
+    private List<LinkableSection.LinkedItem> _allWorkflows = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAll();
+    }
+
+    private async Task LoadAll()
+    {
+        _loading = true;
+        try
+        {
+            await Task.WhenAll(
+                LoadApplication(),
+                LoadDepartments(),
+                LoadApis(),
+                LoadAssistants(),
+                LoadKnowledgeBases(),
+                LoadWorkflows());
+        }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task LoadApplication()
+    {
+        try { _application = await Http.GetFromJsonAsync<ApplicationDetail>($"/api/v1/applications/{Id}"); }
+        catch (Exception ex) { Snackbar.Add($"Failed to load application: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task LoadDepartments()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<DepartmentsResult>("/api/v1/departments?page=1&pageSize=100");
+            _departments = result?.Items ?? new();
+        }
+        catch { }
+    }
+
+    private string GetDepartmentName() =>
+        _application is null ? "—" : (_departments.FirstOrDefault(d => d.Id == _application.DepartmentId)?.Name ?? "—");
+
+    private async Task LoadApis()
+    {
+        try { _apis = await Http.GetFromJsonAsync<List<ApiItem>>($"/api/v1/applications/{Id}/apis") ?? new(); }
+        catch (Exception ex) { Snackbar.Add($"Failed to load APIs: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task LoadAssistants()
+    {
+        try
+        {
+            var linked = await Http.GetFromJsonAsync<AssistantsResult>($"/api/v1/assistants?page=1&pageSize=100&applicationId={Id}");
+            _assistants = (linked?.Items ?? new()).Select(a => new LinkableSection.LinkedItem(a.Id, a.Name, a.PublishStatus)).ToList();
+            var all = await Http.GetFromJsonAsync<AssistantsResult>("/api/v1/assistants?page=1&pageSize=200");
+            _allAssistants = (all?.Items ?? new()).Select(a => new LinkableSection.LinkedItem(a.Id, a.Name, a.PublishStatus)).ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load assistants: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task LoadKnowledgeBases()
+    {
+        try
+        {
+            var linked = await Http.GetFromJsonAsync<KbResult>($"/api/v1/knowledgebases?page=1&pageSize=100&applicationId={Id}");
+            _knowledgeBases = (linked?.Items ?? new()).Select(k => new LinkableSection.LinkedItem(k.Id, k.Name, k.Status)).ToList();
+            var all = await Http.GetFromJsonAsync<KbResult>("/api/v1/knowledgebases?page=1&pageSize=200");
+            _allKnowledgeBases = (all?.Items ?? new()).Select(k => new LinkableSection.LinkedItem(k.Id, k.Name, k.Status)).ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load knowledge bases: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task LoadWorkflows()
+    {
+        try
+        {
+            var linked = await Http.GetFromJsonAsync<WorkflowsResult>($"/api/v1/workflows?page=1&pageSize=100&applicationId={Id}");
+            _workflows = (linked?.Items ?? new()).Select(w => new LinkableSection.LinkedItem(w.Id, w.Name, w.VersionStatus)).ToList();
+            var all = await Http.GetFromJsonAsync<WorkflowsResult>("/api/v1/workflows?page=1&pageSize=200");
+            _allWorkflows = (all?.Items ?? new()).Select(w => new LinkableSection.LinkedItem(w.Id, w.Name, w.VersionStatus)).ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load workflows: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ChangeStatus(string action)
+    {
+        _actionInProgress = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/applications/{Id}/status", new { Action = action });
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Action failed" : body, Severity.Error);
+                return;
+            }
+            Snackbar.Add($"Application {action.ToLowerInvariant()}d", Severity.Success);
+            await LoadApplication();
+        }
+        catch (Exception ex) { Snackbar.Add($"Action failed: {ex.Message}", Severity.Error); }
+        finally { _actionInProgress = false; }
+    }
+
+    private async Task AddApi()
+    {
+        if (string.IsNullOrWhiteSpace(_apiName) || string.IsNullOrWhiteSpace(_apiBaseUrl))
+        {
+            Snackbar.Add("API name and base URL are required", Severity.Warning);
+            return;
+        }
+        _actionInProgress = true;
+        try
+        {
+            var payload = new { ApplicationId = Id, Name = _apiName, BaseUrl = _apiBaseUrl, AuthScheme = _apiAuthScheme };
+            var response = await Http.PostAsJsonAsync($"/api/v1/applications/{Id}/apis", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to add API" : body, Severity.Error);
+                return;
+            }
+            _apiName = string.Empty; _apiBaseUrl = string.Empty; _apiAuthScheme = "None"; _showAddApiForm = false;
+            await LoadApis();
+            Snackbar.Add("API added", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to add API: {ex.Message}", Severity.Error); }
+        finally { _actionInProgress = false; }
+    }
+
+    private async Task DeleteApi(ApiItem api)
+    {
+        try { await Http.DeleteAsync($"/api/v1/applications/{Id}/apis/{api.Id}"); await LoadApis(); }
+        catch (Exception ex) { Snackbar.Add($"Failed to remove API: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task LinkItem(string endpoint, Guid itemId)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/{endpoint}/{itemId}/application", new { ApplicationId = Id });
+            if (!response.IsSuccessStatusCode) { Snackbar.Add("Failed to link", Severity.Error); return; }
+            Snackbar.Add("Linked", Severity.Success);
+            await LoadAll();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to link: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task UnlinkItem(string endpoint, Guid itemId)
+    {
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/{endpoint}/{itemId}/application", new { ApplicationId = (Guid?)null });
+            if (!response.IsSuccessStatusCode) { Snackbar.Add("Failed to unlink", Severity.Error); return; }
+            Snackbar.Add("Unlinked", Severity.Success);
+            await LoadAll();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to unlink: {ex.Message}", Severity.Error); }
+    }
+
+    private class ApplicationDetail
+    {
+        public Guid Id { get; set; }
+        public Guid DepartmentId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? BaseUrl { get; set; }
+        public string Environment { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public DateTime? PublishedAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+    private class DepartmentsResult { public List<DepartmentOption> Items { get; set; } = new(); }
+    private class DepartmentOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private class ApiItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BaseUrl { get; set; } = string.Empty; public string AuthScheme { get; set; } = string.Empty; }
+    private class AssistantsResult { public List<AssistantItem> Items { get; set; } = new(); }
+    private class AssistantItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string PublishStatus { get; set; } = string.Empty; }
+    private class KbResult { public List<KbItem> Items { get; set; } = new(); }
+    private class KbItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string Status { get; set; } = string.Empty; }
+    private class WorkflowsResult { public List<WorkflowItem> Items { get; set; } = new(); }
+    private class WorkflowItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string VersionStatus { get; set; } = string.Empty; }
+}

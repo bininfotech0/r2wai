@@ -48,8 +48,14 @@ public class WorkflowConfiguration : IEntityTypeConfiguration<Workflow>
             .HasForeignKey(i => i.WorkflowId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasOne(w => w.Application)
+            .WithMany()
+            .HasForeignKey(w => w.ApplicationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasIndex(w => new { w.TenantId, w.Name });
         builder.HasIndex(w => new { w.TenantId, w.IsActive });
         builder.HasIndex(w => new { w.Trigger, w.IsActive });
+        builder.HasIndex(w => w.ApplicationId);
     }
 }

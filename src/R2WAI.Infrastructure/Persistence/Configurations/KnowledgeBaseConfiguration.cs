@@ -54,7 +54,13 @@ public class KnowledgeBaseConfiguration : IEntityTypeConfiguration<KnowledgeBase
             .HasForeignKey(d => d.KnowledgeBaseId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.HasOne(kb => kb.Application)
+            .WithMany()
+            .HasForeignKey(kb => kb.ApplicationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasIndex(kb => new { kb.TenantId, kb.Name });
         builder.HasIndex(kb => new { kb.TenantId, kb.Status });
+        builder.HasIndex(kb => kb.ApplicationId);
     }
 }

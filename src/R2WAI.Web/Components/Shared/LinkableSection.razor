@@ -1,0 +1,57 @@
+<div class="d-flex justify-space-between align-center mb-2">
+    <div class="d-flex align-center gap-2">
+        <MudIcon Icon="@Icon" Color="Color.Primary" Size="Size.Small" />
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">@Title (@Linked.Count)</MudText>
+    </div>
+    <MudLink Href="@ManageUrl" Underline="Underline.None">@ManageLabel &rarr;</MudLink>
+</div>
+
+@if (Linked.Count == 0)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">Nothing linked to this application yet.</MudText>
+}
+else
+{
+    <MudPaper Elevation="0" Class="pa-2 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+        @foreach (var item in Linked)
+        {
+            <div class="d-flex justify-space-between align-center py-2 px-2">
+                <div class="d-flex align-center gap-2">
+                    <MudText Typo="Typo.body2" Style="font-weight: 600;">@item.Name</MudText>
+                    <StatusBadge Status="@item.Status" />
+                </div>
+                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Error" OnClick="@(() => OnUnlink.InvokeAsync(item.Id))">
+                    Unlink
+                </MudButton>
+            </div>
+        }
+    </MudPaper>
+}
+
+<div class="d-flex align-center gap-2 mb-5 flex-wrap">
+    <MudSelect T="Guid?" @bind-Value="_selected" Label="@($"Link an existing {Title.ToLowerInvariant()}")" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 260px;">
+        @foreach (var option in AllOptions.Where(o => Linked.All(l => l.Id != o.Id)))
+        {
+            <MudSelectItem T="Guid?" Value="@((Guid?)option.Id)">@option.Name</MudSelectItem>
+        }
+    </MudSelect>
+    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@(_selected is null)"
+               OnClick="@(async () => { if (_selected is not null) { await OnLink.InvokeAsync(_selected.Value); _selected = null; } })">
+        Link
+    </MudButton>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Icon { get; set; } = string.Empty;
+    [Parameter] public List<LinkedItem> Linked { get; set; } = new();
+    [Parameter] public List<LinkedItem> AllOptions { get; set; } = new();
+    [Parameter] public string ManageUrl { get; set; } = string.Empty;
+    [Parameter] public string ManageLabel { get; set; } = string.Empty;
+    [Parameter] public EventCallback<Guid> OnLink { get; set; }
+    [Parameter] public EventCallback<Guid> OnUnlink { get; set; }
+
+    private Guid? _selected;
+
+    public record LinkedItem(Guid Id, string Name, string Status);
+}

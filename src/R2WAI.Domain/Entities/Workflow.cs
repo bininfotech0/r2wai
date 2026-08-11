@@ -5,6 +5,7 @@ namespace R2WAI.Domain.Entities;
 public sealed class Workflow : BaseEntity<Guid>
 {
     public Guid TenantId { get; private set; }
+    public Guid? ApplicationId { get; private set; }
     public Guid UserId { get; private set; }
     public string Name { get; private set; }
     public string? Description { get; private set; }
@@ -17,6 +18,7 @@ public sealed class Workflow : BaseEntity<Guid>
 
     public Tenant Tenant { get; private set; } = null!;
     public User User { get; private set; } = null!;
+    public ConnectedApplication? Application { get; private set; }
     public ICollection<WorkflowInstance> Instances { get; private set; } = [];
 
     private Workflow() { }
@@ -90,6 +92,12 @@ public sealed class Workflow : BaseEntity<Guid>
     {
         Version++;
         VersionStatus = "Draft";
+        MarkAsModified();
+    }
+
+    public void AssignApplication(Guid? applicationId)
+    {
+        ApplicationId = applicationId;
         MarkAsModified();
     }
 }

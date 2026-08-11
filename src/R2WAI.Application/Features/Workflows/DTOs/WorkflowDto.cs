@@ -3,6 +3,7 @@ namespace R2WAI.Application.Features.Workflows.DTOs;
 public class WorkflowDto
 {
     public Guid Id { get; init; }
+    public Guid? ApplicationId { get; init; }
     public string Name { get; init; } = string.Empty;
     public string? Description { get; init; }
     public string? Type { get; init; }
