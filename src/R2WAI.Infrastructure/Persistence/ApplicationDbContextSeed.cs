@@ -286,6 +286,39 @@ public static class ApplicationDbContextSeed
             invoiceWorkflow, leaveWorkflow, onboardingWorkflow,
             demoBookingWorkflow, feeReminderWorkflow, resultBroadcastWorkflow);
 
+        // --- Demo Departments & Connected Applications ---
+        var digitalServicesDept = new Department(
+            Guid.Parse("00000000-0000-0000-0000-000000000601"),
+            DefaultTenantId, "Digital Services", "DIG",
+            "Manages citizen-facing digital services and connected legacy systems.");
+
+        var revenueDept = new Department(
+            Guid.Parse("00000000-0000-0000-0000-000000000602"),
+            DefaultTenantId, "Revenue", "REV",
+            "Property tax, permits, and collections.");
+
+        context.Departments.AddRange(digitalServicesDept, revenueDept);
+
+        var taxPortal = new ConnectedApplication(
+            Guid.Parse("00000000-0000-0000-0000-000000000701"),
+            DefaultTenantId, revenueDept.Id, "Property Tax Portal", "PROP-TAX",
+            "Online property tax assessment and payment portal.",
+            "https://tax.r2wai.example");
+        taxPortal.UpdateDetails("Property Tax Portal", "Online property tax assessment and payment portal.",
+            "https://tax.r2wai.example", ApplicationEnvironment.Development);
+        taxPortal.Publish();
+
+        var permitSystem = new ConnectedApplication(
+            Guid.Parse("00000000-0000-0000-0000-000000000702"),
+            DefaultTenantId, digitalServicesDept.Id, "Permit Management System", "PERMIT",
+            "Construction and business permit application tracking.",
+            "https://permits.r2wai.example");
+        permitSystem.UpdateDetails("Permit Management System", "Construction and business permit application tracking.",
+            "https://permits.r2wai.example", ApplicationEnvironment.Staging);
+        permitSystem.MarkConfiguring();
+
+        context.Applications.AddRange(taxPortal, permitSystem);
+
         // --- Demo Approval Policy ---
         var approvalPolicy = new ApprovalPolicy(
             Guid.Parse("00000000-0000-0000-0000-000000000301"),

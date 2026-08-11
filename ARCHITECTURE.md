@@ -1,12 +1,53 @@
 # R2WAI Architecture
 
 > System architecture and design decisions, kept in sync with the codebase (not a roadmap or audit snapshot).
+> This document describes the **target architecture**: an Application-centric Government AI Platform. Sections marked **[target]** describe the intended end-state; everything else describes what is already implemented. See [Adoption Status](#adoption-status) for the current codebase → target delta.
 
 ---
 
 ## System Overview
 
-R2WAI is a self-hosted, multi-tenant platform combining AI-powered assistants, RAG knowledge bases, enterprise chatbots, and Elsa-backed workflow/approval automation. The backend follows **Clean Architecture**; the frontend is **Blazor Server**.
+R2WAI is a self-hosted, multi-tenant platform for building **AI assistants on top of existing government applications**. It connects to an existing application, automatically discovers its APIs, navigation, and capabilities, then generates the assistant, knowledge base, tools, permissions, and workflows — leaving the admin to review, test, and publish.
+
+The backend follows **Clean Architecture**; the frontend is **Blazor Server**. AI orchestration uses **Semantic Kernel**; workflows and human-in-the-loop approvals use **Elsa** behind R2WAI's own workflow abstraction.
+
+**The strategic pivot:** R2WAI is not a collection of independent AI features and "studios." It is an **Application-centric platform**. The central domain entity is `Application` (the external system being connected). Everything else — APIs, assistant, knowledge, navigation, tools, workflows, policies, security, monitoring — is configured **per application**.
+
+## Strategic Direction
+
+### What changes
+
+```text
+OLD (feature collection)
+ Tenant → Assistant, Chatbot, KnowledgeBase, Workflow, Model
+
+NEW (application platform)
+ Tenant → Department → Application
+                       ├── APIs
+                       ├── Assistant
+                       ├── Knowledge
+                       ├── Navigation
+                       ├── Tools
+                       ├── Workflows
+                       ├── Policies
+                       ├── Model
+                       ├── Security
+                       └── Monitoring
+```
+
+### The three highest-value additions
+
+1. **Application as the central domain entity**
+2. **Application Discovery Engine + adaptive low-code wizard** (connect → auto-discover → auto-configure → review → test → publish)
+3. **Secure API/Tool Gateway with RBAC + ABAC + policy enforcement** (the LLM never calls government APIs directly)
+
+### The three biggest removals
+
+1. Separate `Chatbot`/`Assistant`/`Agent` concepts → merged into **Assistant + Channels**
+2. Unnecessary standalone studios (Chatbot, Model, Integration, Navigation, Tool, Media) → folded into application areas or Administration
+3. Media/creative-generation features → removed from the government core product
+
+---
 
 ## Solution Layout
 
@@ -28,56 +69,420 @@ Test projects mirror the source layout under `tests/` (`R2WAI.Domain.Tests`, `R2
 
 ### R2WAI.Api
 
-- **Controllers** (`Controllers/`): `Admin`, `ApiKeys`, `Approvals`, `Assistants`, `Auth`, `Chat`, `Chatbots`, `Documents`, `Integrations`, `KnowledgeBases`, `Operations`, `Schedules`, `Webhooks`, `Workflows`.
+- **Controllers** (`Controllers/`): `Admin`, `ApiKeys`, `Approvals`, `Assistants`, `Auth`, `Chat`, `Chatbots`, `Documents`, `Integrations`, `KnowledgeBases`, `Operations`, `Schedules`, `Webhooks`, `Workflows`. **[target]** `Chatbots` controllers collapse into `Assistant` + `Channels`; `Applications`, `Discovery`, `Gateway`/`Tools`, `Governance` controllers are added.
 - **Hubs** (`Hubs/`): `ChatHub` (`/hubs/chat`), `StatusHub` (`/hubs/status`), `NotificationHub` (`/hubs/notification`) — all `[Authorize]`, token accepted via `?access_token=` query string for SignalR clients.
 - **Workflows** (`Workflows/`): Elsa custom activities — `ApprovalStepActivity`, `InvokeSemanticKernelActivity`, `TransformStepActivity`, `StepActivityFactory`, `StepStatusNotificationHandler` — bridging the app's own `Workflow`/`WorkflowInstance` model onto the Elsa runtime via `IWorkflowBridge`.
-- **Middleware** (`Middleware/`): correlation ID, exception handling, request logging, rate limiting, security headers, tenant resolution, API-key authentication.
+- **Middleware** (`Middleware/`): correlation ID, exception handling, request logging, rate limiting, security headers, tenant resolution, API-key authentication. **[target]** an application/tool **gateway middleware** is added in front of any outbound LLM-invoked tool call.
 - **Program.cs**: composition root. Serilog logging with a sensitive-data enricher; Elsa workflow management + runtime registered against the same PostgreSQL connection string as the app's own `ApplicationDbContext`; JWT Bearer auth; authorization policies (`AdminOnly`, `TenantAccess`, `CanManageUsers`, `CanManageDocuments`, `CanManageWorkflows`); CORS allow-list; OpenTelemetry tracing/metrics; Swagger (Dev/Staging only); health checks at `/health`, `/health/ready`, `/health/startup`; a `ValidateProductionConfig` guard that refuses to start in Production if secrets are still `CHANGE_ME` placeholders.
 
 ### R2WAI.Application
 
-CQRS via MediatR under `Features/{Area}/{Commands,Queries,DTOs}`. Areas: `Admin`, `Assistants`, `Chat`, `Chatbots`, `Documents`, `Integrations`, `KnowledgeBases`, `Operations`, `Workflows`.
+CQRS via MediatR under `Features/{Area}/{Commands,Queries,DTOs}`. Areas: `Admin`, `Assistants`, `Chat`, `Chatbots`, `Documents`, `Integrations`, `KnowledgeBases`, `Operations`, `Workflows`. **[target]** areas are re-grouped around the application hierarchy: `Applications`, `Discovery`, `Assistant`, `Channels`, `Knowledge`, `Navigation`, `Tools`/`Gateway`, `Governance`, `Operations`.
 
 `Common/`: `Interfaces/` (service contracts implemented by `Infrastructure`), `Behaviors/` (MediatR pipeline — `LoggingBehavior`, `ValidationBehavior`), `Exceptions/` (`NotFoundException`, `ValidationException`, `UnauthorizedException`), `DiagnosticsConfig.cs` (OpenTelemetry `ActivitySource`).
 
 ### R2WAI.Infrastructure
 
-- **AI** (`AI/`): `SemanticKernelService` implements `IAIService`. Provider selection (`AI:Provider`: `openai` | `ollama` | `zai`) built via `Kernel.CreateBuilder().AddOpenAIChatCompletion/AddOpenAIEmbeddingGenerator`, with a static kernel cache (1-hour max age). Plugins (`AI/Plugins/`): `WorkflowPlugin`, `DocumentPlugin`, `RAGPlugin`, `AssistantPlugin` — only attached when the caller passes `enableTools: true` (see Security below). `AiFunctionAuditFilter` logs every tool invocation when tools are enabled. `AI/Prompts/SystemPromptTemplates.cs` holds the live prompt templates.
-- **Persistence** (`Persistence/`): `ApplicationDbContext` (23 `DbSet<T>`), `Configurations/` (EF Core Fluent API per entity), `Migrations/`, `Repositories/GenericRepository.cs`, `UnitOfWork.cs`.
-- **Services** (`Services/`): `AssistantService`, `ChatService`, `ChatbotService`, `WorkflowService`, `ApprovalService`, `DocumentService`, `KnowledgeBaseService`, `EmailService`, `EscalationBackgroundService`, `FileProcessingService`, `CurrentUserService`, `ToolFramework/` (`ITool`, `ToolRegistry`, `HttpTool`, `EmailTool`).
+- **AI** (`AI/`): `SemanticKernelService` implements `IAIService`. Provider selection (`AI:Provider`: `openai` | `ollama` | `zai`) built via `Kernel.CreateBuilder().AddOpenAIChatCompletion/AddOpenAIEmbeddingGenerator`, with a static kernel cache (1-hour max age). Plugins (`AI/Plugins/`): `WorkflowPlugin`, `DocumentPlugin`, `RAGPlugin`, `AssistantPlugin` — only attached when the caller passes `enableTools: true` (see AI Integration). `AiFunctionAuditFilter` logs every tool invocation when tools are enabled. `AI/Prompts/SystemPromptTemplates.cs` holds the live prompt templates.
+- **Persistence** (`Persistence/`): `ApplicationDbContext` (23 `DbSet<T>`), `Configurations/` (EF Core Fluent API per entity), `Migrations/`, `Repositories/GenericRepository.cs`, `UnitOfWork.cs`. **[target]** `Application`, `Department`, `ApplicationApi`, `ApplicationDiscovery`, `Tool`/`GatewayEndpoint`, `GovernancePolicy`, `ModelRegistry` entities are added.
+- **Services** (`Services/`): `AssistantService`, `ChatService`, `ChatbotService`, `WorkflowService`, `ApprovalService`, `DocumentService`, `KnowledgeBaseService`, `EmailService`, `EscalationBackgroundService`, `FileProcessingService`, `CurrentUserService`, `ToolFramework/` (`ITool`, `ToolRegistry`, `HttpTool`, `EmailTool`). **[target]** `ToolFramework` is redesigned as a **Tool/API Gateway** with per-tool risk metadata and enforcement (see Gateway).
 - **Storage**: `LocalStorageService` / `MinioStorageService`, switched by `Storage:Provider`.
 - **Cache**: `RedisCacheService` / `InMemoryCacheService`, switched by presence of `Cache:Redis:ConnectionString`.
-- **Auth**: `PasswordHasher`, `JwtService`, `TotpService` (MFA), `EntraIdAuthService`.
+- **Auth**: `PasswordHasher`, `JwtService`, `TotpService` (MFA), `EntraIdAuthService`. **[target]** authorization policy evaluation (`RBAC + ABAC`) moves behind a dedicated policy service so the AI model never decides permissions.
 - **VectorStore**: `PgVectorService` implements `IVectorStoreService` — RAG backed by the `pgvector` PostgreSQL extension (see Data Layer).
 
 ### R2WAI.Web
 
 Blazor Server, MudBlazor. `Components/Pages/` (~40 routed pages spanning every domain area), `Components/Dialogs/` (create/edit/detail dialogs), `Components/Shared/` (charts, markdown editor/renderer, command palette, voice orb, etc.), `Components/Layout/` (`MainLayout`, `AuthLayout`, `WidgetLayout` — the last used only by the embeddable chatbot widget route). `Services/`: `AuthenticatedHttpClient` (JWT-attached), `ChatSessionService`, `VoiceSession`.
 
-## Domain Model
+**[target]** the primary navigation is the **Application Studio** screen; most configuration is defaulted and hidden behind an "Advanced Configuration" disclosure.
 
-Multi-tenant: every tenant-scoped entity carries `TenantId`, enforced via EF Core global query filters applied reflectively in `ApplicationDbContext.OnModelCreating` (`ApplyTenantFilter` / `ApplySoftDeleteFilter`). All entities inherit `BaseEntity<Guid>` (`Id`, `CreatedAt`/`ModifiedAt`, `IsDeleted`, `DomainEvents`).
+---
 
-Core entities: **Tenant, User, Role, ApiKey** · **Conversation → Message → MessageAttachment** · **Document** · **KnowledgeBase → KnowledgeBaseSource** · **Chatbot** (multi-channel, webhook key, embed script, voice-enabled) · **AssistantDefinition** (draft/published/archived, versioned) · **Workflow → WorkflowInstance → WorkflowStepExecution**, **WorkflowSchedule** · **ApprovalPolicy → ApprovalRequest** (multi-level, SLA/escalation) · **ToolDefinition** · **ModelConfiguration** · **WebhookEndpoint** · **AuditLog** (auto-populated on every mutation in `SaveChangesAsync`).
+## Target Domain Model
 
-Domain events (`MessageCreatedEvent`, `DocumentUploadedEvent`, `DocumentProcessedEvent`) are raised via `entity.AddDomainEvent(...)` and dispatched through MediatR after `SaveChangesAsync`.
+```text
+Tenant
+│
+├── Department
+│    │
+│    ├── Application
+│    │    ├── API
+│    │    ├── Assistant
+│    │    ├── Knowledge
+│    │    ├── Navigation
+│    │    ├── Tool
+│    │    ├── Workflow
+│    │    └── Policy
+│    │
+│    └── Users
+│
+├── ModelRegistry
+├── GlobalPolicy
+└── AuditLog
+```
 
-## AI Integration
+### Entity notes
 
-`SemanticKernelService.GetOrCreateKernel(enableTools)` is the security boundary for tool-calling: the base kernel always has `ConversationSummaryPlugin` and `TimePlugin`; the mutating plugins (`WorkflowPlugin` — `start_workflow`, `submit_approval_request`, `notify_approver`, etc.) are only attached when `enableTools: true`. Authenticated chat surfaces (`ChatHub`, `AssistantsController`) pass `true`; the public, anonymous chatbot widget (`ChatbotsController`) hard-codes `false`, so an anonymous website visitor can never trigger a workflow or approval action through the chatbot.
+- **Tenant / Department / Application**: the three-level ownership hierarchy. `Application` is the central entity — it represents the external system (Property Tax, Revenue, Agriculture, HR, …) being connected.
+- **Application → Assistant**: one assistant per application, exposed through multiple **Channels** (Embedded Web widget, Application, API, future channels). The chatbot is a *channel*, not a separate product entity.
+- **Application → API / Tool**: discovered endpoints; tools are generated from APIs (`Swagger → Endpoint → Tool`) rather than hand-authored in a generic tool studio.
+- **Knowledge**: RAG content (FAQ, policy, documents) is kept **separate from live API data** — the assistant can combine both, but they are sourced and governed differently.
+- **ModelRegistry**: platform-level model governance — super admins approve models; department admins select from the approved set.
+- **AuditLog**: every mutation and every tool/gateway invocation is audited.
 
-## Data Layer
+---
 
-PostgreSQL via `Npgsql.EntityFrameworkCore.PostgreSQL` (retry-on-failure). Vector search uses the **pgvector** extension through `PgVectorService` (`VectorStore:Provider=pgvector`, `VectorStore:VectorSize=1536`) — there is no separate vector database. Elsa's own persistence module points at the same connection string and PostgreSQL instance.
+## Target Architecture Areas
 
-## Auth
+### 1. Application Studio — the MAIN product
+
+```text
+APPLICATION STUDIO
+│
+├── Applications
+│
+└── Application
+     ├── Overview
+     ├── Discovery
+     ├── APIs
+     ├── Knowledge
+     ├── Navigation
+     ├── Assistant
+     ├── Tools
+     ├── Workflows
+     ├── Security
+     ├── Policies
+     ├── Testing
+     ├── Monitoring
+     └── Publish
+```
+
+The default screen after connecting an application is a **review checklist** (everything auto-configured), not a 13-page wizard:
+
+```text
+✓ Connected
+✓ API discovered
+✓ Knowledge configured
+✓ Assistant configured
+✓ Security configured
+✓ Monitoring enabled
+
+        [ Test Assistant ]
+        [ Publish ]
+```
+
+Advanced configuration (Model, Prompt, Chunking, Embedding, Tool permissions, API timeout, RAG threshold, Security policy, Workflow settings) is hidden behind **Advanced Configuration** and is editable after publishing.
+
+### 2. Application Discovery Engine
+
+Connect an existing application → automatically understand it → generate configuration → **admin only reviews**.
+
+```text
+Application Discovery
+├── OpenAPI/Swagger discovery
+├── Endpoint discovery
+├── Authentication detection
+├── API schema analysis
+├── Navigation discovery
+├── Capability detection
+├── Tool suggestion
+├── FAQ generation
+├── Permission suggestion
+└── Assistant configuration
+```
+
+### 3. Adaptive Wizard
+
+No mandatory multi-page wizard. Flow:
+
+```text
+Connect
+   ↓
+Auto Discover
+   ↓
+Auto Configure
+   ↓
+Review Issues
+   ↓
+Test
+   ↓
+Publish
+```
+
+All areas remain editable afterward from the Application Studio.
+
+### 4. Tool/API Gateway
+
+The LLM **never** calls government APIs directly. Every tool call passes through a gateway:
+
+```text
+User
+ ↓
+AI Assistant
+ ↓
+Authorization
+ ↓
+Policy
+ ↓
+Tool Gateway
+ ↓
+Application API
+```
+
+Every tool carries:
+
+```text
+Application · Endpoint · HTTP Method · Role · Permission
+Risk Level · Confirmation Required · Approval Required · Audit Required
+```
+
+### 5. RAG vs Live Data
+
+```text
+FAQ / Policy / Documents  →  RAG
+Current status / transactions / application data  →  API
+```
+
+The assistant can combine both sources but they are never treated as the same thing.
+
+### 6. Assistant + Channels
+
+`Chatbot` is removed as a standalone entity and merged into `Assistant → Channels`:
+
+```text
+Assistant
+   │
+   └── Channels
+        ├── Embedded Web
+        ├── Application
+        ├── API
+        └── Future channels
+```
+
+Floating chatbot architecture — one platform serves every application's widget:
+
+```text
+Existing Website
+      │
+      ▼
+R2WAI Floating Widget
+      │
+      ▼
+Application ID
+      │
+      ▼
+R2WAI Gateway
+      │
+      ▼
+Application Assistant
+```
+
+### 7. Workflow & Approvals
+
+**Elsa is kept** — behind the R2WAI workflow abstraction (`IWorkflowBridge`). It remains the right engine for workflow, approval, escalation, notification, scheduling, and human-in-the-loop.
+
+### 8. AI Governance
+
+```text
+AI Governance
+├── Model Registry
+├── Approved Models
+├── Model Policy
+├── Prompt Policy
+├── Tool Policy
+├── Data Policy
+├── Risk Policy
+└── Evaluation
+```
+
+Super Admin controls approved models; Department Admin selects from permitted models. Model management is **Administration → Model Governance**, not a user-facing studio.
+
+### 9. Security: RBAC + ABAC
+
+Role-based access is upgraded with attribute-based access. Decisions combine:
+
+```text
+Role + Department + Application + Jurisdiction
++ Record ownership + Action + Policy
+```
+
+The AI model **never determines these permissions itself** — enforcement is purely in the policy/gateway layer.
+
+### 10. Configuration Inheritance
+
+```text
+GLOBAL POLICY
+      ↓
+DEPARTMENT POLICY
+      ↓
+APPLICATION POLICY
+      ↓
+ASSISTANT POLICY
+      ↓
+USER CONTEXT
+```
+
+Example: Super Admin disables external AI providers → Department allows only approved model X → Application enables RAG → Assistant enables tool Y → Officer may execute Y.
+
+---
+
+## Role Hierarchy
+
+```text
+SUPER ADMIN
+     │
+     ├── Global Governance
+     ├── Model Governance
+     ├── Security Governance
+     └── Departments
+             │
+             ▼
+       DEPARTMENT ADMIN
+             │
+             ├── Applications
+             ├── Assistants
+             ├── Knowledge
+             ├── APIs
+             ├── Tools
+             ├── Workflows
+             └── Policies
+                     │
+              ┌──────┴──────┐
+              ▼             ▼
+           OFFICER         USER
+              │             │
+              └──────┬──────┘
+                     ▼
+                  PUBLIC
+```
+
+**Public is not a role in the same hierarchy** — it is an anonymous access context.
+
+### Access scopes
+
+| Context | Scope |
+|---|---|
+| **Public** | Public FAQ · Public RAG · Public Navigation · Public APIs |
+| **User** | Own information · Own applications · Own documents · Approved transactions |
+| **Officer** | Department · Jurisdiction · Assigned cases · Internal knowledge · Authorized workflows |
+
+---
+
+## Component Action Register
+
+| Component | Action |
+| --- | --- |
+| Tenant | **KEEP** |
+| Department | **ADD / MODIFY** |
+| Application | **ADD — CORE** |
+| Assistant | **KEEP / MODIFY** |
+| Chatbot entity | **MERGE INTO ASSISTANT CHANNELS** |
+| Chatbot Studio | **REMOVE** |
+| Agent Studio | **REMOVE / MERGE** |
+| Knowledge/RAG | **KEEP / COMPLETE** |
+| Model Studio | **REMOVE FROM PRIMARY UX** |
+| Model Registry | **KEEP** |
+| Integration Studio | **REMOVE FROM PRIMARY UX** |
+| Application APIs | **ADD / CORE** |
+| Tool Framework | **KEEP, redesign as Tool Gateway** |
+| Navigation | **MOVE INTO APPLICATION** |
+| Workflow Studio | **KEEP** |
+| Elsa | **KEEP** |
+| Approval | **KEEP / COMPLETE** |
+| Operations Center | **KEEP** |
+| Media Studios | **REMOVE FROM GOVERNMENT CORE** |
+| RBAC | **KEEP / HARDEN** |
+| ABAC | **ADD** |
+| Audit | **KEEP / EXPAND** |
+| AI Governance | **ADD** |
+| Application Discovery | **ADD — CORE** |
+| Low-code Wizard | **ADD — CORE** |
+| Floating Widget | **KEEP / MODIFY** |
+| PostgreSQL | **KEEP** |
+| pgvector | **KEEP** |
+| Qdrant | **REMOVE** |
+| Redis | **OPTIONAL / LATER** |
+| MinIO | **OPTIONAL / LATER** |
+| Docker | **KEEP** |
+| Kubernetes | **LATER** |
+
+---
+
+## Primary UI Areas
+
+The many studios collapse to four primary areas plus Administration:
+
+```text
+┌────────────────────────────────────┐
+│          R2WAI PLATFORM            │
+├────────────────────────────────────┤
+│  1. APPLICATION STUDIO             │
+│  2. ASSISTANT STUDIO               │
+│  3. WORKFLOW STUDIO                │
+│  4. OPERATIONS CENTER              │
+└────────────────────────────────────┘
+Administration = platform section, not a studio.
+```
+
+---
+
+## Current Implementation Notes
+
+### AI Integration
+
+`SemanticKernelService.GetOrCreateKernel(enableTools)` is the security boundary for tool-calling: the base kernel always has `ConversationSummaryPlugin` and `TimePlugin`; the mutating plugins (`WorkflowPlugin` — `start_workflow`, `submit_approval_request`, `notify_approver`, etc.) are only attached when `enableTools: true`. Authenticated chat surfaces (`ChatHub`, `AssistantsController`) pass `true`; the public, anonymous chatbot widget (`ChatbotsController`) hard-codes `false`, so an anonymous website visitor can never trigger a workflow or approval action through the chatbot. **[target]** the `enableTools` boundary is superseded by the explicit **Tool/API Gateway**, which enforces per-tool role/permission/risk policies independent of the kernel.
+
+### Data Layer
+
+PostgreSQL via `Npgsql.EntityFrameworkCore.PostgreSQL` (retry-on-failure). Vector search uses the **pgvector** extension through `PgVectorService` (`VectorStore:Provider=pgvector`, `VectorStore:VectorSize=1536`) — there is no separate vector database (Qdrant is removed from the target stack). Elsa's own persistence module points at the same connection string and PostgreSQL instance.
+
+### Auth
 
 JWT Bearer is the primary scheme (`Authentication:Jwt:*`), with SignalR hubs accepting the token via `?access_token=` query string. Also present: Azure Entra ID SSO (`EntraIdAuthService`), TOTP-based MFA (`TotpService`), and a separate `X-API-Key` header scheme (`ApiKeyAuthenticationMiddleware`) for programmatic API access, independent of JWT.
 
-## Deployment
+### Deployment
 
-Docker Compose is the deployment target (`docker/docker-compose.yml`: `r2wai-web`, `r2wai-api`, `postgres` on the `pgvector/pgvector:pg16` image). Kubernetes manifests were scoped out of the MVP in favor of Docker Compose (see `docs/implementation/MVP-IMPLEMENTATION-PLAN.md`) and are not present in this repo.
+Docker Compose is the deployment target (`docker/docker-compose.yml`: `r2wai-web`, `r2wai-api`, `postgres` on the `pgvector/pgvector:pg16` image). Kubernetes manifests were scoped out of the MVP in favor of Docker Compose (see `docs/implementation/MVP-IMPLEMENTATION-PLAN.md`) and are not present in this repo. Kubernetes and the optional Redis/MinIO components are scheduled **later**, not for the initial government pilot.
+
+---
+
+## Adoption Status
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| Clean Architecture / CQRS / MediatR | **Implemented** | 4-layer solution, MediatR pipeline behaviors |
+| Tenant isolation (EF query filters) | **Implemented** | reflective `ApplyTenantFilter` / `ApplySoftDeleteFilter` |
+| RBAC | **Implemented, needs hardening** | authorization policies exist; ABAC is net-new |
+| Knowledge / RAG (pgvector) | **Implemented, incomplete** | file-upload path works; text/URL source indexing is a known gap |
+| Workflows + Approvals (Elsa) | **Implemented, incomplete** | step chaining, visual designer, approval UI need completion |
+| Audit | **Implemented, needs expansion** | auto-populated on mutation; gateway invocations must be added |
+| Application (central entity) | **[target]** | not yet a first-class entity |
+| Department | **[target]** | currently implicit, not a domain entity |
+| Application Discovery Engine | **[target]** | net-new |
+| Tool/API Gateway + ABAC + Policies | **[target]** | net-new |
+| AI Governance (Model Registry) | **[target]** | net-new |
+| Assistant Channels (Chatbot merge) | **[target]** | migration of `Chatbot` into `Assistant → Channels` |
+| Adaptive wizard / default-hidden config | **[target]** | net-new UX |
+| Application Studio UI | **[target]** | net-new primary screen |
+
+### P0 technical gaps to close before building new features
+
+From the project audit, in priority order:
+
+1. Database migrations for the new entity model
+2. Real frontend ↔ backend integration (remove mock-data paths)
+3. Real KB indexing / embeddings (close the text/URL source gap)
+4. Workflow step chaining
+5. Real approval UI
+6. Tenant isolation verification across new entities
+7. RBAC enforcement review + ABAC introduction
+8. API integration (Application → API → Tool pipeline)
+9. Security hardening (concurrency tokens, gateway controls)
+10. Production configuration validation
+
+---
 
 ## Notes on documents in this repo
 
-Some files under `docs/` (roadmaps, implementation plans, runbooks) are point-in-time planning or audit snapshots rather than living documentation — check the date in each file's own header before relying on specifics. This document and `README.md` are the two documents intended to be kept current with the codebase.
+Some files under `docs/` (roadmaps, implementation plans, runbooks) are point-in-time planning or audit snapshots rather than living documentation — check the date in each file's own header before relying on specifics. This document and `README.md` are the two documents intended to be kept current with the codebase. `ROADMAP.md` tracks the migration to the target architecture above; [docs/implementation/PLATFORM-IMPLEMENTATION-PLAN.md](docs/implementation/PLATFORM-IMPLEMENTATION-PLAN.md) is the code-ready implementation plan (entities, gateway spec, risk model, phases, acceptance criteria).

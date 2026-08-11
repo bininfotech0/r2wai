@@ -6,6 +6,19 @@
 
 ---
 
+## Addendum (2026-08-10) — Strategic re-direction
+
+This report is a **historical snapshot** of the hardening pass and remains accurate for the codebase at commit time. Since then, the product strategy has pivoted to an **Application-centric Government AI Platform** (see [ARCHITECTURE.md](ARCHITECTURE.md) and [ROADMAP.md](ROADMAP.md)). How that changes the reading of this report:
+
+- **The "missing features" list is now partially obsolete by design.** Studios and concepts flagged here as standalone features (chatbot, model, integration, navigation, tool, media) are being **removed or merged** — `Chatbot` merges into `Assistant → Channels`, standalone studios fold into Application areas, media/creative features are removed from the government core. These are no longer net-new features to build; they are refactors to remove.
+- **New P0 priorities supersede part of this report's roadmap.** The pivot's P0 list — `Application`/`Department` entities + migrations, real frontend↔backend integration, complete KB indexing (the text/URL source gap identified in section 5 remains open), workflow step chaining, real approval UI, tenant isolation verification, RBAC hardening + **ABAC**, and a **Tool/API Gateway** — replaces the audit's "missing enterprise features" roadmap as the ordering principle.
+- **The Tool Framework becomes the Tool/API Gateway.** Section 4's note that tool-framework auth is admin-gated and internal is being replaced by explicit per-tool enforcement (role, permission, risk level, confirmation, approval, audit) so the LLM never calls government APIs directly.
+- **The "suitable for a single-tenant internal pilot" verdict still holds** for the audited codebase, but the target is now a department-scoped government pilot under the pivoted plan. The open items this report flags — concurrency tokens, RAG indexing gap, audit export — are all carried into the pivot's Phase 0/6 work.
+
+The rest of this report is preserved unmodified as the record of the 2026-07-14 pass.
+
+---
+
 ## 1. Where this leaves the product
 
 The prior audit (`db2652f84`) gave R2WAI a 46/100 readiness score and a hard **NO-GO**, citing 10 critical (P0) bugs. Four commits landed between that audit and this pass. Verifying against current code: **8 of 10 P0 bugs were already fixed**, along with most of the high-priority (P1) security findings (IDOR, timing attacks, MFA bypass, CORS, rate-limit races, SignalR auth, tenant header spoofing, hardcoded seed password). That earlier NO-GO verdict is now **stale** — it describes a version of the codebase that no longer exists.

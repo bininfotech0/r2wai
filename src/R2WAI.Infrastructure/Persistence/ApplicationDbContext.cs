@@ -11,6 +11,11 @@ public interface ITenantDbContext
 {
     Guid? TenantId { get; }
     DbSet<Tenant> Tenants { get; }
+    DbSet<Department> Departments { get; }
+    DbSet<ConnectedApplication> Applications { get; }
+    DbSet<ApplicationApi> ApplicationApis { get; }
+    DbSet<ApplicationConfiguration> ApplicationConfigurations { get; }
+    DbSet<ApplicationVersion> ApplicationVersions { get; }
     DbSet<User> Users { get; }
     DbSet<Conversation> Conversations { get; }
     DbSet<Message> Messages { get; }
@@ -63,6 +68,11 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     }
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
+    public DbSet<Department> Departments => Set<Department>();
+    public DbSet<ConnectedApplication> Applications => Set<ConnectedApplication>();
+    public DbSet<ApplicationApi> ApplicationApis => Set<ApplicationApi>();
+    public DbSet<ApplicationConfiguration> ApplicationConfigurations => Set<ApplicationConfiguration>();
+    public DbSet<ApplicationVersion> ApplicationVersions => Set<ApplicationVersion>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<Message> Messages => Set<Message>();
