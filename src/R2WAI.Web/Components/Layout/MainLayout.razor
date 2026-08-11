@@ -119,21 +119,26 @@
 
         <MudNavMenu>
             <MudNavLink Href="/" Icon="@Icons.Material.Outlined.SpaceDashboard" Match="NavLinkMatch.All">Home</MudNavLink>
+            <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">Applications</MudNavLink>
 
-            <MudNavGroup Title="Studio" Icon="@Icons.Material.Outlined.AutoAwesome" Expanded="_studioExpanded" ExpandedChanged="@(v => _studioExpanded = v)" HideExpandIcon="false"
+            <MudNavGroup Title="Assistants" Icon="@Icons.Material.Outlined.SmartToy" Expanded="_assistantsExpanded" ExpandedChanged="@(v => _assistantsExpanded = v)" HideExpandIcon="false"
                          Style="color: rgba(255,255,255,0.65);">
-                <MudNavLink Href="/templates" Icon="@Icons.Material.Outlined.DashboardCustomize">Templates</MudNavLink>
                 <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">Assistants</MudNavLink>
-                <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
-                <MudNavLink Href="/workflow-studio" Icon="@Icons.Material.Outlined.AccountTree">Workflows</MudNavLink>
+                <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
                 <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Chatbots</MudNavLink>
-                <MudNavLink Href="/assistant-studio/tools" Icon="@Icons.Material.Outlined.Build">Tools</MudNavLink>
-                <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Extension">Integrations</MudNavLink>
-                <MudNavLink Href="/workflow-studio/schedules" Icon="@Icons.Material.Outlined.Schedule">Schedules</MudNavLink>
+                <MudNavLink Href="/assistant-studio/tools" Icon="@Icons.Material.Outlined.Build">Capabilities</MudNavLink>
+                <MudNavLink Href="/templates" Icon="@Icons.Material.Outlined.DashboardCustomize">Templates</MudNavLink>
             </MudNavGroup>
 
-            <MudNavGroup Title="Workspace" Icon="@Icons.Material.Outlined.WorkOutline" Expanded="_workspaceExpanded" ExpandedChanged="@(v => _workspaceExpanded = v)" HideExpandIcon="false"
+            <MudNavGroup Title="Knowledge" Icon="@Icons.Material.Outlined.MenuBook" Expanded="_knowledgeExpanded" ExpandedChanged="@(v => _knowledgeExpanded = v)" HideExpandIcon="false"
                          Style="color: rgba(255,255,255,0.65);">
+                <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge Bases</MudNavLink>
+                <MudNavLink Href="/documents" Icon="@Icons.Material.Outlined.Description">Documents</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavGroup Title="Workflows" Icon="@Icons.Material.Outlined.AccountTree" Expanded="_workflowsExpanded" ExpandedChanged="@(v => _workflowsExpanded = v)" HideExpandIcon="false"
+                         Style="color: rgba(255,255,255,0.65);">
+                <MudNavLink Href="/workflow-studio" Icon="@Icons.Material.Outlined.AccountTree">Workflows</MudNavLink>
                 <MudNavLink Href="/inbox" Icon="@Icons.Material.Outlined.Inbox">
                     <div class="d-flex justify-space-between align-center" style="width: 100%;">
                         <span>Inbox</span>
@@ -147,11 +152,11 @@
                     </div>
                 </MudNavLink>
                 <MudNavLink Href="/workflow-studio/approvals" Icon="@Icons.Material.Outlined.TaskAlt">Approvals</MudNavLink>
-                <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
-                <MudNavLink Href="/documents" Icon="@Icons.Material.Outlined.Description">Documents</MudNavLink>
+                <MudNavLink Href="/workflow-studio/schedules" Icon="@Icons.Material.Outlined.Schedule">Schedules</MudNavLink>
+                <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Extension">Integrations</MudNavLink>
             </MudNavGroup>
 
-            <MudNavGroup Title="Monitor" Icon="@Icons.Material.Outlined.MonitorHeart" Expanded="_monitorExpanded" ExpandedChanged="@(v => _monitorExpanded = v)" HideExpandIcon="false"
+            <MudNavGroup Title="Operations" Icon="@Icons.Material.Outlined.MonitorHeart" Expanded="_operationsExpanded" ExpandedChanged="@(v => _operationsExpanded = v)" HideExpandIcon="false"
                          Style="color: rgba(255,255,255,0.65);">
                 <MudNavLink Href="/operations" Icon="@Icons.Material.Outlined.Dashboard">Dashboard</MudNavLink>
                 <MudNavLink Href="/operations/ai" Icon="@Icons.Material.Outlined.Psychology">AI Ops</MudNavLink>
@@ -161,17 +166,27 @@
                 <MudNavLink Href="/operations/errors" Icon="@Icons.Material.Outlined.BugReport">Errors</MudNavLink>
             </MudNavGroup>
 
+            <AuthorizeView Roles="Admin">
+                <Authorized>
+                    <MudNavGroup Title="Governance" Icon="@Icons.Material.Outlined.Shield" Expanded="_governanceExpanded" ExpandedChanged="@(v => _governanceExpanded = v)" HideExpandIcon="false"
+                                 Style="color: rgba(255,255,255,0.65);">
+                        <MudNavLink Href="/governance/departments" Icon="@Icons.Material.Outlined.AccountBalance">Departments</MudNavLink>
+                        <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">AI Models</MudNavLink>
+                        <MudNavLink Href="/admin/permissions" Icon="@Icons.Material.Outlined.VerifiedUser">Permissions</MudNavLink>
+                        <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
+                        <MudNavLink Href="/admin/content-moderation" Icon="@Icons.Material.Outlined.Security">Moderation</MudNavLink>
+                    </MudNavGroup>
+                </Authorized>
+            </AuthorizeView>
+
             <MudNavGroup Title="Settings" Icon="@Icons.Material.Outlined.Settings" Expanded="_settingsExpanded" ExpandedChanged="@(v => _settingsExpanded = v)" HideExpandIcon="false"
                          Style="color: rgba(255,255,255,0.65);">
+                <MudNavLink Href="/profile" Icon="@Icons.Material.Outlined.Person">Profile</MudNavLink>
+                <MudNavLink Href="/settings/tenant" Icon="@Icons.Material.Outlined.Domain">Organization</MudNavLink>
                 <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users</MudNavLink>
                 <MudNavLink Href="/admin/roles" Icon="@Icons.Material.Outlined.Shield">Roles</MudNavLink>
-                <MudNavLink Href="/admin/permissions" Icon="@Icons.Material.Outlined.VerifiedUser">Permissions</MudNavLink>
-                <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
-                <MudNavLink Href="/settings/tenant" Icon="@Icons.Material.Outlined.Domain">Tenant</MudNavLink>
-                <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">AI Models</MudNavLink>
+                <MudNavLink Href="/admin/webhooks" Icon="@Icons.Material.Outlined.Webhook">Integrations</MudNavLink>
                 <MudNavLink Href="/admin/api-keys" Icon="@Icons.Material.Outlined.Key">API Keys</MudNavLink>
-                <MudNavLink Href="/admin/webhooks" Icon="@Icons.Material.Outlined.Webhook">Webhooks</MudNavLink>
-                <MudNavLink Href="/admin/content-moderation" Icon="@Icons.Material.Outlined.Security">Moderation</MudNavLink>
             </MudNavGroup>
         </MudNavMenu>
 
@@ -233,12 +248,14 @@
     private CommandPalette? _commandPalette;
     private DotNetObjectReference<MainLayout>? _dotNetRef;
 
-    // Studio/Workspace default open since they're the most-used areas; Monitor/Settings
-    // default closed but auto-expand when the current route lands inside them, so the
-    // active nav link is never hidden behind a collapsed group with no "you are here" cue.
-    private bool _studioExpanded = true;
-    private bool _workspaceExpanded = true;
-    private bool _monitorExpanded;
+    // Assistants/Workflows default open since they're the most-used areas; Knowledge/Operations/
+    // Governance/Settings default closed but auto-expand when the current route lands inside them,
+    // so the active nav link is never hidden behind a collapsed group with no "you are here" cue.
+    private bool _assistantsExpanded = true;
+    private bool _knowledgeExpanded;
+    private bool _workflowsExpanded = true;
+    private bool _operationsExpanded;
+    private bool _governanceExpanded;
     private bool _settingsExpanded;
 
     private int _unreadCount => _notifications.Count(n => !n.IsRead);
@@ -258,9 +275,17 @@
     private void UpdateActiveGroupExpansion()
     {
         var path = new Uri(Navigation.Uri).AbsolutePath;
+        if (path.StartsWith("/assistant-studio/knowledge", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/documents", StringComparison.OrdinalIgnoreCase))
+            _knowledgeExpanded = true;
         if (path.StartsWith("/operations", StringComparison.OrdinalIgnoreCase))
-            _monitorExpanded = true;
-        if (path.StartsWith("/admin", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/settings", StringComparison.OrdinalIgnoreCase))
+            _operationsExpanded = true;
+        if (path.StartsWith("/governance", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/admin/models", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/admin/permissions", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/admin/security", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/admin/content-moderation", StringComparison.OrdinalIgnoreCase))
+            _governanceExpanded = true;
+        if (path.StartsWith("/profile", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/settings", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/admin/users", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/admin/roles", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/admin/webhooks", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/admin/api-keys", StringComparison.OrdinalIgnoreCase))
             _settingsExpanded = true;
     }
 
@@ -414,14 +439,18 @@
 
         var nameMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["assistant-studio"] = "Studio",
-            ["workflow-studio"] = "Studio",
+            ["applications"] = "Applications",
+            ["governance"] = "Governance",
+            ["departments"] = "Departments",
+            ["new"] = "New",
+            ["assistant-studio"] = "Assistants",
+            ["workflow-studio"] = "Workflows",
             ["assistants"] = "Assistants",
             ["workflows"] = "Workflows",
             ["knowledgebases"] = "Knowledge",
-            ["operations"] = "Monitor",
+            ["operations"] = "Operations",
             ["settings"] = "Settings",
-            ["admin"] = "Settings",
+            ["admin"] = "Governance",
             ["knowledge"] = "Knowledge",
             ["tools"] = "Tools",
             ["approvals"] = "Approvals",

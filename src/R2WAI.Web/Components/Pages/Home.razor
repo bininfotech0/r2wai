@@ -6,10 +6,32 @@
 
 <PageTitle>R2WAI - AI Command Center</PageTitle>
 
-<div class="greeting-section">
-    <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;">Good @GetTimeOfDay(), @_userName.</MudText>
-    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-1" Style="line-height: 1.5;">Here's what needs your attention.</MudText>
+<div class="d-flex justify-space-between align-start flex-wrap gap-3 greeting-section">
+    <div>
+        <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;">Good @GetTimeOfDay(), @_userName.</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-1" Style="line-height: 1.5;">Manage your applications and AI assistants from one place.</MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Navigation.NavigateTo("/applications/new"))">
+        Add Application
+    </MudButton>
 </div>
+
+@* Hero — Connect an Application *@
+<MudPaper Elevation="0" Class="pa-5 mt-4 mb-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 16px; background: linear-gradient(135deg, rgba(124,58,237,0.06), rgba(79,70,229,0.04));">
+    <div class="d-flex justify-space-between align-center flex-wrap gap-3">
+        <div>
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Connect an Existing Application</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1" Style="max-width: 560px; line-height: 1.5;">
+                Connect your government application, register the APIs it exposes, and publish an AI layer on top of it — without rebuilding the application itself.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="@(() => Navigation.NavigateTo("/applications/new"))">
+            Add Application
+        </MudButton>
+    </div>
+</MudPaper>
 
 @* Getting Started *@
 @if (_showGettingStarted)
@@ -147,6 +169,30 @@
     </MudItem>
 </MudGrid>
 
+@* Applications Needing Attention — only shown once real applications exist *@
+@if (_applicationsNeedingAttention.Count > 0)
+{
+    <MudText Typo="Typo.h6" Class="mb-3 section-title">Applications Needing Attention</MudText>
+    <MudGrid Class="mb-5" Spacing="3">
+        @foreach (var app in _applicationsNeedingAttention)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Class="pa-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                    <div class="d-flex justify-space-between align-center mb-2">
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">@app.Name</MudText>
+                        <StatusBadge Status="@app.Status" />
+                    </div>
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" FullWidth="true"
+                               EndIcon="@Icons.Material.Filled.ArrowForward"
+                               OnClick="@(() => Navigation.NavigateTo("/applications"))">
+                        Review
+                    </MudButton>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
 @* AI Insights *@
 @if (_insights.Count > 0)
 {
@@ -206,6 +252,17 @@
     <MudItem xs="12" md="5">
         <MudText Typo="Typo.h6" Class="mb-3 section-title">Platform Metrics</MudText>
         <MudGrid Spacing="3">
+            <MudItem xs="6">
+                <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
+                          Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
+                          @onclick="@(() => Navigation.NavigateTo("/applications"))">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">Applications</MudText>
+                    <div class="d-flex justify-space-between align-center mt-1">
+                        <MudText Typo="Typo.h4" Color="Color.Warning" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalApplications</MudText>
+                        <SparklineChart Data="@GenerateSparkline(_totalApplications)" Color="#F59E0B" Width="80" Height="28" />
+                    </div>
+                </MudPaper>
+            </MudItem>
             <MudItem xs="6">
                 <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
                           Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
@@ -292,6 +349,8 @@
     private int _totalWorkflows;
     private int _totalDocuments;
     private int _totalKnowledgeBases;
+    private int _totalApplications;
+    private List<ApplicationSummary> _applicationsNeedingAttention = new();
     private List<ActivityItem> _activities = new();
     private List<HealthEntry> _healthChecks = new();
     private List<InsightItem> _insights = new();
@@ -329,8 +388,9 @@
             var healthTask = LoadHealth();
             var approvalsTask = LoadApprovals();
             var kbTask = Http.GetFromJsonAsync<KbListResult>("/api/v1/knowledgebases");
+            var appsTask = Http.GetFromJsonAsync<AppsResult>("/api/v1/applications?page=1&pageSize=20");
 
-            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, approvalsTask, kbTask);
+            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, approvalsTask, kbTask, appsTask);
             var completed = await Task.WhenAny(allTasks, Task.Delay(Timeout.Infinite, cts.Token));
             if (completed != allTasks)
             {
@@ -351,6 +411,13 @@
             }
 
             _knowledgeBases = kbTask.Result?.Items ?? new();
+
+            var apps = appsTask.Result;
+            _totalApplications = apps?.TotalCount ?? 0;
+            _applicationsNeedingAttention = (apps?.Items ?? new())
+                .Where(a => !a.Status.Equals("Published", StringComparison.OrdinalIgnoreCase) && !a.Status.Equals("Active", StringComparison.OrdinalIgnoreCase))
+                .Take(6)
+                .ToList();
 
             _activities = (logsTask.Result?.Items ?? new())
                 .Select(l => new ActivityItem
@@ -644,6 +711,13 @@
         public string Description { get; set; } = string.Empty;
         public string ActionText { get; set; } = string.Empty;
         public string? ActionUrl { get; set; }
+    }
+    private class AppsResult { public List<ApplicationSummary> Items { get; set; } = new(); public int TotalCount { get; set; } }
+    private class ApplicationSummary
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
     }
     private class KbListResult { public List<KnowledgeBaseListDto> Items { get; set; } = new(); }
     private class KnowledgeBaseListDto

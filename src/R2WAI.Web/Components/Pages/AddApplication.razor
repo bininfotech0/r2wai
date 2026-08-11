@@ -1,0 +1,400 @@
+@page "/applications/new"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - Add Application</PageTitle>
+
+<div class="d-flex justify-space-between align-center mb-5 flex-wrap gap-3">
+    <div>
+        <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="gradient-text">Add Application</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">Connect a government application to R2WAI.</MudText>
+    </div>
+    <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="@(() => Navigation.NavigateTo("/applications"))">
+        Save &amp; Exit
+    </MudButton>
+</div>
+
+<MudPaper Elevation="0" Class="pa-5 mb-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 16px;">
+    <WizardStepper Steps="@_steps" CurrentStep="_currentStep" />
+</MudPaper>
+
+<MudPaper Elevation="0" Class="pa-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 16px;">
+
+@if (_currentStep == 0)
+{
+    <MudText Typo="Typo.h6" Class="mb-4">Connect</MudText>
+    <MudGrid>
+        <MudItem xs="12" sm="8">
+            <MudTextField @bind-Value="_name" Label="Application Name" Required="true" Variant="Variant.Outlined"
+                          OnBlur="@(() => { if (string.IsNullOrWhiteSpace(_code)) _code = Slugify(_name); })" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudTextField @bind-Value="_code" Label="Code" Required="true" HelperText="Short unique code" Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" sm="8">
+            <MudSelect T="Guid?" @bind-Value="_departmentId" Label="Department" Required="true" Variant="Variant.Outlined">
+                @foreach (var dept in _departments)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)dept.Id)">@dept.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="4" Class="d-flex align-end">
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" FullWidth="true" OnClick="OpenCreateDepartment">
+                New Department
+            </MudButton>
+        </MudItem>
+        <MudItem xs="12">
+            <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" sm="8">
+            <MudTextField @bind-Value="_baseUrl" Label="Application URL" Placeholder="https://example.gov.in" Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudSelect T="string" @bind-Value="_environment" Label="Environment" Variant="Variant.Outlined">
+                <MudSelectItem T="string" Value="@("Development")">Development</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Staging")">Staging</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Production")">Production</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+
+    <div class="d-flex justify-end gap-2 mt-5">
+        <MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/applications"))">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" Disabled="_saving" OnClick="ConnectApplication">
+            @(_saving ? "Connecting..." : "Connect")
+        </MudButton>
+    </div>
+}
+else if (_currentStep == 1)
+{
+    <MudText Typo="Typo.h6" Class="mb-1">Configure</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        Automatic API discovery isn't available yet — add the APIs this application exposes manually. You can add more later.
+    </MudText>
+
+    @if (_apis.Count > 0)
+    {
+        <MudTable Items="_apis" Hover="true" Elevation="0" Class="mb-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Base URL</MudTh>
+                <MudTh>Auth</MudTh>
+                <MudTh Style="text-align:right;">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Base URL">@context.BaseUrl</MudTd>
+                <MudTd DataLabel="Auth">@context.AuthScheme</MudTd>
+                <MudTd Style="text-align:right;">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteApi(context))" aria-label="Remove" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+    else if (!_showAddApiForm)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.Api" Title="No APIs added yet"
+                    Description="Add at least one API so the assistant can call it, or continue and add capabilities later."
+                    MinHeight="160px" />
+    }
+
+    @if (_showAddApiForm)
+    {
+        <MudPaper Elevation="0" Class="pa-4 mb-4" Style="border: 1px dashed var(--mud-palette-divider); border-radius: 12px;">
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_apiName" Label="API Name" Required="true" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="string" @bind-Value="_apiAuthScheme" Label="Authentication" Variant="Variant.Outlined">
+                        <MudSelectItem T="string" Value="@("None")">None</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("ApiKey")">API Key</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("OAuth2")">OAuth 2.0</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Jwt")">JWT</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("EntraId")">Entra ID</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_apiBaseUrl" Label="API Base URL" Required="true" Placeholder="https://example.gov.in/api" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_apiOpenApiSource" Label="OpenAPI / Swagger URL (optional)" Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+            <div class="d-flex justify-end gap-2 mt-3">
+                <MudButton Variant="Variant.Text" OnClick="@(() => _showAddApiForm = false)">Cancel</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving" OnClick="AddApi">
+                    @(_saving ? "Adding..." : "Add API")
+                </MudButton>
+            </div>
+        </MudPaper>
+    }
+    else
+    {
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Class="mb-4"
+                   OnClick="@(() => _showAddApiForm = true)">
+            Add API
+        </MudButton>
+    }
+
+    <div class="d-flex justify-space-between gap-2 mt-5">
+        <MudButton Variant="Variant.Text" OnClick="@(() => _currentStep = 0)">Back</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" OnClick="@(() => _currentStep = 2)">Continue</MudButton>
+    </div>
+}
+else if (_currentStep == 2)
+{
+    <MudText Typo="Typo.h6" Class="mb-4">Review</MudText>
+
+    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 700;">Application</MudText>
+    <MudPaper Elevation="0" Class="pa-4 mb-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+        <div class="d-flex justify-space-between py-1"><MudText Typo="Typo.body2" Color="Color.Secondary">Name</MudText><MudText Typo="Typo.body2" Style="font-weight: 600;">@_name</MudText></div>
+        <div class="d-flex justify-space-between py-1"><MudText Typo="Typo.body2" Color="Color.Secondary">Code</MudText><MudText Typo="Typo.body2" Style="font-weight: 600;">@_code</MudText></div>
+        <div class="d-flex justify-space-between py-1"><MudText Typo="Typo.body2" Color="Color.Secondary">Department</MudText><MudText Typo="Typo.body2" Style="font-weight: 600;">@(_departments.FirstOrDefault(d => d.Id == _departmentId)?.Name ?? "—")</MudText></div>
+        <div class="d-flex justify-space-between py-1"><MudText Typo="Typo.body2" Color="Color.Secondary">Environment</MudText><MudText Typo="Typo.body2" Style="font-weight: 600;">@_environment</MudText></div>
+        <div class="d-flex justify-space-between py-1"><MudText Typo="Typo.body2" Color="Color.Secondary">URL</MudText><MudText Typo="Typo.body2" Style="font-weight: 600;">@(_baseUrl ?? "—")</MudText></div>
+    </MudPaper>
+
+    <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 700;">APIs (@_apis.Count)</MudText>
+    @if (_apis.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4" Dense="true">No APIs configured yet — you can add these later from the application workspace.</MudAlert>
+    }
+    else
+    {
+        <MudPaper Elevation="0" Class="pa-2 mb-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+            @foreach (var api in _apis)
+            {
+                <div class="d-flex justify-space-between align-center py-2 px-2">
+                    <MudText Typo="Typo.body2" Style="font-weight: 600;">@api.Name</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@api.BaseUrl</MudText>
+                </div>
+            }
+        </MudPaper>
+    }
+
+    <div class="d-flex justify-space-between gap-2 mt-5">
+        <MudButton Variant="Variant.Text" OnClick="@(() => _currentStep = 1)">Back</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" OnClick="@(() => _currentStep = 3)">Continue to Publish</MudButton>
+    </div>
+}
+else if (_currentStep == 3)
+{
+    <MudText Typo="Typo.h6" Class="mb-4">Publish</MudText>
+
+    <div class="d-flex align-center gap-2 py-2">
+        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+        <MudText Typo="Typo.body2">Application connected</MudText>
+    </div>
+    <div class="d-flex align-center gap-2 py-2">
+        <MudIcon Icon="@(_apis.Count > 0 ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Info)" Color="@(_apis.Count > 0 ? Color.Success : Color.Warning)" Size="Size.Small" />
+        <MudText Typo="Typo.body2">@(_apis.Count > 0 ? $"{_apis.Count} API(s) configured" : "No APIs configured — you can add these later")</MudText>
+    </div>
+
+    <MudAlert Severity="Severity.Info" Class="mt-4 mb-4" Dense="true">
+        Publishing makes this application active. Assistant, knowledge and workflow configuration are not part of this release yet and can be added from the application workspace once available.
+    </MudAlert>
+
+    <div class="d-flex justify-space-between gap-2 mt-5">
+        <MudButton Variant="Variant.Text" OnClick="@(() => _currentStep = 2)">Back</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" Disabled="_saving" OnClick="PublishApplication">
+            @(_saving ? "Publishing..." : "Publish Application")
+        </MudButton>
+    </div>
+}
+
+</MudPaper>
+
+@code {
+    private readonly List<string> _steps = new() { "Connect", "Configure", "Review", "Publish" };
+    private int _currentStep;
+    private bool _saving;
+
+    private Guid? _applicationId;
+    private string _name = string.Empty;
+    private string _code = string.Empty;
+    private string _description = string.Empty;
+    private string _baseUrl = string.Empty;
+    private string _environment = "Development";
+    private Guid? _departmentId;
+    private List<DepartmentOption> _departments = new();
+
+    private List<ApiItem> _apis = new();
+    private bool _showAddApiForm;
+    private string _apiName = string.Empty;
+    private string _apiBaseUrl = string.Empty;
+    private string _apiAuthScheme = "None";
+    private string _apiOpenApiSource = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await LoadDepartments();
+    }
+
+    private async Task LoadDepartments()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<DepartmentsResult>("/api/v1/departments?page=1&pageSize=100");
+            _departments = result?.Items ?? new();
+            if (_departments.Count == 1) _departmentId = _departments[0].Id;
+            StateHasChanged();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load departments: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task OpenCreateDepartment()
+    {
+        var dialog = await Dialog.ShowAsync<CreateEditDepartmentDialog>("New Department");
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+        {
+            await LoadDepartments();
+            if (result.Data is CreateEditDepartmentDialog.DepartmentEditDto created)
+                _departmentId = created.Id;
+        }
+    }
+
+    private static string Slugify(string name)
+    {
+        var slug = new string(name.Where(c => char.IsLetterOrDigit(c) || c == ' ').ToArray())
+            .Trim().Replace(' ', '-').ToUpperInvariant();
+        return slug.Length > 50 ? slug[..50] : slug;
+    }
+
+    private async Task ConnectApplication()
+    {
+        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_code) || _departmentId is null)
+        {
+            Snackbar.Add("Application name, code and department are required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var payload = new
+            {
+                DepartmentId = _departmentId,
+                Name = _name,
+                Code = _code,
+                Description = (string?)(string.IsNullOrWhiteSpace(_description) ? null : _description),
+                BaseUrl = (string?)(string.IsNullOrWhiteSpace(_baseUrl) ? null : _baseUrl),
+                Environment = _environment
+            };
+            var response = await Http.PostAsJsonAsync("/api/v1/applications", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to connect application" : body, Severity.Error);
+                return;
+            }
+            var created = await response.Content.ReadFromJsonAsync<CreatedApplication>();
+            _applicationId = created?.Id;
+
+            if (_applicationId is not null)
+            {
+                await Http.PostAsJsonAsync($"/api/v1/applications/{_applicationId}/status", new { Action = "MarkConfiguring" });
+            }
+
+            Snackbar.Add("Application connected", Severity.Success);
+            _currentStep = 1;
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to connect application: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task AddApi()
+    {
+        if (_applicationId is null) return;
+        if (string.IsNullOrWhiteSpace(_apiName) || string.IsNullOrWhiteSpace(_apiBaseUrl))
+        {
+            Snackbar.Add("API name and base URL are required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var payload = new
+            {
+                ApplicationId = _applicationId,
+                Name = _apiName,
+                BaseUrl = _apiBaseUrl,
+                AuthScheme = _apiAuthScheme,
+                OpenApiSource = (string?)(string.IsNullOrWhiteSpace(_apiOpenApiSource) ? null : _apiOpenApiSource)
+            };
+            var response = await Http.PostAsJsonAsync($"/api/v1/applications/{_applicationId}/apis", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to add API" : body, Severity.Error);
+                return;
+            }
+
+            _apiName = string.Empty; _apiBaseUrl = string.Empty; _apiOpenApiSource = string.Empty; _apiAuthScheme = "None";
+            _showAddApiForm = false;
+            await LoadApis();
+            Snackbar.Add("API added", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to add API: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private async Task LoadApis()
+    {
+        if (_applicationId is null) return;
+        try
+        {
+            _apis = await Http.GetFromJsonAsync<List<ApiItem>>($"/api/v1/applications/{_applicationId}/apis") ?? new();
+            StateHasChanged();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load APIs: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteApi(ApiItem api)
+    {
+        if (_applicationId is null) return;
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/applications/{_applicationId}/apis/{api.Id}");
+            await LoadApis();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to remove API: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task PublishApplication()
+    {
+        if (_applicationId is null) return;
+        _saving = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/applications/{_applicationId}/status", new { Action = "Publish" });
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to publish" : body, Severity.Error);
+                return;
+            }
+            Snackbar.Add($"{_name} published", Severity.Success);
+            Navigation.NavigateTo("/applications");
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to publish: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private class DepartmentsResult { public List<DepartmentOption> Items { get; set; } = new(); }
+    private class DepartmentOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private class CreatedApplication { public Guid Id { get; set; } }
+    private class ApiItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string BaseUrl { get; set; } = string.Empty;
+        public string AuthScheme { get; set; } = string.Empty;
+    }
+}

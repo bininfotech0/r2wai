@@ -1,0 +1,101 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Department" : "New Department")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="8">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudTextField @bind-Value="_code" Label="Code" Required="true" Disabled="_isEdit"
+                              HelperText="Short unique code" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Description" Lines="2" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Guid? EditId { get; set; }
+
+    private bool _isEdit => EditId.HasValue;
+    private string _name = string.Empty;
+    private string _code = string.Empty;
+    private string _description = string.Empty;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            try
+            {
+                var dept = await Http.GetFromJsonAsync<DepartmentEditDto>($"/api/v1/departments/{EditId}");
+                if (dept is not null)
+                {
+                    _name = dept.Name;
+                    _code = dept.Code;
+                    _description = dept.Description ?? string.Empty;
+                }
+            }
+            catch (Exception ex) { Snackbar.Add($"Failed to load department: {ex.Message}", Severity.Error); }
+        }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name) || (!_isEdit && string.IsNullOrWhiteSpace(_code)))
+        {
+            Snackbar.Add("Name and code are required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_isEdit)
+            {
+                var payload = new { Name = _name, Description = (string?)(string.IsNullOrWhiteSpace(_description) ? null : _description) };
+                await Http.PutAsJsonAsync($"/api/v1/departments/{EditId}", payload);
+                Snackbar.Add("Department updated", Severity.Success);
+            }
+            else
+            {
+                var payload = new { Name = _name, Code = _code, Description = (string?)(string.IsNullOrWhiteSpace(_description) ? null : _description) };
+                var response = await Http.PostAsJsonAsync("/api/v1/departments", payload);
+                response.EnsureSuccessStatusCode();
+                var created = await response.Content.ReadFromJsonAsync<DepartmentEditDto>();
+                Snackbar.Add("Department created", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(created));
+                return;
+            }
+            MudDialog.Close(DialogResult.Ok<DepartmentEditDto?>(null));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    public class DepartmentEditDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
+        public string? Description { get; set; }
+    }
+}

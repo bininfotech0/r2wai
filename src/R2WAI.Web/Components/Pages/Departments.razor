@@ -1,0 +1,119 @@
+@page "/governance/departments"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - Departments</PageTitle>
+
+<PageHeader Title="Departments" Subtitle="Departments own applications, assistants and users within your tenant.">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Class="btn-gradient"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        Add Department
+    </MudButton>
+</PageHeader>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-4" />
+}
+else if (_departments.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Outlined.AccountBalance"
+                Title="No departments yet"
+                Description="Create a department before connecting applications — every application belongs to a department."
+                ActionText="Add Department"
+                OnAction="OpenCreateDialog"
+                MinHeight="320px" />
+}
+else
+{
+    <MudTable Items="_departments" Hover="true" Elevation="0" Class="stagger-in" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Code</MudTh>
+            <MudTh>Description</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Created</MudTh>
+            <MudTh Style="text-align:right;">Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Code">@context.Code</MudTd>
+            <MudTd DataLabel="Description">@context.Description</MudTd>
+            <MudTd DataLabel="Status"><StatusBadge Status="@(context.IsActive ? "Active" : "Inactive")" /></MudTd>
+            <MudTd DataLabel="Created">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
+            <MudTd Style="text-align:right;">
+                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => OpenEditDialog(context))" aria-label="Edit" />
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteDepartment(context))" aria-label="Delete" />
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private List<DepartmentDto> _departments = new();
+    private bool _loading = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await LoadDepartments(); }
+
+    private async Task LoadDepartments()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<DepartmentsResult>("/api/v1/departments?page=1&pageSize=100");
+            _departments = result?.Items ?? new();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load departments: {ex.Message}", Severity.Error); }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await Dialog.ShowAsync<CreateEditDepartmentDialog>("New Department");
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadDepartments();
+    }
+
+    private async Task OpenEditDialog(DepartmentDto department)
+    {
+        var parameters = new DialogParameters<CreateEditDepartmentDialog> { { x => x.EditId, department.Id } };
+        var dialog = await Dialog.ShowAsync<CreateEditDepartmentDialog>("Edit Department", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadDepartments();
+    }
+
+    private async Task DeleteDepartment(DepartmentDto department)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, department.Name } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"/api/v1/departments/{department.Id}");
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Delete failed" : body, Severity.Error);
+                return;
+            }
+            Snackbar.Add("Department deleted", Severity.Success);
+            await LoadDepartments();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    private class DepartmentsResult { public List<DepartmentDto> Items { get; set; } = new(); }
+    private class DepartmentDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+}
