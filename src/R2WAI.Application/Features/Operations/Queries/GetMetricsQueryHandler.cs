@@ -6,6 +6,7 @@ public class GetMetricsQueryHandler(
     IRepository<Document> documentRepo,
     IRepository<KnowledgeBase> kbRepo,
     IRepository<AssistantDefinition> assistantRepo,
+    IRequestMetricsStore requestMetrics,
     ICurrentUserService currentUser,
     Common.Interfaces.ICacheService cache) : IRequestHandler<GetMetricsQuery, MetricsDto>
 {
@@ -18,6 +19,7 @@ public class GetMetricsQueryHandler(
         if (cached is not null) return cached;
 
         var startOfDayUtc = DateTime.UtcNow.Date;
+        var last24Hours = DateTime.UtcNow.AddHours(-24);
 
         // Sequential queries — EF Core DbContext is not thread-safe; Task.WhenAll would throw
         var totalWorkflows    = await workflowRepo.CountAsync(
@@ -35,6 +37,13 @@ public class GetMetricsQueryHandler(
             kb => kb.TenantId == tenantId && !kb.IsDeleted, cancellationToken);
         var totalAssistants   = await assistantRepo.CountAsync(
             a => a.TenantId == tenantId && !a.IsDeleted, cancellationToken);
+        var workflowErrors = await instanceRepo.CountAsync(
+            i => i.TenantId == tenantId
+                 && i.Status == WorkflowInstanceStatus.Failed
+                 && i.CompletedAt != null
+                 && i.CompletedAt >= last24Hours, cancellationToken);
+
+        var requestSnapshot = requestMetrics.GetSnapshot(tenantId, TimeSpan.FromHours(24));
 
         var result = new MetricsDto
         {
@@ -45,6 +54,13 @@ public class GetMetricsQueryHandler(
             TotalAssistants = totalAssistants,
             CompletedToday = completedToday,
             Timestamp = DateTime.UtcNow,
+            TotalRequests = requestSnapshot.TotalRequests,
+            SuccessRate = requestSnapshot.SuccessRate,
+            AverageLatencyMs = requestSnapshot.AverageLatencyMs,
+            ActiveUsers = requestSnapshot.ActiveUsers,
+            ApiErrors = requestSnapshot.ApiErrors,
+            AiErrors = requestSnapshot.AiErrors,
+            WorkflowErrors = workflowErrors,
         };
 
         await cache.SetAsync(cacheKey, result, TimeSpan.FromSeconds(30), cancellationToken);

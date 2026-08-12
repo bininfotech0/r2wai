@@ -76,6 +76,50 @@ else
     </div>
 }
 
+@* Overview — real, rolling 24h request signal (§33) *@
+<MudText Typo="Typo.subtitle1" Class="mb-3 section-title" Style="font-weight: 600;">Overview (last 24h)</MudText>
+<MudGrid Class="mb-4 stagger-in" Spacing="3">
+    <MudItem xs="12" sm="6" md="3">
+        <KpiCard Value="@((_metrics?.TotalRequests ?? 0).ToString())" Label="Requests"
+                 Icon="@Icons.Material.Outlined.Http" ValueColor="Color.Primary" IconColor="Color.Primary" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <KpiCard Value="@($"{(_metrics?.SuccessRate ?? 100):0.#}%")" Label="Success Rate"
+                 Icon="@Icons.Material.Outlined.CheckCircleOutline"
+                 ValueColor="@((_metrics?.SuccessRate ?? 100) >= 99 ? Color.Success : Color.Warning)"
+                 IconColor="@((_metrics?.SuccessRate ?? 100) >= 99 ? Color.Success : Color.Warning)" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <KpiCard Value="@($"{(_metrics?.AverageLatencyMs ?? 0):0}ms")" Label="Average Latency"
+                 Icon="@Icons.Material.Outlined.Speed" ValueColor="Color.Info" IconColor="Color.Info" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <KpiCard Value="@((_metrics?.ActiveUsers ?? 0).ToString())" Label="Active Users"
+                 Icon="@Icons.Material.Outlined.People" ValueColor="Color.Secondary" IconColor="Color.Secondary" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <KpiCard Value="@((_metrics?.ApiErrors ?? 0).ToString())" Label="API Errors"
+                 Icon="@Icons.Material.Outlined.ErrorOutline"
+                 ValueColor="@((_metrics?.ApiErrors ?? 0) > 0 ? Color.Error : Color.Default)"
+                 IconColor="@((_metrics?.ApiErrors ?? 0) > 0 ? Color.Error : Color.Default)"
+                 OnClick="@(() => Navigation.NavigateTo("/operations/errors"))" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <KpiCard Value="@((_metrics?.AiErrors ?? 0).ToString())" Label="AI Errors"
+                 Icon="@Icons.Material.Outlined.SmartToy"
+                 ValueColor="@((_metrics?.AiErrors ?? 0) > 0 ? Color.Error : Color.Default)"
+                 IconColor="@((_metrics?.AiErrors ?? 0) > 0 ? Color.Error : Color.Default)"
+                 OnClick="@(() => Navigation.NavigateTo("/operations/ai"))" />
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4">
+        <KpiCard Value="@((_metrics?.WorkflowErrors ?? 0).ToString())" Label="Workflow Errors"
+                 Icon="@Icons.Material.Outlined.AccountTree"
+                 ValueColor="@((_metrics?.WorkflowErrors ?? 0) > 0 ? Color.Error : Color.Default)"
+                 IconColor="@((_metrics?.WorkflowErrors ?? 0) > 0 ? Color.Error : Color.Default)"
+                 OnClick="@(() => Navigation.NavigateTo("/workflow-studio"))" />
+    </MudItem>
+</MudGrid>
+
 @* KPI Cards *@
 <MudGrid Class="mb-4 stagger-in" Spacing="3">
     <MudItem xs="12" sm="6" md="3">
@@ -602,6 +646,13 @@ else
         public int TotalKnowledgeBases { get; set; }
         public int TotalAssistants { get; set; }
         public int PendingApprovals { get; set; }
+        public int TotalRequests { get; set; }
+        public double SuccessRate { get; set; }
+        public double AverageLatencyMs { get; set; }
+        public int ActiveUsers { get; set; }
+        public int ApiErrors { get; set; }
+        public int AiErrors { get; set; }
+        public int WorkflowErrors { get; set; }
     }
 
     private class HealthEntry

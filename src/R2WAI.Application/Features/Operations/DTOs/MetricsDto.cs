@@ -9,4 +9,13 @@ public class MetricsDto
     public int TotalAssistants { get; init; }
     public int CompletedToday { get; init; }
     public DateTime Timestamp { get; init; }
+
+    // Real, rolling 24h operational signals — see IRequestMetricsStore.
+    public int TotalRequests { get; init; }
+    public double SuccessRate { get; init; }
+    public double AverageLatencyMs { get; init; }
+    public int ActiveUsers { get; init; }
+    public int ApiErrors { get; init; }
+    public int AiErrors { get; init; }
+    public int WorkflowErrors { get; init; }
 }

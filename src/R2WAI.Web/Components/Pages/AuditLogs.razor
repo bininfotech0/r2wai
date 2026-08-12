@@ -72,6 +72,7 @@
         </TemplateColumn>
         <PropertyColumn Property="x => x.EntityType" Title="Entity" />
         <PropertyColumn Property="x => x.EntityId" Title="Entity ID" />
+        <PropertyColumn Property="x => x.IpAddress" Title="IP Address" />
     </Columns>
     <NoRecordsContent>
         <EmptyState Icon="@Icons.Material.Outlined.ManageSearch"
@@ -168,6 +169,7 @@
         public string Action { get; set; } = string.Empty;
         public string EntityType { get; set; } = string.Empty;
         public string EntityId { get; set; } = string.Empty;
+        public string? IpAddress { get; set; }
         public DateTime Timestamp { get; set; }
     }
 }

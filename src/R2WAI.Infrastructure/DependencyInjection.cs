@@ -88,6 +88,7 @@ public static class DependencyInjection
         services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 
         services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
+        services.AddSingleton<IRequestMetricsStore, RequestMetricsStore>();
         services.AddHostedService<BackgroundTaskProcessor>();
 
         services.AddScoped<IAIService, SemanticKernelService>();
