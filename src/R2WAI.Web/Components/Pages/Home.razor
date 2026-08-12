@@ -545,8 +545,12 @@
     {
         if (string.IsNullOrWhiteSpace(_commandInput)) return;
         var cmd = _commandInput.ToLowerInvariant();
-        if (cmd.Contains("assistant")) { Navigation.NavigateTo("/assistant-studio"); _commandInput = string.Empty; return; }
+        if (cmd.Contains("application")) { Navigation.NavigateTo("/applications"); _commandInput = string.Empty; return; }
+        else if (cmd.Contains("governance") || cmd.Contains("department") || cmd.Contains("polic")) { Navigation.NavigateTo("/governance"); _commandInput = string.Empty; return; }
+        else if (cmd.Contains("capabilit")) { Navigation.NavigateTo("/assistant-studio/tools"); _commandInput = string.Empty; return; }
+        else if (cmd.Contains("assistant")) { Navigation.NavigateTo("/assistant-studio"); _commandInput = string.Empty; return; }
         else if (cmd.Contains("workflow")) { Navigation.NavigateTo("/workflow-studio"); _commandInput = string.Empty; return; }
+        else if (cmd.Contains("knowledge")) { Navigation.NavigateTo("/assistant-studio/knowledge"); _commandInput = string.Empty; return; }
         else if (cmd.Contains("document") || cmd.Contains("upload")) { Navigation.NavigateTo("/documents"); _commandInput = string.Empty; return; }
         else if (cmd.Contains("approval") || cmd.Contains("inbox")) { Navigation.NavigateTo("/inbox"); _commandInput = string.Empty; return; }
         else if (cmd.Contains("operation") || cmd.Contains("monitor")) { Navigation.NavigateTo("/operations"); _commandInput = string.Empty; return; }
