@@ -434,15 +434,6 @@
                                     }
                                 </MudSelect>
                             </MudItem>
-                            <MudItem xs="12" sm="8">
-                                <MudTextField @bind-Value="_editTags" Label="Tags" Variant="Variant.Outlined"
-                                              Margin="Margin.Dense" HelperText="Comma-separated tags for search and categorization"
-                                              Placeholder="e.g. onboarding, benefits, leave" />
-                            </MudItem>
-                            <MudItem xs="12" sm="4">
-                                <MudTextField @bind-Value="_editAvatarUrl" Label="Avatar URL" Variant="Variant.Outlined"
-                                              Margin="Margin.Dense" Placeholder="https://..." />
-                            </MudItem>
                         </MudGrid>
 
                         @* ─── System Prompt ─── *@
@@ -465,35 +456,52 @@
                                         Placeholder="Define how the assistant should behave and respond. Be specific about its role, expertise, tone, and boundaries..."
                                         HelperText="Use markdown to format instructions. Bold for emphasis, code blocks for examples, lists for rules." />
 
-                        @* ─── Response Settings ─── *@
+                        @* ─── Advanced Configuration ─── *@
                         <MudDivider Class="my-4" />
-                        <MudText Typo="Typo.subtitle2" Class="mb-3" Style="font-weight: 700;">Response Settings</MudText>
-                        <MudGrid Spacing="3">
-                            <MudItem xs="12" sm="4">
-                                <MudSelect T="string" @bind-Value="_editTone" Label="Tone" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                    <MudSelectItem T="string" Value="@("Professional")">Professional</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("Friendly")">Friendly</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("Concise")">Concise</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("Detailed")">Detailed</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("Technical")">Technical</MudSelectItem>
-                                </MudSelect>
-                            </MudItem>
-                            <MudItem xs="12" sm="4">
-                                <MudSelect T="string" @bind-Value="_editResponseLength" Label="Response Length" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                    <MudSelectItem T="string" Value="@("Short")">Short (1-2 paragraphs)</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("Medium")">Medium (3-5 paragraphs)</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("Long")">Long (detailed)</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("Auto")">Auto (context-aware)</MudSelectItem>
-                                </MudSelect>
-                            </MudItem>
-                            <MudItem xs="12" sm="4">
-                                <MudSelect T="string" @bind-Value="_editResponseFormat" Label="Format" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                    <MudSelectItem T="string" Value="@("Markdown")">Markdown</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("Plain Text")">Plain Text</MudSelectItem>
-                                    <MudSelectItem T="string" Value="@("Structured")">Structured (lists/tables)</MudSelectItem>
-                                </MudSelect>
-                            </MudItem>
-                        </MudGrid>
+                        <MudExpansionPanels Elevation="0" Dense="true">
+                            <MudExpansionPanel Text="Advanced Configuration" Icon="@Icons.Material.Outlined.Tune">
+                                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="font-weight: 700;">Response Settings</MudText>
+                                <MudGrid Spacing="3" Class="mb-4">
+                                    <MudItem xs="12" sm="4">
+                                        <MudSelect T="string" @bind-Value="_editTone" Label="Tone" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                            <MudSelectItem T="string" Value="@("Professional")">Professional</MudSelectItem>
+                                            <MudSelectItem T="string" Value="@("Friendly")">Friendly</MudSelectItem>
+                                            <MudSelectItem T="string" Value="@("Concise")">Concise</MudSelectItem>
+                                            <MudSelectItem T="string" Value="@("Detailed")">Detailed</MudSelectItem>
+                                            <MudSelectItem T="string" Value="@("Technical")">Technical</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" sm="4">
+                                        <MudSelect T="string" @bind-Value="_editResponseLength" Label="Response Length" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                            <MudSelectItem T="string" Value="@("Short")">Short (1-2 paragraphs)</MudSelectItem>
+                                            <MudSelectItem T="string" Value="@("Medium")">Medium (3-5 paragraphs)</MudSelectItem>
+                                            <MudSelectItem T="string" Value="@("Long")">Long (detailed)</MudSelectItem>
+                                            <MudSelectItem T="string" Value="@("Auto")">Auto (context-aware)</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                    <MudItem xs="12" sm="4">
+                                        <MudSelect T="string" @bind-Value="_editResponseFormat" Label="Format" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                            <MudSelectItem T="string" Value="@("Markdown")">Markdown</MudSelectItem>
+                                            <MudSelectItem T="string" Value="@("Plain Text")">Plain Text</MudSelectItem>
+                                            <MudSelectItem T="string" Value="@("Structured")">Structured (lists/tables)</MudSelectItem>
+                                        </MudSelect>
+                                    </MudItem>
+                                </MudGrid>
+
+                                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="font-weight: 700;">Metadata</MudText>
+                                <MudGrid Spacing="3">
+                                    <MudItem xs="12" sm="8">
+                                        <MudTextField @bind-Value="_editTags" Label="Tags" Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense" HelperText="Comma-separated tags for search and categorization"
+                                                      Placeholder="e.g. onboarding, benefits, leave" />
+                                    </MudItem>
+                                    <MudItem xs="12" sm="4">
+                                        <MudTextField @bind-Value="_editAvatarUrl" Label="Avatar URL" Variant="Variant.Outlined"
+                                                      Margin="Margin.Dense" Placeholder="https://..." />
+                                    </MudItem>
+                                </MudGrid>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
                     </MudTabPanel>
 
                     @* ── Knowledge Tab ── *@
@@ -564,12 +572,12 @@
                         }
                     </MudTabPanel>
 
-                    @* ── Tools Tab ── *@
-                    <MudTabPanel Text="Tools" Icon="@Icons.Material.Outlined.Build" BadgeData="@(_availableTools.Count(t => t.IsEnabled))"
+                    @* ── Capabilities Tab ── *@
+                    <MudTabPanel Text="Capabilities" Icon="@Icons.Material.Outlined.Build" BadgeData="@(_availableTools.Count(t => t.IsEnabled))"
                                  BadgeColor="Color.Primary">
                         <div class="mb-4">
-                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Available Tools</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Enable tools this assistant can use during conversations</MudText>
+                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Available Capabilities</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Enable what this assistant can do during conversations</MudText>
                         </div>
 
                         @foreach (var category in _availableTools.GroupBy(t => t.Category))
