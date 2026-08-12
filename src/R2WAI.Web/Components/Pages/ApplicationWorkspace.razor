@@ -274,7 +274,8 @@ else
                             <MudTd DataLabel="Permission">@(context.RequiredRole ?? "—")</MudTd>
                             <MudTd DataLabel="Status">
                                 <MudSwitch T="bool" Value="@context.IsActive" Color="Color.Primary"
-                                           ValueChanged="@(v => ToggleCapabilityActive(context, v))" />
+                                           ValueChanged="@(v => ToggleCapabilityActive(context, v))"
+                                           aria-label="@($"Toggle {context.Name} enabled")" />
                             </MudTd>
                             <MudTd Style="text-align:right;">
                                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditCapability(context))" aria-label="Edit" />
@@ -356,7 +357,8 @@ else
                                     </MudText>
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">@nav.Path &middot; @(nav.RequiredRole ?? "Public")</MudText>
                                 </div>
-                                <MudSwitch T="bool" Value="@nav.IsEnabled" Color="Color.Primary" ValueChanged="@(v => ToggleNavEnabled(nav, v))" />
+                                <MudSwitch T="bool" Value="@nav.IsEnabled" Color="Color.Primary" ValueChanged="@(v => ToggleNavEnabled(nav, v))"
+                                           aria-label="@($"Toggle {nav.Label} enabled")" />
                                 <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditNavItem(nav))" aria-label="Edit" />
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteNavItem(nav))" aria-label="Delete" />
                             </div>

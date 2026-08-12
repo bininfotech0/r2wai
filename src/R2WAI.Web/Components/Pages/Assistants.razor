@@ -596,7 +596,8 @@
                                                              Color="@(tool.IsEnabled ? Color.Primary : Color.Default)" />
                                                     <MudText Typo="Typo.body2" Style="font-weight: 600;">@tool.Name</MudText>
                                                 </div>
-                                                <MudSwitch T="bool" @bind-Value="tool.IsEnabled" Color="Color.Primary" />
+                                                <MudSwitch T="bool" @bind-Value="tool.IsEnabled" Color="Color.Primary"
+                                                           aria-label="@($"Toggle {tool.Name} capability")" />
                                             </div>
                                             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@tool.Description</MudText>
                                         </MudPaper>
