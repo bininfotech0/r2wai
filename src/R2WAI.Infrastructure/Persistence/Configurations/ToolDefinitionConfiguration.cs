@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using R2WAI.Domain.Enums;
 
 namespace R2WAI.Infrastructure.Persistence.Configurations;
 
@@ -9,35 +8,76 @@ public class ToolDefinitionConfiguration : IEntityTypeConfiguration<ToolDefiniti
     {
         builder.ToTable("ToolDefinitions");
 
-        builder.HasKey(td => td.Id);
+        builder.HasKey(t => t.Id);
 
-        builder.Property(td => td.Name)
+        builder.Property(t => t.Name)
             .IsRequired()
             .HasMaxLength(500);
 
-        builder.Property(td => td.Description)
+        builder.Property(t => t.Description)
             .HasMaxLength(2000);
 
-        builder.Property(td => td.ToolType)
+        builder.Property(t => t.ToolType)
             .IsRequired()
             .HasConversion<string>()
             .HasMaxLength(50);
 
-        builder.Property(td => td.EndpointUrl)
+        builder.Property(t => t.EndpointUrl)
             .HasMaxLength(2000);
 
-        builder.Property(td => td.Configuration)
+        builder.Property(t => t.HttpMethod)
+            .HasMaxLength(10);
+
+        builder.Property(t => t.EndpointPath)
+            .HasMaxLength(500);
+
+        builder.Property(t => t.Configuration)
             .HasColumnType("jsonb");
 
-        builder.Property(td => td.IsActive)
+        builder.Property(t => t.IsActive)
+            .IsRequired()
             .HasDefaultValue(true);
 
-        builder.HasOne(td => td.Tenant)
+        builder.Property(t => t.RiskLevel)
+            .IsRequired()
+            .HasMaxLength(20)
+            .HasDefaultValue("Low");
+
+        builder.Property(t => t.RequiredRole)
+            .HasMaxLength(50);
+
+        builder.Property(t => t.ConfirmationRequired)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(t => t.ApprovalRequired)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(t => t.AuditRequired)
+            .IsRequired()
+            .HasDefaultValue(true);
+
+        builder.Property(t => t.CreatedAt).IsRequired();
+        builder.Property(t => t.ModifiedAt);
+
+        builder.HasOne(t => t.Tenant)
             .WithMany()
-            .HasForeignKey(td => td.TenantId)
+            .HasForeignKey(t => t.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(td => new { td.TenantId, td.ToolType });
-        builder.HasIndex(td => new { td.TenantId, td.Name }).IsUnique();
+        builder.HasOne(t => t.Application)
+            .WithMany()
+            .HasForeignKey(t => t.ApplicationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(t => t.ApplicationApi)
+            .WithMany()
+            .HasForeignKey(t => t.ApplicationApiId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasIndex(t => new { t.TenantId, t.Name });
+        builder.HasIndex(t => new { t.TenantId, t.IsActive });
+        builder.HasIndex(t => t.ApplicationId);
     }
 }

@@ -162,6 +162,128 @@ else
 
         <MudTabPanel Text="Build">
             <div class="pt-4">
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <div class="d-flex align-center gap-2">
+                        <MudIcon Icon="@Icons.Material.Outlined.Build" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Capabilities (@_capabilities.Count)</MudText>
+                    </div>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="@(() => { _showAddCapabilityForm = !_showAddCapabilityForm; _editingCapabilityId = null; ResetCapabilityForm(); })">
+                        Add Capability
+                    </MudButton>
+                </div>
+
+                @if (_showAddCapabilityForm)
+                {
+                    <MudPaper Elevation="0" Class="pa-4 mb-3" Style="border: 1px dashed var(--mud-palette-divider); border-radius: 12px;">
+                        <MudGrid>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_capName" Label="Name" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="Guid?" @bind-Value="_capApplicationApiId" Label="API (optional)" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    @foreach (var api in _apis)
+                                    {
+                                        <MudSelectItem T="Guid?" Value="@((Guid?)api.Id)">@api.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="3">
+                                <MudSelect T="string" @bind-Value="_capHttpMethod" Label="Method" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    <MudSelectItem T="string" Value="@("GET")">GET</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("POST")">POST</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("PUT")">PUT</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("PATCH")">PATCH</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("DELETE")">DELETE</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="9">
+                                <MudTextField @bind-Value="_capEndpointPath" Label="Endpoint Path" Placeholder="/application/status" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="_capDescription" Label="Description" Lines="2" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="string" @bind-Value="_capRiskLevel" Label="Risk" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    <MudSelectItem T="string" Value="@("Low")">Low</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Medium")">Medium</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("High")">High</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="string" @bind-Value="_capRequiredRole" Label="Permission" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    <MudSelectItem T="string" Value="@("Public")">Public</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("User")">Authenticated User</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Officer")">Officer</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Admin")">Admin</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudSwitch T="bool" @bind-Value="_capConfirmationRequired" Color="Color.Primary" Label="Confirmation required" />
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudSwitch T="bool" @bind-Value="_capApprovalRequired" Color="Color.Primary" Label="Approval required" />
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudSwitch T="bool" @bind-Value="_capAuditRequired" Color="Color.Primary" Label="Audit required" />
+                            </MudItem>
+                        </MudGrid>
+                        <div class="d-flex justify-end gap-2 mt-3">
+                            <MudButton Variant="Variant.Text" OnClick="@(() => _showAddCapabilityForm = false)">Cancel</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_actionInProgress" OnClick="SaveCapability">
+                                @(_editingCapabilityId is null ? "Add Capability" : "Save Changes")
+                            </MudButton>
+                        </div>
+                    </MudPaper>
+                }
+
+                @if (_capabilities.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.Build" Title="No capabilities yet"
+                                Description="Turn an API endpoint into a governed capability the assistant can call — with risk, permission, confirmation and audit rules."
+                                MinHeight="140px" />
+                }
+                else
+                {
+                    <MudTable Items="_capabilities" Hover="true" Elevation="0" Class="mb-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                        <HeaderContent>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Endpoint</MudTh>
+                            <MudTh>Risk</MudTh>
+                            <MudTh>Permission</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh Style="text-align:right;">Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Name">@context.Name</MudTd>
+                            <MudTd DataLabel="Endpoint">
+                                @if (!string.IsNullOrEmpty(context.HttpMethod))
+                                {
+                                    <span>@context.HttpMethod @context.EndpointPath</span>
+                                }
+                                else
+                                {
+                                    <span>—</span>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Risk">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                         Color="@GetRiskColor(context.RiskLevel)">@context.RiskLevel</MudChip>
+                            </MudTd>
+                            <MudTd DataLabel="Permission">@(context.RequiredRole ?? "—")</MudTd>
+                            <MudTd DataLabel="Status">
+                                <MudSwitch T="bool" Value="@context.IsActive" Color="Color.Primary"
+                                           ValueChanged="@(v => ToggleCapabilityActive(context, v))" />
+                            </MudTd>
+                            <MudTd Style="text-align:right;">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditCapability(context))" aria-label="Edit" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteCapability(context))" aria-label="Delete" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+
                 <LinkableSection Title="Assistants" Icon="@Icons.Material.Outlined.SmartToy"
                                   Linked="_assistants" AllOptions="_allAssistants"
                                   ManageUrl="/assistant-studio" ManageLabel="Manage in Assistants"
@@ -202,6 +324,20 @@ else
     private List<LinkableSection.LinkedItem> _allKnowledgeBases = new();
     private List<LinkableSection.LinkedItem> _allWorkflows = new();
 
+    private List<CapabilityItem> _capabilities = new();
+    private bool _showAddCapabilityForm;
+    private Guid? _editingCapabilityId;
+    private string _capName = string.Empty;
+    private string _capDescription = string.Empty;
+    private Guid? _capApplicationApiId;
+    private string _capHttpMethod = "GET";
+    private string _capEndpointPath = string.Empty;
+    private string _capRiskLevel = "Low";
+    private string _capRequiredRole = "User";
+    private bool _capConfirmationRequired;
+    private bool _capApprovalRequired;
+    private bool _capAuditRequired = true;
+
     protected override async Task OnParametersSetAsync()
     {
         await LoadAll();
@@ -216,6 +352,7 @@ else
                 LoadApplication(),
                 LoadDepartments(),
                 LoadApis(),
+                LoadCapabilities(),
                 LoadAssistants(),
                 LoadKnowledgeBases(),
                 LoadWorkflows());
@@ -247,6 +384,141 @@ else
         try { _apis = await Http.GetFromJsonAsync<List<ApiItem>>($"/api/v1/applications/{Id}/apis") ?? new(); }
         catch (Exception ex) { Snackbar.Add($"Failed to load APIs: {ex.Message}", Severity.Error); }
     }
+
+    private async Task LoadCapabilities()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<CapabilitiesResult>($"/api/v1/capabilities?page=1&pageSize=200&applicationId={Id}");
+            _capabilities = result?.Items ?? new();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load capabilities: {ex.Message}", Severity.Error); }
+    }
+
+    private void ResetCapabilityForm()
+    {
+        _capName = string.Empty;
+        _capDescription = string.Empty;
+        _capApplicationApiId = null;
+        _capHttpMethod = "GET";
+        _capEndpointPath = string.Empty;
+        _capRiskLevel = "Low";
+        _capRequiredRole = "User";
+        _capConfirmationRequired = false;
+        _capApprovalRequired = false;
+        _capAuditRequired = true;
+    }
+
+    private void EditCapability(CapabilityItem capability)
+    {
+        _editingCapabilityId = capability.Id;
+        _capName = capability.Name;
+        _capDescription = capability.Description ?? string.Empty;
+        _capApplicationApiId = capability.ApplicationApiId;
+        _capHttpMethod = capability.HttpMethod ?? "GET";
+        _capEndpointPath = capability.EndpointPath ?? string.Empty;
+        _capRiskLevel = capability.RiskLevel;
+        _capRequiredRole = capability.RequiredRole ?? "User";
+        _capConfirmationRequired = capability.ConfirmationRequired;
+        _capApprovalRequired = capability.ApprovalRequired;
+        _capAuditRequired = capability.AuditRequired;
+        _showAddCapabilityForm = true;
+    }
+
+    private async Task SaveCapability()
+    {
+        if (string.IsNullOrWhiteSpace(_capName))
+        {
+            Snackbar.Add("Capability name is required", Severity.Warning);
+            return;
+        }
+
+        _actionInProgress = true;
+        try
+        {
+            HttpResponseMessage response;
+            if (_editingCapabilityId is null)
+            {
+                var payload = new
+                {
+                    ApplicationId = Id,
+                    ApplicationApiId = _capApplicationApiId,
+                    Name = _capName,
+                    Description = (string?)(string.IsNullOrWhiteSpace(_capDescription) ? null : _capDescription),
+                    HttpMethod = _capHttpMethod,
+                    EndpointPath = (string?)(string.IsNullOrWhiteSpace(_capEndpointPath) ? null : _capEndpointPath),
+                    RiskLevel = _capRiskLevel,
+                    RequiredRole = _capRequiredRole,
+                    ConfirmationRequired = _capConfirmationRequired,
+                    ApprovalRequired = _capApprovalRequired,
+                    AuditRequired = _capAuditRequired
+                };
+                response = await Http.PostAsJsonAsync("/api/v1/capabilities", payload);
+            }
+            else
+            {
+                var payload = new
+                {
+                    Name = _capName,
+                    Description = (string?)(string.IsNullOrWhiteSpace(_capDescription) ? null : _capDescription),
+                    ApplicationApiId = _capApplicationApiId,
+                    HttpMethod = _capHttpMethod,
+                    EndpointPath = (string?)(string.IsNullOrWhiteSpace(_capEndpointPath) ? null : _capEndpointPath),
+                    RiskLevel = _capRiskLevel,
+                    RequiredRole = _capRequiredRole,
+                    ConfirmationRequired = _capConfirmationRequired,
+                    ApprovalRequired = _capApprovalRequired,
+                    AuditRequired = _capAuditRequired
+                };
+                response = await Http.PutAsJsonAsync($"/api/v1/capabilities/{_editingCapabilityId}", payload);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to save capability" : body, Severity.Error);
+                return;
+            }
+
+            _showAddCapabilityForm = false;
+            _editingCapabilityId = null;
+            ResetCapabilityForm();
+            await LoadCapabilities();
+            Snackbar.Add("Capability saved", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to save capability: {ex.Message}", Severity.Error); }
+        finally { _actionInProgress = false; }
+    }
+
+    private async Task ToggleCapabilityActive(CapabilityItem capability, bool isActive)
+    {
+        try
+        {
+            await Http.PostAsJsonAsync($"/api/v1/capabilities/{capability.Id}/status", new { IsActive = isActive });
+            await LoadCapabilities();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to update capability: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteCapability(CapabilityItem capability)
+    {
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/capabilities/{capability.Id}");
+            await LoadCapabilities();
+            Snackbar.Add("Capability deleted", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to delete capability: {ex.Message}", Severity.Error); }
+    }
+
+    private static Color GetRiskColor(string riskLevel) => riskLevel switch
+    {
+        "Low" => Color.Success,
+        "Medium" => Color.Warning,
+        "High" => Color.Warning,
+        "Critical" => Color.Error,
+        _ => Color.Default,
+    };
 
     private async Task LoadAssistants()
     {
@@ -375,6 +647,22 @@ else
     private class DepartmentsResult { public List<DepartmentOption> Items { get; set; } = new(); }
     private class DepartmentOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
     private class ApiItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string BaseUrl { get; set; } = string.Empty; public string AuthScheme { get; set; } = string.Empty; }
+    private class CapabilitiesResult { public List<CapabilityItem> Items { get; set; } = new(); }
+    private class CapabilityItem
+    {
+        public Guid Id { get; set; }
+        public Guid? ApplicationApiId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? HttpMethod { get; set; }
+        public string? EndpointPath { get; set; }
+        public bool IsActive { get; set; }
+        public string RiskLevel { get; set; } = "Low";
+        public string? RequiredRole { get; set; }
+        public bool ConfirmationRequired { get; set; }
+        public bool ApprovalRequired { get; set; }
+        public bool AuditRequired { get; set; }
+    }
     private class AssistantsResult { public List<AssistantItem> Items { get; set; } = new(); }
     private class AssistantItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string PublishStatus { get; set; } = string.Empty; }
     private class KbResult { public List<KbItem> Items { get; set; } = new(); }
