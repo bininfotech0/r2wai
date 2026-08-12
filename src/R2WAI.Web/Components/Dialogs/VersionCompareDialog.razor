@@ -1,0 +1,171 @@
+@using System.Text.Json
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3" Color="Color.Secondary">
+            Comparing v@(OlderVersionNumber) → v@(NewerVersionNumber)
+        </MudText>
+
+        <MudSimpleTable Dense="true" Hover="true" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+            <thead>
+                <tr>
+                    <th>Field</th>
+                    <th>v@(OlderVersionNumber)</th>
+                    <th>v@(NewerVersionNumber)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in _fieldDiffs)
+                {
+                    <tr style="@(row.Changed ? "background: var(--mud-palette-warning-hover);" : "")">
+                        <td><strong>@row.Label</strong></td>
+                        <td>@(row.OldValue ?? "—")</td>
+                        <td>@(row.NewValue ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2" Style="font-weight: 700;">APIs</MudText>
+        @if (_apiDiffs.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">No API differences.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+                <thead>
+                    <tr>
+                        <th>API</th>
+                        <th>Change</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var api in _apiDiffs)
+                    {
+                        <tr>
+                            <td>@api.Name</td>
+                            <td>
+                                <MudChip T="string" Size="Size.Small" Color="@GetApiChangeColor(api.ChangeType)">@api.ChangeType</MudChip>
+                            </td>
+                            <td>@api.Detail</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public int OlderVersionNumber { get; set; }
+    [Parameter] public string OlderConfigSnapshot { get; set; } = string.Empty;
+    [Parameter] public int NewerVersionNumber { get; set; }
+    [Parameter] public string NewerConfigSnapshot { get; set; } = string.Empty;
+
+    private List<FieldDiff> _fieldDiffs = new();
+    private List<ApiDiff> _apiDiffs = new();
+
+    protected override void OnInitialized()
+    {
+        ConfigSnapshot? older = null;
+        ConfigSnapshot? newer = null;
+        try { older = JsonSerializer.Deserialize<ConfigSnapshot>(OlderConfigSnapshot); } catch { }
+        try { newer = JsonSerializer.Deserialize<ConfigSnapshot>(NewerConfigSnapshot); } catch { }
+
+        _fieldDiffs = BuildFieldDiffs(older, newer);
+        _apiDiffs = BuildApiDiffs(older?.Apis ?? new(), newer?.Apis ?? new());
+    }
+
+    private static List<FieldDiff> BuildFieldDiffs(ConfigSnapshot? older, ConfigSnapshot? newer)
+    {
+        FieldDiff Row(string label, string? oldValue, string? newValue) =>
+            new(label, oldValue, newValue, !string.Equals(oldValue, newValue, StringComparison.Ordinal));
+
+        return new List<FieldDiff>
+        {
+            Row("Name", older?.Name, newer?.Name),
+            Row("Description", older?.Description, newer?.Description),
+            Row("Base URL", older?.BaseUrl, newer?.BaseUrl),
+            Row("Environment", older?.Environment, newer?.Environment),
+            Row("Timeout (s)", older?.Configuration?.TimeoutSeconds.ToString(), newer?.Configuration?.TimeoutSeconds.ToString()),
+            Row("Max Retries", older?.Configuration?.MaxRetries.ToString(), newer?.Configuration?.MaxRetries.ToString()),
+            Row("RAG Threshold", older?.Configuration?.RagThreshold.ToString("F2"), newer?.Configuration?.RagThreshold.ToString("F2")),
+            Row("Model ID", older?.Configuration?.ModelId, newer?.Configuration?.ModelId),
+            Row("System Prompt Template", older?.Configuration?.SystemPromptTemplate, newer?.Configuration?.SystemPromptTemplate),
+        };
+    }
+
+    private static List<ApiDiff> BuildApiDiffs(List<ApiSnapshot> older, List<ApiSnapshot> newer)
+    {
+        var diffs = new List<ApiDiff>();
+
+        foreach (var newApi in newer)
+        {
+            var oldApi = older.FirstOrDefault(a => a.Name == newApi.Name);
+            if (oldApi is null)
+            {
+                diffs.Add(new ApiDiff(newApi.Name, "Added", newApi.BaseUrl));
+            }
+            else if (oldApi.BaseUrl != newApi.BaseUrl || oldApi.AuthScheme != newApi.AuthScheme)
+            {
+                diffs.Add(new ApiDiff(newApi.Name, "Modified", $"{oldApi.BaseUrl} ({oldApi.AuthScheme}) → {newApi.BaseUrl} ({newApi.AuthScheme})"));
+            }
+        }
+
+        foreach (var oldApi in older)
+        {
+            if (newer.All(a => a.Name != oldApi.Name))
+                diffs.Add(new ApiDiff(oldApi.Name, "Removed", oldApi.BaseUrl));
+        }
+
+        return diffs;
+    }
+
+    private static Color GetApiChangeColor(string changeType) => changeType switch
+    {
+        "Added" => Color.Success,
+        "Removed" => Color.Error,
+        "Modified" => Color.Warning,
+        _ => Color.Default,
+    };
+
+    private void Close() => MudDialog.Close();
+
+    private record FieldDiff(string Label, string? OldValue, string? NewValue, bool Changed);
+    private record ApiDiff(string Name, string ChangeType, string Detail);
+
+    private class ConfigSnapshot
+    {
+        public string Name { get; init; } = string.Empty;
+        public string? Description { get; init; }
+        public string? BaseUrl { get; init; }
+        public string Environment { get; init; } = string.Empty;
+        public List<ApiSnapshot> Apis { get; init; } = new();
+        public ConfigurationSnapshot? Configuration { get; init; }
+    }
+
+    private class ApiSnapshot
+    {
+        public string Name { get; init; } = string.Empty;
+        public string BaseUrl { get; init; } = string.Empty;
+        public string AuthScheme { get; init; } = string.Empty;
+        public string? CredentialRef { get; init; }
+        public string? OpenApiSource { get; init; }
+    }
+
+    private class ConfigurationSnapshot
+    {
+        public int TimeoutSeconds { get; init; }
+        public int MaxRetries { get; init; }
+        public double RagThreshold { get; init; }
+        public string? ModelId { get; init; }
+        public string? SystemPromptTemplate { get; init; }
+    }
+}
