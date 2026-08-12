@@ -492,7 +492,16 @@
 
         _iframeEmbed = $"<iframe src=\"{widgetUrl}\" width=\"{_width}\" height=\"{_height}\" style=\"border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);\" allow=\"microphone\" title=\"{safeTitle}\"></iframe>";
 
-        _scriptEmbed = "<script>\n"
+        // On mobile, the widget goes full-screen when opened (§44) rather than staying a small
+        // fixed-size box — the media query below overrides the inline styles the script sets
+        // (needs !important since inline style specificity otherwise wins).
+        _scriptEmbed = "<style>\n"
+            + "@media (max-width: 600px) {\n"
+            + "  #r2wai-chatbot.r2wai-open { position:fixed !important; inset:0 !important; width:100% !important; height:100% !important; }\n"
+            + "  #r2wai-chatbot.r2wai-open iframe { width:100% !important; height:100% !important; border-radius:0 !important; }\n"
+            + "}\n"
+            + "</style>\n"
+            + "<script>\n"
             + "(function() {\n"
             + "  var w = document.createElement('div');\n"
             + "  w.id = 'r2wai-chatbot';\n"
@@ -511,6 +520,7 @@
             + "  btn.onclick = function() {\n"
             + "    var open = w.style.display !== 'none';\n"
             + "    w.style.display = open ? 'none' : 'block';\n"
+            + "    w.classList.toggle('r2wai-open', !open);\n"
             + "    btn.style.display = open ? 'flex' : 'none';\n"
             + "  };\n"
             + "})();\n"
