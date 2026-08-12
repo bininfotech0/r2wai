@@ -16,17 +16,11 @@ public class RemoveSourceCommandValidator : AbstractValidator<RemoveSourceComman
 }
 
 public class RemoveSourceCommandHandler(
-    IRepository<KnowledgeBaseSource> sourceRepo,
-    IUnitOfWork unitOfWork) : IRequestHandler<RemoveSourceCommand, Unit>
+    IKnowledgeBaseService knowledgeBaseService) : IRequestHandler<RemoveSourceCommand, Unit>
 {
     public async Task<Unit> Handle(RemoveSourceCommand command, CancellationToken cancellationToken)
     {
-        var source = await sourceRepo.GetByIdAsync(command.SourceId, cancellationToken)
-            ?? throw new NotFoundException(nameof(KnowledgeBaseSource), command.SourceId);
-
-        sourceRepo.Delete(source);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
+        await knowledgeBaseService.RemoveSourceAsync(command.SourceId, cancellationToken);
         return Unit.Value;
     }
 }

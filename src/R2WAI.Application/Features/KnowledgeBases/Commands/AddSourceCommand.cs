@@ -21,24 +21,9 @@ public class AddSourceCommandValidator : AbstractValidator<AddSourceCommand>
 }
 
 public class AddSourceCommandHandler(
-    IRepository<KnowledgeBase> kbRepo,
-    IRepository<KnowledgeBaseSource> sourceRepo,
-    IUnitOfWork unitOfWork,
-    IMapper mapper) : IRequestHandler<AddSourceCommand, KnowledgeBaseSourceDto>
+    IKnowledgeBaseService knowledgeBaseService) : IRequestHandler<AddSourceCommand, KnowledgeBaseSourceDto>
 {
-    public async Task<KnowledgeBaseSourceDto> Handle(AddSourceCommand command, CancellationToken cancellationToken)
-    {
-        var kb = await kbRepo.GetByIdAsync(command.KnowledgeBaseId, cancellationToken)
-            ?? throw new NotFoundException(nameof(KnowledgeBase), command.KnowledgeBaseId);
-
-        var source = new KnowledgeBaseSource(
-            Guid.NewGuid(), command.KnowledgeBaseId, command.Type,
-            command.ReferenceId, command.Url, command.Content);
-
-        kb.AddSource(source);
-        await sourceRepo.AddAsync(source, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return mapper.Map<KnowledgeBaseSourceDto>(source);
-    }
+    public Task<KnowledgeBaseSourceDto> Handle(AddSourceCommand command, CancellationToken cancellationToken) =>
+        knowledgeBaseService.AddSourceAsync(
+            command.KnowledgeBaseId, command.Type, command.ReferenceId, command.Url, command.Content, cancellationToken);
 }

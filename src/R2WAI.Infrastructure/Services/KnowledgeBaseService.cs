@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using R2WAI.Infrastructure.VectorStore;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace R2WAI.Infrastructure.Services;
 
@@ -9,17 +10,20 @@ public class KnowledgeBaseService : IKnowledgeBaseService
     private readonly ApplicationDbContext _context;
     private readonly IAIService _aiService;
     private readonly IVectorStoreService _vectorStore;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<KnowledgeBaseService> _logger;
 
     public KnowledgeBaseService(
         ApplicationDbContext context,
         IAIService aiService,
         IVectorStoreService vectorStore,
+        IHttpClientFactory httpClientFactory,
         ILogger<KnowledgeBaseService> logger)
     {
         _context = context;
         _aiService = aiService;
         _vectorStore = vectorStore;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -85,13 +89,32 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         _context.KnowledgeBaseSources.Add(source);
         await _context.SaveChangesAsync(ct);
 
-        if (!string.IsNullOrEmpty(content) && !string.IsNullOrEmpty(kb.VectorCollectionName))
+        var textToIndex = content;
+        if (string.IsNullOrEmpty(textToIndex) && type.Equals("Url", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(url))
         {
+            source.MarkProcessing();
+            await _context.SaveChangesAsync(ct);
+
+            try { textToIndex = await FetchUrlTextAsync(url, ct); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to fetch URL content for source {SourceId}: {Url}", source.Id, url);
+                source.MarkFailed($"Could not fetch URL: {ex.Message}");
+                await _context.SaveChangesAsync(ct);
+                textToIndex = null;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(textToIndex) && !string.IsNullOrEmpty(kb.VectorCollectionName))
+        {
+            source.MarkProcessing();
+            await _context.SaveChangesAsync(ct);
+
             try
             {
                 var chunkSize = kb.ChunkSize ?? 1000;
                 var chunkOverlap = kb.ChunkOverlap ?? 200;
-                var chunks = ChunkText(content, chunkSize, chunkOverlap);
+                var chunks = ChunkText(textToIndex, chunkSize, chunkOverlap);
 
                 if (chunks.Count > 0)
                 {
@@ -122,12 +145,21 @@ public class KnowledgeBaseService : IKnowledgeBaseService
                         _logger.LogInformation("Indexed {ChunkCount} chunks from source {SourceId} into {Collection}",
                             vectors.Count, source.Id, kb.VectorCollectionName);
                     }
+
+                    source.MarkIndexed(vectors.Count);
+                }
+                else
+                {
+                    source.MarkFailed("No content could be extracted to index.");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to index source {SourceId} into Qdrant", source.Id);
+                _logger.LogError(ex, "Failed to index source {SourceId} into vector store", source.Id);
+                source.MarkFailed(ex.Message);
             }
+
+            await _context.SaveChangesAsync(ct);
         }
 
         return new KnowledgeBaseSourceDto
@@ -140,6 +172,27 @@ public class KnowledgeBaseService : IKnowledgeBaseService
             Status = source.Status,
             CreatedAt = source.CreatedAt
         };
+    }
+
+    private async Task<string> FetchUrlTextAsync(string url, CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient();
+        client.Timeout = TimeSpan.FromSeconds(20);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("R2WAI-KnowledgeIndexer/1.0");
+
+        var html = await client.GetStringAsync(url, ct);
+        return ExtractReadableText(html);
+    }
+
+    private static string ExtractReadableText(string html)
+    {
+        var withoutScripts = Regex.Replace(html, "<(script|style)[^>]*>.*?</\\1>", " ",
+            RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        var withoutTags = Regex.Replace(withoutScripts, "<[^>]+>", " ");
+        var decoded = System.Net.WebUtility.HtmlDecode(withoutTags);
+        var collapsed = Regex.Replace(decoded, @"\s+", " ").Trim();
+        const int maxLength = 200_000;
+        return collapsed.Length > maxLength ? collapsed[..maxLength] : collapsed;
     }
 
     public async Task RemoveSourceAsync(Guid id, CancellationToken ct = default)
