@@ -7,7 +7,7 @@ using R2WAI.Application.Features.Governance.Queries;
 namespace R2WAI.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Roles = "Admin,SystemAdmin")]
 [Route("api/v1/governance")]
 public class GovernanceController(IMediator mediator) : ControllerBase
 {

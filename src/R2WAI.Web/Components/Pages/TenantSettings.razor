@@ -1,5 +1,5 @@
 @page "/settings/tenant"
-@attribute [Authorize]
+@attribute [Authorize(Roles = "Admin,SystemAdmin")]
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
 

@@ -183,11 +183,15 @@
             <MudNavGroup Title="Settings" Icon="@Icons.Material.Outlined.Settings" Expanded="_settingsExpanded" ExpandedChanged="@(v => _settingsExpanded = v)" HideExpandIcon="false"
                          Style="color: rgba(255,255,255,0.65);">
                 <MudNavLink Href="/profile" Icon="@Icons.Material.Outlined.Person">Profile</MudNavLink>
-                <MudNavLink Href="/settings/tenant" Icon="@Icons.Material.Outlined.Domain">Organization</MudNavLink>
-                <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users</MudNavLink>
-                <MudNavLink Href="/admin/roles" Icon="@Icons.Material.Outlined.Shield">Roles</MudNavLink>
-                <MudNavLink Href="/admin/webhooks" Icon="@Icons.Material.Outlined.Webhook">Integrations</MudNavLink>
-                <MudNavLink Href="/admin/api-keys" Icon="@Icons.Material.Outlined.Key">API Keys</MudNavLink>
+                <AuthorizeView Roles="Admin">
+                    <Authorized>
+                        <MudNavLink Href="/settings/tenant" Icon="@Icons.Material.Outlined.Domain">Organization</MudNavLink>
+                        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users</MudNavLink>
+                        <MudNavLink Href="/admin/roles" Icon="@Icons.Material.Outlined.Shield">Roles</MudNavLink>
+                        <MudNavLink Href="/admin/webhooks" Icon="@Icons.Material.Outlined.Webhook">Integrations</MudNavLink>
+                        <MudNavLink Href="/admin/api-keys" Icon="@Icons.Material.Outlined.Key">API Keys</MudNavLink>
+                    </Authorized>
+                </AuthorizeView>
             </MudNavGroup>
         </MudNavMenu>
 

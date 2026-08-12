@@ -1,6 +1,6 @@
 @page "/admin/permissions"
 @page "/settings/permissions"
-@attribute [Authorize]
+@attribute [Authorize(Roles = "Admin,SystemAdmin")]
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation

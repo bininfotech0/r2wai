@@ -11,7 +11,11 @@ namespace R2WAI.Api.Controllers;
 [Route("api/v1/[controller]")]
 public class DepartmentsController(IMediator mediator) : ControllerBase
 {
+    // Reading departments is open to any authenticated user — the Add Application wizard and
+    // Applications list need the department dropdown/filter regardless of role. Only creating,
+    // renaming, or removing a department is Super-Admin/Governance territory.
     [HttpPost]
+    [Authorize(Roles = "Admin,SystemAdmin")]
     public async Task<IActionResult> Create([FromBody] CreateDepartmentCommand command, CancellationToken ct = default)
     {
         var result = await mediator.Send(command, ct);
@@ -39,6 +43,7 @@ public class DepartmentsController(IMediator mediator) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin,SystemAdmin")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDepartmentCommand command, CancellationToken ct = default)
     {
         command = command with { Id = id };
@@ -47,6 +52,7 @@ public class DepartmentsController(IMediator mediator) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin,SystemAdmin")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {
         var command = new DeleteDepartmentCommand { Id = id };
