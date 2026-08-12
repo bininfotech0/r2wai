@@ -7,4 +7,5 @@ public interface ICurrentUserService
     string[] Roles { get; }
     bool IsAuthenticated { get; }
     string? IpAddress { get; }
+    string? CorrelationId { get; }
 }

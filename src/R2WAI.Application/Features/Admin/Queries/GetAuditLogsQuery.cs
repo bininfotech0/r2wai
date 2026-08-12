@@ -5,6 +5,7 @@ public record GetAuditLogsQuery : IRequest<PagedResult<AuditLogDto>>, IAuthorize
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 50;
     public Guid? UserId { get; init; }
+    public Guid? ApplicationId { get; init; }
     public AuditAction? Action { get; init; }
     public string? EntityType { get; init; }
     public DateTime? From { get; init; }
@@ -24,6 +25,7 @@ public class GetAuditLogsQueryHandler(
         var all = await auditLogRepo.FindAsync(
             l => l.TenantId == tenantId
               && (!query.UserId.HasValue || l.UserId == query.UserId)
+              && (!query.ApplicationId.HasValue || l.ApplicationId == query.ApplicationId)
               && (!query.Action.HasValue || l.Action == query.Action)
               && (string.IsNullOrWhiteSpace(query.EntityType) || l.EntityType == query.EntityType)
               && (!query.From.HasValue || l.Timestamp >= query.From.Value)

@@ -7,6 +7,8 @@ public sealed class AuditLog : BaseEntity<Guid>
 {
     public Guid TenantId { get; private set; }
     public Guid? UserId { get; private set; }
+    public Guid? ApplicationId { get; private set; }
+    public string? CorrelationId { get; private set; }
     public AuditAction Action { get; private set; }
     public string EntityType { get; private set; }
     public string EntityId { get; private set; }
@@ -19,17 +21,21 @@ public sealed class AuditLog : BaseEntity<Guid>
 
     public Tenant Tenant { get; private set; } = null!;
     public User? User { get; private set; }
+    public ConnectedApplication? Application { get; private set; }
 
     private AuditLog() { }
 
     public AuditLog(Guid id, Guid tenantId, AuditAction action, string entityType,
                     string entityId, Guid? userId = null, string? oldValues = null,
                     string? newValues = null, string? ipAddress = null,
-                    string? userAgent = null, string? metadata = null)
+                    string? userAgent = null, string? metadata = null,
+                    Guid? applicationId = null, string? correlationId = null)
     {
         Id = id;
         TenantId = tenantId;
         UserId = userId;
+        ApplicationId = applicationId;
+        CorrelationId = correlationId;
         Action = action;
         EntityType = entityType;
         EntityId = entityId;

@@ -31,10 +31,19 @@
                           Placeholder="Filter by username" />
         </MudItem>
         <MudItem xs="12" sm="3">
+            <MudSelect T="Guid?" @bind-Value="_filterApplicationId" Label="Application" Clearable="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var app in _applications)
+                {
+                    <MudSelectItem T="Guid?" Value="@((Guid?)app.Id)">@app.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="2">
             <MudDatePicker @bind-Date="_filterFrom" Label="From Date"
                            Variant="Variant.Outlined" Margin="Margin.Dense" />
         </MudItem>
-        <MudItem xs="12" sm="3">
+        <MudItem xs="12" sm="2">
             <MudDatePicker @bind-Date="_filterTo" Label="To Date"
                            Variant="Variant.Outlined" Margin="Margin.Dense" />
         </MudItem>
@@ -72,7 +81,24 @@
         </TemplateColumn>
         <PropertyColumn Property="x => x.EntityType" Title="Entity" />
         <PropertyColumn Property="x => x.EntityId" Title="Entity ID" />
+        <TemplateColumn Title="Application">
+            <CellTemplate>
+                @GetApplicationName(context.Item.ApplicationId)
+            </CellTemplate>
+        </TemplateColumn>
         <PropertyColumn Property="x => x.IpAddress" Title="IP Address" />
+        <TemplateColumn Title="Correlation ID">
+            <CellTemplate>
+                @if (!string.IsNullOrEmpty(context.Item.CorrelationId))
+                {
+                    <MudTooltip Text="@context.Item.CorrelationId">
+                        <span class="mud-text-secondary" style="font-family: monospace; font-size: 0.75rem;">
+                            @context.Item.CorrelationId[..Math.Min(8, context.Item.CorrelationId.Length)]
+                        </span>
+                    </MudTooltip>
+                }
+            </CellTemplate>
+        </TemplateColumn>
     </Columns>
     <NoRecordsContent>
         <EmptyState Icon="@Icons.Material.Outlined.ManageSearch"
@@ -88,13 +114,32 @@
     private string _filterAction = string.Empty;
     private string _filterEntityType = string.Empty;
     private string _filterUser = string.Empty;
+    private Guid? _filterApplicationId;
     private DateTime? _filterFrom;
     private DateTime? _filterTo;
+    private List<ApplicationOption> _applications = new();
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) await LoadLogs();
+        if (firstRender)
+        {
+            await LoadApplications();
+            await LoadLogs();
+        }
     }
+
+    private async Task LoadApplications()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ApplicationsResult>("/api/v1/applications?page=1&pageSize=100");
+            _applications = result?.Items ?? new();
+        }
+        catch { /* application filter is a convenience; leave list empty on failure */ }
+    }
+
+    private string GetApplicationName(Guid? applicationId) =>
+        applicationId is null ? "—" : (_applications.FirstOrDefault(a => a.Id == applicationId)?.Name ?? "—");
 
     private async Task LoadLogs()
     {
@@ -109,6 +154,8 @@
                 url += $"&action={_filterAction}";
             if (!string.IsNullOrEmpty(_filterUser))
                 url += $"&user={Uri.EscapeDataString(_filterUser)}";
+            if (_filterApplicationId.HasValue)
+                url += $"&applicationId={_filterApplicationId.Value}";
             if (_filterFrom.HasValue)
                 url += $"&from={_filterFrom.Value:yyyy-MM-dd}";
             if (_filterTo.HasValue)
@@ -131,6 +178,7 @@
             if (!string.IsNullOrEmpty(_filterAction)) url += $"&action={_filterAction}";
             if (!string.IsNullOrEmpty(_filterEntityType)) url += $"&entityType={Uri.EscapeDataString(_filterEntityType)}";
             if (!string.IsNullOrEmpty(_filterUser)) url += $"&user={Uri.EscapeDataString(_filterUser)}";
+            if (_filterApplicationId.HasValue) url += $"&applicationId={_filterApplicationId.Value}";
             if (_filterFrom.HasValue) url += $"&from={_filterFrom.Value:yyyy-MM-dd}";
             if (_filterTo.HasValue) url += $"&to={_filterTo.Value:yyyy-MM-dd}";
 
@@ -166,10 +214,19 @@
         public Guid Id { get; set; }
         public Guid? UserId { get; set; }
         public string? UserName { get; set; }
+        public Guid? ApplicationId { get; set; }
+        public string? CorrelationId { get; set; }
         public string Action { get; set; } = string.Empty;
         public string EntityType { get; set; } = string.Empty;
         public string EntityId { get; set; } = string.Empty;
         public string? IpAddress { get; set; }
         public DateTime Timestamp { get; set; }
+    }
+
+    private class ApplicationsResult { public List<ApplicationOption> Items { get; set; } = new(); }
+    private class ApplicationOption
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
     }
 }

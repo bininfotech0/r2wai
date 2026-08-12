@@ -42,6 +42,8 @@ public class CurrentUserService : ICurrentUserService
 
     public bool IsAuthenticated => _httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated ?? false;
 
+    public string? CorrelationId => _httpContextAccessor.HttpContext?.Items["CorrelationId"] as string;
+
     public string? IpAddress
     {
         get

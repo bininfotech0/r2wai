@@ -135,6 +135,7 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] Guid? userId = null,
+        [FromQuery] Guid? applicationId = null,
         [FromQuery] string? action = null,
         [FromQuery] string? entityType = null,
         CancellationToken ct = default)
@@ -149,6 +150,7 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
             Page = page,
             PageSize = pageSize,
             UserId = userId,
+            ApplicationId = applicationId,
             Action = parsedAction,
             EntityType = entityType
         };

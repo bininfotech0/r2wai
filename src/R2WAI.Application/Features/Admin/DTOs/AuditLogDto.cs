@@ -5,6 +5,8 @@ public class AuditLogDto
     public Guid Id { get; init; }
     public Guid? UserId { get; init; }
     public string? UserName { get; init; }
+    public Guid? ApplicationId { get; init; }
+    public string? CorrelationId { get; init; }
     public AuditAction Action { get; init; }
     public string EntityType { get; init; } = string.Empty;
     public string EntityId { get; init; } = string.Empty;

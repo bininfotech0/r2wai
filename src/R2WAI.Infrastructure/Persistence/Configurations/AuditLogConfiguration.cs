@@ -35,6 +35,9 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.Property(al => al.UserAgent)
             .HasMaxLength(500);
 
+        builder.Property(al => al.CorrelationId)
+            .HasMaxLength(64);
+
         builder.Property(al => al.Metadata)
             .HasColumnType("jsonb");
 
@@ -51,6 +54,11 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.HasOne(al => al.User)
             .WithMany()
             .HasForeignKey(al => al.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(al => al.Application)
+            .WithMany()
+            .HasForeignKey(al => al.ApplicationId)
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(al => new { al.TenantId, al.Timestamp });

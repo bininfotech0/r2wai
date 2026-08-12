@@ -20,6 +20,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] Guid? userId = null,
+        [FromQuery] Guid? applicationId = null,
         [FromQuery] string? entityType = null,
         [FromQuery] string? action = null,
         [FromQuery] DateTime? from = null,
@@ -35,6 +36,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
             Page = page,
             PageSize = pageSize,
             UserId = userId,
+            ApplicationId = applicationId,
             EntityType = entityType,
             Action = parsedAction,
             From = from,
@@ -536,10 +538,10 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
         }
 
         var csv = new StringBuilder();
-        csv.AppendLine("Timestamp,Action,EntityType,EntityId,UserId");
+        csv.AppendLine("Timestamp,Action,EntityType,EntityId,UserId,ApplicationId,CorrelationId");
         foreach (var item in items)
         {
-            csv.AppendLine($"{item.Timestamp:yyyy-MM-dd HH:mm:ss},{item.Action},{item.EntityType},{item.EntityId},{item.UserId}");
+            csv.AppendLine($"{item.Timestamp:yyyy-MM-dd HH:mm:ss},{item.Action},{item.EntityType},{item.EntityId},{item.UserId},{item.ApplicationId},{item.CorrelationId}");
         }
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "audit-logs.csv");
     }

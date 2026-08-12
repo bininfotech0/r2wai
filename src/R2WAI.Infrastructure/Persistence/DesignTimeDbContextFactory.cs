@@ -39,6 +39,7 @@ internal class DesignTimeCurrentUserService : ICurrentUserService
     public string[] Roles => ["Admin"];
     public bool IsAuthenticated => true;
     public string? IpAddress => "127.0.0.1";
+    public string? CorrelationId => null;
 }
 
 internal class DesignTimeDateTimeService : IDateTimeService

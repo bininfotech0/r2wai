@@ -193,6 +193,7 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
             {
                 EntityType = entry.Entity.GetType().Name,
                 EntityId = entry.Entity.Id.ToString(),
+                ApplicationId = entry.Entity.GetType().GetProperty("ApplicationId")?.GetValue(entry.Entity) as Guid?,
                 Action = entry.State switch
                 {
                     EntityState.Added => AuditAction.Create,
@@ -232,7 +233,11 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
                 _currentUserService.UserId,
                 auditEntry.OldValues,
                 auditEntry.NewValues,
-                _currentUserService.IpAddress);
+                _currentUserService.IpAddress,
+                userAgent: null,
+                metadata: null,
+                applicationId: auditEntry.ApplicationId,
+                correlationId: _currentUserService.CorrelationId);
 
             AuditLogs.Add(auditLog);
         }
@@ -250,6 +255,7 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     {
         public string EntityType { get; set; } = string.Empty;
         public string EntityId { get; set; } = string.Empty;
+        public Guid? ApplicationId { get; set; }
         public AuditAction Action { get; set; }
         public string? OldValues { get; set; }
         public string? NewValues { get; set; }
