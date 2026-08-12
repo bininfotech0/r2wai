@@ -7,6 +7,7 @@ public record CreateChatbotCommand : IRequest<ChatbotDto>
     public string Name { get; init; } = string.Empty;
     public Guid? KnowledgeBaseId { get; init; }
     public Guid? ModelConfigurationId { get; init; }
+    public Guid? AssistantId { get; init; }
     public bool VoiceEnabled { get; init; }
 }
 
@@ -33,6 +34,9 @@ public class CreateChatbotCommandHandler(
         var chatbot = new Chatbot(
             Guid.NewGuid(), tenantId, userId, command.Name,
             command.KnowledgeBaseId, command.ModelConfigurationId);
+
+        if (command.AssistantId.HasValue)
+            chatbot.AssignAssistant(command.AssistantId);
 
         if (command.VoiceEnabled)
             chatbot.SetVoiceEnabled(true);

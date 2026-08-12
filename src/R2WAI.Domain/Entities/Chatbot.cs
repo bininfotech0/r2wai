@@ -7,6 +7,7 @@ public sealed class Chatbot : BaseEntity<Guid>
 {
     public Guid TenantId { get; private set; }
     public Guid UserId { get; private set; }
+    public Guid? AssistantId { get; private set; }
     public string Name { get; private set; }
     public string? Description { get; private set; }
     public string? WelcomeMessage { get; private set; }
@@ -26,6 +27,7 @@ public sealed class Chatbot : BaseEntity<Guid>
     public User User { get; private set; } = null!;
     public KnowledgeBase? KnowledgeBase { get; private set; }
     public ModelConfiguration? ModelConfiguration { get; private set; }
+    public AssistantDefinition? Assistant { get; private set; }
 
     private Chatbot() { }
 
@@ -93,6 +95,12 @@ public sealed class Chatbot : BaseEntity<Guid>
     {
         WebhookApiKeyHash = hash;
         WebhookApiKeyPrefix = prefix;
+        MarkAsModified();
+    }
+
+    public void AssignAssistant(Guid? assistantId)
+    {
+        AssistantId = assistantId;
         MarkAsModified();
     }
 }

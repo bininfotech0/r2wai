@@ -30,9 +30,9 @@ public class ChatbotsController(
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetList([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<IActionResult> GetList([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] Guid? assistantId = null, CancellationToken ct = default)
     {
-        var query = new GetChatbotsQuery { Page = page, PageSize = pageSize };
+        var query = new GetChatbotsQuery { Page = page, PageSize = pageSize, AssistantId = assistantId };
         var result = await mediator.Send(query, ct);
         return Ok(result);
     }

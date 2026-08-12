@@ -63,6 +63,12 @@ public class ChatbotConfiguration : IEntityTypeConfiguration<Chatbot>
             .HasForeignKey(c => c.ModelConfigurationId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.HasOne(c => c.Assistant)
+            .WithMany()
+            .HasForeignKey(c => c.AssistantId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasIndex(c => new { c.TenantId, c.Name });
+        builder.HasIndex(c => c.AssistantId);
     }
 }

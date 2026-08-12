@@ -4,6 +4,7 @@ public record GetChatbotsQuery : IRequest<PagedResult<ChatbotDto>>
 {
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
+    public Guid? AssistantId { get; init; }
 }
 
 public class GetChatbotsQueryHandler(
@@ -15,13 +16,18 @@ public class GetChatbotsQueryHandler(
     public async Task<PagedResult<ChatbotDto>> Handle(GetChatbotsQuery query, CancellationToken cancellationToken)
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
+        var hasAssistantFilter = query.AssistantId.HasValue;
         var cacheKey = $"chatbots:{tenantId}:p{query.Page}:s{query.PageSize}";
 
-        var cached = await cache.GetAsync<PagedResult<ChatbotDto>>(cacheKey, cancellationToken);
-        if (cached is not null) return cached;
+        if (!hasAssistantFilter)
+        {
+            var cached = await cache.GetAsync<PagedResult<ChatbotDto>>(cacheKey, cancellationToken);
+            if (cached is not null) return cached;
+        }
 
         var filtered = await chatbotRepo.FindAsync(
-            c => c.TenantId == tenantId && !c.IsDeleted, cancellationToken);
+            c => c.TenantId == tenantId && !c.IsDeleted
+              && (!hasAssistantFilter || c.AssistantId == query.AssistantId), cancellationToken);
 
         var ordered = filtered.OrderByDescending(c => c.CreatedAt);
         var total = ordered.Count();
@@ -35,7 +41,8 @@ public class GetChatbotsQueryHandler(
             PageSize = query.PageSize,
         };
 
-        await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(2), cancellationToken);
+        if (!hasAssistantFilter)
+            await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(2), cancellationToken);
         return result;
     }
 }

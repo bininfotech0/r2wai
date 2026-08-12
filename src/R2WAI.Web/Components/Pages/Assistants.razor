@@ -779,6 +779,76 @@
                             </div>
                         </MudPaper>
                     </MudTabPanel>
+
+                    <MudTabPanel Text="Channels" Icon="@Icons.Material.Outlined.Hub">
+                        <div class="mb-4">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Channels</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Where this assistant can be reached</MudText>
+                        </div>
+
+                        @if (_channelLoading)
+                        {
+                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" />
+                        }
+
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" sm="6">
+                                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%;">
+                                    <div class="d-flex justify-space-between align-center mb-2">
+                                        <div class="d-flex align-center gap-2">
+                                            <MudIcon Icon="@Icons.Material.Outlined.Language" Color="Color.Primary" Size="Size.Small" />
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Website</MudText>
+                                        </div>
+                                        @if (_assistantChatbot is not null)
+                                        {
+                                            <StatusBadge Status="@_assistantChatbot.Status" />
+                                        }
+                                    </div>
+                                    @if (_assistantChatbot is null)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                                            Embed this assistant as a floating chat widget on a website.
+                                        </MudText>
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.Add" Disabled="_channelLoading"
+                                                   OnClick="CreateWebsiteChannel">
+                                            Add Website Channel
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                                            Live at a public, credential-free embed — no secrets are ever sent to the browser.
+                                        </MudText>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="OpenChannelConfigure">Configure</MudButton>
+                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="PreviewChannel">Preview</MudButton>
+                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="OpenChannelEmbedCode">
+                                                Get Embed Code
+                                            </MudButton>
+                                        </div>
+                                    }
+                                </MudPaper>
+                            </MudItem>
+                            @foreach (var (icon, label) in new[]
+                            {
+                                (Icons.Material.Outlined.Apps, "Application"),
+                                (Icons.Material.Outlined.PhoneIphone, "Mobile"),
+                                (Icons.Material.Outlined.Api, "API"),
+                            })
+                            {
+                                <MudItem xs="12" sm="6">
+                                    <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%; opacity: 0.6;">
+                                        <div class="d-flex align-center gap-2 mb-2">
+                                            <MudIcon Icon="@icon" Size="Size.Small" />
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">@label</MudText>
+                                        </div>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Not yet available in this release.</MudText>
+                                    </MudPaper>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    </MudTabPanel>
                 </MudTabs>
             </MudPaper>
 
@@ -823,6 +893,8 @@
 @code {
     private List<AssistantDto> _assistants = new();
     private AssistantDto? _selectedAssistant;
+    private ChatbotChannelItem? _assistantChatbot;
+    private bool _channelLoading;
     private string _searchTerm = string.Empty;
     private string _filter = "All";
     private bool _loading = true;
@@ -1223,6 +1295,77 @@
             await LoadDocuments();
         }
         catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+
+        await LoadAssistantChatbot();
+    }
+
+    private async Task LoadAssistantChatbot()
+    {
+        if (_selectedAssistant is null) return;
+        _channelLoading = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ChatbotListResult>(
+                $"/api/v1/chatbots?page=1&pageSize=1&assistantId={_selectedAssistant.Id}");
+            _assistantChatbot = result?.Items?.FirstOrDefault();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load channels: {ex.Message}", Severity.Error); }
+        finally { _channelLoading = false; }
+    }
+
+    private async Task CreateWebsiteChannel()
+    {
+        if (_selectedAssistant is null) return;
+        _channelLoading = true;
+        try
+        {
+            var payload = new
+            {
+                Name = _selectedAssistant.Name,
+                KnowledgeBaseId = _editKnowledgeBaseId,
+                ModelConfigurationId = _editModelId,
+                AssistantId = _selectedAssistant.Id
+            };
+            var response = await Http.PostAsJsonAsync("/api/v1/chatbots", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to create channel" : body, Severity.Error);
+                return;
+            }
+            await LoadAssistantChatbot();
+            Snackbar.Add("Website channel created", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to create channel: {ex.Message}", Severity.Error); }
+        finally { _channelLoading = false; }
+    }
+
+    private async Task OpenChannelConfigure()
+    {
+        if (_assistantChatbot is null) return;
+        var parameters = new DialogParameters<CreateEditChatbotDialog> { { x => x.EditId, _assistantChatbot.Id.ToString() } };
+        var dialog = await Dialog.ShowAsync<CreateEditChatbotDialog>("Configure Website Channel", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled == false) await LoadAssistantChatbot();
+    }
+
+    private void PreviewChannel()
+    {
+        if (_assistantChatbot is null) return;
+        Navigation.NavigateTo($"/chatbot/{_assistantChatbot.Id}", forceLoad: true);
+    }
+
+    private async Task OpenChannelEmbedCode()
+    {
+        if (_assistantChatbot is null) return;
+        var parameters = new DialogParameters<ChatbotEmbedDialog>
+        {
+            { x => x.ChatbotId, _assistantChatbot.Id.ToString() },
+            { x => x.ChatbotName, _assistantChatbot.Name },
+            { x => x.WelcomeMessage, _assistantChatbot.WelcomeMessage }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await Dialog.ShowAsync<ChatbotEmbedDialog>($"Embed {_assistantChatbot.Name}", parameters, options);
     }
 
     private async Task LoadDocuments()
@@ -1614,4 +1757,13 @@
     }
     private class PromptTemplatesResult { public List<PromptTemplateItem>? Items { get; set; } }
     private class PromptTemplateItem { public string Type { get; set; } = string.Empty; public string Prompt { get; set; } = string.Empty; }
+
+    private class ChatbotListResult { public List<ChatbotChannelItem>? Items { get; set; } }
+    private class ChatbotChannelItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? WelcomeMessage { get; set; }
+        public string Status { get; set; } = string.Empty;
+    }
 }
