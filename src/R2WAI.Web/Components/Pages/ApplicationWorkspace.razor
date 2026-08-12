@@ -300,6 +300,128 @@ else
                                   OnLink="@(id => LinkItem("workflows", id))" OnUnlink="@(id => UnlinkItem("workflows", id))" />
             </div>
         </MudTabPanel>
+
+        <MudTabPanel Text="Test">
+            <div class="pt-4">
+                @if (_assistants.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.Chat" Title="No assistant linked yet"
+                                Description="Link an assistant in the Build tab before you can test it here."
+                                MinHeight="200px" />
+                }
+                else
+                {
+                    <div class="d-flex justify-space-between align-center mb-3 flex-wrap gap-2">
+                        <MudSelect T="Guid?" Value="_testAssistantId" ValueChanged="OnTestAssistantChanged"
+                                   Label="Assistant" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 260px;">
+                            @foreach (var a in _assistants)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.RestartAlt"
+                                   OnClick="ClearTestConversation">
+                            New Conversation
+                        </MudButton>
+                    </div>
+
+                    <MudGrid>
+                        <MudItem xs="12" md="7">
+                            <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; min-height: 420px; display: flex; flex-direction: column;">
+                                <div style="flex: 1; overflow-y: auto; max-height: 480px;">
+                                    @if (_testMessages.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4" Align="Align.Center">
+                                            Send a message to test this assistant.
+                                        </MudText>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var msg in _testMessages)
+                                        {
+                                            <div class="d-flex mb-3" style="@(msg.IsUser ? "justify-content: flex-end;" : "justify-content: flex-start;")">
+                                                <MudPaper Elevation="0" Class="pa-3" Style="@($"max-width: 80%; border-radius: 12px; background: {(msg.IsUser ? "var(--mud-palette-primary)" : "var(--mud-palette-surface)")}; color: {(msg.IsUser ? "white" : "inherit")}; border: 1px solid var(--mud-palette-divider);")">
+                                                    <MudText Typo="Typo.caption" Style="font-weight: 700; opacity: 0.8;">@(msg.IsUser ? "User" : "Assistant")</MudText>
+                                                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@msg.Content</MudText>
+                                                </MudPaper>
+                                            </div>
+                                        }
+                                    }
+                                    @if (_testSending)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                                    }
+                                </div>
+                                <div class="d-flex gap-2 mt-3">
+                                    <MudTextField @bind-Value="_testInput" Placeholder="Type a message..." Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense" Immediate="true"
+                                                  OnKeyUp="@(async e => { if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_testInput)) await SendTestMessage(); })" />
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_testSending || string.IsNullOrWhiteSpace(_testInput))"
+                                               OnClick="SendTestMessage">
+                                        Send
+                                    </MudButton>
+                                </div>
+                            </MudPaper>
+                        </MudItem>
+
+                        <MudItem xs="12" md="5">
+                            <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; min-height: 420px;">
+                                <MudText Typo="Typo.subtitle2" Class="mb-2" Style="font-weight: 700;">Execution Trace</MudText>
+                                @if (_testTraceDurationMs is null)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Trace for the last message will appear here.</MudText>
+                                }
+                                else
+                                {
+                                    <div class="d-flex justify-space-between py-1">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Duration</MudText>
+                                        <MudText Typo="Typo.body2" Style="font-weight: 600;">@(_testTraceDurationMs)ms</MudText>
+                                    </div>
+
+                                    <MudDivider Class="my-2" />
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 700; text-transform: uppercase;">Knowledge</MudText>
+                                    @if (_testTraceCitations.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">No sources retrieved.</MudText>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var c in _testTraceCitations)
+                                        {
+                                            <div class="d-flex justify-space-between py-1">
+                                                <MudText Typo="Typo.body2">@c.SourceName</MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">score @c.Score.ToString("F2")</MudText>
+                                            </div>
+                                        }
+                                    }
+
+                                    <MudDivider Class="my-2" />
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 700; text-transform: uppercase;">Capability Calls</MudText>
+                                    @if (_testTraceFunctionCalls.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">No capabilities were called for this response.</MudText>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var f in _testTraceFunctionCalls)
+                                        {
+                                            <div class="d-flex justify-space-between align-center py-1">
+                                                <div class="d-flex align-center gap-2">
+                                                    <MudIcon Icon="@(f.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
+                                                             Color="@(f.Success ? Color.Success : Color.Error)" Size="Size.Small" />
+                                                    <MudText Typo="Typo.body2">@($"{f.Plugin}.{f.Function}")</MudText>
+                                                </div>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">@(f.DurationMs)ms</MudText>
+                                            </div>
+                                        }
+                                    }
+                                }
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                }
+            </div>
+        </MudTabPanel>
     </MudTabs>
 }
 
@@ -337,6 +459,15 @@ else
     private bool _capConfirmationRequired;
     private bool _capApprovalRequired;
     private bool _capAuditRequired = true;
+
+    private Guid? _testAssistantId;
+    private Guid? _testConversationId;
+    private List<TestMessage> _testMessages = new();
+    private string _testInput = string.Empty;
+    private bool _testSending;
+    private long? _testTraceDurationMs;
+    private List<TestCitation> _testTraceCitations = new();
+    private List<TestFunctionCall> _testTraceFunctionCalls = new();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -528,8 +659,63 @@ else
             _assistants = (linked?.Items ?? new()).Select(a => new LinkableSection.LinkedItem(a.Id, a.Name, a.PublishStatus)).ToList();
             var all = await Http.GetFromJsonAsync<AssistantsResult>("/api/v1/assistants?page=1&pageSize=200");
             _allAssistants = (all?.Items ?? new()).Select(a => new LinkableSection.LinkedItem(a.Id, a.Name, a.PublishStatus)).ToList();
+
+            if (_testAssistantId is null || _assistants.All(a => a.Id != _testAssistantId))
+                _testAssistantId = _assistants.FirstOrDefault()?.Id;
         }
         catch (Exception ex) { Snackbar.Add($"Failed to load assistants: {ex.Message}", Severity.Error); }
+    }
+
+    private void OnTestAssistantChanged(Guid? assistantId)
+    {
+        _testAssistantId = assistantId;
+        ClearTestConversation();
+    }
+
+    private void ClearTestConversation()
+    {
+        _testConversationId = null;
+        _testMessages.Clear();
+        _testTraceDurationMs = null;
+        _testTraceCitations.Clear();
+        _testTraceFunctionCalls.Clear();
+    }
+
+    private async Task SendTestMessage()
+    {
+        if (_testAssistantId is null || string.IsNullOrWhiteSpace(_testInput)) return;
+
+        var userMessage = _testInput;
+        _testMessages.Add(new TestMessage(true, userMessage));
+        _testInput = string.Empty;
+        _testSending = true;
+        StateHasChanged();
+
+        try
+        {
+            var payload = new { AssistantId = _testAssistantId, Message = userMessage, ConversationId = _testConversationId };
+            var response = await Http.PostAsJsonAsync($"/api/v1/assistants/{_testAssistantId}/chat", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Chat request failed" : body, Severity.Error);
+                return;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<ChatResult>();
+            if (result is not null)
+            {
+                _testConversationId = result.ConversationId;
+                _testMessages.Add(new TestMessage(false, result.Reply));
+                _testTraceDurationMs = result.DurationMs;
+                _testTraceCitations = (result.Citations ?? new())
+                    .Select(c => new TestCitation(c.SourceName, c.Score)).ToList();
+                _testTraceFunctionCalls = (result.FunctionCalls ?? new())
+                    .Select(f => new TestFunctionCall(f.Plugin, f.Function, f.DurationMs, f.Success)).ToList();
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Chat request failed: {ex.Message}", Severity.Error); }
+        finally { _testSending = false; }
     }
 
     private async Task LoadKnowledgeBases()
@@ -669,4 +855,25 @@ else
     private class KbItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string Status { get; set; } = string.Empty; }
     private class WorkflowsResult { public List<WorkflowItem> Items { get; set; } = new(); }
     private class WorkflowItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string VersionStatus { get; set; } = string.Empty; }
+
+    public record TestMessage(bool IsUser, string Content);
+    public record TestCitation(string SourceName, double Score);
+    public record TestFunctionCall(string Plugin, string Function, long DurationMs, bool Success);
+
+    private class ChatResult
+    {
+        public Guid ConversationId { get; set; }
+        public string Reply { get; set; } = string.Empty;
+        public long DurationMs { get; set; }
+        public List<CitationResult>? Citations { get; set; }
+        public List<FunctionCallResult>? FunctionCalls { get; set; }
+    }
+    private class CitationResult { public string SourceName { get; set; } = string.Empty; public double Score { get; set; } }
+    private class FunctionCallResult
+    {
+        public string Plugin { get; set; } = string.Empty;
+        public string Function { get; set; } = string.Empty;
+        public long DurationMs { get; set; }
+        public bool Success { get; set; }
+    }
 }

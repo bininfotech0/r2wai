@@ -95,6 +95,7 @@ public static class DependencyInjection
         services.AddScoped<RAGPlugin>();
         services.AddScoped<WorkflowPlugin>();
         services.AddScoped<AssistantPlugin>();
+        services.AddScoped<IChatTraceCollector, ChatTraceCollector>();
         services.AddScoped<AiFunctionAuditFilter>();
 
         services.AddScoped<IVectorStoreService, PgVectorService>();

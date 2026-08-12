@@ -13,7 +13,9 @@ public record ChatWithAssistantResult(
     Guid ConversationId,
     string Reply,
     int TokensUsed,
-    List<CitationDto>? Citations = null);
+    List<CitationDto>? Citations = null,
+    long DurationMs = 0,
+    List<FunctionCallTraceDto>? FunctionCalls = null);
 
 public record CitationDto(string SourceName, string Content, float Score, int Index);
 
@@ -32,12 +34,15 @@ public class ChatWithAssistantCommandHandler(
     IRepository<KnowledgeBase> kbRepo,
     IKnowledgeBaseService knowledgeBaseService,
     IAIService aiService,
+    IChatTraceCollector traceCollector,
     ICurrentUserService currentUser,
     IUnitOfWork unitOfWork,
     ILogger<ChatWithAssistantCommandHandler> logger) : IRequestHandler<ChatWithAssistantCommand, ChatWithAssistantResult>
 {
     public async Task<ChatWithAssistantResult> Handle(ChatWithAssistantCommand command, CancellationToken cancellationToken)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        traceCollector.Clear();
         var assistant = await assistantRepo.GetByIdAsync(command.AssistantId, cancellationToken)
             ?? throw new NotFoundException(nameof(AssistantDefinition), command.AssistantId);
 
@@ -109,6 +114,9 @@ public class ChatWithAssistantCommandHandler(
         assistant.IncrementUsageCount();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return new ChatWithAssistantResult(conversation.Id, reply, 0, citations);
+        stopwatch.Stop();
+        var functionCalls = traceCollector.GetTrace().ToList();
+
+        return new ChatWithAssistantResult(conversation.Id, reply, 0, citations, stopwatch.ElapsedMilliseconds, functionCalls);
     }
 }
