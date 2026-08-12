@@ -90,13 +90,19 @@
             <div class="d-flex justify-space-between align-center">
                 <div class="d-flex gap-2 flex-wrap">
                     <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
-                             OnClick="@(() => ApplyTemplate("invoice"))">Invoice Approval</MudChip>
+                             OnClick="@(() => ApplyTemplate("application-approval"))">Application Approval</MudChip>
                     <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
-                             OnClick="@(() => ApplyTemplate("leave"))">Leave Request</MudChip>
+                             OnClick="@(() => ApplyTemplate("document-verification"))">Document Verification</MudChip>
                     <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined"
-                             OnClick="@(() => ApplyTemplate("expense"))">Expense Report</MudChip>
+                             OnClick="@(() => ApplyTemplate("citizen-complaint"))">Citizen Complaint</MudChip>
                     <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
-                             OnClick="@(() => ApplyTemplate("onboarding"))">Employee Onboarding</MudChip>
+                             OnClick="@(() => ApplyTemplate("payment-approval"))">Payment Approval</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("certificate-generation"))">Certificate Generation</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("department-escalation"))">Department Escalation</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                             OnClick="@(() => ApplyTemplate("employee-request"))">Employee Request</MudChip>
                 </div>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.AutoAwesome" OnClick="GenerateWorkflow"
@@ -1089,10 +1095,13 @@
     {
         _generatorPrompt = type switch
         {
-            "invoice" => "Create an invoice approval workflow. Invoices under ₹50,000 auto-approve. ₹50,000 to ₹5,00,000 require manager approval. Above ₹5,00,000 require manager and finance director approval. Send email notification after each approval.",
-            "leave" => "Create a leave request workflow. Employee submits leave request, manager approves or rejects. If approved, HR is notified and calendar is updated. If rejected, employee is notified with reason.",
-            "expense" => "Create an expense report workflow. Employee submits expense with receipts. Under ₹10,000 auto-approved. Above ₹10,000 needs manager approval. Finance team processes reimbursement after approval.",
-            "onboarding" => "Create an employee onboarding workflow. HR initiates, IT provisions accounts, manager assigns buddy, employee completes training modules. Send welcome email on day 1.",
+            "application-approval" => "Create an application approval workflow. Citizen submits an application, an officer reviews it, and if approved the applicant is notified; if rejected the applicant is notified with the reason.",
+            "document-verification" => "Create a document verification workflow. Citizen uploads documents, an officer verifies their authenticity, and the applicant is notified of the verification result.",
+            "citizen-complaint" => "Create a citizen complaint workflow. Citizen submits a complaint, it is assigned to the relevant department, an officer responds, and the citizen is notified of the resolution.",
+            "payment-approval" => "Create a payment approval workflow. Payments under ₹50,000 auto-approve. ₹50,000 to ₹5,00,000 require officer approval. Above ₹5,00,000 require officer and department head approval. Notify the payer after each decision.",
+            "certificate-generation" => "Create a certificate generation workflow. Officer reviews the application and supporting documents, approves it, the certificate is generated, and the citizen is notified it is ready.",
+            "department-escalation" => "Create a department escalation workflow. A case is reviewed by an officer; if not resolved within the target time it escalates to a senior officer for approval, then the requester is notified.",
+            "employee-request" => "Create an employee request workflow. Employee submits a request, manager approves or rejects it, and the employee is notified of the outcome.",
             _ => _generatorPrompt
         };
     }
@@ -1109,25 +1118,68 @@
 
         var prompt = _generatorPrompt.ToLowerInvariant();
         var type = "General";
-        if (prompt.Contains("invoice") || prompt.Contains("payment")) type = "Finance";
-        else if (prompt.Contains("leave") || prompt.Contains("vacation")) type = "HR";
-        else if (prompt.Contains("expense") || prompt.Contains("reimbursement")) type = "Finance";
-        else if (prompt.Contains("onboarding") || prompt.Contains("hiring")) type = "HR";
+        if (prompt.Contains("payment")) type = "Finance";
+        else if (prompt.Contains("complaint")) type = "Citizen Services";
+        else if (prompt.Contains("certificate") || prompt.Contains("document")) type = "Records";
+        else if (prompt.Contains("escalat")) type = "Governance";
+        else if (prompt.Contains("employee")) type = "HR";
+        else if (prompt.Contains("application") || prompt.Contains("approval")) type = "Approvals";
 
         var name = "AI Generated Workflow";
-        if (prompt.Contains("invoice")) name = "Invoice Approval Flow";
-        else if (prompt.Contains("leave")) name = "Leave Request Flow";
-        else if (prompt.Contains("expense")) name = "Expense Report Flow";
-        else if (prompt.Contains("onboarding")) name = "Employee Onboarding Flow";
+        if (prompt.Contains("document verification")) name = "Document Verification Flow";
+        else if (prompt.Contains("complaint")) name = "Citizen Complaint Flow";
+        else if (prompt.Contains("payment")) name = "Payment Approval Flow";
+        else if (prompt.Contains("certificate")) name = "Certificate Generation Flow";
+        else if (prompt.Contains("escalat")) name = "Department Escalation Flow";
+        else if (prompt.Contains("employee")) name = "Employee Request Flow";
+        else if (prompt.Contains("application")) name = "Application Approval Flow";
 
         var steps = new List<object>();
-        if (prompt.Contains("approval") || prompt.Contains("approve"))
+        if (prompt.Contains("document verification") || prompt.Contains("verifies their authenticity"))
+        {
+            steps.Add(new { Name = "Upload Documents", Action = "Action", Order = 0 });
+            steps.Add(new { Name = "Verify Authenticity", Action = "Approval", AssignedRole = "Officer", Order = 1 });
+            steps.Add(new { Name = "Notify Applicant", Action = "Email", Order = 2 });
+        }
+        else if (prompt.Contains("complaint"))
+        {
+            steps.Add(new { Name = "Submit Complaint", Action = "Action", Order = 0 });
+            steps.Add(new { Name = "Assign to Department", Action = "Action", Order = 1 });
+            steps.Add(new { Name = "Officer Response", Action = "Approval", AssignedRole = "Officer", Order = 2 });
+            steps.Add(new { Name = "Notify Citizen", Action = "Email", Order = 3 });
+        }
+        else if (prompt.Contains("certificate"))
+        {
+            steps.Add(new { Name = "Review Application", Action = "Approval", AssignedRole = "Officer", Order = 0 });
+            steps.Add(new { Name = "Generate Certificate", Action = "Action", Order = 1 });
+            steps.Add(new { Name = "Notify Citizen", Action = "Email", Order = 2 });
+        }
+        else if (prompt.Contains("escalat"))
+        {
+            steps.Add(new { Name = "Officer Review", Action = "Approval", AssignedRole = "Officer", Order = 0 });
+            steps.Add(new { Name = "Escalate If Overdue", Action = "Condition", Order = 1 });
+            steps.Add(new { Name = "Senior Officer Review", Action = "Approval", AssignedRole = "Senior Officer", Order = 2 });
+            steps.Add(new { Name = "Notify Requester", Action = "Email", Order = 3 });
+        }
+        else if (prompt.Contains("payment"))
+        {
+            steps.Add(new { Name = "Submit Payment", Action = "Action", Order = 0 });
+            steps.Add(new { Name = "Officer Approval", Action = "Approval", AssignedRole = "Officer", Order = 1 });
+            if (prompt.Contains("department head"))
+                steps.Add(new { Name = "Department Head Approval", Action = "Approval", AssignedRole = "Department Head", Order = 2 });
+            steps.Add(new { Name = "Notify Payer", Action = "Email", Order = steps.Count });
+        }
+        else if (prompt.Contains("employee"))
         {
             steps.Add(new { Name = "Submit Request", Action = "Action", Order = 0 });
-            steps.Add(new { Name = "Manager Review", Action = "Approval", AssignedRole = "Manager", Order = 1 });
-            if (prompt.Contains("finance") || prompt.Contains("director"))
-                steps.Add(new { Name = "Finance Approval", Action = "Approval", AssignedRole = "Finance", Order = 2 });
-            steps.Add(new { Name = "Send Notification", Action = "Email", Order = steps.Count });
+            steps.Add(new { Name = "Manager Approval", Action = "Approval", AssignedRole = "Manager", Order = 1 });
+            steps.Add(new { Name = "Notify Employee", Action = "Email", Order = 2 });
+        }
+        else if (prompt.Contains("approval") || prompt.Contains("approve"))
+        {
+            steps.Add(new { Name = "Submit Application", Action = "Action", Order = 0 });
+            steps.Add(new { Name = "Officer Review", Action = "Approval", AssignedRole = "Officer", Order = 1 });
+            steps.Add(new { Name = "Notify Applicant", Action = "Email", Order = 2 });
         }
         else
         {
