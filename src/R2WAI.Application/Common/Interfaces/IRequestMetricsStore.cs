@@ -19,7 +19,8 @@ public record RequestMetricsSnapshot(
     double AverageLatencyMs,
     int ActiveUsers,
     int ApiErrors,
-    int AiErrors);
+    int AiErrors,
+    int AiRequests);
 
 /// <summary>
 /// Rolling, in-memory window of real HTTP request outcomes (recorded by

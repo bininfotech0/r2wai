@@ -61,6 +61,7 @@ public class GetMetricsQueryHandler(
             ApiErrors = requestSnapshot.ApiErrors,
             AiErrors = requestSnapshot.AiErrors,
             WorkflowErrors = workflowErrors,
+            AiRequests = requestSnapshot.AiRequests,
         };
 
         await cache.SetAsync(cacheKey, result, TimeSpan.FromSeconds(30), cancellationToken);

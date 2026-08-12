@@ -170,6 +170,7 @@
                 <Authorized>
                     <MudNavGroup Title="Governance" Icon="@Icons.Material.Outlined.Shield" Expanded="_governanceExpanded" ExpandedChanged="@(v => _governanceExpanded = v)" HideExpandIcon="false"
                                  Style="color: rgba(255,255,255,0.65);">
+                        <MudNavLink Href="/governance" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Dashboard">Overview</MudNavLink>
                         <MudNavLink Href="/governance/departments" Icon="@Icons.Material.Outlined.AccountBalance">Departments</MudNavLink>
                         <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">AI Models</MudNavLink>
                         <MudNavLink Href="/admin/permissions" Icon="@Icons.Material.Outlined.VerifiedUser">Permissions</MudNavLink>

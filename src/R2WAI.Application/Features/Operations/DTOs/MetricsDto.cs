@@ -18,4 +18,5 @@ public class MetricsDto
     public int ApiErrors { get; init; }
     public int AiErrors { get; init; }
     public int WorkflowErrors { get; init; }
+    public int AiRequests { get; init; }
 }

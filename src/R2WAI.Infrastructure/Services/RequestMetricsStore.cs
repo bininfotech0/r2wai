@@ -27,6 +27,7 @@ public sealed class RequestMetricsStore : IRequestMetricsStore
         var errors = total - success;
         var apiErrors = relevant.Count(e => e.StatusCode >= 400 && e.Category == RequestMetricCategory.Api);
         var aiErrors = relevant.Count(e => e.StatusCode >= 400 && e.Category == RequestMetricCategory.Ai);
+        var aiRequests = relevant.Count(e => e.Category == RequestMetricCategory.Ai);
         var activeUsers = relevant.Where(e => e.UserId.HasValue).Select(e => e.UserId).Distinct().Count();
         var avgLatency = total == 0 ? 0 : relevant.Average(e => e.DurationMs);
 
@@ -38,6 +39,7 @@ public sealed class RequestMetricsStore : IRequestMetricsStore
             AverageLatencyMs: Math.Round(avgLatency, 1),
             ActiveUsers: activeUsers,
             ApiErrors: apiErrors,
-            AiErrors: aiErrors);
+            AiErrors: aiErrors,
+            AiRequests: aiRequests);
     }
 }
