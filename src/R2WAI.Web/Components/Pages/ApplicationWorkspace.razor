@@ -502,6 +502,101 @@ else
                 }
             </div>
         </MudTabPanel>
+
+        <MudTabPanel Text="Publish">
+            <div class="pt-4">
+                <MudText Typo="Typo.subtitle1" Class="mb-1" Style="font-weight: 700;">Configuration Readiness</MudText>
+                <MudPaper Elevation="0" Class="pa-4 mb-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                    <div class="d-flex align-center gap-2 py-1">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                        <MudText Typo="Typo.body2">Application connected</MudText>
+                    </div>
+                    <div class="d-flex align-center gap-2 py-1">
+                        <MudIcon Icon="@(_apis.Count > 0 ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Info)"
+                                 Color="@(_apis.Count > 0 ? Color.Success : Color.Warning)" Size="Size.Small" />
+                        <MudText Typo="Typo.body2">@(_apis.Count) API(s) configured</MudText>
+                    </div>
+                    <div class="d-flex align-center gap-2 py-1">
+                        <MudIcon Icon="@(_capabilities.Count > 0 ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Info)"
+                                 Color="@(_capabilities.Count > 0 ? Color.Success : Color.Warning)" Size="Size.Small" />
+                        <MudText Typo="Typo.body2">@(_capabilities.Count) capability(ies) configured</MudText>
+                    </div>
+                    <div class="d-flex align-center gap-2 py-1">
+                        <MudIcon Icon="@(_navItems.Count > 0 ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Info)"
+                                 Color="@(_navItems.Count > 0 ? Color.Success : Color.Warning)" Size="Size.Small" />
+                        <MudText Typo="Typo.body2">@(_navItems.Count) navigation item(s) registered</MudText>
+                    </div>
+                    <div class="d-flex align-center gap-2 py-1">
+                        <MudIcon Icon="@(_assistants.Count > 0 ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Info)"
+                                 Color="@(_assistants.Count > 0 ? Color.Success : Color.Warning)" Size="Size.Small" />
+                        <MudText Typo="Typo.body2">@(_assistants.Count) assistant(s) linked</MudText>
+                    </div>
+                </MudPaper>
+
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Versions</MudText>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="@(() => _showCreateVersionForm = !_showCreateVersionForm)">
+                        Create Version
+                    </MudButton>
+                </div>
+
+                @if (_showCreateVersionForm)
+                {
+                    <MudPaper Elevation="0" Class="pa-4 mb-3" Style="border: 1px dashed var(--mud-palette-divider); border-radius: 12px;">
+                        <MudTextField @bind-Value="_versionNote" Label="Note (optional)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Placeholder="What changed in this version?" />
+                        <div class="d-flex justify-end gap-2 mt-3">
+                            <MudButton Variant="Variant.Text" OnClick="@(() => _showCreateVersionForm = false)">Cancel</MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="_actionInProgress" OnClick="@(() => CreateVersion(false))">
+                                Save as Draft
+                            </MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" Disabled="_actionInProgress" OnClick="@(() => CreateVersion(true))">
+                                Publish Version
+                            </MudButton>
+                        </div>
+                    </MudPaper>
+                }
+
+                @if (_versions.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.History" Title="No versions yet"
+                                Description="Create a version to snapshot this application's current configuration. Publishing a version makes it the active one; you can roll back to any earlier version."
+                                MinHeight="160px" />
+                }
+                else
+                {
+                    <MudTable Items="_versions" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                        <HeaderContent>
+                            <MudTh>Version</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh>Note</MudTh>
+                            <MudTh>Created</MudTh>
+                            <MudTh Style="text-align:right;">Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Version">v@(context.VersionNumber)</MudTd>
+                            <MudTd DataLabel="Status"><StatusBadge Status="@(context.IsPublished ? "Published" : "Draft")" /></MudTd>
+                            <MudTd DataLabel="Note">@(context.Note ?? "—")</MudTd>
+                            <MudTd DataLabel="Created">@context.CreatedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                            <MudTd Style="text-align:right;">
+                                @if (!context.IsPublished)
+                                {
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" Disabled="_actionInProgress"
+                                               OnClick="@(() => RollbackToVersion(context))">
+                                        Rollback to this
+                                    </MudButton>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Active</MudText>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </div>
+        </MudTabPanel>
     </MudTabs>
 }
 
@@ -557,6 +652,10 @@ else
     private string _navRequiredRole = "Public";
     private bool _navIsExternal;
 
+    private List<VersionItem> _versions = new();
+    private bool _showCreateVersionForm;
+    private string _versionNote = string.Empty;
+
     protected override async Task OnParametersSetAsync()
     {
         await LoadAll();
@@ -573,6 +672,7 @@ else
                 LoadApis(),
                 LoadCapabilities(),
                 LoadNavItems(),
+                LoadVersions(),
                 LoadAssistants(),
                 LoadKnowledgeBases(),
                 LoadWorkflows());
@@ -857,6 +957,61 @@ else
         catch (Exception ex) { Snackbar.Add($"Failed to delete navigation item: {ex.Message}", Severity.Error); }
     }
 
+    private async Task LoadVersions()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<VersionItem>>($"/api/v1/applications/{Id}/versions");
+            _versions = (result ?? new()).OrderByDescending(v => v.VersionNumber).ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load versions: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task CreateVersion(bool publish)
+    {
+        _actionInProgress = true;
+        try
+        {
+            var payload = new { Note = (string?)(string.IsNullOrWhiteSpace(_versionNote) ? null : _versionNote), Publish = publish };
+            var response = await Http.PostAsJsonAsync($"/api/v1/applications/{Id}/versions", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to create version" : body, Severity.Error);
+                return;
+            }
+
+            _showCreateVersionForm = false;
+            _versionNote = string.Empty;
+            await LoadVersions();
+            Snackbar.Add(publish ? "Version published" : "Version saved as draft", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to create version: {ex.Message}", Severity.Error); }
+        finally { _actionInProgress = false; }
+    }
+
+    private async Task RollbackToVersion(VersionItem version)
+    {
+        _actionInProgress = true;
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/applications/{Id}/versions/{version.Id}/rollback", null);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Rollback failed" : body, Severity.Error);
+                return;
+            }
+
+            await LoadVersions();
+            await LoadApis();
+            await LoadApplication();
+            Snackbar.Add($"Rolled back to v{version.VersionNumber}", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Rollback failed: {ex.Message}", Severity.Error); }
+        finally { _actionInProgress = false; }
+    }
+
     private async Task LoadAssistants()
     {
         try
@@ -1092,5 +1247,14 @@ else
         public bool IsExternal { get; set; }
         public bool IsEnabled { get; set; }
         public int Order { get; set; }
+    }
+
+    private class VersionItem
+    {
+        public Guid Id { get; set; }
+        public int VersionNumber { get; set; }
+        public bool IsPublished { get; set; }
+        public string? Note { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
 }
