@@ -284,6 +284,86 @@ else
                     </MudTable>
                 }
 
+                <div class="d-flex justify-space-between align-center mb-2 mt-2">
+                    <div class="d-flex align-center gap-2">
+                        <MudIcon Icon="@Icons.Material.Outlined.Route" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Navigation (@_navItems.Count)</MudText>
+                    </div>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="@(() => { _showAddNavForm = !_showAddNavForm; _editingNavId = null; ResetNavForm(); })">
+                        Add Navigation Item
+                    </MudButton>
+                </div>
+
+                @if (_showAddNavForm)
+                {
+                    <MudPaper Elevation="0" Class="pa-4 mb-3" Style="border: 1px dashed var(--mud-palette-divider); border-radius: 12px;">
+                        <MudGrid>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_navLabel" Label="Label" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="My Applications" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="_navPath" Label="Path / URL" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="/my-applications" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="string" @bind-Value="_navRequiredRole" Label="Visibility" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    <MudSelectItem T="string" Value="@("Public")">Public</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("User")">Authenticated User</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Officer")">Officer</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Admin")">Admin</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="6" Class="d-flex align-center">
+                                <MudSwitch T="bool" @bind-Value="_navIsExternal" Color="Color.Primary" Label="External link" />
+                            </MudItem>
+                        </MudGrid>
+                        <div class="d-flex justify-end gap-2 mt-3">
+                            <MudButton Variant="Variant.Text" OnClick="@(() => _showAddNavForm = false)">Cancel</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_actionInProgress" OnClick="SaveNavItem">
+                                @(_editingNavId is null ? "Add Item" : "Save Changes")
+                            </MudButton>
+                        </div>
+                    </MudPaper>
+                }
+
+                @if (_navItems.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.Route" Title="No navigation registered"
+                                Description="Register the destinations the assistant is allowed to navigate to — it can never send a user anywhere else."
+                                MinHeight="140px" />
+                }
+                else
+                {
+                    <MudPaper Elevation="0" Class="pa-2 mb-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                        @for (var i = 0; i < _navItems.Count; i++)
+                        {
+                            var index = i;
+                            var nav = _navItems[index];
+                            <div class="d-flex align-center gap-2 py-2 px-2" style="@(index > 0 ? "border-top: 1px solid var(--mud-palette-divider);" : "")">
+                                <div class="d-flex flex-column">
+                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" Disabled="@(index == 0)"
+                                                   OnClick="@(() => MoveNavItem(index, -1))" aria-label="Move up" Style="height: 20px;" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" Disabled="@(index == _navItems.Count - 1)"
+                                                   OnClick="@(() => MoveNavItem(index, 1))" aria-label="Move down" Style="height: 20px;" />
+                                </div>
+                                <div style="flex: 1;">
+                                    <MudText Typo="Typo.body2" Style="font-weight: 600;">
+                                        @nav.Label
+                                        @if (nav.IsExternal)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Style="font-size: 0.85rem; vertical-align: middle; margin-left: 4px; opacity: 0.6;" />
+                                        }
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@nav.Path &middot; @(nav.RequiredRole ?? "Public")</MudText>
+                                </div>
+                                <MudSwitch T="bool" Value="@nav.IsEnabled" Color="Color.Primary" ValueChanged="@(v => ToggleNavEnabled(nav, v))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditNavItem(nav))" aria-label="Edit" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteNavItem(nav))" aria-label="Delete" />
+                            </div>
+                        }
+                    </MudPaper>
+                }
+
                 <LinkableSection Title="Assistants" Icon="@Icons.Material.Outlined.SmartToy"
                                   Linked="_assistants" AllOptions="_allAssistants"
                                   ManageUrl="/assistant-studio" ManageLabel="Manage in Assistants"
@@ -469,6 +549,14 @@ else
     private List<TestCitation> _testTraceCitations = new();
     private List<TestFunctionCall> _testTraceFunctionCalls = new();
 
+    private List<NavItem> _navItems = new();
+    private bool _showAddNavForm;
+    private Guid? _editingNavId;
+    private string _navLabel = string.Empty;
+    private string _navPath = string.Empty;
+    private string _navRequiredRole = "Public";
+    private bool _navIsExternal;
+
     protected override async Task OnParametersSetAsync()
     {
         await LoadAll();
@@ -484,6 +572,7 @@ else
                 LoadDepartments(),
                 LoadApis(),
                 LoadCapabilities(),
+                LoadNavItems(),
                 LoadAssistants(),
                 LoadKnowledgeBases(),
                 LoadWorkflows());
@@ -650,6 +739,123 @@ else
         "Critical" => Color.Error,
         _ => Color.Default,
     };
+
+    private async Task LoadNavItems()
+    {
+        try
+        {
+            _navItems = await Http.GetFromJsonAsync<List<NavItem>>($"/api/v1/navigation?applicationId={Id}") ?? new();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load navigation: {ex.Message}", Severity.Error); }
+    }
+
+    private void ResetNavForm()
+    {
+        _navLabel = string.Empty;
+        _navPath = string.Empty;
+        _navRequiredRole = "Public";
+        _navIsExternal = false;
+    }
+
+    private void EditNavItem(NavItem nav)
+    {
+        _editingNavId = nav.Id;
+        _navLabel = nav.Label;
+        _navPath = nav.Path;
+        _navRequiredRole = nav.RequiredRole ?? "Public";
+        _navIsExternal = nav.IsExternal;
+        _showAddNavForm = true;
+    }
+
+    private async Task SaveNavItem()
+    {
+        if (string.IsNullOrWhiteSpace(_navLabel) || string.IsNullOrWhiteSpace(_navPath))
+        {
+            Snackbar.Add("Label and path are required", Severity.Warning);
+            return;
+        }
+
+        _actionInProgress = true;
+        try
+        {
+            HttpResponseMessage response;
+            if (_editingNavId is null)
+            {
+                var payload = new
+                {
+                    ApplicationId = Id,
+                    Label = _navLabel,
+                    Path = _navPath,
+                    RequiredRole = _navRequiredRole,
+                    IsExternal = _navIsExternal
+                };
+                response = await Http.PostAsJsonAsync("/api/v1/navigation", payload);
+            }
+            else
+            {
+                var payload = new
+                {
+                    Label = _navLabel,
+                    Path = _navPath,
+                    RequiredRole = _navRequiredRole,
+                    IsExternal = _navIsExternal
+                };
+                response = await Http.PutAsJsonAsync($"/api/v1/navigation/{_editingNavId}", payload);
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to save navigation item" : body, Severity.Error);
+                return;
+            }
+
+            _showAddNavForm = false;
+            _editingNavId = null;
+            ResetNavForm();
+            await LoadNavItems();
+            Snackbar.Add("Navigation item saved", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to save navigation item: {ex.Message}", Severity.Error); }
+        finally { _actionInProgress = false; }
+    }
+
+    private async Task MoveNavItem(int index, int direction)
+    {
+        var targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= _navItems.Count) return;
+
+        (_navItems[index], _navItems[targetIndex]) = (_navItems[targetIndex], _navItems[index]);
+        StateHasChanged();
+
+        try
+        {
+            var payload = new { ApplicationId = Id, OrderedIds = _navItems.Select(n => n.Id).ToList() };
+            await Http.PostAsJsonAsync("/api/v1/navigation/reorder", payload);
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to save order: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task ToggleNavEnabled(NavItem nav, bool isEnabled)
+    {
+        try
+        {
+            await Http.PostAsJsonAsync($"/api/v1/navigation/{nav.Id}/status", new { IsEnabled = isEnabled });
+            await LoadNavItems();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to update navigation item: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteNavItem(NavItem nav)
+    {
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/navigation/{nav.Id}");
+            await LoadNavItems();
+            Snackbar.Add("Navigation item deleted", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to delete navigation item: {ex.Message}", Severity.Error); }
+    }
 
     private async Task LoadAssistants()
     {
@@ -875,5 +1081,16 @@ else
         public string Function { get; set; } = string.Empty;
         public long DurationMs { get; set; }
         public bool Success { get; set; }
+    }
+
+    private class NavItem
+    {
+        public Guid Id { get; set; }
+        public string Label { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
+        public string? RequiredRole { get; set; }
+        public bool IsExternal { get; set; }
+        public bool IsEnabled { get; set; }
+        public int Order { get; set; }
     }
 }

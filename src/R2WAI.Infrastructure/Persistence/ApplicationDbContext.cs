@@ -16,6 +16,7 @@ public interface ITenantDbContext
     DbSet<ApplicationApi> ApplicationApis { get; }
     DbSet<ApplicationConfiguration> ApplicationConfigurations { get; }
     DbSet<ApplicationVersion> ApplicationVersions { get; }
+    DbSet<NavigationDefinition> NavigationDefinitions { get; }
     DbSet<User> Users { get; }
     DbSet<Conversation> Conversations { get; }
     DbSet<Message> Messages { get; }
@@ -73,6 +74,7 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     public DbSet<ApplicationApi> ApplicationApis => Set<ApplicationApi>();
     public DbSet<ApplicationConfiguration> ApplicationConfigurations => Set<ApplicationConfiguration>();
     public DbSet<ApplicationVersion> ApplicationVersions => Set<ApplicationVersion>();
+    public DbSet<NavigationDefinition> NavigationDefinitions => Set<NavigationDefinition>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<Message> Messages => Set<Message>();
