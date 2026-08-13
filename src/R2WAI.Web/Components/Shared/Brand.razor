@@ -1,0 +1,20 @@
+<div class="r2-brand-mark r2-logo" style="width:@(Size)px;height:@(Size)px;">
+    <MudIcon Icon="@Icon" Style="@($"color:#fff;font-size:{Size * 0.45}px;")" />
+</div>
+@if (ShowWordmark)
+{
+    <MudText Typo="WordmarkTypo" Class="@(WordmarkGradient ? "gradient-text" : null)"
+             Style="@WordmarkStyle">R2WAI</MudText>
+}
+
+@code {
+    [Parameter] public int Size { get; set; } = 32;
+    [Parameter] public string Icon { get; set; } = Icons.Material.Filled.AutoAwesome;
+    [Parameter] public bool ShowWordmark { get; set; } = true;
+    [Parameter] public bool WordmarkGradient { get; set; }
+    [Parameter] public Typo WordmarkTypo { get; set; } = Typo.subtitle1;
+    [Parameter] public string? TextColorOverride { get; set; }
+
+    private string WordmarkStyle =>
+        $"font-weight:800;letter-spacing:-0.03em;{(TextColorOverride is null ? "" : $"color:{TextColorOverride};")}";
+}

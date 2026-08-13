@@ -10,7 +10,11 @@
 
 @if (_loading)
 {
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Cards" />
+}
+else if (_error is not null)
+{
+    <ErrorState ErrorMessage="@_error" OnRetry="LoadData" />
 }
 else
 {
@@ -180,6 +184,7 @@ else
 
 @code {
     private bool _loading = true;
+    private string? _error;
     private int _totalConversations;
     private long _totalTokens;
     private double _avgResponseTime;
@@ -198,6 +203,14 @@ else
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
         try
         {
             var modelsTask = Http.GetFromJsonAsync<ModelsResult>("/api/v1/admin/models");
@@ -251,6 +264,7 @@ else
         }
         catch
         {
+            _error = "Unable to load AI operations data. Please check your connection and try again.";
             Snackbar.Add("Failed to load AI operations data.", Severity.Warning);
         }
         finally { _loading = false; StateHasChanged(); }

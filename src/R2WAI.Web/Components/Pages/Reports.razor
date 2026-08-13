@@ -69,7 +69,11 @@
 
 @if (_loading)
 {
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Table" />
+}
+else if (_error is not null)
+{
+    <ErrorState ErrorMessage="@_error" OnRetry="LoadReports" />
 }
 else if (_reports.Count == 0)
 {
@@ -117,6 +121,7 @@ else
 
 @code {
     private bool _loading = true;
+    private string? _error;
     private List<ReportItem> _reports = new();
     private string? _selectedType;
 
@@ -128,14 +133,18 @@ else
     private async Task LoadReports()
     {
         _loading = true;
+        _error = null;
+        StateHasChanged();
         try
         {
             var result = await Http.GetFromJsonAsync<ReportListResult>("/api/v1/operations/reports");
             _reports = result?.Items ?? new();
         }
-        catch
+        catch (Exception ex)
         {
             _reports = new();
+            _error = "Unable to load reports. Please check your connection and try again.";
+            Snackbar.Add($"Failed to load reports: {ex.Message}", Severity.Error);
         }
         _loading = false;
     }

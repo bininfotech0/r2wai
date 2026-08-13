@@ -67,13 +67,13 @@
                     <MudItem xs="12" sm="6" md="4">
                         <MudPaper Elevation="0"
                                   Style="@(isSelected
-                                      ? "border: 2px solid #7C3AED; border-radius: 12px; background: rgba(124,58,237,0.06); cursor: pointer; padding: 12px;"
-                                      : "border: 1px solid var(--mud-palette-divider); border-radius: 12px; cursor: pointer; padding: 12px;")"
+                                      ? "border: 2px solid var(--mud-palette-primary); border-radius: var(--r2-radius-md); background: var(--r2-primary-subtle, rgba(124,58,237,0.06)); cursor: pointer; padding: 12px;"
+                                      : "border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); cursor: pointer; padding: 12px;")"
                                   @onclick="@(() => SelectAssistant(asstId))">
                             <div class="d-flex align-center gap-3">
                                 <MudAvatar Size="Size.Medium"
                                            Style="@(isSelected
-                                               ? "background: linear-gradient(135deg, #7C3AED, #6D28D9);"
+                                               ? "background: var(--r2-gradient-primary);"
                                                : "background: var(--mud-palette-action-disabled-background);")">
                                     @(asst.Name.Length > 0 ? asst.Name[0].ToString().ToUpper() : "A")
                                 </MudAvatar>
@@ -188,10 +188,10 @@ else
                     @foreach (var conversation in FilteredConversations)
                     {
                         <MudListItem T="ConversationListItem" OnClick="@(() => SelectConversation(conversation))"
-                                     Style="@(_selectedConversation?.Id == conversation.Id ? "background: var(--r2-primary-subtle, rgba(124,58,237,0.08)); border-left: 3px solid #7C3AED; border-radius: 8px;" : "border-radius: 8px; border-left: 3px solid transparent;")">
+                                     Style="@(_selectedConversation?.Id == conversation.Id ? "background: var(--r2-primary-subtle); border-left: 3px solid var(--mud-palette-primary); border-radius: var(--r2-radius-sm);" : "border-radius: var(--r2-radius-sm); border-left: 3px solid transparent;")">
                             <div class="d-flex align-center gap-3" style="width: 100%;">
                                 <MudAvatar Size="Size.Small" Color="Color.Primary"
-                                           Style="width: 36px; height: 36px; font-size: 0.75rem; background: linear-gradient(135deg, #7C3AED, #6D28D9);">
+                                           Style="width: 36px; height: 36px; font-size: 0.75rem; background: var(--r2-gradient-primary);">
                                     @(conversation.AssistantName.Length > 0 ? conversation.AssistantName[0].ToString().ToUpper() : "A")
                                 </MudAvatar>
                                 <div style="flex: 1; min-width: 0;">
@@ -271,7 +271,7 @@ else
                                            OnClick="@(() => _selectedConversation = null)"
                                            aria-label="Back to conversation list" />
                             <MudAvatar Color="Color.Primary" Size="Size.Medium"
-                                       Style="background: linear-gradient(135deg, #7C3AED, #6D28D9);">
+                                       Style="background: var(--r2-gradient-primary);">
                                 @(_selectedConversation.AssistantName.Length > 0 ? _selectedConversation.AssistantName[0].ToString().ToUpper() : "A")
                             </MudAvatar>
                             <div>
@@ -337,7 +337,7 @@ else
                                         }
                                         <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small"
                                                    StartIcon="@Icons.Material.Filled.StopCircle" Class="mt-1"
-                                                   OnClick="StopReply" Style="border-radius: 8px;">
+                                                   OnClick="StopReply" Style="border-radius: var(--r2-radius-sm);">
                                             Stop
                                         </MudButton>
                                     </div>
@@ -359,7 +359,7 @@ else
                     <div class="pa-3" style="border-top: 1px solid var(--mud-palette-divider);">
                         @if (_isListening)
                         {
-                            <div class="d-flex align-center gap-2 mb-2 pa-2" style="background: rgba(76,175,80,0.08); border-radius: 8px; border: 1px solid rgba(76,175,80,0.2);">
+                            <div class="d-flex align-center gap-2 mb-2 pa-2" style="background: rgba(76,175,80,0.08); border-radius: var(--r2-radius-sm); border: 1px solid rgba(76,175,80,0.2);">
                                 <div class="voice-pulse-dot"></div>
                                 <MudText Typo="Typo.caption" Color="Color.Success" Style="font-weight: 600;">
                                     @(_interimTranscript.Length > 0 ? _interimTranscript : "Listening...")

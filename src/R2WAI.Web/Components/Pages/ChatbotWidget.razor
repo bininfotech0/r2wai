@@ -24,7 +24,7 @@
             <MudText Typo="Typo.subtitle1" Style="color: white;">@_title</MudText>
             @if (_voiceChatActive)
             {
-                <span style="background: rgba(255,255,255,0.2); border-radius: 12px; padding: 2px 8px; font-size: 0.6875rem; color: white; display: flex; align-items: center; gap: 4px; animation: pulse-soft 1.5s infinite;">
+                <span style="background: rgba(255,255,255,0.2); border-radius: var(--r2-radius-md); padding: 2px 8px; font-size: 0.6875rem; color: white; display: flex; align-items: center; gap: 4px; animation: pulse-soft 1.5s infinite;">
                     <MudIcon Icon="@Icons.Material.Filled.GraphicEq" Style="color: white; font-size: 12px;" /> Voice
                 </span>
             }
@@ -35,7 +35,7 @@
     <div style="flex: 1; overflow-y: auto; padding: 16px;" id="widget-chat-container">
         @if (!string.IsNullOrEmpty(_welcomeMessage))
         {
-            <MudPaper Class="pa-3 mb-2" Elevation="1" Style="max-width: 80%; border-radius: 12px;">
+            <MudPaper Class="pa-3 mb-2" Elevation="1" Style="max-width: 80%; border-radius: var(--r2-radius-md);">
                 <MudText Typo="Typo.body2">@_welcomeMessage</MudText>
             </MudPaper>
         }
@@ -45,7 +45,7 @@
             <div class="d-flex @(msg.IsUser ? "justify-end" : "justify-start") mb-2">
                 <div style="max-width: 80%;">
                     <MudPaper Class="pa-3" Elevation="@(msg.IsUser ? 0 : 1)"
-                              Style="@($"border-radius: 12px; {(msg.IsUser ? $"background: {_color}; color: white;" : "")}")">
+                              Style="@($"border-radius: var(--r2-radius-md); {(msg.IsUser ? $"background: {_color}; color: white;" : "")}")">
                         <MudText Typo="Typo.body2" Style="@(msg.IsUser ? "color: white;" : "")">@msg.Content</MudText>
                         @if (!msg.IsUser && _voiceConfigEnabled && _ttsSupported)
                         {
@@ -60,7 +60,7 @@
                     </MudPaper>
                     @if (!msg.IsUser && msg.Citations?.Count > 0)
                     {
-                        <MudPaper Elevation="0" Class="pa-2 mt-1" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px; background: var(--mud-palette-background);">
+                        <MudPaper Elevation="0" Class="pa-2 mt-1" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm); background: var(--mud-palette-background);">
                             <MudText Typo="Typo.caption" Style="font-weight: 700;" Color="Color.Primary">Sources</MudText>
                             @foreach (var citation in msg.Citations)
                             {
@@ -75,7 +75,7 @@
         @if (_sending)
         {
             <div class="d-flex justify-start mb-2">
-                <MudPaper Class="pa-3" Elevation="1" Style="max-width: 80%; border-radius: 12px;">
+                <MudPaper Class="pa-3" Elevation="1" Style="max-width: 80%; border-radius: var(--r2-radius-md);">
                     @if (!string.IsNullOrEmpty(_streamingContent))
                     {
                         <MudText Typo="Typo.body2">@_streamingContent</MudText>

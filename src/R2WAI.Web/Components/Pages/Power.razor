@@ -7,12 +7,12 @@
 <div class="power-page">
     <nav class="power-nav">
         <div class="d-flex align-center gap-3">
-            <div style="width: 40px; height: 40px; border-radius: 12px; background: var(--r2-gradient-primary); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3); flex-shrink: 0;">
+            <div style="width: 40px; height: 40px; border-radius: var(--r2-radius-md); background: var(--r2-gradient-primary); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3); flex-shrink: 0;">
                 <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color: white; font-size: 1.25rem;" />
             </div>
             <MudText Typo="Typo.h5" Style="font-weight: 700; color: white;">R2WAI</MudText>
         </div>
-        <MudButton Variant="Variant.Outlined" Href="/login" Style="border-radius: 10px; border-color: rgba(255,255,255,0.25); color: white;">
+        <MudButton Variant="Variant.Outlined" Href="/login" Style="border-radius: var(--r2-radius-sm); border-color: rgba(255,255,255,0.25); color: white;">
             Sign In
         </MudButton>
     </nav>
@@ -28,11 +28,11 @@
         </MudText>
         <div class="d-flex gap-3 mt-8 flex-wrap justify-center">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Href="/register"
-                       Class="btn-gradient" Style="border-radius: 10px; font-weight: 600; height: 48px; padding: 0 28px;">
+                       Class="btn-gradient" Style="border-radius: var(--r2-radius-sm); font-weight: 600; height: 48px; padding: 0 28px;">
                 Get Started
             </MudButton>
             <MudButton Variant="Variant.Outlined" Size="Size.Large" Href="/login"
-                       Style="border-radius: 10px; font-weight: 600; height: 48px; padding: 0 28px; border-color: rgba(255,255,255,0.25); color: white;">
+                       Style="border-radius: var(--r2-radius-sm); font-weight: 600; height: 48px; padding: 0 28px; border-color: rgba(255,255,255,0.25); color: white;">
                 Sign In
             </MudButton>
         </div>
@@ -89,7 +89,7 @@
 
     private readonly List<Feature> _features = new()
     {
-        new(Icons.Material.Filled.RecordVoiceOver, "linear-gradient(135deg, #7C3AED, #6D28D9)",
+        new(Icons.Material.Filled.RecordVoiceOver, "var(--r2-gradient-primary)",
             "Voice Assistance", "Integrated voice recognition for hands-free interactions."),
         new(Icons.Material.Filled.Psychology, "linear-gradient(135deg, #4F46E5, #3B82F6)",
             "AI Responses", "Real-time, streaming AI answers grounded in your knowledge base."),

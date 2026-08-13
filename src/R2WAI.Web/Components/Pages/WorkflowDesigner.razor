@@ -97,7 +97,7 @@
 @* Execution Status Bar *@
 @if (_executionMode || _executionCompleted)
 {
-    <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+    <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm);">
         <div class="d-flex justify-space-between align-center mb-2">
             <div class="d-flex align-center gap-2">
                 <MudIcon Icon="@(_executionMode ? Icons.Material.Filled.PlayCircle : (_executionFailed ? Icons.Material.Filled.ErrorOutline : Icons.Material.Filled.CheckCircle))"
@@ -130,7 +130,11 @@
 
 @if (_loading)
 {
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Detail" />
+}
+else if (_error is not null)
+{
+    <ErrorState ErrorMessage="@_error" OnRetry="LoadWorkflowAsync" />
 }
 else if (_workflow is null)
 {
@@ -165,7 +169,7 @@ else
                     @for (var i = 0; i < _variables.Count; i++)
                     {
                         var idx = i;
-                        <MudPaper Class="pa-3 mb-2" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+                        <MudPaper Class="pa-3 mb-2" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm);">
                             <MudGrid Spacing="2">
                                 <MudItem xs="5">
                                     <MudTextField @bind-Value="_variables[idx].Name" Label="Name" Variant="Variant.Outlined"
@@ -213,7 +217,7 @@ else
                     @* ── Full Step Inspector ── *@
                     <div class="d-flex justify-space-between align-center mb-3">
                         <div class="d-flex align-center gap-2">
-                            <div style="width: 8px; height: 24px; border-radius: 4px; background: @StepHexColor(_editingStep.Action);"></div>
+                            <div style="width: 8px; height: 24px; border-radius: var(--r2-radius-sm); background: @StepHexColor(_editingStep.Action);"></div>
                             <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Step Configuration</MudText>
                         </div>
                         <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
@@ -470,7 +474,7 @@ else
                     <MudDivider Class="my-3" />
                     <MudExpansionPanels Elevation="0" Dense="true">
                         <MudExpansionPanel Text="Timeout & Retry" MaxHeight="400" Dense="true"
-                                           Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+                                           Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm);">
                             <MudNumericField T="int" @bind-Value="_editingStep.Config.TimeoutMinutes" Label="Timeout (minutes)"
                                              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-2"
                                              Min="0" Max="10080" />
@@ -522,7 +526,7 @@ else
                         var index = i;
                         var isDragging = _dragFromIndex == index;
                         var isDropTarget = _dropTargetIndex == index;
-                        var rowStyle = $"border: 1px solid var(--mud-palette-divider); border-left: 4px solid {StepHexColor(step.Action)}; border-radius: 8px; cursor: grab; transition: all 0.15s ease;"
+                        var rowStyle = $"border: 1px solid var(--mud-palette-divider); border-left: 4px solid {StepHexColor(step.Action)}; border-radius: var(--r2-radius-sm); cursor: grab; transition: all 0.15s ease;"
                             + (isDragging ? " opacity: 0.4;" : "")
                             + (isDropTarget ? " border-top: 2px solid var(--mud-palette-primary); margin-top: 6px;" : "");
 
@@ -848,6 +852,7 @@ else
     private List<VariableItem> _variables = new();
     private StepItem? _editingStep;
     private bool _loading = true;
+    private string? _error;
     private bool _saving;
     private bool _hasChanges;
     private bool _editingName;
@@ -888,32 +893,44 @@ else
     {
         if (firstRender)
         {
-            try
+            await LoadWorkflowAsync();
+        }
+    }
+
+    private async Task LoadWorkflowAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var raw = await Http.GetFromJsonAsync<WorkflowRawDto>($"/api/v1/workflows/{WorkflowId}");
+            if (raw is not null)
             {
-                var raw = await Http.GetFromJsonAsync<WorkflowRawDto>($"/api/v1/workflows/{WorkflowId}");
-                if (raw is not null)
+                _workflow = new WorkflowDetailDto { Id = raw.Id, Name = raw.Name, Description = raw.Description };
+
+                if (!string.IsNullOrEmpty(raw.Steps))
                 {
-                    _workflow = new WorkflowDetailDto { Id = raw.Id, Name = raw.Name, Description = raw.Description };
+                    var parsedSteps = System.Text.Json.JsonSerializer.Deserialize<List<StepDto>>(
+                        raw.Steps, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                    if (!string.IsNullOrEmpty(raw.Steps))
-                    {
-                        var parsedSteps = System.Text.Json.JsonSerializer.Deserialize<List<StepDto>>(
-                            raw.Steps, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                        if (parsedSteps is not null)
-                            _steps = parsedSteps.OrderBy(s => s.Order).Select(s => new StepItem
-                            {
-                                Name = s.Name,
-                                Action = s.Action ?? "Action",
-                                AssignedRole = s.AssignedRole,
-                                Config = s.Config ?? new StepConfig()
-                            }).ToList();
-                    }
+                    if (parsedSteps is not null)
+                        _steps = parsedSteps.OrderBy(s => s.Order).Select(s => new StepItem
+                        {
+                            Name = s.Name,
+                            Action = s.Action ?? "Action",
+                            AssignedRole = s.AssignedRole,
+                            Config = s.Config ?? new StepConfig()
+                        }).ToList();
                 }
             }
-            catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
-            finally { _loading = false; StateHasChanged(); }
+            _error = null;
         }
+        catch (Exception ex)
+        {
+            _error = "Unable to load this workflow. Please check your connection and try again.";
+            Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error);
+        }
+        finally { _loading = false; StateHasChanged(); }
     }
 
     // ── Canvas layout constants ──

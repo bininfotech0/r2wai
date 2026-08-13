@@ -62,6 +62,10 @@
             <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Table" />
         </div>
     }
+    else if (_error is not null)
+    {
+        <ErrorState ErrorMessage="@_error" OnRetry="LoadData" />
+    }
     else if (_approvals.Count == 0)
     {
         <EmptyState Icon="@Icons.Material.Outlined.Celebration"
@@ -127,6 +131,7 @@
 @code {
     private List<ApprovalDto> _approvals = new();
     private bool _loading = true;
+    private string? _error;
     private int _pendingCount;
     private int _approvedCount;
     private int _overdueCount;
@@ -228,8 +233,13 @@
             _approvals = result?.Items ?? new();
             _pendingCount = _approvals.Count;
             _overdueCount = _approvals.Count(a => IsOverdue(a));
+            _error = null;
         }
-        catch { Snackbar.Add("Failed to load inbox.", Severity.Warning); }
+        catch
+        {
+            _error = "Unable to load your inbox. Please check your connection and try again.";
+            Snackbar.Add("Failed to load inbox.", Severity.Warning);
+        }
         finally { _loading = false; StateHasChanged(); }
     }
 
@@ -300,7 +310,7 @@
         right: -4px;
         background: var(--mud-palette-info);
         color: white;
-        border-radius: 12px;
+        border-radius: var(--r2-radius-md);
         padding: 2px 8px;
         font-size: 11px;
         font-weight: 700;

@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inject AuthenticatedHttpClient Http
 @inject NavigationManager Navigation
+@inject ISnackbar Snackbar
 
 <PageTitle>R2WAI - Usage Analytics</PageTitle>
 
@@ -21,7 +22,11 @@
 
 @if (_loading)
 {
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Cards" />
+}
+else if (_error is not null)
+{
+    <ErrorState ErrorMessage="@_error" OnRetry="LoadData" />
 }
 else if (_data is not null)
 {
@@ -104,7 +109,7 @@ else if (_data is not null)
                             var yPos = marginTop + plotHeight - (plotHeight * yi / ySteps);
                             <line x1="@marginLeft" y1="@yPos" x2="@(chartWidth - marginRight)" y2="@yPos"
                                   stroke="#E5E7EB" stroke-width="1" stroke-dasharray="@(yi == 0 ? "0" : "4,4")" />
-                            @((MarkupString)$"<text x=\"{marginLeft - 8}\" y=\"{yPos + 4}\" text-anchor=\"end\" fill=\"#9CA3AF\" font-size=\"10\">{yVal:0}</text>")
+                            @((MarkupString)$"<text x=\"{marginLeft - 8}\" y=\"{yPos + 4}\" text-anchor=\"end\" fill=\"var(--mud-palette-text-secondary)\" font-size=\"10\">{yVal:0}</text>")
                         }
                     }
 
@@ -148,7 +153,7 @@ else if (_data is not null)
                         @if (i % 7 == 0 || i == _trendData.Count - 1)
                         {
                             var labelX = groupX + barGroupWidth / 2;
-                            @((MarkupString)$"<text x=\"{labelX.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}\" y=\"{marginTop + plotHeight + 20}\" text-anchor=\"middle\" fill=\"#9CA3AF\" font-size=\"10\">{day.Date:MMM dd}</text>")
+                            @((MarkupString)$"<text x=\"{labelX.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}\" y=\"{marginTop + plotHeight + 20}\" text-anchor=\"middle\" fill=\"var(--mud-palette-text-secondary)\" font-size=\"10\">{day.Date:MMM dd}</text>")
                         }
                     }
                 </svg>
@@ -328,6 +333,7 @@ else
 @code {
     private int _days = 30;
     private bool _loading = true;
+    private string? _error;
     private UsageData? _data;
     private List<DayData> _trendData = new();
     private List<TopAssistantItem> _topAssistants = new();
@@ -345,6 +351,7 @@ else
     private async Task LoadData()
     {
         _loading = true;
+        _error = null;
         StateHasChanged();
         try
         {
@@ -355,7 +362,12 @@ else
                 BuildChartData();
             }
         }
-        catch { _data = null; }
+        catch (Exception ex)
+        {
+            _data = null;
+            _error = "Unable to load usage analytics. Please check your connection and try again.";
+            Snackbar.Add($"Failed to load analytics: {ex.Message}", Severity.Error);
+        }
         finally { _loading = false; StateHasChanged(); }
     }
 

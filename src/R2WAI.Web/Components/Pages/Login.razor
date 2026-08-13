@@ -16,8 +16,8 @@
 
         <MudPaper Class="pa-6 pa-sm-10 login-card" Elevation="0">
         <div class="d-flex flex-column align-center mb-8">
-            <div style="width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, #7C3AED, #6D28D9); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);">
-                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Style="color: white; font-size: 1.5rem;" />
+            <div class="mb-4">
+                <Brand Size="48" ShowWordmark="false" />
             </div>
             <MudText Typo="Typo.h4" Align="Align.Center" Class="gradient-text" Style="font-weight: 700; letter-spacing: -0.02em;">R2WAI</MudText>
             <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mt-1" Style="max-width: 280px; line-height: 1.5;">
@@ -46,6 +46,7 @@
                           InputType="@(_showPassword ? InputType.Text : InputType.Password)"
                           Adornment="Adornment.End"
                           AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                          AdornmentAriaLabel="@(_showPassword ? "Hide password" : "Show password")"
                           OnAdornmentClick="@(() => _showPassword = !_showPassword)"
                           Class="mb-2"
                           Required="true"

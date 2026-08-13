@@ -54,7 +54,7 @@
     var hasFailure = _steps.Any(s => s.Status == "Failed");
     var isRunning = _instance.Status == "Running";
 
-    <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px;">
+    <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm);">
         <div class="d-flex justify-space-between align-center mb-2">
             <div class="d-flex align-center gap-2">
                 <MudIcon Icon="@(isRunning ? Icons.Material.Filled.PlayCircle : (hasFailure ? Icons.Material.Filled.ErrorOutline : Icons.Material.Filled.CheckCircle))"
@@ -77,7 +77,11 @@
 
 @if (_loading)
 {
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Timeline" />
+}
+else if (_error is not null)
+{
+    <ErrorState ErrorMessage="@_error" OnRetry="ManualRefresh" />
 }
 else if (_instance is null)
 {
@@ -280,7 +284,7 @@ else
                                             <MudDivider Class="my-2" />
                                             @if (_showRawOutput)
                                             {
-                                                <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 6px; padding: 8px; overflow-x: auto; max-height: 200px;">
+                                                <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: var(--r2-radius-sm); padding: 8px; overflow-x: auto; max-height: 200px;">
                                                     <pre style="margin: 0; font-size: 0.75rem; font-family: 'Fira Code', monospace; white-space: pre-wrap; word-break: break-all; color: #374151;">@step.Output</pre>
                                                 </div>
                                             }
@@ -301,7 +305,7 @@ else
                                                     </MudButton>
                                                     @if (_expandedOutputStep == step)
                                                     {
-                                                        <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 6px; padding: 8px; max-height: 400px; overflow: auto;">
+                                                        <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: var(--r2-radius-sm); padding: 8px; max-height: 400px; overflow: auto;">
                                                             <pre style="margin: 0; font-size: 0.75rem; font-family: 'Fira Code', monospace; white-space: pre-wrap; word-break: break-all;">@step.Output</pre>
                                                         </div>
                                                     }
@@ -338,6 +342,7 @@ else
     private bool _autoRefresh;
     private bool _showRawOutput;
     private StepDto? _expandedOutputStep;
+    private string? _error;
     private System.Threading.Timer? _refreshTimer;
     private bool _isRefreshing;
     private IJSObjectReference? _utilsModule;
@@ -355,11 +360,16 @@ else
 
                 _instance = instanceTask.Result;
                 _steps = stepsTask.Result?.Items ?? new();
+                _error = null;
 
                 if (_instance?.Status == "Running")
                     StartAutoRefresh();
             }
-            catch (Exception ex) { Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error); }
+            catch (Exception ex)
+            {
+                _error = "Unable to load this workflow execution. Please check your connection and try again.";
+                Snackbar.Add($"Failed to load: {ex.Message}", Severity.Error);
+            }
             finally { _loading = false; StateHasChanged(); }
 
             await ScrollToCurrentStep();
@@ -433,9 +443,14 @@ else
             if (_instance?.Status == "Running" && !_autoRefresh)
                 StartAutoRefresh();
 
+            _error = null;
             Snackbar.Add("Refreshed", Severity.Info);
         }
-        catch (Exception ex) { Snackbar.Add($"Refresh failed: {ex.Message}", Severity.Error); }
+        catch (Exception ex)
+        {
+            _error = "Unable to load this workflow execution. Please check your connection and try again.";
+            Snackbar.Add($"Refresh failed: {ex.Message}", Severity.Error);
+        }
         finally { _loading = false; StateHasChanged(); }
 
         await ScrollToCurrentStep();

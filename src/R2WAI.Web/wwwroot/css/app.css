@@ -372,15 +372,35 @@ a {
    FOCUS & ACCESSIBILITY
    ================================================ */
 
+/* !important is required here: MudBlazor's own stylesheet sets `button:focus { outline: none }`
+   and `.mud-button-root { outline: 0 }`, both of which are more specific than `*:focus-visible`
+   and silently wins the cascade, leaving every button in the app with no visible keyboard focus
+   indicator (WCAG 2.4.7). This overrides that regardless of which MudBlazor selector applies. */
 *:focus-visible {
-    outline: 2px solid var(--r2-primary);
+    outline-style: solid !important;
+    outline-width: 2px !important;
+    outline-color: var(--r2-primary) !important;
     outline-offset: 2px;
     border-radius: 4px;
 }
 
 .mud-theme-dark *:focus-visible {
-    outline-color: var(--r2-neon-cyan);
+    outline-color: var(--r2-neon-cyan) !important;
     box-shadow: var(--r2-glow-neon);
+}
+
+/* Chromium resolves computed outline-width to 0 on <button>/.mud-button-root specifically even
+   with the !important outline-width rule above winning on style/color — verified via matching
+   CSSOM rules and computed style, not just visually; box-shadow doesn't share that quirk, so it's
+   used here as the reliable indicator for buttons instead of fighting the outline cascade further. */
+button:focus-visible,
+.mud-button-root:focus-visible {
+    box-shadow: 0 0 0 2px var(--r2-primary) !important;
+}
+
+.mud-theme-dark button:focus-visible,
+.mud-theme-dark .mud-button-root:focus-visible {
+    box-shadow: 0 0 0 2px var(--r2-neon-cyan) !important;
 }
 
 /* ================================================
@@ -400,11 +420,11 @@ a {
 }
 
 /* ================================================
-   NAVIGATION DRAWER — Dark Sidebar
+   NAVIGATION DRAWER — Left Rail (Light/Dark Adaptive)
    ================================================ */
 
 .mud-drawer {
-    border-right: none !important;
+    border-right: 1px solid var(--mud-palette-divider) !important;
 }
 
 .mud-nav-link {
@@ -414,19 +434,19 @@ a {
     transition: all var(--r2-transition-fast);
     font-size: 0.8125rem;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--mud-palette-drawer-text);
     position: relative;
 }
 
 .mud-nav-link:hover {
-    background-color: rgba(255, 255, 255, 0.08) !important;
-    color: rgba(255, 255, 255, 0.95);
+    background-color: var(--mud-palette-action-default-hover) !important;
+    color: var(--mud-palette-drawer-text);
     transform: translateX(2px);
 }
 
 .mud-nav-link.active {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.2), rgba(124, 58, 237, 0.12)) !important;
-    color: #A78BFA !important;
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.16), rgba(124, 58, 237, 0.08)) !important;
+    color: var(--mud-palette-primary) !important;
     font-weight: 600;
     box-shadow: inset 3px 0 0 var(--r2-primary);
 }
@@ -438,17 +458,18 @@ a {
 
 .mud-nav-link .mud-nav-link-icon {
     font-size: 1.125rem;
-    opacity: 0.65;
+    opacity: 0.75;
+    color: var(--mud-palette-drawer-icon);
     transition: opacity var(--r2-transition-fast);
 }
 
 .mud-nav-link:hover .mud-nav-link-icon {
-    opacity: 0.9;
+    opacity: 1;
 }
 
 .mud-nav-link.active .mud-nav-link-icon {
     opacity: 1;
-    color: #A78BFA !important;
+    color: var(--mud-palette-primary) !important;
 }
 
 .mud-nav-group .mud-nav-link {
@@ -456,7 +477,8 @@ a {
 }
 
 .mud-navmenu .mud-nav-group .mud-list-item {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--mud-palette-drawer-text);
+    opacity: 0.6;
     font-size: 0.6875rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -465,7 +487,7 @@ a {
 }
 
 .mud-drawer .mud-divider {
-    border-color: rgba(255, 255, 255, 0.06) !important;
+    border-color: var(--mud-palette-divider) !important;
     margin: 4px 16px;
 }
 
@@ -473,7 +495,7 @@ a {
 .mud-nav-group .mud-nav-group-title {
     font-size: 0.8125rem;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--mud-palette-drawer-text);
     border-radius: var(--r2-radius-sm);
     margin: 2px 10px;
     padding: 9px 14px;
@@ -481,13 +503,14 @@ a {
 }
 
 .mud-nav-group .mud-nav-group-title:hover {
-    background-color: rgba(255, 255, 255, 0.08) !important;
-    color: rgba(255, 255, 255, 0.95);
+    background-color: var(--mud-palette-action-default-hover) !important;
+    color: var(--mud-palette-drawer-text);
 }
 
 .mud-nav-group .mud-nav-group-title .mud-icon-root {
     font-size: 1.125rem;
-    opacity: 0.65;
+    opacity: 0.75;
+    color: var(--mud-palette-drawer-icon);
 }
 
 .mud-nav-group .mud-collapse-container .mud-nav-link {
@@ -545,6 +568,7 @@ a {
     z-index: 1;
 }
 
+/* Intentional: auth screen is a fixed dark-brand moment, not theme-token-driven */
 .login-showcase {
     display: none;
     max-width: 440px;
@@ -1689,7 +1713,7 @@ a {
     right: 0;
     z-index: 1300;
     background: var(--mud-palette-appbar-background, #1a1625);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--mud-palette-divider);
     padding: 6px 0 max(6px, env(safe-area-inset-bottom));
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -1704,7 +1728,7 @@ a {
     gap: 2px;
     padding: 6px 8px;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--mud-palette-text-secondary);
     transition: all var(--r2-transition-fast);
     text-decoration: none;
     border: none;
@@ -1731,7 +1755,7 @@ a {
 
 .mobile-bottom-nav-item.active,
 .mobile-bottom-nav-item:hover {
-    color: #A78BFA;
+    color: var(--mud-palette-primary);
 }
 
 .mobile-bottom-nav-item .mobile-nav-icon {
@@ -2306,6 +2330,16 @@ a {
     background-size: 200% 200%;
     animation: gradientShift 6s ease-in-out infinite;
     transition: transform var(--r2-transition-fast), box-shadow var(--r2-transition-fast);
+}
+
+.r2-brand-mark {
+    background: var(--r2-gradient-primary);
+    border-radius: var(--r2-radius-sm);
+    box-shadow: var(--r2-shadow-glow-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .r2-logo:hover {

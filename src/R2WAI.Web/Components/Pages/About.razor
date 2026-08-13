@@ -9,7 +9,7 @@
 
 @if (_loading)
 {
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Cards" />
 }
 else
 {
@@ -46,7 +46,7 @@ else
                 <div class="stagger-in">
                     @foreach (var feature in _features)
                     {
-                        <div class="d-flex align-center justify-space-between pa-2" style="border-radius: 8px; transition: background 0.2s;"
+                        <div class="d-flex align-center justify-space-between pa-2" style="border-radius: var(--r2-radius-sm); transition: background 0.2s;"
                              onmouseover="this.style.background='rgba(124, 58, 237, 0.04)'" onmouseout="this.style.background='transparent'">
                             <div class="d-flex align-center gap-2">
                                 <div class="icon-container icon-container--@GetIconVariant(feature.Color)">
@@ -81,7 +81,7 @@ else
 
                 @if (_healthStatus is not null)
                 {
-                    <div class="d-flex align-center gap-2 mb-3 pa-2" style="border-radius: 8px; background: rgba(16, 185, 129, 0.06);">
+                    <div class="d-flex align-center gap-2 mb-3 pa-2" style="border-radius: var(--r2-radius-sm); background: rgba(16, 185, 129, 0.06);">
                         <span class="health-dot health-dot--@(_healthStatus == "Healthy" ? "healthy" : _healthStatus == "Degraded" ? "degraded" : "unhealthy")"></span>
                         <MudText Typo="Typo.body2" Style="font-weight: 600;">Overall: @_healthStatus</MudText>
                         @if (_healthDuration > 0)
@@ -94,7 +94,7 @@ else
                 <div class="d-flex flex-column gap-2 stagger-in">
                     @foreach (var check in _healthChecks)
                     {
-                        <div class="d-flex justify-space-between align-center pa-2" style="border-radius: 8px; border: 1px solid var(--mud-palette-divider);">
+                        <div class="d-flex justify-space-between align-center pa-2" style="border-radius: var(--r2-radius-sm); border: 1px solid var(--mud-palette-divider);">
                             <div class="d-flex align-center gap-2">
                                 <span class="health-dot health-dot--@(check.Status == "Healthy" ? "healthy" : check.Status == "Degraded" ? "degraded" : "unhealthy")"></span>
                                 <MudText Typo="Typo.body2" Style="font-weight: 500;">@check.Name</MudText>

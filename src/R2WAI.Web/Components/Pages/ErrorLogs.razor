@@ -39,7 +39,11 @@
 <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
     @if (_loading)
     {
-        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Table" />
+    }
+    else if (_error is not null)
+    {
+        <ErrorState ErrorMessage="@_error" OnRetry="LoadErrors" />
     }
     else if (_errors.Count == 0)
     {
@@ -95,6 +99,7 @@
 @code {
     private List<ErrorEntry> _errors = new();
     private bool _loading = true;
+    private string? _error;
     private string _filterLevel = "Error";
     private string _filterCorrelationId = string.Empty;
 
@@ -106,6 +111,7 @@
     private async Task LoadErrors()
     {
         _loading = true;
+        _error = null;
         StateHasChanged();
         try
         {
@@ -120,6 +126,7 @@
         catch
         {
             _errors = new();
+            _error = "Error log endpoint not available. Configure structured logging to enable error collection.";
             Snackbar.Add("Error log endpoint not available. Configure structured logging to enable error collection.", Severity.Warning);
         }
         finally { _loading = false; StateHasChanged(); }
