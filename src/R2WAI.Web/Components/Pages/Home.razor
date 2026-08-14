@@ -33,7 +33,7 @@
 
 @* KPI Row *@
 <MudGrid Class="mb-4" Spacing="3">
-    <MudItem xs="12" sm="6" md="4" lg="2" Style="flex-grow:1;">
+    <MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
                   @onclick="@(() => Navigation.NavigateTo("/applications"))">
             <div class="d-flex align-center gap-2 mb-2">
@@ -46,7 +46,7 @@
             @RenderTrend(_applicationsTrendPercent)
         </MudPaper>
     </MudItem>
-    <MudItem xs="12" sm="6" md="4" lg="2" Style="flex-grow:1;">
+    <MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
                   @onclick="@(() => Navigation.NavigateTo("/assistant-studio"))">
             <div class="d-flex align-center gap-2 mb-2">
@@ -59,7 +59,7 @@
             @RenderTrend(_assistantsTrendPercent)
         </MudPaper>
     </MudItem>
-    <MudItem xs="12" sm="6" md="4" lg="2" Style="flex-grow:1;">
+    <MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
                   @onclick="@(() => Navigation.NavigateTo("/conversations"))">
             <div class="d-flex align-center gap-2 mb-2">
@@ -72,7 +72,7 @@
             @RenderTrend(_conversationsTrendPercent)
         </MudPaper>
     </MudItem>
-    <MudItem xs="12" sm="6" md="4" lg="3" Style="flex-grow:1;">
+    <MudItem xs="12" sm="6" md="4" lg="3">
         <MudPaper Class="pa-4 kpi-card" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
             <div class="d-flex align-center gap-2 mb-2">
                 <div class="icon-container icon-container--warning" style="width: 32px; height: 32px;">
@@ -86,7 +86,7 @@
             <MudText Typo="Typo.caption" Color="Color.Secondary">Last 30 days</MudText>
         </MudPaper>
     </MudItem>
-    <MudItem xs="12" sm="6" md="4" lg="3" Style="flex-grow:1;">
+    <MudItem xs="12" sm="6" md="4" lg="3">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
                   @onclick="@(() => Navigation.NavigateTo("/admin/users"))">
             <div class="d-flex align-center gap-2 mb-2">
@@ -265,6 +265,7 @@
             }
             else
             {
+                <div style="overflow-x: auto;">
                 <MudTable T="ApplicationSummary" Items="_applications" Hover="true" Dense="true" Elevation="0" RowsPerPage="5">
                     <HeaderContent>
                         <MudTh>Name</MudTh>
@@ -288,6 +289,7 @@
                         <MudTablePager RowsPerPageString="" InfoFormat="{first_item}-{last_item} of {all_items}" />
                     </PagerContent>
                 </MudTable>
+                </div>
             }
         </MudPaper>
     </MudItem>
