@@ -109,12 +109,7 @@
     @* Side Navigation Drawer *@
     <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="0"
                Breakpoint="Breakpoint.Md" Variant="DrawerVariant.Responsive" aria-label="Main navigation">
-        <div class="pa-4 pb-2">
-            <Brand Size="32" WordmarkTypo="Typo.h6" />
-            <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary); font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.75; margin-top: 4px;">AI Work Platform</MudText>
-        </div>
-
-        <MudNavMenu>
+        <MudNavMenu Class="mt-2">
             <MudNavLink Href="/" Icon="@Icons.Material.Outlined.SpaceDashboard" Match="NavLinkMatch.All">Home</MudNavLink>
 
             <MudNavGroup Title="Build" Icon="@Icons.Material.Outlined.Construction" Expanded="_buildExpanded" ExpandedChanged="@(v => _buildExpanded = v)" HideExpandIcon="false">
