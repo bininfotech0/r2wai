@@ -539,7 +539,9 @@ else
                              @ondragend="OnDragEnd">
                             <MudPaper Class="pa-3 mb-2" Elevation="0"
                                       Style="@rowStyle"
-                                      @onclick="@(() => { _editingStep = step; _showVariables = false; })">
+                                      @onclick="@(() => { _editingStep = step; _showVariables = false; })"
+                                      @onkeydown="@(e => { if (e.Key is "Enter" or " ") { _editingStep = step; _showVariables = false; } })"
+                                      tabindex="0" role="button" aria-label="@($"Edit step {index + 1}: {step.Name}")">
                                 <div class="d-flex justify-space-between align-center">
                                     <div class="d-flex align-center gap-2" style="min-width: 0; flex: 1;">
                                         <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small"

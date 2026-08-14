@@ -1,6 +1,10 @@
 <MudPaper Class="@($"pa-4 kpi-card {(OnClick.HasDelegate ? "kpi-card--clickable" : "")}")" Elevation="0"
           Style="@($"border: 1px solid var(--mud-palette-divider); cursor: {(OnClick.HasDelegate ? "pointer" : "default")};")"
-          @onclick="OnClick">
+          @onclick="OnClick"
+          tabindex="@(OnClick.HasDelegate ? "0" : null)"
+          role="@(OnClick.HasDelegate ? "button" : null)"
+          aria-label="@(OnClick.HasDelegate ? (AriaLabel ?? $"{Label}: {Value}") : null)"
+          @onkeydown="@(OnClick.HasDelegate ? HandleKeyDown : null)">
     <div class="d-flex justify-space-between align-center mb-2">
         <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">@Label</MudText>
         @if (!string.IsNullOrEmpty(Icon))
@@ -37,6 +41,12 @@
     [Parameter] public Color ValueColor { get; set; } = Color.Default;
     [Parameter] public Color IconColor { get; set; } = Color.Default;
     [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
 
     public enum TrendDirection { Up, Down, Neutral }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or " ") await OnClick.InvokeAsync();
+    }
 }

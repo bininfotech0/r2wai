@@ -14,6 +14,8 @@
                 {
                     <MudItem xs="12" sm="6">
                         <MudPaper Class="pa-3 cursor-pointer" Elevation="1" @onclick="@(() => ApplyTemplate(t))"
+                                  @onkeydown="@(e => { if (e.Key is "Enter" or " ") ApplyTemplate(t); })"
+                                  tabindex="0" role="button" aria-label="@($"Apply template: {t.Name}")"
                                   Style="border: 1px solid var(--mud-palette-lines-default);">
                             <MudText Typo="Typo.subtitle2">@t.Name</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@t.Description</MudText>

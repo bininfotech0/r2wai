@@ -18,7 +18,7 @@
     <MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
         <MudGrid>
             <MudItem xs="12" sm="5">
-                <MudTextField @bind-Value="_searchTerm" Placeholder="Search applications..."
+                <MudTextField @bind-Value="_searchTerm" Placeholder="Search applications..." aria-label="Search applications"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                               Variant="Variant.Outlined" Margin="Margin.Dense"
                               Immediate="true" DebounceInterval="300" />
@@ -75,7 +75,9 @@ else
         {
             <MudItem xs="12" sm="6" md="4">
                 <MudPaper Elevation="0" Class="pa-4 application-card" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; height: 100%; cursor: pointer;"
-                          @onclick="@(() => Navigation.NavigateTo($"/applications/{app.Id}"))">
+                          @onclick="@(() => Navigation.NavigateTo($"/applications/{app.Id}"))"
+                          @onkeydown="@(e => { if (e.Key is "Enter" or " ") Navigation.NavigateTo($"/applications/{app.Id}"); })"
+                          tabindex="0" role="button" aria-label="@($"Open application {app.Name}")">
                     <div class="d-flex justify-space-between align-center mb-3">
                         <div class="d-flex align-center gap-2">
                             <div class="icon-container icon-container--primary">

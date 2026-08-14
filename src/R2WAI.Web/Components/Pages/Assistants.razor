@@ -63,7 +63,8 @@
             <MudItem xs="12" sm="6" md="4" lg="3">
                 <MudPaper Elevation="0" Class="pa-4 template-card cursor-pointer d-flex flex-column align-center justify-center"
                           Style="border: 2px dashed var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%; min-height: 180px;"
-                          @onclick="ShowCreator">
+                          @onclick="ShowCreator" @onkeydown="@(e => { if (e.Key is "Enter" or " ") ShowCreator(); })"
+                          tabindex="0" role="button" aria-label="Create a custom assistant">
                     <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Size="Size.Large" Color="Color.Primary" Style="opacity: 0.5;" />
                     <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="mt-2" Style="font-weight: 600;">Custom Assistant</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1" Align="Align.Center">
@@ -162,7 +163,7 @@
                 </div>
             </div>
 
-            <MudTextField @bind-Value="_searchTerm" Placeholder="Search assistants..."
+            <MudTextField @bind-Value="_searchTerm" Placeholder="Search assistants..." aria-label="Search assistants"
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                           Immediate="true" DebounceInterval="300" Class="mb-2" Variant="Variant.Outlined"
                           Margin="Margin.Dense" />

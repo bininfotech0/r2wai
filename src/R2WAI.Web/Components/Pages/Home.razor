@@ -35,7 +35,8 @@
 <MudGrid Class="mb-4" Spacing="3">
     <MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
-                  @onclick="@(() => Navigation.NavigateTo("/applications"))">
+                  @onclick="@(() => Navigation.NavigateTo("/applications"))" @onkeydown="@(e => NavigateOnEnter(e, "/applications"))"
+                  tabindex="0" role="button" aria-label="@($"Applications: {_totalApplications}. View all applications.")">
             <div class="d-flex align-center gap-2 mb-2">
                 <div class="icon-container icon-container--secondary" style="width: 32px; height: 32px;">
                     <MudIcon Icon="@Icons.Material.Outlined.Apps" Color="Color.Secondary" Size="Size.Small" />
@@ -48,7 +49,8 @@
     </MudItem>
     <MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
-                  @onclick="@(() => Navigation.NavigateTo("/assistant-studio"))">
+                  @onclick="@(() => Navigation.NavigateTo("/assistant-studio"))" @onkeydown="@(e => NavigateOnEnter(e, "/assistant-studio"))"
+                  tabindex="0" role="button" aria-label="@($"Assistants: {_totalAssistants}. View all assistants.")">
             <div class="d-flex align-center gap-2 mb-2">
                 <div class="icon-container icon-container--primary" style="width: 32px; height: 32px;">
                     <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Color="Color.Primary" Size="Size.Small" />
@@ -61,7 +63,8 @@
     </MudItem>
     <MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
-                  @onclick="@(() => Navigation.NavigateTo("/conversations"))">
+                  @onclick="@(() => Navigation.NavigateTo("/conversations"))" @onkeydown="@(e => NavigateOnEnter(e, "/conversations"))"
+                  tabindex="0" role="button" aria-label="@($"Conversations: {_totalConversations}. View all conversations.")">
             <div class="d-flex align-center gap-2 mb-2">
                 <div class="icon-container icon-container--success" style="width: 32px; height: 32px;">
                     <MudIcon Icon="@Icons.Material.Outlined.ChatBubbleOutline" Color="Color.Success" Size="Size.Small" />
@@ -88,7 +91,8 @@
     </MudItem>
     <MudItem xs="12" sm="6" md="4" lg="3">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
-                  @onclick="@(() => Navigation.NavigateTo("/admin/users"))">
+                  @onclick="@(() => Navigation.NavigateTo("/admin/users"))" @onkeydown="@(e => NavigateOnEnter(e, "/admin/users"))"
+                  tabindex="0" role="button" aria-label="@($"Active Users: {_activeUsersByLogin}. View all users.")">
             <div class="d-flex align-center gap-2 mb-2">
                 <div class="icon-container icon-container--primary" style="width: 32px; height: 32px;">
                     <MudIcon Icon="@Icons.Material.Outlined.Groups" Color="Color.Primary" Size="Size.Small" />
@@ -184,7 +188,8 @@
                     @foreach (var result in group)
                     {
                         <MudPaper Elevation="0" Class="pa-3 mb-2 search-result-item" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm); cursor: pointer;"
-                                  @onclick="@(() => Navigation.NavigateTo("/assistant-studio/knowledge"))">
+                                  @onclick="@(() => Navigation.NavigateTo("/assistant-studio/knowledge"))" @onkeydown="@(e => NavigateOnEnter(e, "/assistant-studio/knowledge"))"
+                                  tabindex="0" role="button" aria-label="@($"Search result from {group.Key}. Open Knowledge Bases.")">
                             <MudText Typo="Typo.body2" Style="line-height: 1.5;">@((MarkupString)HighlightSearchTerm(result.Content, _lastSearchQuery))</MudText>
                             @if (!string.IsNullOrEmpty(result.SourceName))
                             {
@@ -794,6 +799,11 @@
         builder.CloseComponent();
         builder.CloseElement();
     };
+
+    private void NavigateOnEnter(KeyboardEventArgs e, string url)
+    {
+        if (e.Key is "Enter" or " ") Navigation.NavigateTo(url);
+    }
 
     private static string GetTimeOfDay()
     {
