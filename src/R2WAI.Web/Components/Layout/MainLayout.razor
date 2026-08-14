@@ -122,27 +122,7 @@
                 <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">Assistants</MudNavLink>
                 <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge Bases</MudNavLink>
                 <MudNavLink Href="/assistant-studio/tools" Icon="@Icons.Material.Outlined.Build">Tools &amp; APIs</MudNavLink>
-                <MudNavLink Href="/documents" Icon="@Icons.Material.Outlined.Description">Documents</MudNavLink>
-                <MudNavLink Href="/templates" Icon="@Icons.Material.Outlined.DashboardCustomize">Templates</MudNavLink>
-            </MudNavGroup>
-
-            <MudNavGroup Title="Workflows" Icon="@Icons.Material.Outlined.AccountTree" Expanded="_workflowsExpanded" ExpandedChanged="@(v => _workflowsExpanded = v)" HideExpandIcon="false">
-                <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Workflow Studio</MudNavLink>
-                <MudNavLink Href="/inbox" Icon="@Icons.Material.Outlined.Inbox">
-                    <div class="d-flex justify-space-between align-center" style="width: 100%;">
-                        <span>Inbox</span>
-                        @if (_pendingApprovalCount > 0)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Error"
-                                     Style="height: 20px; font-size: 0.6875rem; min-width: 20px; font-weight: 700;">
-                                @_pendingApprovalCount
-                            </MudChip>
-                        }
-                    </div>
-                </MudNavLink>
-                <MudNavLink Href="/workflow-studio/approvals" Icon="@Icons.Material.Outlined.TaskAlt">Approvals</MudNavLink>
-                <MudNavLink Href="/workflow-studio/schedules" Icon="@Icons.Material.Outlined.Schedule">Schedules</MudNavLink>
-                <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Extension">Integrations</MudNavLink>
+                <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Workflows</MudNavLink>
             </MudNavGroup>
 
             <MudNavGroup Title="Test" Icon="@Icons.Material.Outlined.Science" Expanded="_testExpanded" ExpandedChanged="@(v => _testExpanded = v)" HideExpandIcon="false">
@@ -158,18 +138,15 @@
             <MudNavGroup Title="Monitor" Icon="@Icons.Material.Outlined.MonitorHeart" Expanded="_monitorExpanded" ExpandedChanged="@(v => _monitorExpanded = v)" HideExpandIcon="false">
                 <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Dashboard">Overview</MudNavLink>
                 <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
+                <MudNavLink Href="/workflow-studio?tab=1" Icon="@Icons.Material.Outlined.PlaylistPlay">Runs</MudNavLink>
                 <MudNavLink Href="/operations/errors" Icon="@Icons.Material.Outlined.BugReport">Errors</MudNavLink>
                 <MudNavLink Href="/operations/audit-logs" Icon="@Icons.Material.Outlined.History">Audit</MudNavLink>
-                <MudNavLink Href="/operations/analytics" Icon="@Icons.Material.Outlined.BarChart">Analytics</MudNavLink>
-                <MudNavLink Href="/operations/reports" Icon="@Icons.Material.Outlined.Assessment">Reports</MudNavLink>
-                <MudNavLink Href="/operations/ai" Icon="@Icons.Material.Outlined.Psychology">AI Ops</MudNavLink>
             </MudNavGroup>
 
             <AuthorizeView Roles="Admin,SystemAdmin">
                 <Authorized>
                     <MudNavGroup Title="Manage" Icon="@Icons.Material.Outlined.AdminPanelSettings" Expanded="_manageExpanded" ExpandedChanged="@(v => _manageExpanded = v)" HideExpandIcon="false">
-                        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users</MudNavLink>
-                        <MudNavLink Href="/admin/roles" Icon="@Icons.Material.Outlined.Shield">Roles</MudNavLink>
+                        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users &amp; Roles</MudNavLink>
                         <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">Models</MudNavLink>
                         <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
                         <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
@@ -240,7 +217,6 @@
     // closed but auto-expand when the current route lands inside them, so the active nav link
     // is never hidden behind a collapsed group with no "you are here" cue.
     private bool _buildExpanded = true;
-    private bool _workflowsExpanded;
     private bool _testExpanded;
     private bool _publishExpanded;
     private bool _monitorExpanded;
@@ -270,10 +246,9 @@
         if (path.StartsWith("/applications", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/documents", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/templates", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/workflow-studio", StringComparison.OrdinalIgnoreCase)
             || (path.StartsWith("/assistant-studio", StringComparison.OrdinalIgnoreCase) && !inPlayground))
             _buildExpanded = true;
-        if (path.StartsWith("/workflow-studio", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/inbox", StringComparison.OrdinalIgnoreCase))
-            _workflowsExpanded = true;
         if (inPlayground)
             _testExpanded = true;
         if (path.StartsWith("/chatbots", StringComparison.OrdinalIgnoreCase))

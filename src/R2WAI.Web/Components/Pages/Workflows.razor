@@ -152,7 +152,7 @@
                  BadgeData="@(_workflows.Count > 0 ? _workflows.Count.ToString() : null)" BadgeColor="Color.Primary">
         <div class="d-flex justify-space-between align-center pa-4 animate-slide-in flex-wrap gap-2">
             <div class="d-flex align-center gap-3 flex-wrap">
-                <MudTextField T="string" Value="_workflowSearch" ValueChanged="OnWorkflowSearchChanged" Placeholder="Search workflows..."
+                <MudTextField T="string" Value="_workflowSearch" ValueChanged="OnWorkflowSearchChanged" Placeholder="Search workflows..." aria-label="Search workflows"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                               Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 240px; max-width: 300px;"
                               Immediate="true" DebounceInterval="300" />
@@ -360,8 +360,13 @@
                                                  Variant="@(!wf.IsActive && !wf.IsArchived ? Variant.Outlined : Variant.Filled)">
                                             @GetWorkflowStatusLabel(wf)
                                         </MudChip>
-                                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+                                        <MudMenu Size="Size.Small" Dense="true"
                                                  AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                                            <ActivatorContent>
+                                                <MudIconButton Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small"
+                                                               aria-label="@($"Actions for {wf.Name}")" />
+                                            </ActivatorContent>
+                                            <ChildContent>
                                             <MudMenuItem Icon="@Icons.Material.Outlined.ContentCopy" IconColor="Color.Primary"
                                                          OnClick="@(() => CloneWorkflow(wf))">
                                                 Clone
@@ -400,6 +405,7 @@
                                                          OnClick="@(() => DeleteWorkflow(wf))">
                                                 Delete
                                             </MudMenuItem>
+                                            </ChildContent>
                                         </MudMenu>
                                     </div>
                                 </div>
@@ -656,60 +662,22 @@
             }
             else
             {
-                <div class="d-flex flex-column gap-3">
-                    @foreach (var approval in _pendingApprovals)
-                    {
-                        var isOverdue = approval.DueAt.HasValue && approval.DueAt < DateTime.UtcNow;
-                        <MudPaper Elevation="0" Class="@($"pa-4 inbox-item {(isOverdue ? "inbox-item--urgent" : "inbox-item--normal")}")">
-                            <div class="d-flex justify-space-between align-start">
-                                <div style="min-width: 0; flex: 1;">
-                                    <div class="d-flex align-center gap-2">
-                                        <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@approval.WorkflowName</MudText>
-                                        @if (isOverdue)
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled"
-                                                     Style="font-size: 0.6875rem; height: 18px;">
-                                                OVERDUE
-                                            </MudChip>
-                                        }
-                                    </div>
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">
-                                        Requested by @approval.RequesterFirstName @approval.RequesterLastName
-                                    </MudText>
-                                    <div class="d-flex gap-3 mt-1 align-center flex-wrap">
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small" Style="font-size: 14px; vertical-align: middle; margin-right: 2px;" />
-                                            @FormatRelativeTime(approval.RequestedAt)
-                                        </MudText>
-                                        @if (approval.DueAt.HasValue)
-                                        {
-                                            <MudText Typo="Typo.caption" Color="@(isOverdue ? Color.Error : Color.Secondary)">
-                                                Due: @approval.DueAt.Value.ToString("MMM dd, HH:mm")
-                                            </MudText>
-                                        }
-                                        @if (approval.EscalationLevel > 0)
-                                        {
-                                            <MudChip T="string" Color="Color.Warning" Size="Size.Small">
-                                                Escalated L@(approval.EscalationLevel)
-                                            </MudChip>
-                                        }
-                                    </div>
-                                </div>
-                                <div class="d-flex gap-2 flex-shrink-0">
-                                    <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
-                                               StartIcon="@Icons.Material.Filled.Check"
-                                               OnClick="@(() => OpenApprovalAction(approval, true))">
-                                        Approve
-                                    </MudButton>
-                                    <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
-                                               StartIcon="@Icons.Material.Filled.Close"
-                                               OnClick="@(() => OpenApprovalAction(approval, false))">
-                                        Reject
-                                    </MudButton>
-                                </div>
-                            </div>
-                        </MudPaper>
-                    }
+                <div class="d-flex justify-space-between align-center pa-4" style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+                    <div>
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">
+                            @_pendingApprovals.Count pending approval@(_pendingApprovals.Count == 1 ? "" : "s")
+                        </MudText>
+                        @{
+                            var overdueCount = _pendingApprovals.Count(a => a.DueAt.HasValue && a.DueAt < DateTime.UtcNow);
+                        }
+                        <MudText Typo="Typo.body2" Color="@(overdueCount > 0 ? Color.Error : Color.Secondary)">
+                            @(overdueCount > 0 ? $"{overdueCount} overdue" : "None overdue")
+                        </MudText>
+                    </div>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
+                               StartIcon="@Icons.Material.Filled.TaskAlt" Href="/workflow-studio/approvals">
+                        Review Approvals
+                    </MudButton>
                 </div>
             }
         </div>
@@ -954,6 +922,9 @@
 </MudTabs>
 
 @code {
+    [SupplyParameterFromQuery(Name = "tab")]
+    private int? TabParam { get; set; }
+
     private int _activeTab;
     private string _workflowSearch = string.Empty;
     private string _statusFilter = "All";
@@ -1079,6 +1050,11 @@
         if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
         if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
         return dt.ToString("MMM dd");
+    }
+
+    protected override void OnInitialized()
+    {
+        if (TabParam is >= 0 and <= 5) _activeTab = TabParam.Value;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -1547,20 +1523,6 @@
         }
         catch { Snackbar.Add("Failed to load approvals.", Severity.Warning); }
         finally { _loadingApprovals = false; }
-    }
-
-    private async Task OpenApprovalAction(PendingApprovalDto approval, bool isApprove)
-    {
-        var parameters = new DialogParameters<ApprovalActionDialog>
-        {
-            { x => x.ApprovalId, approval.Id.ToString() },
-            { x => x.WorkflowName, approval.WorkflowName },
-            { x => x.IsApprove, isApprove }
-        };
-        var dialog = await Dialog.ShowAsync<ApprovalActionDialog>(
-            isApprove ? "Approve Request" : "Reject Request", parameters);
-        var result = await dialog.Result;
-        if (result?.Canceled == false) await LoadApprovals();
     }
 
     // --- Schedules ---
