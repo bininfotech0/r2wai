@@ -6,41 +6,136 @@
 
 <PageTitle>R2WAI - AI Command Center</PageTitle>
 
-<div class="d-flex justify-space-between align-start flex-wrap gap-3 greeting-section">
+<div class="d-flex justify-space-between align-start flex-wrap gap-3 greeting-section mb-4">
     <div>
-        <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;">Good @GetTimeOfDay(), @_userName.</MudText>
-        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-1" Style="line-height: 1.5;">Manage your applications and AI assistants from one place.</MudText>
+        <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;">Good @GetTimeOfDay(), @_userName 👋</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-1" Style="line-height: 1.5;">Here's what's happening with your R2WAI platform.</MudText>
     </div>
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
-               StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Navigation.NavigateTo("/applications/new"))">
-        Add Application
-    </MudButton>
-</div>
-
-@* Hero — Connect an Application *@
-<MudPaper Elevation="0" Class="pa-5 mt-4 mb-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 16px; background: linear-gradient(135deg, rgba(124,58,237,0.06), rgba(79,70,229,0.04));">
-    <div class="d-flex justify-space-between align-center flex-wrap gap-3">
-        <div>
-            <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Connect an Existing Application</MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1" Style="max-width: 560px; line-height: 1.5;">
-                Connect your government application, register the APIs it exposes, and publish an AI layer on top of it — without rebuilding the application itself.
-            </MudText>
-        </div>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="@(() => Navigation.NavigateTo("/applications/new"))">
+    <div class="d-flex align-center gap-2">
+        <MudSelect T="int" Value="_dailyTrendDays" ValueChanged="OnDailyTrendDaysChanged" Variant="Variant.Outlined" Margin="Margin.Dense"
+                   Style="min-width: 140px;" AdornmentIcon="@Icons.Material.Filled.CalendarMonth" Adornment="Adornment.Start">
+            <MudSelectItem T="int" Value="7">Last 7 days</MudSelectItem>
+            <MudSelectItem T="int" Value="14">Last 14 days</MudSelectItem>
+            <MudSelectItem T="int" Value="30">Last 30 days</MudSelectItem>
+        </MudSelect>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Navigation.NavigateTo("/applications/new"))">
             Add Application
         </MudButton>
     </div>
-</MudPaper>
+</div>
 
-@* Getting Started *@
+@* Getting Started — only for brand-new tenants *@
 @if (_showGettingStarted)
 {
     <GettingStarted OnDismiss="DismissGettingStarted" />
 }
 
+@* KPI Row *@
+<MudGrid Class="mb-4" Spacing="3">
+    <MudItem xs="12" sm="6" md="4" lg="2" Style="flex-grow:1;">
+        <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/applications"))">
+            <div class="d-flex align-center gap-2 mb-2">
+                <div class="icon-container icon-container--secondary" style="width: 32px; height: 32px;">
+                    <MudIcon Icon="@Icons.Material.Outlined.Apps" Color="Color.Secondary" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Applications</MudText>
+            </div>
+            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalApplications</MudText>
+            @RenderTrend(_applicationsTrendPercent)
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4" lg="2" Style="flex-grow:1;">
+        <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/assistant-studio"))">
+            <div class="d-flex align-center gap-2 mb-2">
+                <div class="icon-container icon-container--primary" style="width: 32px; height: 32px;">
+                    <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Color="Color.Primary" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Assistants</MudText>
+            </div>
+            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalAssistants</MudText>
+            @RenderTrend(_assistantsTrendPercent)
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4" lg="2" Style="flex-grow:1;">
+        <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/conversations"))">
+            <div class="d-flex align-center gap-2 mb-2">
+                <div class="icon-container icon-container--success" style="width: 32px; height: 32px;">
+                    <MudIcon Icon="@Icons.Material.Outlined.ChatBubbleOutline" Color="Color.Success" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Conversations</MudText>
+            </div>
+            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalConversations</MudText>
+            @RenderTrend(_conversationsTrendPercent)
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4" lg="3" Style="flex-grow:1;">
+        <MudPaper Class="pa-4 kpi-card" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+            <div class="d-flex align-center gap-2 mb-2">
+                <div class="icon-container icon-container--warning" style="width: 32px; height: 32px;">
+                    <MudIcon Icon="@Icons.Material.Outlined.TrendingUp" Color="Color.Warning" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Successful Runs</MudText>
+            </div>
+            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">
+                @(_workflowSuccessRatePercent.HasValue ? $"{_workflowSuccessRatePercent.Value:F1}%" : "—")
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Last 30 days</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4" lg="3" Style="flex-grow:1;">
+        <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/admin/users"))">
+            <div class="d-flex align-center gap-2 mb-2">
+                <div class="icon-container icon-container--primary" style="width: 32px; height: 32px;">
+                    <MudIcon Icon="@Icons.Material.Outlined.Groups" Color="Color.Primary" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Active Users</MudText>
+            </div>
+            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_activeUsersByLogin</MudText>
+            @RenderTrend(_activeUsersTrendPercent)
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* Platform Overview + Application Status *@
+<MudGrid Class="mb-4" Spacing="3">
+    <MudItem xs="12" md="7">
+        <MudPaper Class="pa-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+            <MudText Typo="Typo.subtitle1" Class="mb-3" Style="font-weight: 700;">Platform Overview</MudText>
+            @if (_loadingTrend)
+            {
+                <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Detail" />
+            }
+            else
+            {
+                <LineChart Series="_trendSeries" XAxisLabels="_trendXLabels" Height="220" />
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="5">
+        <MudPaper Class="pa-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+            <MudText Typo="Typo.subtitle1" Class="mb-3" Style="font-weight: 700;">Application Status</MudText>
+            @if (_totalApplications == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.Apps" Title="No applications yet"
+                            Description="Connect your first application to see its status here." MinHeight="180px" />
+            }
+            else
+            {
+                <div class="d-flex justify-center">
+                    <DonutChart Segments="_statusSegments" Size="160" CenterLabel="Total" CenterValue="@_totalApplications.ToString()" />
+                </div>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
 @* AI Command Bar *@
-<div class="ai-command-bar mb-5">
+<div class="ai-command-bar mb-4">
     <div class="d-flex align-center gap-2 mb-3">
         <div class="icon-container icon-container--primary" style="width: 28px; height: 28px; border-radius: 8px;">
             <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Color="Color.Primary" Style="font-size: 0.9rem;" />
@@ -49,7 +144,7 @@
     </div>
     <MudTextField @bind-Value="_commandInput" Placeholder="Create an HR assistant, build an approval workflow, search knowledge..."
                   Variant="Variant.Outlined" Margin="Margin.Dense"
-                  Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Send"
+                  Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Send" AdornmentAriaLabel="Submit command"
                   AdornmentColor="Color.Primary" OnAdornmentClick="HandleCommand"
                   OnKeyUp="HandleCommandKeyUp" Immediate="true"
                   Style="border-radius: 10px;" aria-label="AI Command input" />
@@ -57,7 +152,7 @@
     @* Knowledge Base Search Results *@
     @if (_searching)
     {
-        <MudPaper Elevation="2" Class="pa-4 mt-3" Style="border-radius: 12px;">
+        <MudPaper Elevation="2" Class="pa-4 mt-3" Style="border-radius: var(--r2-radius-md);">
             <div class="d-flex align-center gap-2 mb-3">
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
                 <MudText Typo="Typo.body2" Color="Color.Secondary">Searching knowledge bases...</MudText>
@@ -69,7 +164,7 @@
     }
     else if (_searchResults.Count > 0)
     {
-        <MudPaper Elevation="2" Class="pa-4 mt-3" Style="border-radius: 12px; max-height: 400px; overflow-y: auto;">
+        <MudPaper Elevation="2" Class="pa-4 mt-3" Style="border-radius: var(--r2-radius-md); max-height: 400px; overflow-y: auto;">
             <div class="d-flex justify-space-between align-center mb-3">
                 <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">
                     <MudIcon Icon="@Icons.Material.Outlined.Search" Size="Size.Small" Style="vertical-align: middle;" />
@@ -88,7 +183,7 @@
                     </div>
                     @foreach (var result in group)
                     {
-                        <MudPaper Elevation="0" Class="pa-3 mb-2 search-result-item" Style="border: 1px solid var(--mud-palette-divider); border-radius: 8px; cursor: pointer;"
+                        <MudPaper Elevation="0" Class="pa-3 mb-2 search-result-item" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm); cursor: pointer;"
                                   @onclick="@(() => Navigation.NavigateTo("/assistant-studio/knowledge"))">
                             <MudText Typo="Typo.body2" Style="line-height: 1.5;">@((MarkupString)HighlightSearchTerm(result.Content, _lastSearchQuery))</MudText>
                             @if (!string.IsNullOrEmpty(result.SourceName))
@@ -130,74 +225,11 @@
     </div>
 </div>
 
-@* Action Cards — Needs Attention *@
-<MudGrid Class="mb-5" Spacing="3">
-    <MudItem xs="12" sm="6" md="4">
-        <MudPaper Class="pa-4 action-card" Elevation="0" @onclick="@(() => Navigation.NavigateTo("/inbox"))">
-            <div class="d-flex align-center gap-3 mb-2">
-                <div class="icon-container icon-container--error">
-                    <MudIcon Icon="@Icons.Material.Outlined.Inbox" Color="Color.Error" Size="Size.Small" />
-                </div>
-                <div>
-                    <MudText Typo="Typo.h5" Style="font-weight: 800; letter-spacing: -0.02em;" Class="animate-count">@_pendingApprovals</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 500;">Pending Approvals</MudText>
-                </div>
-            </div>
-            <MudText Typo="Typo.caption" Color="@(_pendingApprovals > 0 ? Color.Error : Color.Success)" Style="font-weight: 600;">
-                @(_pendingApprovals > 0 ? "Requires your attention" : "All clear")
-            </MudText>
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="12" sm="6" md="8">
-        <MudPaper Class="pa-4 action-card" Elevation="0" @onclick="@(() => Navigation.NavigateTo("/operations"))"
-                  Style="height: 100%;">
-            <div class="d-flex align-center justify-space-between flex-wrap gap-3" style="height: 100%;">
-                <div class="d-flex align-center gap-4 flex-wrap">
-                    <div class="d-flex align-center gap-2">
-                        <span class="health-dot health-dot--@(_healthStatus == "Healthy" ? "healthy" : "degraded")"></span>
-                        <MudText Typo="Typo.body1" Style="font-weight: 700;">@_healthStatus</MudText>
-                    </div>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">@_activeWorkflows active workflows</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">@_completedToday completed today</MudText>
-                </div>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                           EndIcon="@Icons.Material.Filled.ArrowForward">
-                    View Operations Hub
-                </MudButton>
-            </div>
-        </MudPaper>
-    </MudItem>
-</MudGrid>
-
-@* Applications Needing Attention — only shown once real applications exist *@
-@if (_applicationsNeedingAttention.Count > 0)
-{
-    <MudText Typo="Typo.h6" Class="mb-3 section-title">Applications Needing Attention</MudText>
-    <MudGrid Class="mb-5" Spacing="3">
-        @foreach (var app in _applicationsNeedingAttention)
-        {
-            <MudItem xs="12" sm="6" md="4">
-                <MudPaper Class="pa-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
-                    <div class="d-flex justify-space-between align-center mb-2">
-                        <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">@app.Name</MudText>
-                        <StatusBadge Status="@app.Status" />
-                    </div>
-                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" FullWidth="true"
-                               EndIcon="@Icons.Material.Filled.ArrowForward"
-                               OnClick="@(() => Navigation.NavigateTo($"/applications/{app.Id}"))">
-                        Review
-                    </MudButton>
-                </MudPaper>
-            </MudItem>
-        }
-    </MudGrid>
-}
-
 @* AI Insights *@
 @if (_insights.Count > 0)
 {
     <MudText Typo="Typo.h6" Class="mb-3 section-title">AI Insights</MudText>
-    <div class="d-flex flex-column gap-3 mb-5 stagger-in">
+    <div class="d-flex flex-column gap-3 mb-4 stagger-in">
         @foreach (var insight in _insights)
         {
             <AiInsightCard Title="@insight.Title" Description="@insight.Description"
@@ -208,11 +240,75 @@
     </div>
 }
 
-@* Productivity Metrics + Recent Activity *@
+@* Recent Applications + Right Rail *@
 <MudGrid Spacing="3">
-    <MudItem xs="12" md="7">
-        <MudText Typo="Typo.h6" Class="mb-3 section-title">Recent Activity</MudText>
-        <MudPaper Elevation="0" Class="pa-0" Style="border: 1px solid var(--mud-palette-divider); overflow: hidden;">
+    <MudItem xs="12" md="8">
+        <div class="d-flex justify-space-between align-center mb-3">
+            <MudText Typo="Typo.h6" Class="section-title">Recent Applications</MudText>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" OnClick="@(() => Navigation.NavigateTo("/applications"))">
+                View all
+            </MudButton>
+        </div>
+        <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); overflow: hidden;">
+            @if (_loading)
+            {
+                <div class="pa-4">
+                    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Table" />
+                </div>
+            }
+            else if (_applications.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.Apps"
+                            Title="No applications yet"
+                            Description="Connect your first government application and R2WAI will help you register its APIs, knowledge, and capabilities."
+                            ActionText="Add Application" OnAction="@(() => Navigation.NavigateTo("/applications/new"))" />
+            }
+            else
+            {
+                <MudTable T="ApplicationSummary" Items="_applications" Hover="true" Dense="true" Elevation="0" RowsPerPage="5">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Assistant</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Last updated</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">
+                            <MudLink Href="@($"/applications/{context.Id}")" Underline="Underline.None" Style="font-weight: 600;">@context.Name</MudLink>
+                            @if (!string.IsNullOrEmpty(context.BaseUrl))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@context.BaseUrl</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Assistant">@(GetAssistantName(context.Id) ?? "—")</MudTd>
+                        <MudTd DataLabel="Status"><StatusBadge Status="@context.Status" /></MudTd>
+                        <MudTd DataLabel="Last updated">@((context.ModifiedAt ?? context.CreatedAt).ToString("MMM d, yyyy"))</MudTd>
+                    </RowTemplate>
+                    <PagerContent>
+                        <MudTablePager RowsPerPageString="" InfoFormat="{first_item}-{last_item} of {all_items}" />
+                    </PagerContent>
+                </MudTable>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudText Typo="Typo.h6" Class="mb-3 section-title">Quick Actions</MudText>
+        <MudPaper Elevation="0" Class="pa-2 mb-4" Style="border: 1px solid var(--mud-palette-divider);">
+            @foreach (var action in _quickActions)
+            {
+                <MudButton FullWidth="true" Variant="Variant.Text" Color="Color.Default" Class="justify-start pa-3 mb-1"
+                           StartIcon="@action.Icon" OnClick="@(() => Navigation.NavigateTo(action.Url))"
+                           Style="text-transform: none; font-weight: 500;">
+                    @action.Label
+                </MudButton>
+            }
+        </MudPaper>
+
+        <div class="d-flex justify-space-between align-center mb-3">
+            <MudText Typo="Typo.h6" Class="section-title">Recent Activity</MudText>
+        </div>
+        <MudPaper Elevation="0" Class="pa-0 mb-4" Style="border: 1px solid var(--mud-palette-divider); overflow: hidden;">
             @if (_loading)
             {
                 <div class="pa-4">
@@ -223,108 +319,56 @@
             {
                 <EmptyState Icon="@Icons.Material.Filled.Timeline"
                             Title="No recent activity"
-                            Description="Your recent actions will appear here as you use the platform."
-                            MinHeight="200px" />
+                            Description="Your recent actions will appear here."
+                            MinHeight="160px" />
             }
             else
             {
                 <MudList T="string" Dense="true" Class="stagger-in">
-                    @foreach (var activity in _activities)
+                    @foreach (var activity in _activities.Take(5))
                     {
                         <MudListItem Icon="@GetActivityIcon(activity.Action)" IconColor="@GetActivityColor(activity.Action)">
-                            <div class="d-flex justify-space-between align-center" style="width: 100%;">
-                                <div>
-                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@activity.Description</MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@activity.EntityType</MudText>
-                                </div>
-                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
-                                         Style="font-size: 0.6875rem;">
-                                    @FormatTimeAgo(activity.Timestamp)
-                                </MudChip>
+                            <div style="width: 100%;">
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@activity.Description</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTimeAgo(activity.Timestamp)</MudText>
                             </div>
                         </MudListItem>
                     }
                 </MudList>
             }
         </MudPaper>
-    </MudItem>
 
-    <MudItem xs="12" md="5">
-        <MudText Typo="Typo.h6" Class="mb-3 section-title">Platform Metrics</MudText>
-        <MudGrid Spacing="3">
-            <MudItem xs="6">
-                <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
-                          Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
-                          @onclick="@(() => Navigation.NavigateTo("/applications"))">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">Applications</MudText>
-                    <div class="d-flex justify-space-between align-center mt-1">
-                        <MudText Typo="Typo.h4" Color="Color.Warning" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalApplications</MudText>
-                        <SparklineChart Data="@GenerateSparkline(_totalApplications)" Color="#F59E0B" Width="80" Height="28" />
-                    </div>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="6">
-                <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
-                          Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
-                          @onclick="@(() => Navigation.NavigateTo("/assistant-studio"))">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">Assistants</MudText>
-                    <div class="d-flex justify-space-between align-center mt-1">
-                        <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalAssistants</MudText>
-                        <SparklineChart Data="@GenerateSparkline(_totalAssistants)" Color="#7C3AED" Width="80" Height="28" />
-                    </div>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="6">
-                <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
-                          Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
-                          @onclick="@(() => Navigation.NavigateTo("/workflow-studio"))">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">Workflows</MudText>
-                    <div class="d-flex justify-space-between align-center mt-1">
-                        <MudText Typo="Typo.h4" Color="Color.Secondary" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalWorkflows</MudText>
-                        <SparklineChart Data="@GenerateSparkline(_totalWorkflows)" Color="#3B82F6" Width="80" Height="28" />
-                    </div>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="6">
-                <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
-                          Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
-                          @onclick="@(() => Navigation.NavigateTo("/documents"))">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">Documents</MudText>
-                    <div class="d-flex justify-space-between align-center mt-1">
-                        <MudText Typo="Typo.h4" Color="Color.Tertiary" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalDocuments</MudText>
-                        <SparklineChart Data="@GenerateSparkline(_totalDocuments)" Color="#10B981" Width="80" Height="28" />
-                    </div>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="6">
-                <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0"
-                          Style="border: 1px solid var(--mud-palette-divider); cursor: pointer;"
-                          @onclick="@(() => Navigation.NavigateTo("/assistant-studio/knowledge"))">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.6875rem;">Knowledge Bases</MudText>
-                    <div class="d-flex justify-space-between align-center mt-1">
-                        <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalKnowledgeBases</MudText>
-                        <SparklineChart Data="@GenerateSparkline(_totalKnowledgeBases)" Color="#6B7280" Width="80" Height="28" />
-                    </div>
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
-
-        <MudText Typo="Typo.h6" Class="mb-3 mt-5 section-title">System Health</MudText>
+        <MudText Typo="Typo.h6" Class="mb-3 section-title">System Status</MudText>
         <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
-            @if (_healthChecks.Count > 0)
+            @if (_healthChecks.Count > 0 || !_loading)
             {
-                <div class="stagger-in">
-                    @foreach (var check in _healthChecks)
-                    {
-                        <div class="d-flex justify-space-between align-center py-2">
-                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@check.Name</MudText>
-                            <div class="d-flex align-center gap-2">
-                                <span class="health-dot health-dot--@(check.Status == "Healthy" ? "healthy" : check.Status == "Degraded" ? "degraded" : "unhealthy")"></span>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 500;">@check.Status</MudText>
-                            </div>
-                        </div>
-                    }
+                <div class="d-flex align-center gap-2 mb-2">
+                    <MudIcon Icon="@(_healthStatus == "Healthy" ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Warning)"
+                             Color="@(_healthStatus == "Healthy" ? Color.Success : Color.Warning)" />
+                    <MudText Typo="Typo.body1" Style="font-weight: 700;">
+                        @(_healthStatus == "Healthy" ? "All systems operational" : _healthStatus)
+                    </MudText>
                 </div>
+                @if (_healthChecks.Count > 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">All components are running smoothly.</MudText>
+                    <div class="stagger-in">
+                        @foreach (var check in _healthChecks)
+                        {
+                            <div class="d-flex justify-space-between align-center py-1">
+                                <MudText Typo="Typo.caption" Style="font-weight: 500;">@check.Name</MudText>
+                                <div class="d-flex align-center gap-2">
+                                    <span class="health-dot health-dot--@(check.Status == "Healthy" ? "healthy" : check.Status == "Degraded" ? "degraded" : "unhealthy")"></span>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@check.Status</MudText>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Class="mt-2"
+                           OnClick="@(() => Navigation.NavigateTo("/operations"))">
+                    View status
+                </MudButton>
             }
             else
             {
@@ -341,6 +385,7 @@
     private string _commandInput = string.Empty;
     private string _userName = "there";
     private bool _loading = true;
+    private bool _loadingTrend = true;
     private int _pendingApprovals;
     private int _activeWorkflows;
     private int _completedToday;
@@ -350,7 +395,15 @@
     private int _totalDocuments;
     private int _totalKnowledgeBases;
     private int _totalApplications;
-    private List<ApplicationSummary> _applicationsNeedingAttention = new();
+    private int _totalConversations;
+    private int _activeUsersByLogin;
+    private double? _workflowSuccessRatePercent;
+    private double? _applicationsTrendPercent;
+    private double? _assistantsTrendPercent;
+    private double? _conversationsTrendPercent;
+    private double? _activeUsersTrendPercent;
+    private List<ApplicationSummary> _applications = new();
+    private List<AssistantLookupItem> _assistantsLookup = new();
     private List<ActivityItem> _activities = new();
     private List<HealthEntry> _healthChecks = new();
     private List<InsightItem> _insights = new();
@@ -359,6 +412,20 @@
     private bool _searching;
     private string _lastSearchQuery = string.Empty;
     private List<KnowledgeBaseListDto> _knowledgeBases = new();
+    private int _dailyTrendDays = 7;
+    private List<LineChart.ChartSeries> _trendSeries = new();
+    private List<string> _trendXLabels = new();
+    private List<DonutChart.ChartSegment> _statusSegments = new();
+
+    private readonly List<QuickAction> _quickActions = new()
+    {
+        new("New Application", Icons.Material.Filled.Add, "/applications/new"),
+        new("Create Assistant", Icons.Material.Filled.SmartToy, "/assistant-studio"),
+        new("Add Knowledge", Icons.Material.Filled.MenuBook, "/assistant-studio/knowledge"),
+        new("Add Tool / API", Icons.Material.Filled.Build, "/assistant-studio/tools"),
+        new("Create Workflow", Icons.Material.Filled.AccountTree, "/workflow-studio"),
+        new("Test Assistant", Icons.Material.Filled.PlayArrow, "/assistant-studio/playground"),
+    };
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthState { get; set; }
@@ -388,9 +455,10 @@
             var healthTask = LoadHealth();
             var approvalsTask = LoadApprovals();
             var kbTask = Http.GetFromJsonAsync<KbListResult>("/api/v1/knowledgebases");
-            var appsTask = Http.GetFromJsonAsync<AppsResult>("/api/v1/applications?page=1&pageSize=20");
+            var appsTask = Http.GetFromJsonAsync<AppsResult>("/api/v1/applications?page=1&pageSize=200");
+            var assistantsTask = Http.GetFromJsonAsync<AssistantsResult>("/api/v1/assistants?page=1&pageSize=200");
 
-            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, approvalsTask, kbTask, appsTask);
+            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, approvalsTask, kbTask, appsTask, assistantsTask);
             var completed = await Task.WhenAny(allTasks, Task.Delay(Timeout.Infinite, cts.Token));
             if (completed != allTasks)
             {
@@ -406,7 +474,14 @@
                 _activeWorkflows = metrics.ActiveWorkflows;
                 _totalDocuments = metrics.TotalDocuments;
                 _totalKnowledgeBases = metrics.TotalKnowledgeBases;
+                _totalConversations = metrics.TotalConversations;
                 _completedToday = metrics.CompletedToday;
+                _activeUsersByLogin = metrics.ActiveUsersByLogin;
+                _workflowSuccessRatePercent = metrics.WorkflowSuccessRatePercent;
+                _applicationsTrendPercent = metrics.ApplicationsTrendPercent;
+                _assistantsTrendPercent = metrics.AssistantsTrendPercent;
+                _conversationsTrendPercent = metrics.ConversationsTrendPercent;
+                _activeUsersTrendPercent = metrics.ActiveUsersTrendPercent;
                 if (metrics.PendingApprovals > 0) _pendingApprovals = metrics.PendingApprovals;
             }
 
@@ -414,9 +489,13 @@
 
             var apps = appsTask.Result;
             _totalApplications = apps?.TotalCount ?? 0;
-            _applicationsNeedingAttention = (apps?.Items ?? new())
-                .Where(a => !a.Status.Equals("Published", StringComparison.OrdinalIgnoreCase) && !a.Status.Equals("Active", StringComparison.OrdinalIgnoreCase))
-                .Take(6)
+            _applications = (apps?.Items ?? new())
+                .OrderByDescending(a => a.ModifiedAt ?? a.CreatedAt)
+                .ToList();
+            BuildStatusSegments();
+
+            _assistantsLookup = (assistantsTask.Result?.Items ?? new())
+                .Where(a => a.ApplicationId.HasValue)
                 .ToList();
 
             _activities = (logsTask.Result?.Items ?? new())
@@ -440,6 +519,58 @@
         finally
         {
             _loading = false;
+            StateHasChanged();
+        }
+
+        await LoadDailyTrend();
+    }
+
+    private void BuildStatusSegments()
+    {
+        // Bucket the 7-value ApplicationStatus enum into the 4 display buckets the chart shows:
+        // Discovering/Configuring (pre-launch) fold into Draft; Disabled folds into Archived.
+        int Count(Func<string, bool> match) => _applications.Count(a => match(a.Status));
+
+        _statusSegments = new List<DonutChart.ChartSegment>
+        {
+            new() { Label = "Published", Value = Count(s => s.Equals("Published", StringComparison.OrdinalIgnoreCase)), Color = "var(--mud-palette-success)" },
+            new() { Label = "Testing", Value = Count(s => s.Equals("Testing", StringComparison.OrdinalIgnoreCase)), Color = "var(--mud-palette-info)" },
+            new() { Label = "Draft", Value = Count(s => s.Equals("Draft", StringComparison.OrdinalIgnoreCase) || s.Equals("Discovering", StringComparison.OrdinalIgnoreCase) || s.Equals("Configuring", StringComparison.OrdinalIgnoreCase)), Color = "var(--mud-palette-warning)" },
+            new() { Label = "Archived", Value = Count(s => s.Equals("Archived", StringComparison.OrdinalIgnoreCase) || s.Equals("Disabled", StringComparison.OrdinalIgnoreCase)), Color = "var(--mud-palette-text-secondary)" },
+        };
+    }
+
+    private string? GetAssistantName(Guid applicationId) =>
+        _assistantsLookup.FirstOrDefault(a => a.ApplicationId == applicationId)?.Name;
+
+    private async Task OnDailyTrendDaysChanged(int days)
+    {
+        _dailyTrendDays = days;
+        await LoadDailyTrend();
+    }
+
+    private async Task LoadDailyTrend()
+    {
+        _loadingTrend = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Http.GetFromJsonAsync<DailyTrendResult>($"/api/v1/operations/daily-trend?days={_dailyTrendDays}");
+            var points = result?.Days ?? new();
+            _trendXLabels = points.Select(p => p.Date.ToString("MMM d")).ToList();
+            _trendSeries = new List<LineChart.ChartSeries>
+            {
+                new() { Label = "Conversations", Color = "#7C3AED", Data = points.Select(p => (double)p.Conversations).ToList() },
+                new() { Label = "Runs", Color = "#3B82F6", Data = points.Select(p => (double)p.Runs).ToList() },
+            };
+        }
+        catch
+        {
+            Snackbar.Add("Could not load platform trend data.", Severity.Warning);
+        }
+        finally
+        {
+            _loadingTrend = false;
             StateHasChanged();
         }
     }
@@ -638,14 +769,29 @@
         return $"{before}<mark style=\"background: rgba(124, 58, 237, 0.15); padding: 2px 4px; border-radius: 3px; font-weight: 600;\">{match}</mark>{after}";
     }
 
-    private static List<double> GenerateSparkline(int currentValue)
+    private static RenderFragment RenderTrend(double? percent) => builder =>
     {
-        if (currentValue <= 0) return new List<double> { 0, 0, 0, 0, 0, 0, 0 };
-        var points = new List<double>(7);
-        for (var i = 0; i < 7; i++)
-            points.Add(Math.Max(0, Math.Round(currentValue * (0.3 + 0.7 * i / 6.0))));
-        return points;
-    }
+        if (percent is null) return;
+        var up = percent.Value >= 0;
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "d-flex align-center gap-1 mt-1");
+        builder.OpenComponent<MudIcon>(2);
+        builder.AddAttribute(3, "Icon", up ? Icons.Material.Filled.ArrowUpward : Icons.Material.Filled.ArrowDownward);
+        builder.AddAttribute(4, "Color", up ? Color.Success : Color.Error);
+        builder.AddAttribute(5, "Size", Size.Small);
+        builder.AddAttribute(6, "Style", "font-size: 0.9rem;");
+        builder.CloseComponent();
+        builder.OpenComponent<MudText>(7);
+        builder.AddAttribute(8, "Typo", Typo.caption);
+        builder.AddAttribute(9, "Color", up ? Color.Success : Color.Error);
+        builder.AddAttribute(10, "Style", "font-weight: 600;");
+        builder.AddAttribute(11, "ChildContent", (RenderFragment)(b2 =>
+        {
+            b2.AddContent(0, $"{Math.Abs(percent.Value):F1}% vs last week");
+        }));
+        builder.CloseComponent();
+        builder.CloseElement();
+    };
 
     private static string GetTimeOfDay()
     {
@@ -682,6 +828,8 @@
         _ => Color.Default,
     };
 
+    private record QuickAction(string Label, string Icon, string Url);
+
     private class MetricsDto
     {
         public int TotalWorkflows { get; set; }
@@ -689,8 +837,15 @@
         public int TotalDocuments { get; set; }
         public int TotalKnowledgeBases { get; set; }
         public int TotalAssistants { get; set; }
+        public int TotalConversations { get; set; }
         public int PendingApprovals { get; set; }
         public int CompletedToday { get; set; }
+        public int ActiveUsersByLogin { get; set; }
+        public double? WorkflowSuccessRatePercent { get; set; }
+        public double? ApplicationsTrendPercent { get; set; }
+        public double? AssistantsTrendPercent { get; set; }
+        public double? ConversationsTrendPercent { get; set; }
+        public double? ActiveUsersTrendPercent { get; set; }
     }
     private class LogsResult { public List<AuditLogDto> Items { get; set; } = new(); }
     private class AuditLogDto
@@ -721,7 +876,17 @@
     {
         public Guid Id { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string? BaseUrl { get; set; }
         public string Status { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+        public DateTime? ModifiedAt { get; set; }
+    }
+    private class AssistantsResult { public List<AssistantLookupItem> Items { get; set; } = new(); }
+    private class AssistantLookupItem
+    {
+        public Guid Id { get; set; }
+        public Guid? ApplicationId { get; set; }
+        public string Name { get; set; } = string.Empty;
     }
     private class KbListResult { public List<KnowledgeBaseListDto> Items { get; set; } = new(); }
     private class KnowledgeBaseListDto
@@ -744,5 +909,12 @@
         public string Content { get; set; } = string.Empty;
         public string? SourceName { get; set; }
         public double Score { get; set; }
+    }
+    private class DailyTrendResult { public List<DailyTrendPoint> Days { get; set; } = new(); }
+    private class DailyTrendPoint
+    {
+        public DateTime Date { get; set; }
+        public int Conversations { get; set; }
+        public int Runs { get; set; }
     }
 }

@@ -143,6 +143,43 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
         return Ok(result);
     }
 
+    [HttpGet("daily-trend")]
+    public async Task<IActionResult> GetDailyTrend([FromQuery] int days = 7, CancellationToken ct = default)
+    {
+        var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
+        if (currentUser.TenantId is null) return Unauthorized();
+
+        var tenantId = currentUser.TenantId.Value;
+        days = Math.Clamp(days, 1, 90);
+        var sinceDate = DateTime.UtcNow.Date.AddDays(-(days - 1));
+
+        var convByDay = await dbContext.Conversations
+            .Where(c => c.TenantId == tenantId && c.CreatedAt >= sinceDate)
+            .GroupBy(c => c.CreatedAt.Date)
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+
+        var runsByDay = await dbContext.WorkflowInstances
+            .Where(w => w.TenantId == tenantId && w.CreatedAt >= sinceDate)
+            .GroupBy(w => w.CreatedAt.Date)
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+
+        var points = new List<object>();
+        for (var i = 0; i < days; i++)
+        {
+            var date = sinceDate.AddDays(i);
+            points.Add(new
+            {
+                Date = date,
+                Conversations = convByDay.FirstOrDefault(c => c.Date == date)?.Count ?? 0,
+                Runs = runsByDay.FirstOrDefault(r => r.Date == date)?.Count ?? 0,
+            });
+        }
+
+        return Ok(new { Days = points });
+    }
+
     [HttpGet("ai-stats")]
     public async Task<IActionResult> GetAiStats(CancellationToken ct = default)
     {
