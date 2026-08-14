@@ -92,6 +92,7 @@
                                   Placeholder="@(_isEdit && _existingHasKey ? "••••••••  (leave blank to keep current)" : "Enter API key")"
                                   HelperText="@(_isEdit && _existingHasKey ? "Leave blank to keep the existing key" : "Required for cloud providers")"
                                   Adornment="Adornment.End" AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  AdornmentAriaLabel="@(_showApiKey ? "Hide API key" : "Show API key")"
                                   OnAdornmentClick="@(() => _showApiKey = !_showApiKey)" />
                 </MudItem>
             }
@@ -150,6 +151,39 @@
                     The default model is used when no specific model is selected for an assistant.
                 </MudText>
             </MudItem>
+
+            <MudItem xs="12">
+                <MudDivider Class="my-1" />
+                <MudText Typo="Typo.subtitle2" Class="mb-2 mt-2" Style="font-weight: 600;">Governance</MudText>
+            </MudItem>
+
+            <MudItem xs="12" sm="4">
+                <MudSelect T="string" @bind-Value="_dataClassification" Label="Data Classification" Variant="Variant.Outlined"
+                           HelperText="Sensitivity of data this model may process">
+                    <MudSelectItem T="string" Value="@("Public")">Public</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Internal")">Internal</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Confidential")">Confidential</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("Restricted")">Restricted</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="Guid?" @bind-Value="_departmentId" Label="Department" Clearable="true" Variant="Variant.Outlined"
+                           HelperText="Owning department (optional)">
+                    @foreach (var dept in _departments)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)dept.Id)">@dept.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="Guid?" @bind-Value="_applicationId" Label="Application" Clearable="true" Variant="Variant.Outlined"
+                           HelperText="Scope to one application, or leave blank for tenant-wide">
+                    @foreach (var app in _applications)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)app.Id)">@app.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
         </MudGrid>
         </MudForm>
     </DialogContent>
@@ -184,9 +218,24 @@
     private bool _isDefault;
     private bool _saving;
     private MudForm _form = default!;
+    private string _dataClassification = "Internal";
+    private Guid? _departmentId;
+    private Guid? _applicationId;
+    private List<DepartmentOption> _departments = new();
+    private List<ApplicationOption> _applications = new();
 
     protected override async Task OnInitializedAsync()
     {
+        try
+        {
+            var deptsTask = Http.GetFromJsonAsync<DepartmentsResult>("/api/v1/departments?page=1&pageSize=100");
+            var appsTask = Http.GetFromJsonAsync<ApplicationsResult>("/api/v1/applications?page=1&pageSize=200");
+            await Task.WhenAll(deptsTask, appsTask);
+            _departments = deptsTask.Result?.Items ?? new();
+            _applications = appsTask.Result?.Items ?? new();
+        }
+        catch { /* governance selectors are a convenience; leave lists empty on failure */ }
+
         if (_isEdit)
         {
             try
@@ -204,6 +253,9 @@
                     _topP = match.TopP;
                     _isDefault = match.IsDefault;
                     _existingHasKey = match.HasApiKey;
+                    _dataClassification = match.DataClassification;
+                    _departmentId = match.DepartmentId;
+                    _applicationId = match.ApplicationId;
                 }
             }
             catch { Snackbar.Add("Failed to load model", Severity.Error); }
@@ -401,7 +453,10 @@
                 MaxTokens = _maxTokens,
                 Temperature = _temperature,
                 TopP = _topP,
-                IsDefault = _isDefault
+                IsDefault = _isDefault,
+                DataClassification = _dataClassification,
+                DepartmentId = _departmentId,
+                ApplicationId = _applicationId
             };
 
             if (_isEdit)
@@ -435,5 +490,22 @@
         public double? TopP { get; set; }
         public bool IsDefault { get; set; }
         public bool HasApiKey { get; set; }
+        public string DataClassification { get; set; } = "Internal";
+        public Guid? DepartmentId { get; set; }
+        public Guid? ApplicationId { get; set; }
+    }
+
+    private class DepartmentsResult { public List<DepartmentOption> Items { get; set; } = new(); }
+    private class DepartmentOption
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private class ApplicationsResult { public List<ApplicationOption> Items { get; set; } = new(); }
+    private class ApplicationOption
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
     }
 }

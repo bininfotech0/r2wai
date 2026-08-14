@@ -1,5 +1,4 @@
 @page "/admin/models"
-@page "/settings/models"
 @attribute [Authorize(Roles = "Admin,SystemAdmin")]
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
@@ -123,6 +122,12 @@ else if (_showGridView)
                                 {
                                     <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">Default</MudChip>
                                 }
+                                <MudTooltip Text="@GetClassificationTooltip(model.DataClassification)">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@GetClassificationColor(model.DataClassification)"
+                                             Style="font-size: 0.6875rem;">
+                                        @model.DataClassification
+                                    </MudChip>
+                                </MudTooltip>
                             </div>
                         </div>
 
@@ -672,5 +677,26 @@ else
         public double? Temperature { get; set; }
         public bool IsDefault { get; set; }
         public bool HasApiKey { get; set; }
+        public string DataClassification { get; set; } = "Internal";
+        public Guid? DepartmentId { get; set; }
+        public Guid? ApplicationId { get; set; }
     }
+
+    private static Color GetClassificationColor(string classification) => classification switch
+    {
+        "Public" => Color.Success,
+        "Internal" => Color.Default,
+        "Confidential" => Color.Warning,
+        "Restricted" => Color.Error,
+        _ => Color.Default,
+    };
+
+    private static string GetClassificationTooltip(string classification) => classification switch
+    {
+        "Public" => "Data Classification: Public — no sensitivity restrictions",
+        "Internal" => "Data Classification: Internal — default, not for public-facing use",
+        "Confidential" => "Data Classification: Confidential — restricted to authorized use",
+        "Restricted" => "Data Classification: Restricted — highest sensitivity, tightly controlled",
+        _ => "Data Classification",
+    };
 }

@@ -1,10 +1,13 @@
 using R2WAI.Domain.Common;
+using R2WAI.Domain.Enums;
 
 namespace R2WAI.Domain.Entities;
 
 public sealed class ModelConfiguration : BaseEntity<Guid>
 {
     public Guid TenantId { get; private set; }
+    public Guid? ApplicationId { get; private set; }
+    public Guid? DepartmentId { get; private set; }
     public string Name { get; private set; }
     public string Provider { get; private set; }
     public string ModelId { get; private set; }
@@ -16,7 +19,13 @@ public sealed class ModelConfiguration : BaseEntity<Guid>
     public bool IsDefault { get; private set; }
     public bool IsActive { get; private set; } = true;
 
+    // Governance — what sensitivity of data this model is approved to process, and which
+    // department/application it's scoped to, if not tenant-wide.
+    public DataClassification DataClassification { get; private set; } = DataClassification.Internal;
+
     public Tenant Tenant { get; private set; } = null!;
+    public ConnectedApplication? Application { get; private set; }
+    public Department? Department { get; private set; }
 
     private ModelConfiguration() { }
 
@@ -36,7 +45,9 @@ public sealed class ModelConfiguration : BaseEntity<Guid>
 
     public void UpdateDetails(string name, string provider, string modelId,
                                int? maxTokens, double? temperature, double? topP,
-                               string? endpoint = null)
+                               string? endpoint = null,
+                               Guid? applicationId = null, Guid? departmentId = null,
+                               DataClassification dataClassification = DataClassification.Internal)
     {
         Name = name;
         Provider = provider;
@@ -45,6 +56,9 @@ public sealed class ModelConfiguration : BaseEntity<Guid>
         Temperature = temperature;
         TopP = topP;
         Endpoint = endpoint;
+        ApplicationId = applicationId;
+        DepartmentId = departmentId;
+        DataClassification = dataClassification;
         MarkAsModified();
     }
 

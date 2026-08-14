@@ -36,6 +36,12 @@ public class ModelConfigurationConfiguration : IEntityTypeConfiguration<ModelCon
             .IsRequired()
             .HasDefaultValue(true);
 
+        builder.Property(mc => mc.DataClassification)
+            .IsRequired()
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(Domain.Enums.DataClassification.Internal);
+
         builder.Property(mc => mc.CreatedAt).IsRequired();
         builder.Property(mc => mc.ModifiedAt);
 
@@ -44,6 +50,18 @@ public class ModelConfigurationConfiguration : IEntityTypeConfiguration<ModelCon
             .HasForeignKey(mc => mc.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne(mc => mc.Application)
+            .WithMany()
+            .HasForeignKey(mc => mc.ApplicationId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(mc => mc.Department)
+            .WithMany()
+            .HasForeignKey(mc => mc.DepartmentId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasIndex(mc => new { mc.TenantId, mc.IsDefault });
+        builder.HasIndex(mc => mc.ApplicationId);
+        builder.HasIndex(mc => mc.DepartmentId);
     }
 }
