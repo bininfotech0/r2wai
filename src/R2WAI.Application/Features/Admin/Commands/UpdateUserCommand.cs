@@ -8,6 +8,7 @@ public record UpdateUserCommand : IRequest<UserDto>, IAuthorizedRequest
     public string FirstName { get; init; } = string.Empty;
     public string LastName { get; init; } = string.Empty;
     public string? AvatarUrl { get; init; }
+    public string? MobileNumber { get; init; }
     public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
 }
 
@@ -18,6 +19,10 @@ public class UpdateUserCommandValidator : AbstractValidator<UpdateUserCommand>
         RuleFor(v => v.Id).NotEmpty();
         RuleFor(v => v.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(v => v.LastName).NotEmpty().MaximumLength(100);
+        RuleFor(v => v.MobileNumber)
+            .Matches(@"^(\+91)?[6-9]\d{9}$")
+            .When(v => !string.IsNullOrWhiteSpace(v.MobileNumber))
+            .WithMessage("Please enter a valid Indian mobile number.");
     }
 }
 
@@ -32,6 +37,7 @@ public class UpdateUserCommandHandler(
             ?? throw new NotFoundException(nameof(User), command.Id);
 
         user.UpdateProfile(command.FirstName, command.LastName, command.AvatarUrl);
+        user.SetMobileNumber(string.IsNullOrWhiteSpace(command.MobileNumber) ? null : command.MobileNumber.Trim());
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return mapper.Map<UserDto>(user);

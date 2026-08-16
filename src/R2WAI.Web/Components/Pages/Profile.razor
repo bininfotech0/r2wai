@@ -55,10 +55,32 @@
                 <MudTextField @bind-Value="_lastName" Label="Last Name" Required="true"
                               Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
-            <MudItem xs="12">
-                <MudText Typo="Typo.caption" Color="Color.Secondary">Email</MudText>
-                <MudText Typo="Typo.body1">@_email</MudText>
+            @if (string.IsNullOrEmpty(_email))
+            {
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_email" Label="Email address (optional)" InputType="InputType.Email"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  HelperText="Add an email to your account" />
+                </MudItem>
+            }
+            else
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Email</MudText>
+                    <MudText Typo="Typo.body1">@_email</MudText>
+                </MudItem>
+            }
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_mobileNumber" Label="Mobile Number" InputType="InputType.Telephone"
+                              MaxLength="10" Variant="Variant.Outlined" Margin="Margin.Dense" />
             </MudItem>
+            @if (_hasAadhaar)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Aadhaar</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Verified">Linked</MudChip>
+                </MudItem>
+            }
             <MudItem xs="12" sm="6">
                 <MudText Typo="Typo.caption">Roles</MudText>
                 <MudText Typo="Typo.body1">@_roles</MudText>
@@ -80,12 +102,23 @@
         {
             <MudItem xs="12" sm="6">
                 <MudText Typo="Typo.caption">Email</MudText>
-                <MudText Typo="Typo.body1">@_email</MudText>
+                <MudText Typo="Typo.body1">@(string.IsNullOrEmpty(_email) ? "—" : _email)</MudText>
             </MudItem>
             <MudItem xs="12" sm="6">
                 <MudText Typo="Typo.caption">Name</MudText>
                 <MudText Typo="Typo.body1">@_firstName @_lastName</MudText>
             </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudText Typo="Typo.caption">Mobile Number</MudText>
+                <MudText Typo="Typo.body1">@(string.IsNullOrEmpty(_mobileNumber) ? "—" : _mobileNumber)</MudText>
+            </MudItem>
+            @if (_hasAadhaar)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Aadhaar</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Verified">Linked</MudChip>
+                </MudItem>
+            }
             <MudItem xs="12" sm="6">
                 <MudText Typo="Typo.caption">Roles</MudText>
                 <MudText Typo="Typo.body1">@_roles</MudText>
@@ -276,6 +309,10 @@
     private string _lastName = string.Empty;
     private string _originalFirstName = string.Empty;
     private string _originalLastName = string.Empty;
+    private string _originalEmail = string.Empty;
+    private string _mobileNumber = string.Empty;
+    private string _originalMobileNumber = string.Empty;
+    private bool _hasAadhaar;
     private string _roles = string.Empty;
     private string _tenantId = string.Empty;
     private bool _editing;
@@ -323,7 +360,7 @@
         {
             var state = await AuthState;
             var user = state.User;
-            _email = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "—";
+            _email = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "";
             _firstName = user.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value
                 ?? user.FindFirst("first_name")?.Value ?? "";
             _lastName = user.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value
@@ -335,7 +372,24 @@
 
             _originalFirstName = _firstName;
             _originalLastName = _lastName;
+            _originalEmail = _email;
         }
+
+        // JWT claims can go stale (e.g. an empty email claim from before a member added one) —
+        // refresh from the live record for Mobile Number, Aadhaar-linked status, and Email.
+        try
+        {
+            var me = await Http.GetFromJsonAsync<MeResult>("/api/v1/auth/me");
+            if (me is not null)
+            {
+                _email = me.Email ?? "";
+                _originalEmail = _email;
+                _mobileNumber = me.MobileNumber ?? "";
+                _originalMobileNumber = _mobileNumber;
+                _hasAadhaar = me.HasAadhaar;
+            }
+        }
+        catch { }
 
         try
         {
@@ -421,6 +475,12 @@
 
     private class MfaStatusResult { public bool MfaEnabled { get; set; } }
     private class MfaSetupResult { public string Secret { get; set; } = ""; public string SetupUri { get; set; } = ""; }
+    private class MeResult
+    {
+        public string? Email { get; set; }
+        public string? MobileNumber { get; set; }
+        public bool HasAadhaar { get; set; }
+    }
 
     private void StartEdit() => _editing = true;
 
@@ -428,6 +488,8 @@
     {
         _firstName = _originalFirstName;
         _lastName = _originalLastName;
+        _email = _originalEmail;
+        _mobileNumber = _originalMobileNumber;
         _editing = false;
     }
 
@@ -442,13 +504,25 @@
         _saving = true;
         try
         {
-            await Http.PutAsJsonAsync("/api/v1/auth/profile", new
+            var response = await Http.PutAsJsonAsync("/api/v1/auth/profile", new
             {
                 FirstName = _firstName,
-                LastName = _lastName
+                LastName = _lastName,
+                MobileNumber = _mobileNumber,
+                Email = string.IsNullOrEmpty(_originalEmail) ? _email : null,
             });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to update profile." : body, Severity.Error);
+                return;
+            }
+
             _originalFirstName = _firstName;
             _originalLastName = _lastName;
+            _originalEmail = _email;
+            _originalMobileNumber = _mobileNumber;
             _editing = false;
             Snackbar.Add("Profile updated", Severity.Success);
         }

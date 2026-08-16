@@ -52,13 +52,15 @@ public class AuthController(
         bool IsActive,
         DateTime? LastLoginAt,
         DateTime CreatedAt,
-        DateTime? UpdatedAt);
+        DateTime? UpdatedAt,
+        string? MobileNumber,
+        bool HasAadhaar);
 
     public record RefreshRequest(string AccessToken, string RefreshToken);
 
     public record EntraIdRequest(string IdToken);
 
-    public record UpdateProfileRequest(string FirstName, string LastName);
+    public record UpdateProfileRequest(string FirstName, string LastName, string? MobileNumber = null, string? Email = null);
 
     public record ForgotPasswordRequest(string Email);
 
@@ -276,6 +278,34 @@ public class AuthController(
             return NotFound(new { error = "User not found" });
 
         user.UpdateProfile(request.FirstName, request.LastName, user.AvatarUrl);
+
+        if (request.MobileNumber is not null)
+        {
+            var mobile = request.MobileNumber.Trim();
+            if (mobile.Length > 0 && !System.Text.RegularExpressions.Regex.IsMatch(mobile, @"^(\+91)?[6-9]\d{9}$"))
+                return BadRequest(new { error = "Please enter a valid Indian mobile number." });
+
+            user.SetMobileNumber(mobile.Length == 0 ? null : mobile);
+        }
+
+        // Email can only be added when the account doesn't already have one (e.g. a member who
+        // signed up with just Aadhaar) — changing an existing email is a bigger, riskier change
+        // (it's also the login identifier for non-member accounts) and isn't handled here.
+        if (!string.IsNullOrWhiteSpace(request.Email) && string.IsNullOrEmpty(user.Email))
+        {
+            var email = request.Email.Trim();
+            if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(email))
+                return BadRequest(new { error = "Please enter a valid email address." });
+
+            var emailTaken = await dbContext.Users.IgnoreQueryFilters()
+                .Where(u => !u.IsDeleted && u.Id != userId)
+                .AnyAsync(u => u.Email == email, ct);
+            if (emailTaken)
+                return Conflict(new { error = "A user with this email already exists." });
+
+            user.SetEmail(email);
+        }
+
         await dbContext.SaveChangesAsync(ct);
 
         logger.LogInformation("Profile updated for user {UserId}", userId);
@@ -531,6 +561,8 @@ public class AuthController(
             user.Status != "Inactive",
             user.LastLoginAt,
             user.CreatedAt,
-            user.ModifiedAt);
+            user.ModifiedAt,
+            user.MobileNumber,
+            !string.IsNullOrEmpty(user.AadhaarNumberHash));
     }
 }

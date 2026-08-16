@@ -4,7 +4,9 @@ public class UserDto
 {
     public Guid Id { get; init; }
     public string ExternalId { get; init; } = string.Empty;
-    public string Email { get; init; } = string.Empty;
+    public string? Email { get; init; }
+    public string? MobileNumber { get; init; }
+    public bool HasAadhaar { get; init; }
     public string FirstName { get; init; } = string.Empty;
     public string LastName { get; init; } = string.Empty;
     public string FullName => $"{FirstName} {LastName}";

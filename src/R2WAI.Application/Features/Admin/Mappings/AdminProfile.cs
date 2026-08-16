@@ -8,7 +8,8 @@ public class AdminProfile : Profile
     public AdminProfile()
     {
         CreateMap<User, UserDto>()
-            .ForMember(d => d.Roles, o => o.MapFrom(s => s.UserRoles.Select(ur => ur.Role.Name).ToList()));
+            .ForMember(d => d.Roles, o => o.MapFrom(s => s.UserRoles.Select(ur => ur.Role.Name).ToList()))
+            .ForMember(d => d.HasAadhaar, o => o.MapFrom(s => !string.IsNullOrEmpty(s.AadhaarNumberHash)));
 
         CreateMap<Role, RoleDto>();
 

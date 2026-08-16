@@ -44,11 +44,19 @@
                 <CellTemplate>
                     <div class="d-flex align-center gap-2">
                         <MudAvatar Size="Size.Small" Color="Color.Primary" Style="width: 28px; height: 28px; font-size: 0.7rem;">
-                            @(context.Item.Email.Length > 0 ? context.Item.Email[0].ToString().ToUpper() : "U")
+                            @(!string.IsNullOrEmpty(context.Item.Email) ? context.Item.Email[0].ToString().ToUpper() : context.Item.FirstName.Length > 0 ? context.Item.FirstName[0].ToString().ToUpper() : "U")
                         </MudAvatar>
                         <div>
                             <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Item.FirstName @context.Item.LastName</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Item.Email</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @(context.Item.Email ?? context.Item.MobileNumber ?? "—")
+                                @if (context.Item.HasAadhaar)
+                                {
+                                    <MudTooltip Text="Aadhaar linked">
+                                        <MudIcon Icon="@Icons.Material.Filled.Verified" Size="Size.Small" Color="Color.Success" Style="vertical-align: middle; margin-left: 4px; font-size: 0.9rem;" />
+                                    </MudTooltip>
+                                }
+                            </MudText>
                         </div>
                     </div>
                 </CellTemplate>
@@ -166,7 +174,7 @@
     {
         var parameters = new DialogParameters<DeleteConfirmationDialog>
         {
-            { x => x.ItemName, user.Email },
+            { x => x.ItemName, user.Email ?? $"{user.FirstName} {user.LastName}" },
             { x => x.Description, "This user will lose access to the platform." }
         };
         var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
@@ -209,7 +217,9 @@
     private class UserDto
     {
         public Guid Id { get; set; }
-        public string Email { get; set; } = string.Empty;
+        public string? Email { get; set; }
+        public string? MobileNumber { get; set; }
+        public bool HasAadhaar { get; set; }
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string[] Roles { get; set; } = [];

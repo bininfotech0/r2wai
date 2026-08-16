@@ -70,6 +70,21 @@ public sealed class User : BaseEntity<Guid>
         MarkAsModified();
     }
 
+    public void SetMobileNumber(string? mobileNumber)
+    {
+        MobileNumber = mobileNumber;
+        MarkAsModified();
+    }
+
+    // Only meant to be called when Email is currently null (a member adding contact info after
+    // signing up with just Aadhaar) — enforcing "only when null" is the caller's job, since that's
+    // a business rule about who may change a login-identifying field, not an entity invariant.
+    public void SetEmail(string email)
+    {
+        Email = email;
+        MarkAsModified();
+    }
+
     public void SetPasswordHash(string passwordHash)
     {
         PasswordHash = passwordHash;
