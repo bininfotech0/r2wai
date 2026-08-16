@@ -222,11 +222,45 @@ public class WorkflowsController(
         [FromHeader(Name = "X-Webhook-Timestamp")] string? webhookTimestamp = null,
         CancellationToken ct = default)
     {
-        var configuredSecret = configuration["Webhooks:Secret"];
-        if (string.IsNullOrEmpty(configuredSecret))
+        // Webhooks created through the admin UI (WebhooksController) persist a WebhookEndpoint row
+        // keyed by its own Slug/Secret/WorkflowId — that row is the source of truth whenever one
+        // exists for this slug, since it's the only thing the admin panel actually lets anyone
+        // configure. Workflow.Trigger is a separate, older field with no admin UI at all; kept only
+        // as a fallback against the single global config secret for anything still relying on it.
+        var webhookEndpoint = await dbContext.WebhookEndpoints
+            .FirstOrDefaultAsync(w => w.Slug == slug && !w.IsDeleted, ct);
+
+        R2WAI.Domain.Entities.Workflow? workflow;
+        string? configuredSecret;
+
+        if (webhookEndpoint is not null)
         {
-            logger.LogError("Webhook rejected: no webhook secret configured — all webhooks blocked until Webhooks:Secret is set");
-            return StatusCode(503, new { error = "Webhook endpoint not configured. Contact administrator." });
+            if (!webhookEndpoint.IsActive || webhookEndpoint.WorkflowId is null)
+                return NotFound(new { error = $"No active webhook with slug '{slug}'" });
+
+            configuredSecret = webhookEndpoint.Secret;
+            if (string.IsNullOrEmpty(configuredSecret))
+            {
+                logger.LogError("Webhook rejected: webhook '{Slug}' has no secret configured", slug);
+                return StatusCode(503, new { error = "Webhook endpoint not configured. Contact administrator." });
+            }
+
+            workflow = await dbContext.Workflows.FirstOrDefaultAsync(w => w.Id == webhookEndpoint.WorkflowId && w.IsActive, ct);
+            if (workflow is null)
+                return NotFound(new { error = "Linked workflow not found or inactive" });
+        }
+        else
+        {
+            configuredSecret = configuration["Webhooks:Secret"];
+            if (string.IsNullOrEmpty(configuredSecret))
+            {
+                logger.LogError("Webhook rejected: no webhook secret configured — all webhooks blocked until Webhooks:Secret is set");
+                return StatusCode(503, new { error = "Webhook endpoint not configured. Contact administrator." });
+            }
+
+            workflow = await dbContext.Workflows.FirstOrDefaultAsync(w => w.Trigger == slug && w.IsActive, ct);
+            if (workflow is null)
+                return NotFound(new { error = $"No active workflow with trigger '{slug}'" });
         }
 
         if (!string.IsNullOrEmpty(webhookSignature) && !string.IsNullOrEmpty(webhookTimestamp))
@@ -260,12 +294,6 @@ public class WorkflowsController(
             return Unauthorized(new { error = "Invalid or missing webhook secret" });
         }
 
-        var workflow = await dbContext.Workflows
-            .FirstOrDefaultAsync(w => w.Trigger == slug && w.IsActive, ct);
-
-        if (workflow is null)
-            return NotFound(new { error = $"No active workflow with trigger '{slug}'" });
-
         var data = payload is not null ? System.Text.Json.JsonSerializer.Serialize(payload) : null;
 
         try
@@ -273,6 +301,9 @@ public class WorkflowsController(
             var defaultTenantId = workflow.TenantId;
             var (elsaInstanceId, instanceId) = await workflowBridge.StartWorkflowAsync(
                 workflow.Id, defaultTenantId, workflow.UserId, data, ct);
+
+            webhookEndpoint?.RecordCall();
+            await dbContext.SaveChangesAsync(ct);
 
             logger.LogInformation("Webhook triggered workflow {WorkflowId} → instance {InstanceId}", workflow.Id, instanceId);
             return Accepted(new { workflowId = workflow.Id, instanceId, elsaInstanceId, status = "running" });

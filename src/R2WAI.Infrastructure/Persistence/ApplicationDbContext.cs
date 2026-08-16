@@ -41,6 +41,10 @@ public interface ITenantDbContext
     DbSet<WebhookEndpoint> WebhookEndpoints { get; }
     DbSet<ApiKey> ApiKeys { get; }
     DbSet<ChatbotChannel> ChatbotChannels { get; }
+    DbSet<TestCase> TestCases { get; }
+    DbSet<TestRun> TestRuns { get; }
+    DbSet<TestCaseResult> TestCaseResults { get; }
+    DbSet<AccessRequest> AccessRequests { get; }
 }
 
 public class ApplicationDbContext : DbContext, ITenantDbContext
@@ -100,6 +104,10 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     public DbSet<WebhookEndpoint> WebhookEndpoints => Set<WebhookEndpoint>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<ChatbotChannel> ChatbotChannels => Set<ChatbotChannel>();
+    public DbSet<TestCase> TestCases => Set<TestCase>();
+    public DbSet<TestRun> TestRuns => Set<TestRun>();
+    public DbSet<TestCaseResult> TestCaseResults => Set<TestCaseResult>();
+    public DbSet<AccessRequest> AccessRequests => Set<AccessRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

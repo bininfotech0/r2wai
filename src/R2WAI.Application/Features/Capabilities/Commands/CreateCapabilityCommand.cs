@@ -25,6 +25,16 @@ public class CreateCapabilityCommandValidator : AbstractValidator<CreateCapabili
         RuleFor(v => v.Description).MaximumLength(2000);
         RuleFor(v => v.RiskLevel).NotEmpty().Must(r => new[] { "Low", "Medium", "High", "Critical" }.Contains(r))
             .WithMessage("RiskLevel must be one of: Low, Medium, High, Critical");
+        // HttpMethod/EndpointPath define a real outbound HTTP call this capability lets the AI
+        // invoke (ToolDefinition.LinkApi) — previously unchecked, so anything reached the point
+        // of being wired into a tool call unvalidated.
+        RuleFor(v => v.HttpMethod)
+            .Must(m => new[] { "GET", "POST", "PUT", "PATCH", "DELETE" }.Contains(m))
+            .WithMessage("HttpMethod must be one of: GET, POST, PUT, PATCH, DELETE")
+            .When(v => v.HttpMethod is not null);
+        RuleFor(v => v.EndpointPath).MaximumLength(500)
+            .Must(p => p!.StartsWith('/')).WithMessage("EndpointPath must start with '/'.")
+            .When(v => !string.IsNullOrEmpty(v.EndpointPath));
     }
 }
 

@@ -1,0 +1,170 @@
+@inject ISnackbar Snackbar
+@inject AuthenticatedHttpClient Http
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEdit ? "Edit Test Case" : "New Test Case")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_name" Label="Name" Required="true" Variant="Variant.Outlined" Placeholder="Application Status" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?" @bind-Value="_assistantId" Label="Assistant" Required="true" Variant="Variant.Outlined">
+                    @foreach (var a in _assistants)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?" @bind-Value="_applicationId" Label="Application (optional)" Clearable="true" Variant="Variant.Outlined">
+                    @foreach (var app in _applications)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)app.Id)">@app.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_question" Label="Question" Required="true" Lines="2" Variant="Variant.Outlined"
+                              Placeholder="How can I check my application status?" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudDivider Class="my-2" />
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 700;" Class="mb-1">Expected Behavior (optional)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                    Leave both blank to just verify the assistant responds without error.
+                </MudText>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_expectedResponseContains" Label="Response should contain"
+                              Placeholder="e.g. status" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_expectedCapabilityCalled" Label="Capability that should be called"
+                              Placeholder="e.g. GetApplicationStatus" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+            @(_saving ? "Saving..." : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Guid? EditId { get; set; }
+
+    private bool _isEdit => EditId.HasValue;
+    private string _name = string.Empty;
+    private Guid? _assistantId;
+    private Guid? _applicationId;
+    private string _question = string.Empty;
+    private string _expectedResponseContains = string.Empty;
+    private string _expectedCapabilityCalled = string.Empty;
+    private bool _saving;
+
+    private List<AssistantOption> _assistants = new();
+    private List<ApplicationOption> _applications = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOptions();
+
+        if (_isEdit)
+        {
+            try
+            {
+                var testCase = await Http.GetFromJsonAsync<TestCaseDetail>($"/api/v1/testcases/{EditId}");
+                if (testCase is not null)
+                {
+                    _name = testCase.Name;
+                    _assistantId = testCase.AssistantId;
+                    _applicationId = testCase.ApplicationId;
+                    _question = testCase.Question;
+                    _expectedResponseContains = testCase.ExpectedResponseContains ?? string.Empty;
+                    _expectedCapabilityCalled = testCase.ExpectedCapabilityCalled ?? string.Empty;
+                }
+            }
+            catch { Snackbar.Add("Failed to load test case", Severity.Error); }
+        }
+    }
+
+    private async Task LoadOptions()
+    {
+        try
+        {
+            var assistants = await Http.GetFromJsonAsync<AssistantsResult>("/api/v1/assistants?page=1&pageSize=200");
+            _assistants = (assistants?.Items ?? new()).Select(a => new AssistantOption { Id = a.Id, Name = a.Name }).ToList();
+
+            var applications = await Http.GetFromJsonAsync<ApplicationsResult>("/api/v1/applications?page=1&pageSize=200");
+            _applications = (applications?.Items ?? new()).Select(a => new ApplicationOption { Id = a.Id, Name = a.Name }).ToList();
+        }
+        catch { /* selectors will just be empty; Save still validates required fields */ }
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name) || !_assistantId.HasValue || string.IsNullOrWhiteSpace(_question))
+        {
+            Snackbar.Add("Name, assistant, and question are required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var payload = new
+            {
+                AssistantId = _assistantId,
+                ApplicationId = _applicationId,
+                Name = _name,
+                Question = _question,
+                ExpectedResponseContains = (string?)(string.IsNullOrWhiteSpace(_expectedResponseContains) ? null : _expectedResponseContains),
+                ExpectedCapabilityCalled = (string?)(string.IsNullOrWhiteSpace(_expectedCapabilityCalled) ? null : _expectedCapabilityCalled)
+            };
+
+            var response = _isEdit
+                ? await Http.PutAsJsonAsync($"/api/v1/testcases/{EditId}", payload)
+                : await Http.PostAsJsonAsync("/api/v1/testcases", payload);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to save test case" : body, Severity.Error);
+                return;
+            }
+
+            Snackbar.Add(_isEdit ? "Test case saved" : "Test case created", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class AssistantOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private class AssistantsResult { public List<AssistantListItem> Items { get; set; } = new(); }
+    private class AssistantListItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+
+    private class ApplicationOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+    private class ApplicationsResult { public List<ApplicationListItem> Items { get; set; } = new(); }
+    private class ApplicationListItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
+
+    private class TestCaseDetail
+    {
+        public Guid AssistantId { get; set; }
+        public Guid? ApplicationId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Question { get; set; } = string.Empty;
+        public string? ExpectedResponseContains { get; set; }
+        public string? ExpectedCapabilityCalled { get; set; }
+    }
+}

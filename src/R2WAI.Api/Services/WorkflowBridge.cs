@@ -13,6 +13,7 @@ using Elsa.Workflows.Runtime.Filters;
 using Elsa.Workflows.Runtime.Messages;
 using Microsoft.EntityFrameworkCore;
 using R2WAI.Api.Workflows;
+using R2WAI.Application.Common.Exceptions;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Workflows.DTOs;
 using R2WAI.Infrastructure.Persistence;
@@ -47,8 +48,11 @@ public class WorkflowBridge : IWorkflowBridge
         var workflowEntity = await _context.Workflows
             .FirstOrDefaultAsync(w => w.Id == workflowId && w.TenantId == tenantId, ct);
 
+        // NotFoundException (404), not InvalidOperationException (409): a missing workflow ID is
+        // exactly what it says — nothing for the caller to "resolve a conflict" over, so it must
+        // not share the exception middleware's domain-guard-conflict mapping.
         if (workflowEntity is null)
-            throw new InvalidOperationException($"Workflow {workflowId} not found for tenant {tenantId}");
+            throw new NotFoundException(nameof(Domain.Entities.Workflow), workflowId);
 
         var steps = DeserializeSteps(workflowEntity.Steps).OrderBy(s => s.Order).ToList();
 

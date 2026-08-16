@@ -27,17 +27,21 @@ public class PgVectorService : IVectorStoreService
     {
         await EnsurePgVectorExtensionAsync(ct);
 
-        var sql = """
+        // pgvector's type modifier (the embedding dimension) must be a literal in the DDL —
+        // Postgres rejects a bound parameter there ("type modifiers must be simple constants
+        // or identifiers"). vectorSize is an int from internal config, not user input, so
+        // interpolating it directly is safe.
+        var sql = $"""
             CREATE TABLE IF NOT EXISTS vector_embeddings (
                 id UUID PRIMARY KEY,
                 collection_name TEXT NOT NULL,
-                embedding vector($1),
+                embedding vector({vectorSize}),
                 payload JSONB,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """;
 
-        await _context.Database.ExecuteSqlRawAsync(sql, [vectorSize], ct);
+        await _context.Database.ExecuteSqlRawAsync(sql, ct);
 
         var idxSql = """
             CREATE INDEX IF NOT EXISTS idx_ve_collection_name
@@ -65,22 +69,35 @@ public class PgVectorService : IVectorStoreService
 
         try
         {
-            using var conn = (NpgsqlConnection)_context.Database.GetDbConnection();
-            await conn.OpenAsync(ct);
-
-            await using var writer = await conn.BeginBinaryImportAsync(
-                "COPY vector_embeddings (id, collection_name, embedding, payload) FROM STDIN (FORMAT BINARY)", ct);
-
-            foreach (var (id, vector, payload) in points)
+            // GetDbConnection() returns the DbContext's own connection — it's shared for the
+            // rest of this request/scope, so it must never be disposed here. Open/close it via
+            // Database.Open/CloseConnectionAsync (EF Core's reference-counted lifecycle APIs)
+            // rather than wrapping the NpgsqlConnection itself in a `using`, which previously
+            // disposed the shared connection outright and broke every subsequent DbContext call
+            // in the same request (including the final SaveChangesAsync that marks the document
+            // Ready) with an ObjectDisposedException.
+            var conn = (NpgsqlConnection)_context.Database.GetDbConnection();
+            await _context.Database.OpenConnectionAsync(ct);
+            try
             {
-                await writer.StartRowAsync(ct);
-                await writer.WriteAsync(id, ct);
-                await writer.WriteAsync(collectionName, ct);
-                await writer.WriteAsync(vector, ct);
-                await writer.WriteAsync(JsonSerializer.Serialize(payload), NpgsqlTypes.NpgsqlDbType.Jsonb, ct);
-            }
+                await using var writer = await conn.BeginBinaryImportAsync(
+                    "COPY vector_embeddings (id, collection_name, embedding, payload) FROM STDIN (FORMAT BINARY)", ct);
 
-            await writer.CompleteAsync(ct);
+                foreach (var (id, vector, payload) in points)
+                {
+                    await writer.StartRowAsync(ct);
+                    await writer.WriteAsync(id, ct);
+                    await writer.WriteAsync(collectionName, ct);
+                    await writer.WriteAsync(vector, ct);
+                    await writer.WriteAsync(JsonSerializer.Serialize(payload), NpgsqlTypes.NpgsqlDbType.Jsonb, ct);
+                }
+
+                await writer.CompleteAsync(ct);
+            }
+            finally
+            {
+                await _context.Database.CloseConnectionAsync();
+            }
         }
         catch (Exception ex)
         {

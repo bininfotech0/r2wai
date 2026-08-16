@@ -145,6 +145,7 @@
                         <MudTextField T="string" @bind-Value="_teamsBotAppPassword" Label="Bot App Password" Margin="Margin.Dense"
                                       InputType="@(_showTeamsSecret ? InputType.Text : InputType.Password)"
                                       Adornment="Adornment.End" AdornmentIcon="@(_showTeamsSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      AdornmentAriaLabel="@(_showTeamsSecret ? "Hide bot app password" : "Show bot app password")"
                                       OnAdornmentClick="@(() => _showTeamsSecret = !_showTeamsSecret)" Class="mb-2" />
                         <MudTextField T="string" @bind-Value="_teamsTenantId" Label="Teams Tenant ID" Margin="Margin.Dense" Class="mb-2" />
                         <div class="d-flex gap-2 mt-2">
@@ -194,6 +195,7 @@
                         <MudTextField T="string" @bind-Value="_slackBotToken" Label="Bot Token" Margin="Margin.Dense"
                                       InputType="@(_showSlackSecret ? InputType.Text : InputType.Password)"
                                       Adornment="Adornment.End" AdornmentIcon="@(_showSlackSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      AdornmentAriaLabel="@(_showSlackSecret ? "Hide bot token" : "Show bot token")"
                                       OnAdornmentClick="@(() => _showSlackSecret = !_showSlackSecret)" Class="mb-2" />
                         <MudTextField T="string" @bind-Value="_slackSigningSecret" Label="Signing Secret" Margin="Margin.Dense"
                                       InputType="@(_showSlackSecret ? InputType.Text : InputType.Password)" Class="mb-2" />
@@ -246,6 +248,7 @@
                         <MudTextField T="string" @bind-Value="_whatsappAuthToken" Label="Auth Token" Margin="Margin.Dense"
                                       InputType="@(_showWhatsappSecret ? InputType.Text : InputType.Password)"
                                       Adornment="Adornment.End" AdornmentIcon="@(_showWhatsappSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      AdornmentAriaLabel="@(_showWhatsappSecret ? "Hide auth token" : "Show auth token")"
                                       OnAdornmentClick="@(() => _showWhatsappSecret = !_showWhatsappSecret)" Class="mb-2" />
                         <MudTextField T="string" @bind-Value="_whatsappNumber" Label="WhatsApp Number" Margin="Margin.Dense"
                                       Placeholder="+14155238886" Class="mb-2" />
@@ -297,6 +300,7 @@
                         <MudTextField T="string" @bind-Value="_smsAuthToken" Label="Auth Token" Margin="Margin.Dense"
                                       InputType="@(_showSmsSecret ? InputType.Text : InputType.Password)"
                                       Adornment="Adornment.End" AdornmentIcon="@(_showSmsSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      AdornmentAriaLabel="@(_showSmsSecret ? "Hide auth token" : "Show auth token")"
                                       OnAdornmentClick="@(() => _showSmsSecret = !_showSmsSecret)" Class="mb-2" />
                         <MudTextField T="string" @bind-Value="_smsPhoneNumber" Label="Phone Number" Margin="Margin.Dense"
                                       Placeholder="+15551234567" Class="mb-2" />

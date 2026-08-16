@@ -1,4 +1,5 @@
 using FluentValidation;
+using R2WAI.Application.Common.Validation;
 
 namespace R2WAI.Application.Features.Integrations.Commands;
 
@@ -19,5 +20,6 @@ public class UpdateIntegrationCommandValidator : AbstractValidator<UpdateIntegra
         RuleFor(v => v.Id).NotEmpty();
         RuleFor(v => v.Name).NotEmpty().MaximumLength(200);
         RuleFor(v => v.Type).NotEmpty();
+        RuleFor(v => v.EndpointUrl).MaximumLength(500).MustBeValidHttpUrl();
     }
 }

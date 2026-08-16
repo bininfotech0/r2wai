@@ -27,3 +27,4 @@ global using R2WAI.Application.Features.Applications.DTOs;
 global using R2WAI.Application.Features.Capabilities.DTOs;
 global using R2WAI.Application.Features.Navigation.DTOs;
 global using R2WAI.Application.Features.Governance.DTOs;
+global using R2WAI.Application.Features.TestCases.DTOs;

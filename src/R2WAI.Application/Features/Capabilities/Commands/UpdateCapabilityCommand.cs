@@ -26,6 +26,13 @@ public class UpdateCapabilityCommandValidator : AbstractValidator<UpdateCapabili
         RuleFor(v => v.Description).MaximumLength(2000);
         RuleFor(v => v.RiskLevel).NotEmpty().Must(r => new[] { "Low", "Medium", "High", "Critical" }.Contains(r))
             .WithMessage("RiskLevel must be one of: Low, Medium, High, Critical");
+        RuleFor(v => v.HttpMethod)
+            .Must(m => new[] { "GET", "POST", "PUT", "PATCH", "DELETE" }.Contains(m))
+            .WithMessage("HttpMethod must be one of: GET, POST, PUT, PATCH, DELETE")
+            .When(v => v.HttpMethod is not null);
+        RuleFor(v => v.EndpointPath).MaximumLength(500)
+            .Must(p => p!.StartsWith('/')).WithMessage("EndpointPath must start with '/'.")
+            .When(v => !string.IsNullOrEmpty(v.EndpointPath));
     }
 }
 

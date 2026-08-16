@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Hosting;
+using R2WAI.Application.Common.Exceptions;
 using R2WAI.Application.Common.Interfaces;
 
 namespace R2WAI.Infrastructure.Services;
@@ -14,17 +15,21 @@ public class EncryptionService : IEncryptionService
         var keyFromEnv = Environment.GetEnvironmentVariable("ENCRYPTION_KEY");
         var keyFromConfig = configuration["Security:EncryptionKey"];
 
+        // ConfigurationException, not InvalidOperationException: this is a server misconfiguration,
+        // not a client-correctable state conflict. The exception middleware maps InvalidOperationException
+        // to 409 Conflict for legitimate domain guards — a missing encryption key must never look like
+        // something the caller can fix by retrying, so it falls through to a real 500 instead.
         var keyString = keyFromEnv ?? keyFromConfig
-            ?? throw new InvalidOperationException(
+            ?? throw new ConfigurationException(
                 "Encryption key not configured. Set the ENCRYPTION_KEY environment variable (32-byte base64 string).");
 
         if (!environment.IsDevelopment() && keyFromEnv is null && keyFromConfig is not null)
-            throw new InvalidOperationException(
+            throw new ConfigurationException(
                 "In non-development environments, the encryption key must be supplied via the ENCRYPTION_KEY environment variable, not appsettings.json.");
 
         _key = Convert.FromBase64String(keyString);
         if (_key.Length != 32)
-            throw new InvalidOperationException("Encryption key must be exactly 32 bytes (256 bits).");
+            throw new ConfigurationException("Encryption key must be exactly 32 bytes (256 bits).");
     }
 
     public string Encrypt(string plainText)

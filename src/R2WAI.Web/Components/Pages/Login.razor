@@ -7,133 +7,155 @@
 @inject JwtAuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject IConfiguration Configuration
+@inject ThemeService ThemeService
 
 <PageTitle>R2WAI - Login</PageTitle>
+
+<div class="theme-toggle-group">
+    <button type="button" class="theme-toggle-btn @(!ThemeService.IsDarkMode ? "active" : "")"
+            @onclick="@(() => SetTheme(false))" aria-label="Light mode" aria-pressed="@(!ThemeService.IsDarkMode)">
+        <MudIcon Icon="@Icons.Material.Filled.LightMode" Size="Size.Small" /> Light
+    </button>
+    <button type="button" class="theme-toggle-btn @(ThemeService.IsDarkMode ? "active" : "")"
+            @onclick="@(() => SetTheme(true))" aria-label="Dark mode" aria-pressed="@ThemeService.IsDarkMode">
+        <MudIcon Icon="@Icons.Material.Filled.DarkMode" Size="Size.Small" /> Dark
+    </button>
+</div>
 
 <div class="login-container">
     <div class="auth-content">
         <AuthShowcase />
 
+        <div class="d-flex flex-column">
         <MudPaper Class="pa-6 pa-sm-10 login-card" Elevation="0">
-        <div class="d-flex flex-column align-center mb-8">
+        <div class="d-flex flex-column align-center mb-6">
             <div class="mb-4">
                 <Brand Size="48" ShowWordmark="false" />
             </div>
-            <MudText Typo="Typo.h4" Align="Align.Center" Class="gradient-text" Style="font-weight: 700; letter-spacing: -0.02em;">R2WAI</MudText>
-            <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mt-1" Style="max-width: 280px; line-height: 1.5;">
-                The AI work platform for enterprise teams. Build assistants, automate workflows, and get work done.
+            <MudText Typo="Typo.h4" Align="Align.Center" Style="font-weight: 700; letter-spacing: -0.02em;">Welcome back!</MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mt-1">
+                Sign in to your R2WAI account
             </MudText>
         </div>
 
-        <EditForm Model="_loginModel" OnValidSubmit="HandleLogin">
-            <DataAnnotationsValidator />
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-4" Class="login-tabs">
+            <MudTabPanel Text="Username & Password">
+                <EditForm Model="_loginModel" OnValidSubmit="HandleLogin">
+                    <DataAnnotationsValidator />
 
-            <MudTextField @bind-Value="_loginModel.Email"
-                          Label="Email address"
-                          Variant="Variant.Outlined"
-                          InputType="InputType.Email"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.MailOutline"
-                          Class="mb-4"
-                          Required="true"
-                          RequiredError="Email is required."
-                          AutoFocus="true"
-                          aria-label="Email address" />
+                    <MudTextField @bind-Value="_loginModel.Email"
+                                  Label="Email address"
+                                  Variant="Variant.Outlined"
+                                  InputType="InputType.Email"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.MailOutline"
+                                  Class="mb-4"
+                                  Required="true"
+                                  RequiredError="Email is required."
+                                  AutoFocus="true"
+                                  aria-label="Email address" />
 
-            <MudTextField @bind-Value="_loginModel.Password"
-                          Label="Password"
-                          Variant="Variant.Outlined"
-                          InputType="@(_showPassword ? InputType.Text : InputType.Password)"
-                          Adornment="Adornment.End"
-                          AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
-                          AdornmentAriaLabel="@(_showPassword ? "Hide password" : "Show password")"
-                          OnAdornmentClick="@(() => _showPassword = !_showPassword)"
-                          Class="mb-2"
-                          Required="true"
-                          RequiredError="Password is required."
-                          aria-label="Password" />
+                    <MudTextField @bind-Value="_loginModel.Password"
+                                  Label="Password"
+                                  Variant="Variant.Outlined"
+                                  InputType="@(_showPassword ? InputType.Text : InputType.Password)"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  AdornmentAriaLabel="@(_showPassword ? "Hide password" : "Show password")"
+                                  OnAdornmentClick="@(() => _showPassword = !_showPassword)"
+                                  Class="mb-2"
+                                  Required="true"
+                                  RequiredError="Password is required."
+                                  aria-label="Password" />
 
-            @if (_mfaRequired)
-            {
-                <MudTextField @ref="_mfaField"
-                              @bind-Value="_loginModel.MfaCode"
-                              Label="Authenticator Code"
-                              Variant="Variant.Outlined"
-                              InputType="InputType.Text"
-                              InputMode="InputMode.numeric"
-                              Class="mb-4"
-                              MaxLength="6"
-                              Placeholder="Enter 6-digit code"
-                              Immediate="true"
-                              aria-label="MFA authenticator code" />
-            }
+                    @if (_mfaRequired)
+                    {
+                        <MudTextField @ref="_mfaField"
+                                      @bind-Value="_loginModel.MfaCode"
+                                      Label="Authenticator Code"
+                                      Variant="Variant.Outlined"
+                                      InputType="InputType.Text"
+                                      InputMode="InputMode.numeric"
+                                      Class="mb-4"
+                                      MaxLength="6"
+                                      Placeholder="Enter 6-digit code"
+                                      Immediate="true"
+                                      aria-label="MFA authenticator code" />
+                    }
 
-            <div class="d-flex justify-space-between align-center mb-5">
-                <MudCheckBox T="bool" @bind-Value="_rememberMe" Label="Remember me"
-                             Color="Color.Primary" Dense="true"
-                             Style="font-size: 0.8125rem;" />
-                <MudLink Href="/forgot-password" Typo="Typo.caption" Color="Color.Primary"
-                         Style="font-weight: 500;">
-                    Forgot password?
-                </MudLink>
-            </div>
+                    <div class="d-flex justify-space-between align-center mb-5">
+                        <MudCheckBox T="bool" @bind-Value="_rememberMe" Label="Remember me"
+                                     Color="Color.Primary" Dense="true"
+                                     Style="font-size: 0.8125rem;" />
+                        <MudLink Href="/forgot-password" Typo="Typo.caption" Color="Color.Primary"
+                                 Style="font-weight: 500;">
+                            Forgot password?
+                        </MudLink>
+                    </div>
 
-            <MudButton ButtonType="ButtonType.Submit"
-                       Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       FullWidth="true"
-                       Size="Size.Large"
-                       Disabled="_isLoading"
-                       Class="btn-gradient"
-                       Style="height: 48px; border-radius: 10px; font-weight: 600;"
-                       aria-label="Sign in">
-                @if (_isLoading)
-                {
-                    <MudProgressCircular Class="ms-n1 me-2" Size="Size.Small" Indeterminate="true"
-                                         Color="Color.Surface" />
-                    <span>Signing in...</span>
-                }
-                else
-                {
-                    <span>Continue</span>
-                }
-            </MudButton>
-        </EditForm>
+                    <MudButton ButtonType="ButtonType.Submit"
+                               Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               FullWidth="true"
+                               Size="Size.Large"
+                               Disabled="_isLoading"
+                               Class="btn-gradient"
+                               Style="height: 48px; border-radius: 10px; font-weight: 600;"
+                               aria-label="Sign in">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Class="ms-n1 me-2" Size="Size.Small" Indeterminate="true"
+                                                 Color="Color.Surface" />
+                            <span>Signing in...</span>
+                        }
+                        else
+                        {
+                            <span>Sign in</span>
+                        }
+                    </MudButton>
+                </EditForm>
+            </MudTabPanel>
 
-        <div class="d-flex align-center gap-2 my-5">
-            <MudDivider Style="flex: 1;" />
-            <MudText Typo="Typo.caption" Color="Color.Secondary">or continue with</MudText>
-            <MudDivider Style="flex: 1;" />
-        </div>
-
-        <div class="d-flex gap-2">
-            <MudTooltip Text="Google SSO available in enterprise plan" Placement="Placement.Top">
-                <MudButton FullWidth="true" Variant="Variant.Outlined" Size="Size.Medium"
-                           Style="border-radius: 10px; border-width: 1.5px; height: 42px; opacity: 0.5; transition: all 0.15s ease;"
-                           StartIcon="@Icons.Custom.Brands.Google" Disabled="true"
-                           aria-label="Sign in with Google (enterprise)">
-                    Google
-                </MudButton>
-            </MudTooltip>
-            <MudButton FullWidth="true" Variant="Variant.Outlined" Size="Size.Medium"
-                       Style="border-radius: 10px; border-width: 1.5px; height: 42px; transition: all 0.15s ease;"
-                       StartIcon="@Icons.Custom.Brands.MicrosoftAzure"
-                       OnClick="HandleMicrosoftLogin"
-                       Disabled="@(_isMsalLoading || !_msalConfigured)"
-                       aria-label="Sign in with Microsoft">
-                @if (_isMsalLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" /> }
-                Microsoft
-            </MudButton>
-        </div>
+            <MudTabPanel Text="Single Sign-On (SSO)">
+                <div class="d-flex flex-column gap-3 mt-2">
+                    <MudTooltip Text="Google SSO available in enterprise plan" Placement="Placement.Top">
+                        <MudButton FullWidth="true" Variant="Variant.Outlined" Size="Size.Large"
+                                   Style="border-radius: 10px; border-width: 1.5px; height: 48px; opacity: 0.5; transition: all 0.15s ease;"
+                                   StartIcon="@Icons.Custom.Brands.Google" Disabled="true"
+                                   aria-label="Sign in with Google (enterprise)">
+                            Continue with Google
+                        </MudButton>
+                    </MudTooltip>
+                    <MudButton FullWidth="true" Variant="Variant.Outlined" Size="Size.Large"
+                               Style="border-radius: 10px; border-width: 1.5px; height: 48px; transition: all 0.15s ease;"
+                               StartIcon="@Icons.Custom.Brands.MicrosoftAzure"
+                               OnClick="HandleMicrosoftLogin"
+                               Disabled="@(_isMsalLoading || !_msalConfigured)"
+                               aria-label="Sign in with Microsoft">
+                        @if (_isMsalLoading) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-1" /> }
+                        Continue with Microsoft
+                    </MudButton>
+                    @if (!_msalConfigured)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                            Microsoft sign-in is not configured for this workspace.
+                        </MudText>
+                    }
+                </div>
+            </MudTabPanel>
+        </MudTabs>
 
         <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-6">
             Don't have an account?&nbsp;
             <MudLink Href="/register" Color="Color.Primary" Style="font-weight: 600;">Request access</MudLink>
         </MudText>
-        <MudText Typo="Typo.caption" Align="Align.Center" Class="mt-3" Style="color: rgba(255,255,255,0.3); font-size: 0.7rem; letter-spacing: 0.03em;">
-            Secured by enterprise-grade encryption
-        </MudText>
         </MudPaper>
+
+        <MudText Typo="Typo.caption" Align="Align.Center" Class="login-footer-text">
+            <MudIcon Icon="@Icons.Material.Outlined.Shield" Size="Size.Small" Style="vertical-align: text-bottom; margin-right: 4px;" />
+            Secured with enterprise-grade encryption
+        </MudText>
+        </div>
     </div>
 </div>
 
@@ -167,6 +189,8 @@
                 }
             }
             catch { }
+
+            try { await LoadThemePreference(); } catch { }
         }
 
         if (_mfaRequired && !_mfaFieldFocused && _mfaField is not null)
@@ -174,6 +198,32 @@
             _mfaFieldFocused = true;
             await _mfaField.FocusAsync();
         }
+    }
+
+    private async Task LoadThemePreference()
+    {
+        var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "r2wai_dark_mode");
+        if (saved is "true" && !ThemeService.IsDarkMode)
+        {
+            ThemeService.SetDarkMode(true);
+            StateHasChanged();
+        }
+        else if (saved is null)
+        {
+            var prefersDark = await JS.InvokeAsync<bool>("eval", "window.matchMedia('(prefers-color-scheme: dark)').matches");
+            if (prefersDark && !ThemeService.IsDarkMode)
+            {
+                ThemeService.SetDarkMode(true);
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task SetTheme(bool dark)
+    {
+        ThemeService.SetDarkMode(dark);
+        try { await JS.InvokeVoidAsync("localStorage.setItem", "r2wai_dark_mode", dark ? "true" : "false"); }
+        catch { }
     }
 
     private async Task HandleMicrosoftLogin()

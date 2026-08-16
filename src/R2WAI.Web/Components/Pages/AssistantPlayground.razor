@@ -1,3 +1,4 @@
+@page "/assistant-studio/playground"
 @page "/assistant-studio/playground/{AssistantId}"
 @attribute [Authorize]
 @implements IAsyncDisposable
@@ -355,6 +356,7 @@
                                       OnKeyUp="HandleKeyUp" Disabled="_sending"
                                       Adornment="Adornment.End"
                                       AdornmentIcon="@(_sending ? Icons.Material.Filled.HourglassEmpty : Icons.Material.Filled.Send)"
+                                      AdornmentAriaLabel="Send message"
                                       AdornmentColor="Color.Primary"
                                       OnAdornmentClick="SendMessage" />
                     </div>
@@ -403,9 +405,34 @@
     private CancellationTokenSource? _sendCts;
     private string _liveAnnouncement = string.Empty;
 
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(AssistantId)) return;
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<AssistantsListResult>("/api/v1/assistants?page=1&pageSize=1");
+            var first = result?.Items?.FirstOrDefault();
+            if (first is not null)
+            {
+                Navigation.NavigateTo($"/assistant-studio/playground/{first.Id}", replace: true);
+            }
+            else
+            {
+                Snackbar.Add("Create an assistant first to use the Playground.", Severity.Info);
+                Navigation.NavigateTo("/assistant-studio", replace: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load assistants: {ex.Message}", Severity.Error);
+            Navigation.NavigateTo("/assistant-studio", replace: true);
+        }
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
+        if (!firstRender || string.IsNullOrEmpty(AssistantId)) return;
         try
         {
             var assistantTask = Http.GetFromJsonAsync<AssistantDto>($"/api/v1/assistants/{AssistantId}");
@@ -858,4 +885,6 @@
         public string Provider { get; set; } = string.Empty;
         public string ModelId { get; set; } = string.Empty;
     }
+    private class AssistantsListResult { public List<AssistantListItem> Items { get; set; } = new(); }
+    private class AssistantListItem { public Guid Id { get; set; } }
 }

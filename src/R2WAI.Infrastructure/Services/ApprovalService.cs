@@ -106,8 +106,17 @@ public class ApprovalService : IApprovalService
     public async Task<Guid> CreateApprovalRequestAsync(Guid tenantId, Guid workflowInstanceId,
         Guid workflowId, Guid requesterId, string? data = null, CancellationToken ct = default)
     {
+        // DueAt drives EscalateOverdueAsync (the 5-minute background sweep) — without it set here,
+        // every approval request stays DueAt=null forever and escalation can never trigger for it,
+        // no matter how long it sits pending. Computed from the tenant's active policy up front so
+        // it's set at creation, not patched in later.
+        var creationPolicy = await _context.ApprovalPolicies
+            .Where(p => p.TenantId == tenantId && p.IsActive)
+            .FirstOrDefaultAsync(ct);
+        var dueAt = creationPolicy?.EscalationMinutes is int minutes ? DateTime.UtcNow.AddMinutes(minutes) : (DateTime?)null;
+
         var request = new ApprovalRequest(
-            Guid.NewGuid(), tenantId, workflowInstanceId, workflowId, requesterId, data);
+            Guid.NewGuid(), tenantId, workflowInstanceId, workflowId, requesterId, data, dueAt);
 
         _context.ApprovalRequests.Add(request);
         await _context.SaveChangesAsync(ct);
@@ -521,10 +530,11 @@ public class ApprovalService : IApprovalService
             return false;
 
         var nextRole = roleChain[nextLevel];
+        var nextDueAt = policy.EscalationMinutes is int minutes ? DateTime.UtcNow.AddMinutes(minutes) : (DateTime?)null;
         var nextApproval = new ApprovalRequest(
             Guid.NewGuid(), completedRequest.TenantId,
             completedRequest.WorkflowInstanceId, completedRequest.WorkflowId,
-            completedRequest.RequesterId, completedRequest.Data, null,
+            completedRequest.RequesterId, completedRequest.Data, nextDueAt,
             nextLevel, completedRequest.Id);
         nextApproval.AssignApprover(Guid.Empty, nextRole);
 

@@ -163,6 +163,30 @@ else
 
         <MudTabPanel Text="Build">
             <div class="pt-4">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3" Style="text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;">
+                    Assistants, Knowledge &amp; Workflows
+                </MudText>
+
+                <LinkableSection Title="Assistants" Icon="@Icons.Material.Outlined.SmartToy"
+                                  Linked="_assistants" AllOptions="_allAssistants"
+                                  ManageUrl="/assistant-studio" ManageLabel="Manage in Assistants"
+                                  OnLink="@(id => LinkItem("assistants", id))" OnUnlink="@(id => UnlinkItem("assistants", id))" />
+
+                <LinkableSection Title="Knowledge Bases" Icon="@Icons.Material.Outlined.MenuBook"
+                                  Linked="_knowledgeBases" AllOptions="_allKnowledgeBases"
+                                  ManageUrl="/assistant-studio/knowledge" ManageLabel="Manage in Knowledge"
+                                  OnLink="@(id => LinkItem("knowledgebases", id))" OnUnlink="@(id => UnlinkItem("knowledgebases", id))" />
+
+                <LinkableSection Title="Workflows" Icon="@Icons.Material.Outlined.AccountTree"
+                                  Linked="_workflows" AllOptions="_allWorkflows"
+                                  ManageUrl="/workflow-studio" ManageLabel="Manage in Workflows"
+                                  OnLink="@(id => LinkItem("workflows", id))" OnUnlink="@(id => UnlinkItem("workflows", id))" />
+
+                <MudDivider Class="my-4" />
+
+                <MudExpansionPanels Elevation="0" Dense="true">
+                    <MudExpansionPanel Text="@($"Advanced: Capabilities ({_capabilities.Count}) & Navigation ({_navItems.Count})")" Icon="@Icons.Material.Outlined.Tune">
+
                 <div class="d-flex justify-space-between align-center mb-2">
                     <div class="d-flex align-center gap-2">
                         <MudIcon Icon="@Icons.Material.Outlined.Build" Color="Color.Primary" Size="Size.Small" />
@@ -367,25 +391,42 @@ else
                     </MudPaper>
                 }
 
-                <LinkableSection Title="Assistants" Icon="@Icons.Material.Outlined.SmartToy"
-                                  Linked="_assistants" AllOptions="_allAssistants"
-                                  ManageUrl="/assistant-studio" ManageLabel="Manage in Assistants"
-                                  OnLink="@(id => LinkItem("assistants", id))" OnUnlink="@(id => UnlinkItem("assistants", id))" />
-
-                <LinkableSection Title="Knowledge Bases" Icon="@Icons.Material.Outlined.MenuBook"
-                                  Linked="_knowledgeBases" AllOptions="_allKnowledgeBases"
-                                  ManageUrl="/assistant-studio/knowledge" ManageLabel="Manage in Knowledge"
-                                  OnLink="@(id => LinkItem("knowledgebases", id))" OnUnlink="@(id => UnlinkItem("knowledgebases", id))" />
-
-                <LinkableSection Title="Workflows" Icon="@Icons.Material.Outlined.AccountTree"
-                                  Linked="_workflows" AllOptions="_allWorkflows"
-                                  ManageUrl="/workflow-studio" ManageLabel="Manage in Workflows"
-                                  OnLink="@(id => LinkItem("workflows", id))" OnUnlink="@(id => UnlinkItem("workflows", id))" />
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
             </div>
         </MudTabPanel>
 
         <MudTabPanel Text="Test">
             <div class="pt-4">
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <div class="d-flex align-center gap-2">
+                        <MudIcon Icon="@Icons.Material.Outlined.FactCheck" Color="Color.Primary" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Test Cases (@_testCaseCount)</MudText>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.PlaylistPlay"
+                                   Disabled="@(_runningAllTestCases || _testCaseCount == 0)" OnClick="RunAllTestCasesForApp">
+                            @(_runningAllTestCases ? "Running..." : "Run All Tests")
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Size="Size.Small" Href="/test-cases">Manage Test Cases</MudButton>
+                    </div>
+                </div>
+                @if (_lastTestRunSummary is not null)
+                {
+                    <MudAlert Severity="@(_lastTestRunSummary.Value.Failed > 0 ? Severity.Error : _lastTestRunSummary.Value.Warning > 0 ? Severity.Warning : Severity.Success)"
+                              Dense="true" Class="mb-3">
+                        @_lastTestRunSummary.Value.Passed Passed &middot; @_lastTestRunSummary.Value.Failed Failed &middot; @_lastTestRunSummary.Value.Warning Warning
+                    </MudAlert>
+                }
+                else if (_testCaseCount == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                        No test cases for this application yet. <MudLink Href="/test-cases">Create one</MudLink> to verify assistant behavior automatically.
+                    </MudText>
+                }
+
+                <MudDivider Class="mb-3" />
+
                 @if (_assistants.Count == 0)
                 {
                     <EmptyState Icon="@Icons.Material.Outlined.Chat" Title="No assistant linked yet"
@@ -613,6 +654,96 @@ else
                 }
             </div>
         </MudTabPanel>
+
+        <MudTabPanel Text="Monitor">
+            <div class="pt-4">
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Recent Audit Activity</MudText>
+                    <MudButton Variant="Variant.Text" Size="Size.Small" Href="/operations/audit-logs">View Audit Trail</MudButton>
+                </div>
+                @if (_auditLogs.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.History" Title="No audit activity yet"
+                                Description="Changes made to this application will appear here." MinHeight="120px" />
+                }
+                else
+                {
+                    <MudTable Items="_auditLogs" Hover="true" Elevation="0" Class="mb-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                        <HeaderContent>
+                            <MudTh>Time</MudTh>
+                            <MudTh>Action</MudTh>
+                            <MudTh>Entity</MudTh>
+                            <MudTh>User</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Time">@context.Timestamp.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                            <MudTd DataLabel="Action">@context.Action</MudTd>
+                            <MudTd DataLabel="Entity">@context.EntityType</MudTd>
+                            <MudTd DataLabel="User">@(context.UserName ?? "—")</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+
+                <div class="d-flex justify-space-between align-center mb-2">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Recent Workflow Runs</MudText>
+                </div>
+                @if (_workflows.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.PlaylistPlay" Title="No workflows linked"
+                                Description="Link a workflow in the Build tab to see its runs here." MinHeight="120px" />
+                }
+                else if (_runs.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.PlaylistPlay" Title="No runs yet"
+                                Description="Runs will appear here once a linked workflow executes." MinHeight="120px" />
+                }
+                else
+                {
+                    <MudTable Items="_runs" Hover="true" Elevation="0" Class="mb-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                        <HeaderContent>
+                            <MudTh>Workflow</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh>Started</MudTh>
+                            <MudTh Style="text-align:right;">Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Workflow">@(context.WorkflowName ?? "—")</MudTd>
+                            <MudTd DataLabel="Status"><StatusBadge Status="@context.Status" /></MudTd>
+                            <MudTd DataLabel="Started">@(context.StartedAt?.ToString("yyyy-MM-dd HH:mm") ?? context.CreatedAt.ToString("yyyy-MM-dd HH:mm"))</MudTd>
+                            <MudTd Style="text-align:right;">
+                                <MudButton Variant="Variant.Text" Size="Size.Small" Href="@($"/workflow-studio/runs/{context.Id}")">View</MudButton>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Conversations and system-wide errors aren't yet filterable by application —
+                    see <MudLink Href="/conversations">Conversations</MudLink> and <MudLink Href="/operations/errors">Errors</MudLink> for the full view.
+                </MudText>
+            </div>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Settings">
+            <div class="pt-4" style="max-width: 640px;">
+                <MudText Typo="Typo.subtitle1" Class="mb-2" Style="font-weight: 700;">Application Configuration</MudText>
+                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                    <MudTextField @bind-Value="_settingsName" Label="Name" Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+                    <MudTextField @bind-Value="_settingsDescription" Label="Description" Lines="2" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+                    <MudTextField @bind-Value="_settingsBaseUrl" Label="Base URL" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+                    <MudSelect T="string" @bind-Value="_settingsEnvironment" Label="Environment" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3">
+                        <MudSelectItem T="string" Value="@("Development")">Development</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Staging")">Staging</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Production")">Production</MudSelectItem>
+                    </MudSelect>
+                    <div class="d-flex justify-end">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" Disabled="_actionInProgress" OnClick="SaveSettings">
+                            Save Changes
+                        </MudButton>
+                    </div>
+                </MudPaper>
+            </div>
+        </MudTabPanel>
     </MudTabs>
 }
 
@@ -673,6 +804,18 @@ else
     private string _versionNote = string.Empty;
     private List<Guid> _selectedVersionIds = new();
 
+    private List<AuditLogItem> _auditLogs = new();
+    private List<RunItem> _runs = new();
+
+    private int _testCaseCount;
+    private bool _runningAllTestCases;
+    private (int Passed, int Failed, int Warning)? _lastTestRunSummary;
+
+    private string _settingsName = string.Empty;
+    private string _settingsDescription = string.Empty;
+    private string _settingsBaseUrl = string.Empty;
+    private string _settingsEnvironment = "Development";
+
     private void ToggleVersionSelection(Guid versionId, bool selected)
     {
         if (selected && !_selectedVersionIds.Contains(versionId))
@@ -718,15 +861,119 @@ else
                 LoadVersions(),
                 LoadAssistants(),
                 LoadKnowledgeBases(),
-                LoadWorkflows());
+                LoadWorkflows(),
+                LoadAuditLogs(),
+                LoadTestCaseCount());
+            await LoadRuns();
         }
         finally { _loading = false; StateHasChanged(); }
     }
 
     private async Task LoadApplication()
     {
-        try { _application = await Http.GetFromJsonAsync<ApplicationDetail>($"/api/v1/applications/{Id}"); }
+        try
+        {
+            _application = await Http.GetFromJsonAsync<ApplicationDetail>($"/api/v1/applications/{Id}");
+            if (_application is not null)
+            {
+                _settingsName = _application.Name;
+                _settingsDescription = _application.Description ?? string.Empty;
+                _settingsBaseUrl = _application.BaseUrl ?? string.Empty;
+                _settingsEnvironment = _application.Environment;
+            }
+        }
         catch (Exception ex) { Snackbar.Add($"Failed to load application: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task LoadAuditLogs()
+    {
+        // AuthenticatedHttpClient.GetFromJsonAsync swallows non-401 HTTP errors and returns null for
+        // class types, so a 403 (non-admin viewer) is indistinguishable here from "no entries yet" —
+        // both render the same neutral empty state below.
+        try
+        {
+            var result = await Http.GetFromJsonAsync<AuditLogsResult>($"/api/v1/operations/audit-logs?applicationId={Id}&pageSize=10");
+            _auditLogs = result?.Items ?? new();
+        }
+        catch { /* audit is a secondary view; failures shouldn't block the workspace */ }
+    }
+
+    private async Task LoadTestCaseCount()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<TestCasesCountResult>($"/api/v1/testcases?applicationId={Id}&page=1&pageSize=1");
+            _testCaseCount = result?.TotalCount ?? 0;
+        }
+        catch { /* non-critical summary count */ }
+    }
+
+    private async Task RunAllTestCasesForApp()
+    {
+        _runningAllTestCases = true;
+        _lastTestRunSummary = null;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/testcases/run-all", new { AssistantId = (Guid?)null, ApplicationId = Id });
+            if (!response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Failed to run tests", Severity.Error);
+                return;
+            }
+            var run = await response.Content.ReadFromJsonAsync<TestRunSummaryResult>();
+            if (run is not null)
+                _lastTestRunSummary = (run.PassedCount, run.FailedCount, run.WarningCount);
+        }
+        catch (Exception ex) { Snackbar.Add($"Run failed: {ex.Message}", Severity.Error); }
+        finally { _runningAllTestCases = false; }
+    }
+
+    private async Task LoadRuns()
+    {
+        try
+        {
+            var runs = new List<RunItem>();
+            foreach (var wf in _workflows)
+            {
+                var result = await Http.GetFromJsonAsync<RunsResult>($"/api/v1/operations/workflow-instances?workflowId={wf.Id}&pageSize=5");
+                if (result?.Items is not null) runs.AddRange(result.Items);
+            }
+            _runs = runs.OrderByDescending(r => r.CreatedAt).Take(10).ToList();
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load runs: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task SaveSettings()
+    {
+        if (string.IsNullOrWhiteSpace(_settingsName))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+
+        _actionInProgress = true;
+        try
+        {
+            var payload = new
+            {
+                Name = _settingsName,
+                Description = (string?)(string.IsNullOrWhiteSpace(_settingsDescription) ? null : _settingsDescription),
+                BaseUrl = (string?)(string.IsNullOrWhiteSpace(_settingsBaseUrl) ? null : _settingsBaseUrl),
+                Environment = _settingsEnvironment
+            };
+            var response = await Http.PutAsJsonAsync($"/api/v1/applications/{Id}", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to save settings" : body, Severity.Error);
+                return;
+            }
+
+            await LoadApplication();
+            Snackbar.Add("Settings saved", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to save settings: {ex.Message}", Severity.Error); }
+        finally { _actionInProgress = false; }
     }
 
     private async Task LoadDepartments()
@@ -1301,4 +1548,26 @@ else
         public DateTime CreatedAt { get; set; }
         public string ConfigSnapshot { get; set; } = string.Empty;
     }
+
+    private class AuditLogsResult { public List<AuditLogItem> Items { get; set; } = new(); }
+    private class AuditLogItem
+    {
+        public string? UserName { get; set; }
+        public string Action { get; set; } = string.Empty;
+        public string EntityType { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+    }
+
+    private class RunsResult { public List<RunItem> Items { get; set; } = new(); }
+    private class RunItem
+    {
+        public Guid Id { get; set; }
+        public string? WorkflowName { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime? StartedAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class TestCasesCountResult { public int TotalCount { get; set; } }
+    private class TestRunSummaryResult { public int PassedCount { get; set; } public int FailedCount { get; set; } public int WarningCount { get; set; } }
 }

@@ -56,6 +56,9 @@ public class SchedulesController(ApplicationDbContext dbContext, ILogger<Schedul
         var workflow = await dbContext.Workflows.FirstOrDefaultAsync(w => w.Id == request.WorkflowId, ct);
         if (workflow is null) return BadRequest(new { error = "Workflow not found" });
 
+        if (!TryParseCron(request.CronExpression, out var cronError))
+            return BadRequest(new { error = cronError });
+
         var tenantClaim = User.FindFirst("tenant_id");
         var tenantId = tenantClaim != null && Guid.TryParse(tenantClaim.Value, out var tid) ? tid : Guid.Empty;
 
@@ -75,6 +78,9 @@ public class SchedulesController(ApplicationDbContext dbContext, ILogger<Schedul
     {
         var schedule = await dbContext.WorkflowSchedules.FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted, ct);
         if (schedule is null) return NotFound();
+
+        if (!TryParseCron(request.CronExpression, out var cronError))
+            return BadRequest(new { error = cronError });
 
         schedule.Update(request.Name, request.CronExpression, request.CronDescription);
         await dbContext.SaveChangesAsync(ct);
@@ -102,6 +108,21 @@ public class SchedulesController(ApplicationDbContext dbContext, ILogger<Schedul
         await dbContext.SaveChangesAsync(ct);
         logger.LogInformation("Schedule deleted: {Id}", id);
         return NoContent();
+    }
+
+    private static bool TryParseCron(string cronExpression, out string? error)
+    {
+        try
+        {
+            Cronos.CronExpression.Parse(cronExpression);
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Invalid cron expression: {ex.Message}";
+            return false;
+        }
     }
 
     public record CreateScheduleRequest(Guid WorkflowId, string Name, string CronExpression, string? CronDescription);

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using R2WAI.Application.Common.Exceptions;
 
 namespace R2WAI.Api.Middleware;
@@ -56,6 +57,56 @@ public class ExceptionHandlingMiddleware
                 problemDetails = new { Status = 403, Title = "Forbidden", Detail = "You do not have permission to perform this action.", Type = "https://tools.ietf.org/html/rfc7231#section-6.5.3" };
                 break;
 
+            // ObjectDisposedException derives from InvalidOperationException in .NET, but it's
+            // never a legitimate client-facing conflict — it always means a resource (e.g. a
+            // connection) was disposed while still in use, which is a real bug. Must be checked
+            // ahead of the InvalidOperationException case below, or it gets misclassified as a
+            // clean 409 and the underlying bug goes unnoticed.
+            case ObjectDisposedException:
+                goto default;
+
+            // Domain guards (e.g. entity.EnsureMutable()) throw this to signal an invalid state
+            // transition — a client-correctable conflict, not a server fault.
+            case InvalidOperationException invalidOp:
+                statusCode = HttpStatusCode.Conflict;
+                problemDetails = new { Status = 409, Title = "Conflict", Detail = invalidOp.Message, Type = "https://tools.ietf.org/html/rfc7231#section-6.5.8" };
+                break;
+
+            // Unique-constraint violations reach here when a handler doesn't pre-check for
+            // an existing row (e.g. duplicate application Code) — surface as 409, not 500.
+            case DbUpdateException dbUpdate when IsUniqueConstraintViolation(dbUpdate):
+                statusCode = HttpStatusCode.Conflict;
+                problemDetails = new { Status = 409, Title = "Conflict", Detail = "A record with the same unique value already exists.", Type = "https://tools.ietf.org/html/rfc7231#section-6.5.8" };
+                break;
+
+            // A save affected 0 rows where 1 was expected — the record was changed or removed
+            // by another operation on the same request/DbContext since it was loaded (observed on
+            // long-running AI chat turns where a tool call mid-stream saves the shared DbContext
+            // before the outer handler's own final save runs). The request genuinely failed and
+            // should be retried, not silently treated as success — 409, not a masked 200 or a raw 500.
+            case DbUpdateConcurrencyException:
+                statusCode = HttpStatusCode.Conflict;
+                problemDetails = new { Status = 409, Title = "Conflict", Detail = "This record was changed by another operation while your request was processing. Please retry.", Type = "https://tools.ietf.org/html/rfc7231#section-6.5.8" };
+                break;
+
+            // A required setting is missing or invalid (e.g. no ENCRYPTION_KEY configured) — a
+            // deployment problem, not something the caller did wrong or can fix by retrying.
+            // Genuinely a 500 (falls through to the same status as default), but logged as
+            // Critical below rather than Error so it's immediately recognizable as an ops/config
+            // issue instead of something to debug in application code.
+            case ConfigurationException configEx:
+                statusCode = HttpStatusCode.InternalServerError;
+                problemDetails = new { Status = 500, Title = "Internal Server Error", Detail = _isDevelopment ? configEx.Message : "The server is misconfigured. Contact your administrator.", Type = "https://tools.ietf.org/html/rfc7231#section-6.6.1" };
+                break;
+
+            // A downstream dependency (e.g. the AI provider) didn't respond in time — its own
+            // HttpClient timeout fired. Distinct from the client itself disconnecting, which
+            // cancels context.RequestAborted and can't be responded to anyway.
+            case OperationCanceledException when !context.RequestAborted.IsCancellationRequested:
+                statusCode = HttpStatusCode.GatewayTimeout;
+                problemDetails = new { Status = 504, Title = "Gateway Timeout", Detail = "The request took too long to complete (an upstream service did not respond in time). Please try again.", Type = "https://tools.ietf.org/html/rfc7231#section-6.6.5" };
+                break;
+
             default:
                 statusCode = HttpStatusCode.InternalServerError;
                 var detail = _isDevelopment
@@ -65,7 +116,11 @@ public class ExceptionHandlingMiddleware
                 break;
         }
 
-        if (statusCode == HttpStatusCode.InternalServerError)
+        if (exception is ConfigurationException)
+        {
+            _logger.LogCritical(exception, "Configuration error: {Message}", exception.Message);
+        }
+        else if (statusCode == HttpStatusCode.InternalServerError)
         {
             _logger.LogError(exception, "Unhandled exception occurred");
         }
@@ -101,4 +156,7 @@ public class ExceptionHandlingMiddleware
 
         await context.Response.WriteAsync(json);
     }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex) =>
+        ex.InnerException?.Message.Contains("duplicate key value violates unique constraint", StringComparison.OrdinalIgnoreCase) == true;
 }

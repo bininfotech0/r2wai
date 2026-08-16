@@ -16,6 +16,7 @@
                       InputType="@(_showKey ? InputType.Text : InputType.Password)"
                       Placeholder="Enter your API key"
                       Adornment="Adornment.End" AdornmentIcon="@(_showKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                      AdornmentAriaLabel="@(_showKey ? "Hide API key" : "Show API key")"
                       OnAdornmentClick="@(() => _showKey = !_showKey)"
                       Required="true" />
     </DialogContent>

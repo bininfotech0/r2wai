@@ -42,6 +42,7 @@
                 <MudTextField @bind-Value="_secret" Label="Secret" Variant="Variant.Outlined"
                               InputType="@(_showSecret ? InputType.Text : InputType.Password)"
                               Adornment="Adornment.End" AdornmentIcon="@(_showSecret ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              AdornmentAriaLabel="@(_showSecret ? "Hide secret" : "Show secret")"
                               OnAdornmentClick="() => _showSecret = !_showSecret"
                               HelperText="Optional. Used to verify webhook signatures." />
             </MudItem>

@@ -80,12 +80,37 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
     {
         var emailService = HttpContext.RequestServices.GetRequiredService<IEmailService>();
         var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
+        var jwtService = HttpContext.RequestServices.GetRequiredService<R2WAI.Infrastructure.Authentication.JwtService>();
+
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+
+        // The invite email tells the recipient to "use this code to create your account", so the
+        // code has to actually be redeemable — it used to be generated, emailed, and discarded with
+        // nothing in the DB to check it against, and no endpoint that could check it even if there
+        // were. Reuses the same create-user-then-set-a-reset-token pattern already proven for access
+        // request approval: create the account now, then let the invitee set their own password via
+        // the existing Reset Password page using this same token as the "reset code".
+        var existingUser = await dbContext.Users.IgnoreQueryFilters()
+            .Where(u => !u.IsDeleted).FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenantId, ct);
+        if (existingUser is not null)
+            return Conflict(new { error = "A user with this email already exists." });
+
+        var inviter = await dbContext.Users.FindAsync([currentUser.UserId], ct);
+        var tenant = await dbContext.Tenants.FindAsync([tenantId], ct);
+
+        var localPart = request.Email.Split('@')[0];
+        var newUser = new Domain.Entities.User(Guid.NewGuid(), tenantId, request.Email, request.Email, localPart, string.Empty);
 
         var tokenBytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
         var inviteToken = Convert.ToBase64String(tokenBytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        newUser.SetPasswordResetToken(jwtService.HashRefreshToken(inviteToken), DateTime.UtcNow.AddDays(7));
 
-        var inviter = await dbContext.Users.FindAsync([currentUser.UserId], ct);
-        var tenant = await dbContext.Tenants.FindAsync([currentUser.TenantId], ct);
+        // Role assignment isn't wired here — the same gap existed in the original code (the Role
+        // field was accepted and silently ignored). Left as-is rather than bolted on as a side
+        // effect of this fix; role assignment is a separate, already-existing admin action
+        // (see the roles endpoints below) that can be applied to the new user after creation.
+        await dbContext.Users.AddAsync(newUser, ct);
+        await dbContext.SaveChangesAsync(ct);
 
         await emailService.SendUserInviteAsync(
             request.Email,
@@ -93,8 +118,79 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
             tenant?.Name ?? "R2WAI",
             inviteToken, ct);
 
-        logger.LogInformation("User invitation sent to {Email}", request.Email);
-        return Ok(new { message = $"Invitation sent to {request.Email}" });
+        logger.LogInformation("User invitation sent to {Email}, account {UserId} created", request.Email, newUser.Id);
+        return Ok(new { message = $"Invitation sent to {request.Email}", userId = newUser.Id });
+    }
+
+    [HttpGet("access-requests")]
+    public async Task<IActionResult> GetAccessRequests([FromQuery] string? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    {
+        (page, pageSize) = ClampPagination(page, pageSize);
+
+        var query = dbContext.AccessRequests.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<Domain.Enums.AccessRequestStatus>(status, true, out var parsedStatus))
+            query = query.Where(a => a.Status == parsedStatus);
+
+        query = query.OrderByDescending(a => a.CreatedAt);
+        var total = await query.CountAsync(ct);
+        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+
+        return Ok(new { items, total, page, pageSize });
+    }
+
+    [HttpPost("access-requests/{id:guid}/approve")]
+    public async Task<IActionResult> ApproveAccessRequest(Guid id, CancellationToken ct = default)
+    {
+        var accessRequest = await dbContext.AccessRequests.FirstOrDefaultAsync(a => a.Id == id, ct);
+        if (accessRequest is null) return NotFound();
+
+        var existingUser = await dbContext.Users.IgnoreQueryFilters()
+            .Where(u => !u.IsDeleted).FirstOrDefaultAsync(u => u.Email == accessRequest.Email, ct);
+        if (existingUser is not null)
+            return Conflict(new { error = "A user with this email already exists." });
+
+        var currentUser = HttpContext.RequestServices.GetRequiredService<ICurrentUserService>();
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+        var reviewerId = currentUser.UserId ?? throw new UnauthorizedAccessException();
+
+        var nameParts = accessRequest.FullName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        var firstName = nameParts.Length > 0 ? nameParts[0] : accessRequest.FullName;
+        var lastName = nameParts.Length > 1 ? nameParts[1] : string.Empty;
+
+        var newUser = new Domain.Entities.User(Guid.NewGuid(), tenantId, accessRequest.Email, accessRequest.Email, firstName, lastName);
+
+        var jwtService = HttpContext.RequestServices.GetRequiredService<R2WAI.Infrastructure.Authentication.JwtService>();
+        var emailService = HttpContext.RequestServices.GetRequiredService<IEmailService>();
+
+        var tokenBytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+        var resetToken = Convert.ToBase64String(tokenBytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+        newUser.SetPasswordResetToken(jwtService.HashRefreshToken(resetToken), DateTime.UtcNow.AddDays(7));
+
+        await dbContext.Users.AddAsync(newUser, ct);
+
+        accessRequest.Approve(reviewerId, newUser.Id);
+        await dbContext.SaveChangesAsync(ct);
+
+        await emailService.SendPasswordResetAsync(newUser.Email, newUser.FirstName, resetToken, ct);
+
+        logger.LogInformation("Access request {Id} approved, user {UserId} created for {Email}", id, newUser.Id, newUser.Email);
+        return Ok(new { message = "Access request approved and account created.", userId = newUser.Id });
+    }
+
+    [HttpPost("access-requests/{id:guid}/reject")]
+    public async Task<IActionResult> RejectAccessRequest(Guid id, CancellationToken ct = default)
+    {
+        var accessRequest = await dbContext.AccessRequests.FirstOrDefaultAsync(a => a.Id == id, ct);
+        if (accessRequest is null) return NotFound();
+
+        var currentUser = HttpContext.RequestServices.GetRequiredService<ICurrentUserService>();
+        var reviewerId = currentUser.UserId ?? throw new UnauthorizedAccessException();
+
+        accessRequest.Reject(reviewerId);
+        await dbContext.SaveChangesAsync(ct);
+
+        logger.LogInformation("Access request {Id} rejected", id);
+        return Ok(new { message = "Access request rejected." });
     }
 
     [HttpGet("roles")]

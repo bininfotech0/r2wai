@@ -5,6 +5,7 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Microsoft.SemanticKernel.Plugins.Core;
 using OpenAI;
+using R2WAI.Application.Common.Exceptions;
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Collections.Concurrent;
@@ -22,6 +23,32 @@ public class SemanticKernelService : IAIService
     private readonly IServiceProvider _serviceProvider;
     private static readonly ConcurrentDictionary<string, (Kernel Kernel, DateTime CreatedAt)> _kernels = new();
     private static readonly TimeSpan KernelMaxAge = TimeSpan.FromHours(1);
+
+    // Latches "this provider doesn't support embeddings" per config, the first time it's
+    // observed, so every later call short-circuits instead of repeating the failing request.
+    // Root-caused to a specific bad response shape, not just "slow": a local Ollama model that
+    // rejects embedding requests drove the API container's memory from ~1.5GB to 6GB+ within
+    // about a minute on repeated attempts, even after bounding both the per-call network timeout
+    // and the overall operation with a hard CancellationTokenSource — the growth happens well
+    // within either bound, so timeouts alone can't prevent it. Skipping the call entirely once
+    // the provider is known to reject it avoids the code path that causes the growth, without
+    // requiring the actual leak (still undiagnosed) to be fixed first.
+    private static readonly ConcurrentDictionary<string, bool> _embeddingsKnownUnsupported = new();
+
+    // The OpenAI client SDK's default NetworkTimeout, combined with a 3-attempt retry policy,
+    // lets a single unresponsive provider turn into a multi-minute hang per call (confirmed: one
+    // chat call took ~305s before failing). A deterministic error (e.g. "this model doesn't
+    // support embeddings") will never succeed on retry either, so retrying it three times just
+    // triples the wait for no benefit. Bounding each attempt keeps worst case bounded too.
+    //
+    // Cloud providers (OpenAI, Z.ai) are fast enough that 45s is already generous. A self-hosted
+    // Ollama model doing real CPU-bound inference is a different story: a legitimate, correct
+    // chat completion here was observed taking ~82-94 seconds, well past 45s — so the first
+    // version of this fix caused real, working requests to fail with a timeout error instead of
+    // just returning slowly. Ollama gets a longer budget to reflect that its normal latency
+    // profile is fundamentally different, not because it's expected to hang.
+    private static readonly TimeSpan AiClientNetworkTimeout = TimeSpan.FromSeconds(45);
+    private static readonly TimeSpan OllamaNetworkTimeout = TimeSpan.FromSeconds(150);
 
     // Some models (notably smaller/local ones via Ollama) don't reliably emit real structured
     // tool_calls -- instead they print a function-call-shaped JSON object as plain assistant
@@ -269,6 +296,9 @@ public class SemanticKernelService : IAIService
 
     public async Task<IReadOnlyList<float>> GenerateEmbeddingAsync(string text, CancellationToken ct = default)
     {
+        if (_embeddingsKnownUnsupported.ContainsKey("default"))
+            return [];
+
         var kernel = GetOrCreateKernel();
         var embeddingGenerator = kernel.Services.GetService<IEmbeddingGenerator<string, Embedding<float>>>();
         if (embeddingGenerator is null)
@@ -277,12 +307,25 @@ public class SemanticKernelService : IAIService
             return [];
         }
 
-        var result = await embeddingGenerator.GenerateAsync([text], cancellationToken: ct);
-        return result.Count > 0 ? result[0].Vector.ToArray() : [];
+        try
+        {
+            var result = await embeddingGenerator.GenerateAsync([text], cancellationToken: ct);
+            return result.Count > 0 ? result[0].Vector.ToArray() : [];
+        }
+        catch (Exception ex) when (LatchIfProviderRejectsEmbeddings(ex))
+        {
+            return [];
+        }
     }
 
     public async Task<IReadOnlyList<IReadOnlyList<float>>> GenerateEmbeddingsAsync(IEnumerable<string> texts, CancellationToken ct = default)
     {
+        if (_embeddingsKnownUnsupported.ContainsKey("default"))
+        {
+            _logger.LogDebug("Skipping embeddings call — this provider was already observed to reject embedding requests.");
+            return [];
+        }
+
         var kernel = GetOrCreateKernel();
         var embeddingGenerator = kernel.Services.GetService<IEmbeddingGenerator<string, Embedding<float>>>();
         if (embeddingGenerator is null)
@@ -291,8 +334,44 @@ public class SemanticKernelService : IAIService
             return [];
         }
 
-        var result = await embeddingGenerator.GenerateAsync(texts, cancellationToken: ct);
-        return result.Select(e => (IReadOnlyList<float>)e.Vector.ToArray()).ToList();
+        try
+        {
+            var result = await embeddingGenerator.GenerateAsync(texts, cancellationToken: ct);
+            var vectors = result.Select(e => (IReadOnlyList<float>)e.Vector.ToArray()).ToList();
+
+            // The actual observed failure for this provider isn't a thrown exception here — it's
+            // a "successful" response whose vectors are all empty (0 dimensions), which only
+            // surfaces later as a Postgres error when something tries to insert a 0-length
+            // vector. Latch on that shape directly instead of only on exceptions, since this is
+            // the failure mode that was actually observed causing runaway resource use downstream.
+            if (vectors.Count > 0 && vectors.All(v => v.Count == 0) && _embeddingsKnownUnsupported.TryAdd("default", true))
+                _logger.LogWarning("AI provider returned only empty embedding vectors — treating as unsupported and skipping embedding calls for the rest of this process's lifetime.");
+
+            return vectors;
+        }
+        catch (Exception ex) when (LatchIfProviderRejectsEmbeddings(ex))
+        {
+            return [];
+        }
+    }
+
+    // Matches the specific "this model/server doesn't do embeddings" rejection shape (as opposed
+    // to a transient network error, which should keep being retried on future calls rather than
+    // latched off permanently). Returning false lets the exception propagate normally for
+    // anything that doesn't match, so real transient failures aren't silently swallowed.
+    private bool LatchIfProviderRejectsEmbeddings(Exception ex)
+    {
+        var message = ex.Message ?? string.Empty;
+        var isUnsupportedRejection = message.Contains("does not support embeddings", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("not supported", StringComparison.OrdinalIgnoreCase);
+
+        if (!isUnsupportedRejection)
+            return false;
+
+        if (_embeddingsKnownUnsupported.TryAdd("default", true))
+            _logger.LogWarning(ex, "AI provider rejected an embeddings request as unsupported — will skip embedding calls for the rest of this process's lifetime instead of repeating a request that can't succeed.");
+
+        return true;
     }
 
     public async Task<string> AnswerQuestionAsync(string question, string context, CancellationToken ct = default)
@@ -411,12 +490,16 @@ public class SemanticKernelService : IAIService
             if (provider == "ollama")
             {
                 var ollamaEndpoint = _configuration["AI:Ollama:Endpoint"]
-                    ?? throw new InvalidOperationException("AI:Ollama:Endpoint must be configured when using Ollama provider.");
+                    ?? throw new ConfigurationException("AI:Ollama:Endpoint must be configured when using Ollama provider.");
                 var ollamaModel = _configuration["AI:Ollama:ModelId"] ?? "qwen2.5-coder:7b";
                 var embeddingModel = _configuration["AI:Ollama:EmbeddingModel"] ?? ollamaModel;
                 var ollamaV1 = new Uri($"{ollamaEndpoint.TrimEnd('/')}/v1");
 
-                var ollamaClient = new OpenAIClient(new ApiKeyCredential("ollama"), new OpenAIClientOptions { Endpoint = ollamaV1, RetryPolicy = new ClientRetryPolicy(3) });
+                // Retries=1 (not the SDK default of several): a local Ollama model that rejects a
+                // request (e.g. "this model doesn't support embeddings") returns the same
+                // deterministic error every time, so retrying it repeatedly only multiplies
+                // latency and resource use for zero chance of success.
+                var ollamaClient = new OpenAIClient(new ApiKeyCredential("ollama"), new OpenAIClientOptions { Endpoint = ollamaV1, RetryPolicy = new ClientRetryPolicy(1), NetworkTimeout = OllamaNetworkTimeout });
                 builder.AddOpenAIChatCompletion(ollamaModel, ollamaClient);
                 builder.AddOpenAIEmbeddingGenerator(embeddingModel, ollamaClient);
 
@@ -428,11 +511,11 @@ public class SemanticKernelService : IAIService
                 // (e.g. NVIDIA NIM: https://integrate.api.nvidia.com/v1). No embedding
                 // model is configured here — these are chat/reasoning models, not embedders.
                 var zaiApiKey = _configuration["AI:ZAI:ApiKey"]
-                    ?? throw new InvalidOperationException("AI:ZAI:ApiKey must be configured when using the zai provider.");
+                    ?? throw new ConfigurationException("AI:ZAI:ApiKey must be configured when using the zai provider.");
                 var zaiEndpoint = _configuration["AI:ZAI:Endpoint"] ?? "https://integrate.api.nvidia.com/v1";
                 var zaiModel = _configuration["AI:ZAI:ModelId"] ?? "z-ai/glm-5.2";
 
-                var zaiClient = new OpenAIClient(new ApiKeyCredential(zaiApiKey), new OpenAIClientOptions { Endpoint = new Uri(zaiEndpoint), RetryPolicy = new ClientRetryPolicy(3) });
+                var zaiClient = new OpenAIClient(new ApiKeyCredential(zaiApiKey), new OpenAIClientOptions { Endpoint = new Uri(zaiEndpoint), RetryPolicy = new ClientRetryPolicy(3), NetworkTimeout = AiClientNetworkTimeout });
                 builder.AddOpenAIChatCompletion(zaiModel, zaiClient);
 
                 _logger.LogInformation("AI provider: Z.ai at {Endpoint}, model: {Model}", zaiEndpoint, zaiModel);
@@ -445,7 +528,7 @@ public class SemanticKernelService : IAIService
 
                 if (!string.IsNullOrEmpty(apiKey))
                 {
-                    var clientOptions = new OpenAIClientOptions { RetryPolicy = new ClientRetryPolicy(3) };
+                    var clientOptions = new OpenAIClientOptions { RetryPolicy = new ClientRetryPolicy(3), NetworkTimeout = AiClientNetworkTimeout };
                     if (!string.IsNullOrEmpty(endpoint))
                         clientOptions.Endpoint = new Uri(endpoint);
 

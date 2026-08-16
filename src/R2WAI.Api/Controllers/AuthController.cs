@@ -63,6 +63,8 @@ public class AuthController(
 
     public record ResetPasswordRequest(string Email, string Token, string NewPassword);
 
+    public record RequestAccessRequest(string FullName, string Email, string Organization, string Department, string? Reason);
+
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
@@ -312,6 +314,27 @@ public class AuthController(
 
         logger.LogInformation("Password reset completed for {Email}", request.Email);
         return Ok(new { message = "Password has been reset successfully." });
+    }
+
+    [HttpPost("request-access")]
+    public async Task<IActionResult> RequestAccess([FromBody] RequestAccessRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.Email)
+            || string.IsNullOrWhiteSpace(request.Organization) || string.IsNullOrWhiteSpace(request.Department))
+            return BadRequest(new { error = "Full name, email, organization, and department are required." });
+
+        if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(request.Email))
+            return BadRequest(new { error = "Please provide a valid email address." });
+
+        var accessRequest = new AccessRequest(
+            Guid.NewGuid(), request.FullName.Trim(), request.Email.Trim(),
+            request.Organization.Trim(), request.Department.Trim(), request.Reason?.Trim());
+
+        await dbContext.AccessRequests.AddAsync(accessRequest, ct);
+        await dbContext.SaveChangesAsync(ct);
+
+        logger.LogInformation("Access request submitted for {Email}", request.Email);
+        return StatusCode(201, new { message = "Your request has been submitted for review." });
     }
 
     [HttpPost("mfa/setup")]

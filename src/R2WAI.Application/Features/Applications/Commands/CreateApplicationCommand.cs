@@ -1,4 +1,5 @@
 using FluentValidation;
+using R2WAI.Application.Common.Validation;
 
 namespace R2WAI.Application.Features.Applications.Commands;
 
@@ -20,7 +21,7 @@ public class CreateApplicationCommandValidator : AbstractValidator<CreateApplica
         RuleFor(v => v.Name).NotEmpty().MaximumLength(500);
         RuleFor(v => v.Code).NotEmpty().MaximumLength(100);
         RuleFor(v => v.Description).MaximumLength(2000);
-        RuleFor(v => v.BaseUrl).MaximumLength(500);
+        RuleFor(v => v.BaseUrl).MaximumLength(500).MustBeValidHttpUrl();
     }
 }
 

@@ -17,45 +17,18 @@ public class ProcessDocumentCommandValidator : AbstractValidator<ProcessDocument
 }
 
 public class ProcessDocumentCommandHandler(
-    IRepository<Document> documentRepo,
-    IUnitOfWork unitOfWork,
-    IAIService aiService,
-    IStorageService storageService,
+    IDocumentService documentService,
     ILogger<ProcessDocumentCommandHandler> logger) : IRequestHandler<ProcessDocumentCommand, Unit>
 {
     public async Task<Unit> Handle(ProcessDocumentCommand command, CancellationToken cancellationToken)
     {
-        var document = await documentRepo.GetByIdAsync(command.DocumentId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Document), command.DocumentId);
-
-        document.UpdateStatus(DocumentStatus.Processing);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        try
-        {
-            var fileStream = await storageService.DownloadFileAsync(document.FilePath, cancellationToken);
-            using var reader = new StreamReader(fileStream);
-            var content = await reader.ReadToEndAsync(cancellationToken);
-
-            if (string.IsNullOrWhiteSpace(content))
-            {
-                content = document.Name;
-            }
-
-            var summary = await aiService.SummarizeTextAsync(content, ct: cancellationToken);
-
-            document.UpdateStatus(DocumentStatus.Ready);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-
-            logger.LogInformation("Document {DocumentId} processed successfully.", document.Id);
-            return Unit.Value;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to process document {DocumentId}", document.Id);
-            document.UpdateStatus(DocumentStatus.Failed, ex.Message);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-            throw;
-        }
+        // Delegates to IDocumentService.ProcessDocumentAsync, which chunks the document,
+        // generates embeddings, and upserts them into the KB's vector collection. A separate,
+        // incomplete inline implementation used to live here — it downloaded the file and asked
+        // the AI to summarize it, but never chunked/embedded/indexed anything, so documents came
+        // back "Ready" without ever becoming searchable via the knowledge base.
+        await documentService.ProcessDocumentAsync(command.DocumentId, cancellationToken);
+        logger.LogInformation("Document {DocumentId} processed successfully.", command.DocumentId);
+        return Unit.Value;
     }
 }

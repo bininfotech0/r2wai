@@ -59,6 +59,14 @@ public class R2WAIWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("Authentication:Jwt:SecretKey", "TestingSecretKeyForUnitTestsThatIsLongEnough!");
+        // EncryptionService requires a 32-byte key or throws from its constructor — and since
+        // AdminController takes IEncryptionService as a constructor parameter, every AdminController
+        // action fails before it even runs without this, not just the ones that actually encrypt
+        // anything. Live deployments set this via docker-compose's ENCRYPTION_KEY; the test host
+        // never did, so nothing exercising AdminController beyond a 401-unauthenticated check could
+        // have caught it. Must be a real environment variable, not just config: EncryptionService
+        // explicitly refuses a config-only key outside Development, and this host runs as "Testing".
+        Environment.SetEnvironmentVariable("ENCRYPTION_KEY", "lEq8IPYv6Hd2+m2OX+kjWGsx4NIhsX4COeYDKiR0D2M=");
 
         builder.ConfigureServices(services =>
         {

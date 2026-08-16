@@ -21,6 +21,7 @@ using R2WAI.Application;
 using R2WAI.Application.Common;
 using R2WAI.Infrastructure;
 using R2WAI.Infrastructure.Persistence;
+using R2WAI.Infrastructure.SignalR;
 using Elsa.Extensions;
 using Elsa.Mediator;
 using Elsa.Persistence.EFCore.Extensions;
@@ -96,6 +97,7 @@ if (!string.IsNullOrEmpty(elsaConnectionString) && !builder.Environment.IsEnviro
 }
 builder.Services.AddSingleton<R2WAI.Api.Hubs.IWorkflowStatusService, R2WAI.Api.Hubs.WorkflowStatusService>();
 builder.Services.AddHostedService<R2WAI.Infrastructure.Services.EscalationBackgroundService>();
+builder.Services.AddHostedService<R2WAI.Api.Services.WorkflowScheduleBackgroundService>();
 
 builder.Services.AddAuthentication(options =>
 {

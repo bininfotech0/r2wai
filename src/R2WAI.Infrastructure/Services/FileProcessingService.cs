@@ -225,13 +225,18 @@ public partial class FileProcessingService
     [GeneratedRegex(@"<a:t>([^<]+)</a:t>")]
     private static partial Regex AtTagRegex();
 
-    [GeneratedRegex(@"stream\s*\n(.*?)\nendstream", RegexOptions.Singleline)]
+    // These run against raw PDF bytes read as Latin1 text, including binary/compressed stream
+    // data that isn't real PDF text syntax. The `(?:\.[^)\\]*)*` shape is a classic catastrophic-
+    // backtracking pattern, and binary data is exactly the adversarial-looking input that
+    // triggers it — without a match timeout this can hang a request indefinitely on a real-world
+    // PDF (confirmed: 72KB file, multiple attempts, stuck in "Processing" for 8+ minutes each).
+    [GeneratedRegex(@"stream\s*\n(.*?)\nendstream", RegexOptions.Singleline, matchTimeoutMilliseconds: 5000)]
     private static partial Regex PdfStreamRegex();
 
-    [GeneratedRegex(@"\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*Tj")]
+    [GeneratedRegex(@"\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*Tj", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
     private static partial Regex PdfTextOperatorRegex();
 
-    [GeneratedRegex(@"\(([^)\\]*(?:\\.[^)\\]*)*)\)")]
+    [GeneratedRegex(@"\(([^)\\]*(?:\\.[^)\\]*)*)\)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
     private static partial Regex PdfParenTextRegex();
 
     [GeneratedRegex(@"[a-zA-Z]{2,}")]

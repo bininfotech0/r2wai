@@ -5,6 +5,8 @@ namespace R2WAI.Infrastructure.Services;
 
 public class DocumentService : IDocumentService
 {
+    private static readonly TimeSpan IndexingTimeout = TimeSpan.FromSeconds(90);
+
     private readonly ApplicationDbContext _context;
     private readonly IStorageService _storageService;
     private readonly IAIService _aiService;
@@ -87,7 +89,16 @@ public class DocumentService : IDocumentService
 
                     if (kb is not null && !string.IsNullOrEmpty(kb.VectorCollectionName))
                     {
-                        var embeddings = await _aiService.GenerateEmbeddingsAsync(chunks, ct);
+                        // Defense in depth: the AI client already has a per-attempt network
+                        // timeout, but observed behavior (memory climbing to 6GB+ within ~70s
+                        // while embedding a 3-chunk document, even with that timeout in place)
+                        // shows the whole embeddings step can still run away regardless of where
+                        // exactly the growth originates. This bounds the entire step — chunk
+                        // count doesn't matter, it always aborts by this deadline.
+                        using var indexingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        indexingCts.CancelAfter(IndexingTimeout);
+
+                        var embeddings = await _aiService.GenerateEmbeddingsAsync(chunks, indexingCts.Token);
                         var vectors = new List<(Guid Id, float[] Vector, Dictionary<string, object> Payload)>();
 
                         for (var i = 0; i < chunks.Count; i++)
@@ -110,7 +121,7 @@ public class DocumentService : IDocumentService
 
                         if (vectors.Count > 0)
                         {
-                            await _vectorStore.UpsertVectorsAsync(kb.VectorCollectionName, vectors, ct);
+                            await _vectorStore.UpsertVectorsAsync(kb.VectorCollectionName, vectors, indexingCts.Token);
                             _logger.LogInformation("Indexed {ChunkCount} chunks from document {DocumentId} into {Collection}",
                                 vectors.Count, document.Id, kb.VectorCollectionName);
                         }

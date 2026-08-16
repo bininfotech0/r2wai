@@ -92,47 +92,50 @@
     };
 
     // Kept in sync with the sidebar groups in MainLayout.razor — category names match
-    // the nav section headers (Applications/Assistants/Knowledge/Workflows/Operations/Governance/Settings) exactly.
+    // the nav section headers (Build/Test/Publish/Monitor/Manage) exactly.
     private static readonly List<CommandItem> NavigationItems = new()
     {
         new("Home", "/", Icons.Material.Outlined.SpaceDashboard, Color.Default, "Home"),
-        new("Applications", "/applications", Icons.Material.Outlined.Apps, Color.Default, "Home"),
 
-        new("Assistants", "/assistant-studio", Icons.Material.Outlined.SmartToy, Color.Primary, "Assistants"),
-        new("Conversations", "/conversations", Icons.Material.Outlined.ChatBubbleOutline, Color.Primary, "Assistants"),
-        new("Chatbots", "/chatbots", Icons.Material.Outlined.Forum, Color.Primary, "Assistants"),
-        new("Capabilities", "/assistant-studio/tools", Icons.Material.Outlined.Build, Color.Primary, "Assistants"),
-        new("Templates", "/templates", Icons.Material.Outlined.DashboardCustomize, Color.Primary, "Assistants"),
+        new("Applications", "/applications", Icons.Material.Outlined.Apps, Color.Primary, "Build"),
+        new("Assistants", "/assistant-studio", Icons.Material.Outlined.SmartToy, Color.Primary, "Build"),
+        new("Knowledge Bases", "/assistant-studio/knowledge", Icons.Material.Outlined.MenuBook, Color.Primary, "Build"),
+        new("Documents", "/documents", Icons.Material.Outlined.Description, Color.Primary, "Build"),
+        new("Tools & APIs", "/assistant-studio/tools", Icons.Material.Outlined.Build, Color.Primary, "Build"),
+        new("Templates", "/templates", Icons.Material.Outlined.DashboardCustomize, Color.Primary, "Build"),
+        new("Workflows", "/workflow-studio", Icons.Material.Outlined.AccountTree, Color.Primary, "Build"),
+        new("Inbox", "/inbox", Icons.Material.Outlined.Inbox, Color.Primary, "Build"),
+        new("Approvals", "/workflow-studio/approvals", Icons.Material.Outlined.TaskAlt, Color.Primary, "Build"),
+        new("Schedules", "/workflow-studio/schedules", Icons.Material.Outlined.Schedule, Color.Primary, "Build"),
+        new("Integrations", "/workflow-studio/integrations", Icons.Material.Outlined.Extension, Color.Primary, "Build"),
 
-        new("Knowledge Bases", "/assistant-studio/knowledge", Icons.Material.Outlined.MenuBook, Color.Secondary, "Knowledge"),
-        new("Documents", "/documents", Icons.Material.Outlined.Description, Color.Secondary, "Knowledge"),
+        new("Playground", "/assistant-studio/playground", Icons.Material.Outlined.Chat, Color.Secondary, "Test"),
+        new("Test Cases", "/test-cases", Icons.Material.Outlined.FactCheck, Color.Secondary, "Test"),
+        new("Test History", "/test-history", Icons.Material.Outlined.History, Color.Secondary, "Test"),
 
-        new("Workflows", "/workflow-studio", Icons.Material.Outlined.AccountTree, Color.Secondary, "Workflows"),
-        new("Inbox", "/inbox", Icons.Material.Outlined.Inbox, Color.Secondary, "Workflows"),
-        new("Approvals", "/workflow-studio/approvals", Icons.Material.Outlined.TaskAlt, Color.Secondary, "Workflows"),
-        new("Schedules", "/workflow-studio/schedules", Icons.Material.Outlined.Schedule, Color.Secondary, "Workflows"),
-        new("Integrations", "/workflow-studio/integrations", Icons.Material.Outlined.Extension, Color.Secondary, "Workflows"),
+        new("Channels", "/chatbots", Icons.Material.Outlined.Forum, Color.Tertiary, "Publish"),
 
-        new("Dashboard", "/operations", Icons.Material.Outlined.Dashboard, Color.Tertiary, "Operations"),
-        new("AI Ops", "/operations/ai", Icons.Material.Outlined.Psychology, Color.Tertiary, "Operations"),
-        new("Analytics", "/operations/analytics", Icons.Material.Outlined.BarChart, Color.Tertiary, "Operations"),
-        new("Reports", "/operations/reports", Icons.Material.Outlined.Assessment, Color.Tertiary, "Operations"),
-        new("Audit Trail", "/operations/audit-logs", Icons.Material.Outlined.History, Color.Tertiary, "Operations"),
-        new("Errors", "/operations/errors", Icons.Material.Outlined.BugReport, Color.Tertiary, "Operations"),
+        new("Overview", "/operations", Icons.Material.Outlined.Dashboard, Color.Tertiary, "Monitor"),
+        new("Conversations", "/conversations", Icons.Material.Outlined.ChatBubbleOutline, Color.Tertiary, "Monitor"),
+        new("AI Ops", "/operations/ai", Icons.Material.Outlined.Psychology, Color.Tertiary, "Monitor"),
+        new("Analytics", "/operations/analytics", Icons.Material.Outlined.BarChart, Color.Tertiary, "Monitor"),
+        new("Reports", "/operations/reports", Icons.Material.Outlined.Assessment, Color.Tertiary, "Monitor"),
+        new("Audit", "/operations/audit-logs", Icons.Material.Outlined.History, Color.Tertiary, "Monitor"),
+        new("Errors", "/operations/errors", Icons.Material.Outlined.BugReport, Color.Tertiary, "Monitor"),
 
-        new("Governance Overview", "/governance", Icons.Material.Outlined.Dashboard, Color.Default, "Governance"),
-        new("Departments", "/governance/departments", Icons.Material.Outlined.AccountBalance, Color.Default, "Governance"),
-        new("AI Models", "/admin/models", Icons.Material.Outlined.ModelTraining, Color.Default, "Governance"),
-        new("Permissions", "/admin/permissions", Icons.Material.Outlined.VerifiedUser, Color.Default, "Governance"),
-        new("Security", "/admin/security", Icons.Material.Outlined.Lock, Color.Default, "Governance"),
-        new("Moderation", "/admin/content-moderation", Icons.Material.Outlined.Security, Color.Default, "Governance"),
-
-        new("Profile", "/profile", Icons.Material.Outlined.Person, Color.Default, "Settings"),
-        new("Organization", "/settings/tenant", Icons.Material.Outlined.Domain, Color.Default, "Settings"),
-        new("Users", "/admin/users", Icons.Material.Outlined.PeopleAlt, Color.Default, "Settings"),
-        new("Roles", "/admin/roles", Icons.Material.Outlined.Shield, Color.Default, "Settings"),
-        new("Webhooks", "/admin/webhooks", Icons.Material.Outlined.Webhook, Color.Default, "Settings"),
-        new("API Keys", "/admin/api-keys", Icons.Material.Outlined.Key, Color.Default, "Settings"),
+        new("Profile", "/profile", Icons.Material.Outlined.Person, Color.Default, "Manage"),
+        new("Users", "/admin/users", Icons.Material.Outlined.PeopleAlt, Color.Default, "Manage"),
+        new("Roles", "/admin/roles", Icons.Material.Outlined.Shield, Color.Default, "Manage"),
+        new("Models", "/admin/models", Icons.Material.Outlined.ModelTraining, Color.Default, "Manage"),
+        new("Security", "/admin/security", Icons.Material.Outlined.Lock, Color.Default, "Manage"),
+        new("Settings", "/settings", Icons.Material.Outlined.Settings, Color.Default, "Manage"),
+        new("Organization", "/settings/tenant", Icons.Material.Outlined.Domain, Color.Default, "Manage"),
+        new("Departments", "/governance/departments", Icons.Material.Outlined.AccountBalance, Color.Default, "Manage"),
+        new("Permissions", "/admin/permissions", Icons.Material.Outlined.VerifiedUser, Color.Default, "Manage"),
+        new("Moderation", "/admin/content-moderation", Icons.Material.Outlined.Security, Color.Default, "Manage"),
+        new("Webhooks", "/admin/webhooks", Icons.Material.Outlined.Webhook, Color.Default, "Manage"),
+        new("API Keys", "/admin/api-keys", Icons.Material.Outlined.Key, Color.Default, "Manage"),
+        new("Governance Overview", "/governance", Icons.Material.Outlined.Shield, Color.Default, "Manage"),
     };
 
     private List<CommandItem> FilteredItems

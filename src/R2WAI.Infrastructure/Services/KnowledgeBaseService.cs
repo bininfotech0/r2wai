@@ -7,6 +7,11 @@ namespace R2WAI.Infrastructure.Services;
 
 public class KnowledgeBaseService : IKnowledgeBaseService
 {
+    // Same containment bound as DocumentService.ProcessDocumentAsync: the embeddings step can run
+    // away in resource use independent of chunk count (see D8), and this URL/text source path
+    // hits the identical GenerateEmbeddingsAsync call with no bound at all otherwise.
+    private static readonly TimeSpan IndexingTimeout = TimeSpan.FromSeconds(90);
+
     private readonly ApplicationDbContext _context;
     private readonly IAIService _aiService;
     private readonly IVectorStoreService _vectorStore;
@@ -118,7 +123,10 @@ public class KnowledgeBaseService : IKnowledgeBaseService
 
                 if (chunks.Count > 0)
                 {
-                    var embeddings = await _aiService.GenerateEmbeddingsAsync(chunks, ct);
+                    using var indexingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    indexingCts.CancelAfter(IndexingTimeout);
+
+                    var embeddings = await _aiService.GenerateEmbeddingsAsync(chunks, indexingCts.Token);
                     var vectors = new List<(Guid Id, float[] Vector, Dictionary<string, object> Payload)>();
 
                     for (var i = 0; i < chunks.Count; i++)
@@ -141,7 +149,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
 
                     if (vectors.Count > 0)
                     {
-                        await _vectorStore.UpsertVectorsAsync(kb.VectorCollectionName, vectors, ct);
+                        await _vectorStore.UpsertVectorsAsync(kb.VectorCollectionName, vectors, indexingCts.Token);
                         _logger.LogInformation("Indexed {ChunkCount} chunks from source {SourceId} into {Collection}",
                             vectors.Count, source.Id, kb.VectorCollectionName);
                     }

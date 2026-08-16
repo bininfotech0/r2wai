@@ -1,0 +1,88 @@
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_run is null)
+        {
+            <MudText Color="Color.Secondary">Test run not found.</MudText>
+        }
+        else
+        {
+            <div class="d-flex align-center gap-4 mb-4">
+                <span><MudText Color="Color.Success" Typo="Typo.body2">@_run.PassedCount Passed</MudText></span>
+                <span><MudText Color="Color.Error" Typo="Typo.body2">@_run.FailedCount Failed</MudText></span>
+                <span><MudText Color="Color.Warning" Typo="Typo.body2">@_run.WarningCount Warning</MudText></span>
+            </div>
+
+            @foreach (var result in _run.Results)
+            {
+                <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px;">
+                    <div class="d-flex justify-space-between align-center mb-2">
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">@result.TestCaseName</MudText>
+                        <StatusBadge Status="@result.Status" />
+                    </div>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Question</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2">@result.Question</MudText>
+
+                    @if (!string.IsNullOrWhiteSpace(result.ActualResponse))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Actual Response</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2" Style="white-space: pre-wrap;">@result.ActualResponse</MudText>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(result.ErrorMessage))
+                    {
+                        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@result.ErrorMessage</MudAlert>
+                    }
+
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@result.DurationMs ms &middot; @result.ExecutedAt.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+                </MudPaper>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Guid RunId { get; set; }
+
+    private TestRunDetail? _run;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { _run = await Http.GetFromJsonAsync<TestRunDetail>($"/api/v1/testruns/{RunId}"); }
+        catch (Exception ex) { Snackbar.Add($"Failed to load test run: {ex.Message}", Severity.Error); }
+        finally { _loading = false; }
+    }
+
+    private void Close() => MudDialog.Close();
+
+    private class TestRunDetail
+    {
+        public int PassedCount { get; set; }
+        public int FailedCount { get; set; }
+        public int WarningCount { get; set; }
+        public List<TestCaseResultItem> Results { get; set; } = new();
+    }
+
+    private class TestCaseResultItem
+    {
+        public string TestCaseName { get; set; } = string.Empty;
+        public string Question { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string? ActualResponse { get; set; }
+        public long DurationMs { get; set; }
+        public string? ErrorMessage { get; set; }
+        public DateTime ExecutedAt { get; set; }
+    }
+}
