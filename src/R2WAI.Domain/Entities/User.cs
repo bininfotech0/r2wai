@@ -7,7 +7,7 @@ public sealed class User : BaseEntity<Guid>
 {
     public Guid TenantId { get; private set; }
     public string ExternalId { get; private set; }
-    public string Email { get; private set; }
+    public string? Email { get; private set; }
     public string FirstName { get; private set; }
     public string LastName { get; private set; }
     public string? AvatarUrl { get; private set; }
@@ -16,6 +16,13 @@ public sealed class User : BaseEntity<Guid>
     public DateTime? RefreshTokenExpiresAt { get; private set; }
     public string? Status { get; private set; }
     public DateTime? LastLoginAt { get; private set; }
+
+    // Member self-service identity (Aadhaar-based signup) — see User.CreateMember. AadhaarNumberHash
+    // is a deterministic SHA-256 digest used only for uniqueness/login lookup; the plaintext number
+    // is never stored — only AadhaarNumberEncrypted (AES-GCM via IEncryptionService) is persisted.
+    public string? MobileNumber { get; private set; }
+    public string? AadhaarNumberEncrypted { get; private set; }
+    public string? AadhaarNumberHash { get; private set; }
 
     public Tenant Tenant { get; private set; } = null!;
     public ICollection<UserRole> UserRoles { get; private set; } = [];
@@ -34,6 +41,25 @@ public sealed class User : BaseEntity<Guid>
         LastName = lastName;
         AvatarUrl = avatarUrl;
         CreatedAt = DateTime.UtcNow;
+    }
+
+    public static User CreateMember(Guid id, Guid tenantId, string aadhaarNumberEncrypted,
+                                     string aadhaarNumberHash, string mobileNumber,
+                                     string firstName, string lastName, string? email = null)
+    {
+        return new User
+        {
+            Id = id,
+            TenantId = tenantId,
+            ExternalId = $"aadhaar:{aadhaarNumberHash}",
+            Email = email,
+            FirstName = firstName,
+            LastName = lastName,
+            MobileNumber = mobileNumber,
+            AadhaarNumberEncrypted = aadhaarNumberEncrypted,
+            AadhaarNumberHash = aadhaarNumberHash,
+            CreatedAt = DateTime.UtcNow,
+        };
     }
 
     public void UpdateProfile(string firstName, string lastName, string? avatarUrl)

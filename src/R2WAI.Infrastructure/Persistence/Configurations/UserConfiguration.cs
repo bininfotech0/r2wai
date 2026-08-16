@@ -17,10 +17,24 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(u => u.ExternalId).IsUnique();
 
         builder.Property(u => u.Email)
-            .IsRequired()
             .HasMaxLength(256);
 
-        builder.HasIndex(u => u.Email).IsUnique();
+        builder.HasIndex(u => u.Email)
+            .IsUnique()
+            .HasFilter("\"Email\" IS NOT NULL");
+
+        builder.Property(u => u.MobileNumber)
+            .HasMaxLength(15);
+
+        builder.Property(u => u.AadhaarNumberEncrypted)
+            .HasMaxLength(500);
+
+        builder.Property(u => u.AadhaarNumberHash)
+            .HasMaxLength(64);
+
+        builder.HasIndex(u => u.AadhaarNumberHash)
+            .IsUnique()
+            .HasFilter("\"AadhaarNumberHash\" IS NOT NULL");
 
         builder.Property(u => u.FirstName)
             .IsRequired()

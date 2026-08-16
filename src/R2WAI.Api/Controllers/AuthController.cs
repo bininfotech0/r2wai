@@ -21,6 +21,7 @@ public class AuthController(
     TotpService totpService,
     ApplicationDbContext dbContext,
     IPasswordHasher passwordHasher,
+    IMediator mediator,
     ILogger<AuthController> logger) : ControllerBase
 {
     private static readonly ConcurrentDictionary<string, LoginAttemptTracker> _loginAttempts = new();
@@ -40,7 +41,7 @@ public class AuthController(
 
     public record UserInfo(
         Guid Id,
-        string Email,
+        string? Email,
         string FirstName,
         string LastName,
         string DisplayName,
@@ -65,6 +66,8 @@ public class AuthController(
 
     public record RequestAccessRequest(string FullName, string Email, string Organization, string Department, string? Reason);
 
+    public record RegisterMemberRequest(string FullName, string AadhaarNumber, string MobileNumber, string Password, string? Email);
+
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
@@ -80,12 +83,26 @@ public class AuthController(
             return StatusCode(429, new { error = $"Account temporarily locked. Try again in {remaining} seconds.", retryAfter = remaining });
         }
 
-        var user = await dbContext.Users
+        // A 12-digit numeric input is never a valid email — treat it as an Aadhaar-based member
+        // login instead. Hashed the same deterministic way RegisterMemberCommandHandler stores it.
+        var isAadhaarLogin = System.Text.RegularExpressions.Regex.IsMatch(request.Email, @"^\d{12}$");
+
+        var usersQuery = dbContext.Users
             .IgnoreQueryFilters()
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
-            .Where(u => !u.IsDeleted)
-            .FirstOrDefaultAsync(u => u.Email == request.Email, ct);
+            .Where(u => !u.IsDeleted);
+
+        User? user;
+        if (isAadhaarLogin)
+        {
+            var aadhaarHash = Convert.ToBase64String(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(request.Email)));
+            user = await usersQuery.FirstOrDefaultAsync(u => u.AadhaarNumberHash == aadhaarHash, ct);
+        }
+        else
+        {
+            user = await usersQuery.FirstOrDefaultAsync(u => u.Email == request.Email, ct);
+        }
 
         if (user is null || string.IsNullOrEmpty(user.PasswordHash) ||
             !passwordHasher.Verify(request.Password, user.PasswordHash))
@@ -98,7 +115,7 @@ public class AuthController(
                 logger.LogWarning("Account locked after {Attempts} failed attempts: {Email}", attempts, request.Email);
             }
             logger.LogWarning("Failed login attempt for: {Email} (attempt {Attempt})", request.Email, attempts);
-            return Unauthorized(new { error = "Invalid email or password" });
+            return Unauthorized(new { error = isAadhaarLogin ? "Invalid Aadhaar number or password" : "Invalid email or password" });
         }
 
         if (user.MfaEnabled)
@@ -134,7 +151,7 @@ public class AuthController(
         };
 
         var (token, expiresAt) = await jwtService.GenerateTokenAsync(
-            user.Id, user.TenantId, user.Email, roles, nameClaims, ct);
+            user.Id, user.TenantId, user.Email ?? string.Empty, roles, nameClaims, ct);
 
         var userInfo = BuildUserInfo(user, roles);
         var response = new LoginResponse(token, refreshToken, expiresAt, userInfo);
@@ -337,6 +354,36 @@ public class AuthController(
         return StatusCode(201, new { message = "Your request has been submitted for review." });
     }
 
+    [HttpPost("register-member")]
+    public async Task<IActionResult> RegisterMember([FromBody] RegisterMemberRequest request, CancellationToken ct)
+    {
+        var member = await mediator.Send(new R2WAI.Application.Features.Auth.Commands.RegisterMemberCommand
+        {
+            FullName = request.FullName,
+            AadhaarNumber = request.AadhaarNumber,
+            MobileNumber = request.MobileNumber,
+            Password = request.Password,
+            Email = request.Email,
+        }, ct);
+
+        var refreshToken = jwtService.GenerateRefreshToken();
+        var refreshTokenHash = jwtService.HashRefreshToken(refreshToken);
+        var refreshExpiry = DateTime.UtcNow.AddDays(jwtService.GetRefreshTokenExpirationDays());
+
+        var user = await dbContext.Users.FindAsync([member.Id], ct)
+            ?? throw new InvalidOperationException("Member was created but could not be reloaded.");
+        user.SetRefreshToken(refreshTokenHash, refreshExpiry);
+        user.SetLastLogin();
+        await dbContext.SaveChangesAsync(ct);
+
+        var (token, expiresAt) = await jwtService.GenerateTokenAsync(
+            member.Id, member.TenantId, member.Email ?? string.Empty, [], null, ct);
+
+        var userInfo = BuildUserInfo(user, []);
+        logger.LogInformation("Member registered and signed in: {UserId}", member.Id);
+        return StatusCode(201, new LoginResponse(token, refreshToken, expiresAt, userInfo));
+    }
+
     [HttpPost("mfa/setup")]
     [Authorize]
     public async Task<IActionResult> SetupMfa(CancellationToken ct)
@@ -460,7 +507,7 @@ public class AuthController(
             userInfo = BuildUserInfo(user, roles);
 
             var (token, expiresAt) = await jwtService.GenerateTokenAsync(
-                user.Id, tenantId, user.Email, roles, null, ct);
+                user.Id, tenantId, user.Email ?? string.Empty, roles, null, ct);
 
             return Ok(new LoginResponse(token, refreshToken, expiresAt, userInfo));
         }

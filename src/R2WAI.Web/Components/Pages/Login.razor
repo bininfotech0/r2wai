@@ -44,16 +44,16 @@
                     <DataAnnotationsValidator />
 
                     <MudTextField @bind-Value="_loginModel.Email"
-                                  Label="Email address"
+                                  Label="Email or Aadhaar Number"
                                   Variant="Variant.Outlined"
-                                  InputType="InputType.Email"
+                                  InputType="InputType.Text"
                                   Adornment="Adornment.Start"
-                                  AdornmentIcon="@Icons.Material.Filled.MailOutline"
+                                  AdornmentIcon="@Icons.Material.Filled.Person"
                                   Class="mb-4"
                                   Required="true"
-                                  RequiredError="Email is required."
+                                  RequiredError="Email or Aadhaar number is required."
                                   AutoFocus="true"
-                                  aria-label="Email address" />
+                                  aria-label="Email or Aadhaar number" />
 
                     <MudTextField @bind-Value="_loginModel.Password"
                                   Label="Password"
@@ -146,8 +146,12 @@
         </MudTabs>
 
         <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-6">
-            Don't have an account?&nbsp;
+            Staff or organization?&nbsp;
             <MudLink Href="/register" Color="Color.Primary" Style="font-weight: 600;">Request access</MudLink>
+        </MudText>
+        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-2">
+            New member?&nbsp;
+            <MudLink Href="/member-join" Color="Color.Primary" Style="font-weight: 600;">Join with Aadhaar</MudLink>
         </MudText>
         </MudPaper>
 
