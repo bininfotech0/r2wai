@@ -8,5 +8,6 @@ public enum AuditAction
     Login,
     Logout,
     Export,
-    View
+    View,
+    Execute
 }

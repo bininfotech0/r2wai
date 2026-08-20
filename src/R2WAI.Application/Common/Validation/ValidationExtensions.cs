@@ -1,4 +1,5 @@
 using FluentValidation;
+using R2WAI.Domain.Enums;
 
 namespace R2WAI.Application.Common.Validation;
 
@@ -15,4 +16,17 @@ public static class ValidationExtensions
             string.IsNullOrEmpty(url) ||
             (Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)))
         .WithMessage("Must be a valid absolute http:// or https:// URL.");
+
+    /// <summary>
+    /// Only "Ollama" runs fully self-hosted; every other provider option ships prompts/documents
+    /// off-premises to a third-party API. DLP boundary: Confidential/Restricted-classified model
+    /// configs must stay on a local provider, or citizen/government data leaves the tenant.
+    /// </summary>
+    private static readonly string[] LocalOnlyProviders = ["Ollama"];
+
+    public static bool ViolatesDataClassificationBoundary(string? dataClassification, string? provider) =>
+        Enum.TryParse<DataClassification>(dataClassification, true, out var classification) &&
+        classification is DataClassification.Confidential or DataClassification.Restricted &&
+        !string.IsNullOrEmpty(provider) &&
+        !LocalOnlyProviders.Contains(provider, StringComparer.OrdinalIgnoreCase);
 }

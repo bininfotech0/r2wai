@@ -8,6 +8,7 @@ public record CreateWorkflowCommand : IRequest<WorkflowDto>
     public string? Description { get; init; }
     public string? Type { get; init; }
     public string? Steps { get; init; }
+    public string? Trigger { get; init; }
 }
 
 public class CreateWorkflowCommandValidator : AbstractValidator<CreateWorkflowCommand>
@@ -31,7 +32,7 @@ public class CreateWorkflowCommandHandler(
 
         var workflow = new Workflow(
             Guid.NewGuid(), tenantId, userId, command.Name,
-            command.Description, command.Type, command.Steps);
+            command.Description, command.Type, command.Steps, command.Trigger);
 
         await workflowRepo.AddAsync(workflow, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

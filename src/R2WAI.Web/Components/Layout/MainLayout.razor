@@ -112,40 +112,95 @@
         <MudNavMenu Class="mt-2">
             <MudNavLink Href="/" Icon="@Icons.Material.Outlined.SpaceDashboard" Match="NavLinkMatch.All">Home</MudNavLink>
 
-            <MudNavGroup Title="Build" Icon="@Icons.Material.Outlined.Construction" Expanded="_buildExpanded" ExpandedChanged="@(v => _buildExpanded = v)" HideExpandIcon="false">
-                <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">Applications</MudNavLink>
-                <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">Assistants</MudNavLink>
-                <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge Bases</MudNavLink>
-                <MudNavLink Href="/assistant-studio/tools" Icon="@Icons.Material.Outlined.Build">Tools &amp; APIs</MudNavLink>
-                <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Workflows</MudNavLink>
-            </MudNavGroup>
-
-            <MudNavGroup Title="Test" Icon="@Icons.Material.Outlined.Science" Expanded="_testExpanded" ExpandedChanged="@(v => _testExpanded = v)" HideExpandIcon="false">
-                <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.Chat">Playground</MudNavLink>
-                <MudNavLink Href="/test-cases" Icon="@Icons.Material.Outlined.FactCheck">Test Cases</MudNavLink>
-                <MudNavLink Href="/test-history" Icon="@Icons.Material.Outlined.History">Test History</MudNavLink>
-            </MudNavGroup>
-
-            <MudNavGroup Title="Publish" Icon="@Icons.Material.Outlined.RocketLaunch" Expanded="_publishExpanded" ExpandedChanged="@(v => _publishExpanded = v)" HideExpandIcon="false">
-                <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Channels</MudNavLink>
-            </MudNavGroup>
-
-            <MudNavGroup Title="Monitor" Icon="@Icons.Material.Outlined.MonitorHeart" Expanded="_monitorExpanded" ExpandedChanged="@(v => _monitorExpanded = v)" HideExpandIcon="false">
-                <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Dashboard">Overview</MudNavLink>
-                <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
-                <MudNavLink Href="/workflow-studio?tab=1" Icon="@Icons.Material.Outlined.PlaylistPlay">Runs</MudNavLink>
-                <MudNavLink Href="/operations/errors" Icon="@Icons.Material.Outlined.BugReport">Errors</MudNavLink>
-                <MudNavLink Href="/operations/audit-logs" Icon="@Icons.Material.Outlined.History">Audit</MudNavLink>
-            </MudNavGroup>
-
-            <AuthorizeView Roles="Admin,SystemAdmin">
+            @* Persona-based nav: each signed-in user sees exactly one of the four blocks below,
+               matching R2WAI.Web.Authentication.RolePersona's priority order (SuperAdmin > DepartmentAdmin
+               > Officer > Citizen). This is UI-only simplification — the API independently enforces access
+               via its own [Authorize(Roles/Policy)] attributes regardless of what nav a user sees. *@
+            <AuthorizeView Context="_navAuth">
                 <Authorized>
-                    <MudNavGroup Title="Manage" Icon="@Icons.Material.Outlined.AdminPanelSettings" Expanded="_manageExpanded" ExpandedChanged="@(v => _manageExpanded = v)" HideExpandIcon="false">
-                        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users &amp; Roles</MudNavLink>
-                        <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">Models</MudNavLink>
-                        <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
-                        <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
-                    </MudNavGroup>
+                    @{ var persona = _navAuth.User.GetPersona(); }
+
+                    @if (persona == RolePersona.SuperAdmin)
+                    {
+                        <MudNavGroup Title="Build" Icon="@Icons.Material.Outlined.Construction" Expanded="_buildExpanded" ExpandedChanged="@(v => _buildExpanded = v)" HideExpandIcon="false">
+                            <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">Applications</MudNavLink>
+                            <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">AI Assistant</MudNavLink>
+                            <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
+                            <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Build">Integrations</MudNavLink>
+                            <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Automations</MudNavLink>
+                        </MudNavGroup>
+
+                        <MudNavGroup Title="Test" Icon="@Icons.Material.Outlined.Science" Expanded="_testExpanded" ExpandedChanged="@(v => _testExpanded = v)" HideExpandIcon="false">
+                            <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.Chat">Playground</MudNavLink>
+                            <MudNavLink Href="/test-cases" Icon="@Icons.Material.Outlined.FactCheck">Test Cases</MudNavLink>
+                            <MudNavLink Href="/test-history" Icon="@Icons.Material.Outlined.History">Test History</MudNavLink>
+                        </MudNavGroup>
+
+                        <MudNavGroup Title="Publish" Icon="@Icons.Material.Outlined.RocketLaunch" Expanded="_publishExpanded" ExpandedChanged="@(v => _publishExpanded = v)" HideExpandIcon="false">
+                            <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Channels</MudNavLink>
+                        </MudNavGroup>
+
+                        <MudNavGroup Title="Monitor" Icon="@Icons.Material.Outlined.MonitorHeart" Expanded="_monitorExpanded" ExpandedChanged="@(v => _monitorExpanded = v)" HideExpandIcon="false">
+                            <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Dashboard">System Monitor</MudNavLink>
+                            <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
+                            <MudNavLink Href="/workflow-studio?tab=1" Icon="@Icons.Material.Outlined.PlaylistPlay">Runs</MudNavLink>
+                            <MudNavLink Href="/operations/errors" Icon="@Icons.Material.Outlined.BugReport">Errors</MudNavLink>
+                            <MudNavLink Href="/operations/audit-logs" Icon="@Icons.Material.Outlined.History">Audit</MudNavLink>
+                        </MudNavGroup>
+
+                        <MudNavGroup Title="Manage" Icon="@Icons.Material.Outlined.AdminPanelSettings" Expanded="_manageExpanded" ExpandedChanged="@(v => _manageExpanded = v)" HideExpandIcon="false">
+                            <MudNavLink Href="/governance/departments" Icon="@Icons.Material.Outlined.CorporateFare">Departments</MudNavLink>
+                            <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users &amp; Roles</MudNavLink>
+                            <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">Models</MudNavLink>
+                            <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
+                            <MudNavLink Href="/governance" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Policy">Global Policies</MudNavLink>
+                            <MudNavLink Href="/admin/member-events" Icon="@Icons.Material.Outlined.Event">Member Events</MudNavLink>
+                            <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
+                        </MudNavGroup>
+                    }
+                    else if (persona == RolePersona.DepartmentAdmin)
+                    {
+                        <MudNavGroup Title="Build" Icon="@Icons.Material.Outlined.Construction" Expanded="_buildExpanded" ExpandedChanged="@(v => _buildExpanded = v)" HideExpandIcon="false">
+                            <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">Applications</MudNavLink>
+                            <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">AI Assistant</MudNavLink>
+                            <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
+                            <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Build">Integrations</MudNavLink>
+                            <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Automations</MudNavLink>
+                        </MudNavGroup>
+
+                        <MudNavGroup Title="Test" Icon="@Icons.Material.Outlined.Science" Expanded="_testExpanded" ExpandedChanged="@(v => _testExpanded = v)" HideExpandIcon="false">
+                            <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.Chat">Playground</MudNavLink>
+                            <MudNavLink Href="/test-cases" Icon="@Icons.Material.Outlined.FactCheck">Test Cases</MudNavLink>
+                            <MudNavLink Href="/test-history" Icon="@Icons.Material.Outlined.History">Test History</MudNavLink>
+                        </MudNavGroup>
+
+                        <MudNavGroup Title="Publish" Icon="@Icons.Material.Outlined.RocketLaunch" Expanded="_publishExpanded" ExpandedChanged="@(v => _publishExpanded = v)" HideExpandIcon="false">
+                            <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Channels</MudNavLink>
+                        </MudNavGroup>
+
+                        <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.MonitorHeart">Monitor</MudNavLink>
+
+                        <MudNavGroup Title="Manage" Icon="@Icons.Material.Outlined.AdminPanelSettings" Expanded="_manageExpanded" ExpandedChanged="@(v => _manageExpanded = v)" HideExpandIcon="false">
+                            <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users &amp; Roles</MudNavLink>
+                            <MudNavLink Href="/admin/member-events" Icon="@Icons.Material.Outlined.Event">Member Events</MudNavLink>
+                            <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
+                        </MudNavGroup>
+                    }
+                    else if (persona == RolePersona.Officer)
+                    {
+                        <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.SmartToy">AI Assistant</MudNavLink>
+                        <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">My Applications</MudNavLink>
+                        <MudNavLink Href="/inbox" Icon="@Icons.Material.Outlined.PendingActions">Pending Work</MudNavLink>
+                        <MudNavLink Href="/operations/reports" Icon="@Icons.Material.Outlined.Assessment">Reports</MudNavLink>
+                    }
+                    else
+                    {
+                        @* Citizen persona — default for any signed-in user without an elevated role. *@
+                        <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.SmartToy">AI Assistant</MudNavLink>
+                        <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">My Applications</MudNavLink>
+                        <MudNavLink Href="/templates" Icon="@Icons.Material.Outlined.Category">Services</MudNavLink>
+                        <MudNavLink Href="/inbox" Icon="@Icons.Material.Outlined.NotificationsActive">Notifications</MudNavLink>
+                    }
                 </Authorized>
             </AuthorizeView>
         </MudNavMenu>
@@ -410,9 +465,9 @@
             ["departments"] = "Departments",
             ["new"] = "New",
             ["assistant-studio"] = "Assistants",
-            ["workflow-studio"] = "Workflows",
+            ["workflow-studio"] = "Automations",
             ["assistants"] = "Assistants",
-            ["workflows"] = "Workflows",
+            ["workflows"] = "Automations",
             ["knowledgebases"] = "Knowledge",
             ["operations"] = "Operations",
             ["settings"] = "Settings",
@@ -427,6 +482,7 @@
             ["reports"] = "Reports",
             ["schedules"] = "Schedules",
             ["designer"] = "Designer",
+            ["automations"] = "Details",
             ["runs"] = "Runs",
             ["playground"] = "Playground",
             ["tenant"] = "Tenant",

@@ -328,6 +328,38 @@ public static class ApplicationDbContextSeed
 
         context.ApprovalPolicies.Add(approvalPolicy);
 
+        // --- Built-in AI Tool Governance ---
+        // One platform-level ToolDefinition ("Capability") row per [KernelFunction] exposed by the
+        // Semantic Kernel plugins (src/R2WAI.Infrastructure/AI/Plugins/), so AiFunctionAuditFilter has
+        // something to enforce and admins can tune it via the existing Capabilities UI. ApplicationId
+        // stays null (platform-wide, not tied to one connected application). Defaults preserve today's
+        // behavior exactly — RequiredRole unset, ApprovalRequired false — so seeding this doesn't newly
+        // block anything; an admin opts into stricter enforcement per function afterward.
+        var builtInTools = new (string Id, string Name, string Description, string RiskLevel)[]
+        {
+            ("00000000-0000-0000-0000-000000000401", "start_workflow", "Start (run) a workflow by name or ID", "Medium"),
+            ("00000000-0000-0000-0000-000000000402", "submit_approval_request", "Submit a new approval request for a workflow instance", "Medium"),
+            ("00000000-0000-0000-0000-000000000403", "get_workflow_status", "Get the current status of a workflow instance", "Low"),
+            ("00000000-0000-0000-0000-000000000404", "notify_approver", "Send a notification to a workflow approver", "Medium"),
+            ("00000000-0000-0000-0000-000000000405", "list_pending_approvals", "List pending approval requests for the current user", "Low"),
+            ("00000000-0000-0000-0000-000000000406", "search_knowledge_base", "Search a knowledge base using semantic search", "Low"),
+            ("00000000-0000-0000-0000-000000000407", "retrieve_documents", "Retrieve documents from a knowledge base", "Low"),
+            ("00000000-0000-0000-0000-000000000408", "get_citations", "Get citations from search results", "Low"),
+            ("00000000-0000-0000-0000-000000000409", "summarize_document", "Summarize a document by its ID", "Low"),
+            ("00000000-0000-0000-0000-000000000410", "extract_from_document", "Extract structured data from a document using a schema", "Low"),
+            ("00000000-0000-0000-0000-000000000411", "compare_documents", "Compare two documents and return the comparison result", "Low"),
+            ("00000000-0000-0000-0000-000000000412", "ask_document", "Ask a question about a document", "Low"),
+            ("00000000-0000-0000-0000-000000000413", "get_assistant_context", "Get the context and configuration for an assistant", "Low"),
+            ("00000000-0000-0000-0000-000000000414", "get_knowledge_base_context", "Get context from a knowledge base for answering questions", "Low"),
+        };
+
+        foreach (var (id, name, description, riskLevel) in builtInTools)
+        {
+            var tool = new ToolDefinition(Guid.Parse(id), DefaultTenantId, name, ToolType.SemanticKernelFunction, description);
+            tool.ConfigureGovernance(riskLevel, requiredRole: null, confirmationRequired: false, approvalRequired: false, auditRequired: true);
+            context.ToolDefinitions.Add(tool);
+        }
+
         await context.SaveChangesAsync(cancellationToken);
     }
 }

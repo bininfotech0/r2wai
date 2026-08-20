@@ -39,6 +39,7 @@ builder.Host.UseDefaultServiceProvider(options =>
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
+    .Destructure.With<R2WAI.Api.Logging.SensitiveDataDestructuringPolicy>()
     .Enrich.FromLogContext()
     .Enrich.With<R2WAI.Api.Logging.SensitiveDataEnricher>()
     .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{CorrelationId}] {Message:lj}{NewLine}{Exception}")

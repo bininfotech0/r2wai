@@ -50,12 +50,12 @@
     <MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
                   @onclick="@(() => Navigation.NavigateTo("/assistant-studio"))" @onkeydown="@(e => NavigateOnEnter(e, "/assistant-studio"))"
-                  tabindex="0" role="button" aria-label="@($"Assistants: {_totalAssistants}. View all assistants.")">
+                  tabindex="0" role="button" aria-label="@($"AI Assistants: {_totalAssistants}. View all assistants.")">
             <div class="d-flex align-center gap-2 mb-2">
                 <div class="icon-container icon-container--primary" style="width: 32px; height: 32px;">
                     <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Color="Color.Primary" Size="Size.Small" />
                 </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Assistants</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">AI Assistants</MudText>
             </div>
             <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalAssistants</MudText>
             @RenderTrend(_assistantsTrendPercent)
@@ -63,25 +63,38 @@
     </MudItem>
     <MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
-                  @onclick="@(() => Navigation.NavigateTo("/conversations"))" @onkeydown="@(e => NavigateOnEnter(e, "/conversations"))"
-                  tabindex="0" role="button" aria-label="@($"Conversations: {_totalConversations}. View all conversations.")">
+                  @onclick="@(() => Navigation.NavigateTo("/workflow-studio"))" @onkeydown="@(e => NavigateOnEnter(e, "/workflow-studio"))"
+                  tabindex="0" role="button" aria-label="@($"Automations: {_totalWorkflows}. View all automations.")">
             <div class="d-flex align-center gap-2 mb-2">
-                <div class="icon-container icon-container--success" style="width: 32px; height: 32px;">
-                    <MudIcon Icon="@Icons.Material.Outlined.ChatBubbleOutline" Color="Color.Success" Size="Size.Small" />
+                <div class="icon-container icon-container--secondary" style="width: 32px; height: 32px;">
+                    <MudIcon Icon="@Icons.Material.Outlined.AccountTree" Color="Color.Secondary" Size="Size.Small" />
                 </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Conversations</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Automations</MudText>
             </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalConversations</MudText>
-            @RenderTrend(_conversationsTrendPercent)
+            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalWorkflows</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@_activeWorkflows active</MudText>
         </MudPaper>
     </MudItem>
-    <MudItem xs="12" sm="6" md="4" lg="3">
+    <MudItem xs="12" sm="6" md="4" lg="2">
+        <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
+                  @onclick="@(() => Navigation.NavigateTo("/workflow-studio?tab=1"))" @onkeydown="@(e => NavigateOnEnter(e, "/workflow-studio?tab=1"))"
+                  tabindex="0" role="button" aria-label="@($"Executions: {_totalExecutions}. View all runs.")">
+            <div class="d-flex align-center gap-2 mb-2">
+                <div class="icon-container icon-container--primary" style="width: 32px; height: 32px;">
+                    <MudIcon Icon="@Icons.Material.Outlined.PlaylistPlay" Color="Color.Primary" Size="Size.Small" />
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Executions</MudText>
+            </div>
+            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalExecutions</MudText>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4 kpi-card" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
             <div class="d-flex align-center gap-2 mb-2">
                 <div class="icon-container icon-container--warning" style="width: 32px; height: 32px;">
                     <MudIcon Icon="@Icons.Material.Outlined.TrendingUp" Color="Color.Warning" Size="Size.Small" />
                 </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Successful Runs</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Success Rate</MudText>
             </div>
             <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">
                 @(_workflowSuccessRatePercent.HasValue ? $"{_workflowSuccessRatePercent.Value:F1}%" : "—")
@@ -89,7 +102,7 @@
             <MudText Typo="Typo.caption" Color="Color.Secondary">Last 30 days</MudText>
         </MudPaper>
     </MudItem>
-    <MudItem xs="12" sm="6" md="4" lg="3">
+    <MudItem xs="12" sm="6" md="4" lg="2">
         <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
                   @onclick="@(() => Navigation.NavigateTo("/admin/users"))" @onkeydown="@(e => NavigateOnEnter(e, "/admin/users"))"
                   tabindex="0" role="button" aria-label="@($"Active Users: {_activeUsersByLogin}. View all users.")">
@@ -146,7 +159,7 @@
         </div>
         <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">What would you like to do?</MudText>
     </div>
-    <MudTextField @bind-Value="_commandInput" Placeholder="Create an HR assistant, build an approval workflow, search knowledge..."
+    <MudTextField @bind-Value="_commandInput" Placeholder="Create an HR assistant, build an approval automation, search knowledge..."
                   Variant="Variant.Outlined" Margin="Margin.Dense"
                   Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Send" AdornmentAriaLabel="Submit command"
                   AdornmentColor="Color.Primary" OnAdornmentClick="HandleCommand"
@@ -215,7 +228,7 @@
         <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Secondary"
                    StartIcon="@Icons.Material.Filled.Add" Class="quick-action-chip"
                    OnClick="@(() => Navigation.NavigateTo("/workflow-studio"))">
-            New Workflow
+            New Automation
         </MudButton>
         <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Tertiary"
                    StartIcon="@Icons.Material.Filled.CloudUpload" Class="quick-action-chip"
@@ -403,6 +416,7 @@
     private int _totalKnowledgeBases;
     private int _totalApplications;
     private int _totalConversations;
+    private int _totalExecutions;
     private int _activeUsersByLogin;
     private double? _workflowSuccessRatePercent;
     private double? _applicationsTrendPercent;
@@ -430,7 +444,7 @@
         new("Create Assistant", Icons.Material.Filled.SmartToy, "/assistant-studio"),
         new("Add Knowledge", Icons.Material.Filled.MenuBook, "/assistant-studio/knowledge"),
         new("Add Tool / API", Icons.Material.Filled.Build, "/assistant-studio/tools"),
-        new("Create Workflow", Icons.Material.Filled.AccountTree, "/workflow-studio"),
+        new("Create Automation", Icons.Material.Filled.AccountTree, "/workflow-studio"),
         new("Test Assistant", Icons.Material.Filled.PlayArrow, "/assistant-studio/playground"),
     };
 
@@ -464,8 +478,9 @@
             var kbTask = Http.GetFromJsonAsync<KbListResult>("/api/v1/knowledgebases");
             var appsTask = Http.GetFromJsonAsync<AppsResult>("/api/v1/applications?page=1&pageSize=200");
             var assistantsTask = Http.GetFromJsonAsync<AssistantsResult>("/api/v1/assistants?page=1&pageSize=200");
+            var executionsTask = Http.GetFromJsonAsync<InstancesCountResult>("/api/v1/operations/workflow-instances?pageSize=1");
 
-            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, approvalsTask, kbTask, appsTask, assistantsTask);
+            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, approvalsTask, kbTask, appsTask, assistantsTask, executionsTask);
             var completed = await Task.WhenAny(allTasks, Task.Delay(Timeout.Infinite, cts.Token));
             if (completed != allTasks)
             {
@@ -491,6 +506,8 @@
                 _activeUsersTrendPercent = metrics.ActiveUsersTrendPercent;
                 if (metrics.PendingApprovals > 0) _pendingApprovals = metrics.PendingApprovals;
             }
+
+            _totalExecutions = executionsTask.Result?.TotalCount ?? 0;
 
             _knowledgeBases = kbTask.Result?.Items ?? new();
 
@@ -633,7 +650,7 @@
             _insights.Add(new InsightItem
             {
                 Title = $"{_pendingApprovals} approvals waiting",
-                Description = "You have pending approvals that may be blocking workflows. Review them now to keep things moving.",
+                Description = "You have pending approvals that may be blocking automations. Review them now to keep things moving.",
                 ActionText = "Review Now",
                 ActionUrl = "/inbox"
             });
@@ -643,9 +660,9 @@
         {
             _insights.Add(new InsightItem
             {
-                Title = "No active workflows",
-                Description = "You have assistants configured but no workflows running. Consider creating a workflow to automate processes.",
-                ActionText = "Create Workflow",
+                Title = "No active automations",
+                Description = "You have assistants configured but no automations running. Consider creating one to automate processes.",
+                ActionText = "Create Automation",
                 ActionUrl = "/workflow-studio"
             });
         }
@@ -884,6 +901,7 @@
         public string? ActionUrl { get; set; }
     }
     private class AppsResult { public List<ApplicationSummary> Items { get; set; } = new(); public int TotalCount { get; set; } }
+    private class InstancesCountResult { public int TotalCount { get; set; } }
     private class ApplicationSummary
     {
         public Guid Id { get; set; }

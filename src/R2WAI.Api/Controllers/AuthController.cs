@@ -68,7 +68,7 @@ public class AuthController(
 
     public record RequestAccessRequest(string FullName, string Email, string Organization, string Department, string? Reason);
 
-    public record RegisterMemberRequest(string FullName, string AadhaarNumber, string MobileNumber, string Password, string? Email);
+    public record RegisterMemberRequest(string FullName, string AadhaarNumber, string MobileNumber, string Password, string? Email, string? ReferralCode = null);
 
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
@@ -394,6 +394,7 @@ public class AuthController(
             MobileNumber = request.MobileNumber,
             Password = request.Password,
             Email = request.Email,
+            ReferralCode = request.ReferralCode,
         }, ct);
 
         var refreshToken = jwtService.GenerateRefreshToken();

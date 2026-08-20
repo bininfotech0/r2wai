@@ -24,6 +24,7 @@ public class GetUsersQueryHandler(
                   || u.Email.ToLower().Contains(searchTerm)
                   || u.FirstName.ToLower().Contains(searchTerm)
                   || u.LastName.ToLower().Contains(searchTerm)),
+            "UserRoles.Role",
             cancellationToken);
 
         var ordered = filtered.OrderByDescending(u => u.CreatedAt);
@@ -55,11 +56,9 @@ public class GetUserByIdQueryHandler(
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
 
-        var user = await userRepo.FirstOrDefaultAsync(
-            u => u.Id == query.Id && u.TenantId == tenantId && !u.IsDeleted,
-            cancellationToken);
+        var user = await userRepo.GetByIdAsync(query.Id, "UserRoles.Role", cancellationToken);
 
-        if (user is null)
+        if (user is null || user.TenantId != tenantId || user.IsDeleted)
             throw new NotFoundException(nameof(User), query.Id);
 
         return mapper.Map<UserDto>(user);

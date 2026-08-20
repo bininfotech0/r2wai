@@ -39,7 +39,7 @@
         </div>
 
         <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-4" Class="login-tabs">
-            <MudTabPanel Text="Username & Password">
+            <MudTabPanel Text="Password">
                 <EditForm Model="_loginModel" OnValidSubmit="HandleLogin">
                     <DataAnnotationsValidator />
 
@@ -116,16 +116,8 @@
                 </EditForm>
             </MudTabPanel>
 
-            <MudTabPanel Text="Single Sign-On (SSO)">
+            <MudTabPanel Text="SSO">
                 <div class="d-flex flex-column gap-3 mt-2">
-                    <MudTooltip Text="Google SSO available in enterprise plan" Placement="Placement.Top">
-                        <MudButton FullWidth="true" Variant="Variant.Outlined" Size="Size.Large"
-                                   Style="border-radius: 10px; border-width: 1.5px; height: 48px; opacity: 0.5; transition: all 0.15s ease;"
-                                   StartIcon="@Icons.Custom.Brands.Google" Disabled="true"
-                                   aria-label="Sign in with Google (enterprise)">
-                            Continue with Google
-                        </MudButton>
-                    </MudTooltip>
                     <MudButton FullWidth="true" Variant="Variant.Outlined" Size="Size.Large"
                                Style="border-radius: 10px; border-width: 1.5px; height: 48px; transition: all 0.15s ease;"
                                StartIcon="@Icons.Custom.Brands.MicrosoftAzure"
@@ -146,12 +138,7 @@
         </MudTabs>
 
         <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-6">
-            Staff or organization?&nbsp;
-            <MudLink Href="/register" Color="Color.Primary" Style="font-weight: 600;">Request access</MudLink>
-        </MudText>
-        <MudText Typo="Typo.caption" Align="Align.Center" Color="Color.Secondary" Class="mt-2">
-            New member?&nbsp;
-            <MudLink Href="/member-join" Color="Color.Primary" Style="font-weight: 600;">Join with Aadhaar</MudLink>
+            Accounts are created by an administrator.
         </MudText>
         </MudPaper>
 

@@ -86,7 +86,7 @@ public class CrossBrowserTests : IAsyncLifetime
         var title = await page.TitleAsync();
         Assert.Contains("R2WAI", title);
 
-        var emailInput = page.Locator("input[type='email']").First;
+        var emailInput = page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await emailInput.IsVisibleAsync(), "Email input should be visible in Firefox");
 
@@ -113,7 +113,7 @@ public class CrossBrowserTests : IAsyncLifetime
         });
         await page.WaitForTimeoutAsync(2000);
 
-        var emailInput = page.Locator("input[type='email']").First;
+        var emailInput = page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         await emailInput.FillAsync("test@example.com");
 
@@ -195,7 +195,7 @@ public class CrossBrowserTests : IAsyncLifetime
         var title = await page.TitleAsync();
         Assert.Contains("R2WAI", title);
 
-        var emailInput = page.Locator("input[type='email']").First;
+        var emailInput = page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await emailInput.IsVisibleAsync(), "Email input should be visible in WebKit");
 
@@ -222,7 +222,7 @@ public class CrossBrowserTests : IAsyncLifetime
         });
         await page.WaitForTimeoutAsync(2000);
 
-        var emailInput = page.Locator("input[type='email']").First;
+        var emailInput = page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         await emailInput.FillAsync("test@example.com");
 
@@ -309,7 +309,7 @@ public class CrossBrowserTests : IAsyncLifetime
             });
             await page.WaitForTimeoutAsync(2000);
 
-            var emailCount = await page.Locator("input[type='email']").CountAsync();
+            var emailCount = await page.Locator("[aria-label='Email or Aadhaar number']").CountAsync();
             Assert.True(emailCount >= 1, $"{name}: Email input should be present");
 
             var passwordCount = await page.Locator("input[type='password']").CountAsync();

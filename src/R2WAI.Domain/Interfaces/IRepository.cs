@@ -7,8 +7,12 @@ public interface IRepository<T> where T : BaseEntity<Guid>
 {
     Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<T?> GetByIdAsync(Guid id, Expression<Func<T, object>> include, CancellationToken cancellationToken = default);
+    /// <summary>Loads a nested include chain (e.g. "UserRoles.Role") that a single-property Expression can't express.</summary>
+    Task<T?> GetByIdAsync(Guid id, string includePath, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<T>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<T>> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
+    /// <summary>Loads a nested include chain (e.g. "UserRoles.Role") that a single-property Expression can't express.</summary>
+    Task<IReadOnlyList<T>> FindAsync(Expression<Func<T, bool>> predicate, string includePath, CancellationToken cancellationToken = default);
     Task<T?> FirstOrDefaultAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
     Task<T> AddAsync(T entity, CancellationToken cancellationToken = default);
     void Update(T entity);

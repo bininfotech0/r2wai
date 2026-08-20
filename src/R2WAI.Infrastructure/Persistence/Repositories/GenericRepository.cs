@@ -23,6 +23,11 @@ public class GenericRepository<T> : IRepository<T> where T : BaseEntity<Guid>
         return await _dbSet.Include(include).FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
     }
 
+    public virtual async Task<T?> GetByIdAsync(Guid id, string includePath, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet.Include(includePath).FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+    }
+
     public virtual async Task<IReadOnlyList<T>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _dbSet.ToListAsync(cancellationToken);
@@ -116,6 +121,12 @@ public class GenericRepository<T> : IRepository<T> where T : BaseEntity<Guid>
         CancellationToken cancellationToken = default)
     {
         return await _dbSet.Where(predicate).ToListAsync(cancellationToken);
+    }
+
+    public virtual async Task<IReadOnlyList<T>> FindAsync(Expression<Func<T, bool>> predicate,
+        string includePath, CancellationToken cancellationToken = default)
+    {
+        return await _dbSet.Include(includePath).Where(predicate).ToListAsync(cancellationToken);
     }
 
     public virtual async Task<T?> FirstOrDefaultAsync(Expression<Func<T, bool>> predicate,

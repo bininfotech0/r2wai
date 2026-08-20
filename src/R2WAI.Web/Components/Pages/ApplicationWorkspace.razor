@@ -82,7 +82,7 @@ else
                     <MudItem xs="6" sm="3">
                         <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
                             <MudText Typo="Typo.h5" Style="font-weight: 700;">@_workflows.Count</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Workflows</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Automations</MudText>
                         </MudPaper>
                     </MudItem>
                 </MudGrid>
@@ -164,7 +164,7 @@ else
         <MudTabPanel Text="Build">
             <div class="pt-4">
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3" Style="text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;">
-                    Assistants, Knowledge &amp; Workflows
+                    Assistants &amp; Knowledge
                 </MudText>
 
                 <LinkableSection Title="Assistants" Icon="@Icons.Material.Outlined.SmartToy"
@@ -176,11 +176,6 @@ else
                                   Linked="_knowledgeBases" AllOptions="_allKnowledgeBases"
                                   ManageUrl="/assistant-studio/knowledge" ManageLabel="Manage in Knowledge"
                                   OnLink="@(id => LinkItem("knowledgebases", id))" OnUnlink="@(id => UnlinkItem("knowledgebases", id))" />
-
-                <LinkableSection Title="Workflows" Icon="@Icons.Material.Outlined.AccountTree"
-                                  Linked="_workflows" AllOptions="_allWorkflows"
-                                  ManageUrl="/workflow-studio" ManageLabel="Manage in Workflows"
-                                  OnLink="@(id => LinkItem("workflows", id))" OnUnlink="@(id => UnlinkItem("workflows", id))" />
 
                 <MudDivider Class="my-4" />
 
@@ -393,6 +388,19 @@ else
 
                     </MudExpansionPanel>
                 </MudExpansionPanels>
+            </div>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Automations">
+            <div class="pt-4">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3" Style="text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;">
+                    Automated processes linked to this application
+                </MudText>
+
+                <LinkableSection Title="Automations" Icon="@Icons.Material.Outlined.AccountTree"
+                                  Linked="_workflows" AllOptions="_allWorkflows"
+                                  ManageUrl="/workflow-studio" ManageLabel="Manage in Automations"
+                                  OnLink="@(id => LinkItem("workflows", id))" OnUnlink="@(id => UnlinkItem("workflows", id))" />
             </div>
         </MudTabPanel>
 
@@ -657,6 +665,25 @@ else
 
         <MudTabPanel Text="Monitor">
             <div class="pt-4">
+                <div class="d-flex align-center gap-3 flex-wrap mb-3">
+                    <MudSelect T="string" @bind-Value="_monitorAction" Label="Action" Clearable="true"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 140px; max-width: 160px;">
+                        <MudSelectItem T="string" Value="@("Create")">Create</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Update")">Update</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Delete")">Delete</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Export")">Export</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("View")">View</MudSelectItem>
+                    </MudSelect>
+                    <MudDatePicker @bind-Date="_monitorFromDate" Label="From" Clearable="true"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 130px; max-width: 150px;" />
+                    <MudDatePicker @bind-Date="_monitorToDate" Label="To" Clearable="true"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 130px; max-width: 150px;" />
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Search" OnClick="LoadAuditLogs">
+                        Apply
+                    </MudButton>
+                </div>
+
                 <div class="d-flex justify-space-between align-center mb-2">
                     <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Recent Audit Activity</MudText>
                     <MudButton Variant="Variant.Text" Size="Size.Small" Href="/operations/audit-logs">View Audit Trail</MudButton>
@@ -684,30 +711,37 @@ else
                     </MudTable>
                 }
 
-                <div class="d-flex justify-space-between align-center mb-2">
-                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Recent Workflow Runs</MudText>
+                <div class="d-flex justify-space-between align-center mb-2 flex-wrap gap-2">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Recent Automation Runs</MudText>
+                    <MudSelect T="string" @bind-Value="_monitorRunStatus" Label="Status" Clearable="true"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 130px; max-width: 150px;">
+                        <MudSelectItem T="string" Value="@("Running")">Running</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Completed")">Completed</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Failed")">Failed</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Pending")">Pending</MudSelectItem>
+                    </MudSelect>
                 </div>
                 @if (_workflows.Count == 0)
                 {
-                    <EmptyState Icon="@Icons.Material.Outlined.PlaylistPlay" Title="No workflows linked"
-                                Description="Link a workflow in the Build tab to see its runs here." MinHeight="120px" />
+                    <EmptyState Icon="@Icons.Material.Outlined.PlaylistPlay" Title="No automations linked"
+                                Description="Link an automation in the Automations tab to see its runs here." MinHeight="120px" />
                 }
-                else if (_runs.Count == 0)
+                else if (FilteredRuns.Count == 0)
                 {
                     <EmptyState Icon="@Icons.Material.Outlined.PlaylistPlay" Title="No runs yet"
-                                Description="Runs will appear here once a linked workflow executes." MinHeight="120px" />
+                                Description="Runs will appear here once a linked automation executes." MinHeight="120px" />
                 }
                 else
                 {
-                    <MudTable Items="_runs" Hover="true" Elevation="0" Class="mb-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                    <MudTable Items="FilteredRuns" Hover="true" Elevation="0" Class="mb-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
                         <HeaderContent>
-                            <MudTh>Workflow</MudTh>
+                            <MudTh>Automation</MudTh>
                             <MudTh>Status</MudTh>
                             <MudTh>Started</MudTh>
                             <MudTh Style="text-align:right;">Actions</MudTh>
                         </HeaderContent>
                         <RowTemplate>
-                            <MudTd DataLabel="Workflow">@(context.WorkflowName ?? "—")</MudTd>
+                            <MudTd DataLabel="Automation">@(context.WorkflowName ?? "—")</MudTd>
                             <MudTd DataLabel="Status"><StatusBadge Status="@context.Status" /></MudTd>
                             <MudTd DataLabel="Started">@(context.StartedAt?.ToString("yyyy-MM-dd HH:mm") ?? context.CreatedAt.ToString("yyyy-MM-dd HH:mm"))</MudTd>
                             <MudTd Style="text-align:right;">
@@ -806,6 +840,15 @@ else
 
     private List<AuditLogItem> _auditLogs = new();
     private List<RunItem> _runs = new();
+    private string? _monitorAction;
+    private DateTime? _monitorFromDate;
+    private DateTime? _monitorToDate;
+    private string? _monitorRunStatus;
+
+    private List<RunItem> FilteredRuns =>
+        string.IsNullOrEmpty(_monitorRunStatus)
+            ? _runs
+            : _runs.Where(r => string.Equals(r.Status, _monitorRunStatus, StringComparison.OrdinalIgnoreCase)).ToList();
 
     private int _testCaseCount;
     private bool _runningAllTestCases;
@@ -892,8 +935,14 @@ else
         // both render the same neutral empty state below.
         try
         {
-            var result = await Http.GetFromJsonAsync<AuditLogsResult>($"/api/v1/operations/audit-logs?applicationId={Id}&pageSize=10");
+            var query = $"/api/v1/operations/audit-logs?applicationId={Id}&pageSize=10";
+            if (!string.IsNullOrEmpty(_monitorAction)) query += $"&action={Uri.EscapeDataString(_monitorAction)}";
+            if (_monitorFromDate.HasValue) query += $"&from={_monitorFromDate.Value:yyyy-MM-dd}";
+            if (_monitorToDate.HasValue) query += $"&to={_monitorToDate.Value:yyyy-MM-dd}";
+
+            var result = await Http.GetFromJsonAsync<AuditLogsResult>(query);
             _auditLogs = result?.Items ?? new();
+            StateHasChanged();
         }
         catch { /* audit is a secondary view; failures shouldn't block the workspace */ }
     }
@@ -1386,7 +1435,7 @@ else
         try
         {
             var linked = await Http.GetFromJsonAsync<WorkflowsResult>($"/api/v1/workflows?page=1&pageSize=100&applicationId={Id}");
-            _workflows = (linked?.Items ?? new()).Select(w => new LinkableSection.LinkedItem(w.Id, w.Name, w.VersionStatus)).ToList();
+            _workflows = (linked?.Items ?? new()).Select(w => new LinkableSection.LinkedItem(w.Id, w.Name, w.VersionStatus, string.IsNullOrEmpty(w.Trigger) ? null : $"Trigger: {w.Trigger}")).ToList();
             var all = await Http.GetFromJsonAsync<WorkflowsResult>("/api/v1/workflows?page=1&pageSize=200");
             _allWorkflows = (all?.Items ?? new()).Select(w => new LinkableSection.LinkedItem(w.Id, w.Name, w.VersionStatus)).ToList();
         }
@@ -1505,7 +1554,7 @@ else
     private class KbResult { public List<KbItem> Items { get; set; } = new(); }
     private class KbItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string Status { get; set; } = string.Empty; }
     private class WorkflowsResult { public List<WorkflowItem> Items { get; set; } = new(); }
-    private class WorkflowItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string VersionStatus { get; set; } = string.Empty; }
+    private class WorkflowItem { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; public string VersionStatus { get; set; } = string.Empty; public string? Trigger { get; set; } }
 
     public record TestMessage(bool IsUser, string Content);
     public record TestCitation(string SourceName, double Score);

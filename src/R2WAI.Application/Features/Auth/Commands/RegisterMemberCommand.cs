@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using FluentValidation;
+using R2WAI.Application.Features.Members;
 
 namespace R2WAI.Application.Features.Auth.Commands;
 
@@ -11,6 +12,7 @@ public record RegisterMemberCommand : IRequest<MemberDto>
     public string MobileNumber { get; init; } = string.Empty;
     public string Password { get; init; } = string.Empty;
     public string? Email { get; init; }
+    public string? ReferralCode { get; init; }
 }
 
 public class RegisterMemberCommandValidator : AbstractValidator<RegisterMemberCommand>
@@ -37,16 +39,24 @@ public class RegisterMemberCommandValidator : AbstractValidator<RegisterMemberCo
             .WithMessage(_ => $"Password must be at least {Common.Security.PasswordPolicy.MinLength} characters and include upper, lower, digit, and special characters.");
 
         RuleFor(v => v.Email).EmailAddress().When(v => !string.IsNullOrWhiteSpace(v.Email));
+
+        RuleFor(v => v.ReferralCode).MaximumLength(20);
     }
 }
 
 public class RegisterMemberCommandHandler(
     IRepository<User> userRepo,
     IRepository<Tenant> tenantRepo,
+    IRepository<MemberWallet> walletRepo,
+    IRepository<PointsTransaction> transactionRepo,
     IUnitOfWork unitOfWork,
     IPasswordHasher passwordHasher,
     IEncryptionService encryptionService) : IRequestHandler<RegisterMemberCommand, MemberDto>
 {
+    // Awarded to both sides of a referral on successful signup — an internal points ledger entry
+    // only, see MemberWallet's compliance note.
+    private const int ReferralBonusPoints = 100;
+
     public async Task<MemberDto> Handle(RegisterMemberCommand command, CancellationToken cancellationToken)
     {
         var aadhaarDigits = command.AadhaarNumber.Trim();
@@ -74,6 +84,31 @@ public class RegisterMemberCommandHandler(
         member.SetPasswordHash(passwordHasher.Hash(command.Password));
 
         await userRepo.AddAsync(member, cancellationToken);
+
+        MemberWallet? referrerWallet = null;
+        if (!string.IsNullOrWhiteSpace(command.ReferralCode))
+        {
+            referrerWallet = await walletRepo.FirstOrDefaultAsync(
+                w => w.ReferralCode == command.ReferralCode.Trim().ToUpperInvariant(), cancellationToken);
+        }
+
+        var referralCode = await GenerateUniqueReferralCode(cancellationToken);
+        var wallet = new MemberWallet(Guid.NewGuid(), tenant.Id, member.Id, referralCode, referrerWallet?.UserId);
+        await walletRepo.AddAsync(wallet, cancellationToken);
+
+        if (referrerWallet is not null)
+        {
+            wallet.AddPoints(ReferralBonusPoints);
+            referrerWallet.AddPoints(ReferralBonusPoints);
+
+            await transactionRepo.AddAsync(new PointsTransaction(
+                Guid.NewGuid(), tenant.Id, member.Id, ReferralBonusPoints,
+                PointsTransactionReason.ReferralBonus, "Signed up using a referral code."), cancellationToken);
+            await transactionRepo.AddAsync(new PointsTransaction(
+                Guid.NewGuid(), tenant.Id, referrerWallet.UserId, ReferralBonusPoints,
+                PointsTransactionReason.ReferralBonus, "Referred a new member."), cancellationToken);
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new MemberDto
@@ -84,7 +119,19 @@ public class RegisterMemberCommandHandler(
             FirstName = member.FirstName,
             LastName = member.LastName,
             MobileNumber = mobile,
+            ReferralCode = referralCode,
         };
+    }
+
+    private async Task<string> GenerateUniqueReferralCode(CancellationToken cancellationToken)
+    {
+        string code;
+        do
+        {
+            code = ReferralCodeGenerator.Generate();
+        } while (await walletRepo.FirstOrDefaultAsync(w => w.ReferralCode == code, cancellationToken) is not null);
+
+        return code;
     }
 
     // Mirrors JwtService.HashRefreshToken's exact convention (plain SHA-256 -> Base64) so this

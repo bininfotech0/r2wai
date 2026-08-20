@@ -27,6 +27,7 @@ public sealed class User : BaseEntity<Guid>
     public Tenant Tenant { get; private set; } = null!;
     public ICollection<UserRole> UserRoles { get; private set; } = [];
     public ICollection<Conversation> Conversations { get; private set; } = [];
+    public MemberWallet? MemberWallet { get; private set; }
 
     private User() { }
 
@@ -142,6 +143,14 @@ public sealed class User : BaseEntity<Guid>
     {
         MfaSecret = null;
         MfaEnabled = false;
+        MarkAsModified();
+    }
+
+    public void AssignRoles(IEnumerable<Guid> roleIds)
+    {
+        UserRoles.Clear();
+        foreach (var roleId in roleIds.Distinct())
+            UserRoles.Add(new UserRole(Id, roleId));
         MarkAsModified();
     }
 

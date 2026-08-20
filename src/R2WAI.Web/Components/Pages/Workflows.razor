@@ -5,9 +5,9 @@
 @inject IDialogService Dialog
 @inject NavigationManager Navigation
 
-<PageTitle>R2WAI - Workflow Studio</PageTitle>
+<PageTitle>R2WAI - Automations</PageTitle>
 
-<PageHeader Title="Workflow Studio" Subtitle="Design, execute, and monitor business workflows" />
+<PageHeader Title="Automations" Subtitle="Design, execute, and monitor business automations" />
 
 @* ── Analytics Summary Bar ── *@
 @if (!_loadingWorkflows && _workflows.Count > 0)
@@ -21,7 +21,7 @@
                     </div>
                     <div>
                         <MudText Typo="Typo.h5" Style="font-weight: 700; line-height: 1;">@_workflows.Count</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Workflows</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Automations</MudText>
                     </div>
                 </div>
             </MudPaper>
@@ -68,7 +68,7 @@
     </MudGrid>
 }
 
-@* AI Workflow Generator *@
+@* AI Automation Generator *@
 @if (_showGenerator)
 {
     <MudPaper Elevation="0" Class="pa-4 mb-4 ai-command-bar">
@@ -77,7 +77,7 @@
                 <div class="icon-container icon-container--primary">
                     <MudIcon Icon="@Icons.Material.Outlined.AutoAwesome" Color="Color.Primary" Size="Size.Small" />
                 </div>
-                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">AI Workflow Generator</MudText>
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">AI Automation Generator</MudText>
             </div>
             <MudIconButton Icon="@Icons.Material.Outlined.Close" Size="Size.Small" OnClick="@(() => _showGenerator = false)" aria-label="Close generator" />
         </div>
@@ -85,7 +85,7 @@
         @if (!_generating)
         {
             <MudTextField @bind-Value="_generatorPrompt" Lines="3" Variant="Variant.Outlined"
-                          Placeholder="Describe your workflow... e.g. 'Create an invoice approval workflow above ₹100,000 requiring manager and finance approval'"
+                          Placeholder="Describe your automation... e.g. 'Notify the officer when an application is pending for more than 7 days'"
                           Class="mb-3" />
             <div class="d-flex justify-space-between align-center">
                 <div class="d-flex gap-2 flex-wrap">
@@ -147,12 +147,12 @@
 <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" @bind-ActivePanelIndex="_activeTab"
          Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
 
-    @* Workflows Tab *@
-    <MudTabPanel Text="Workflows" Icon="@Icons.Material.Outlined.AccountTree"
+    @* Automations Tab *@
+    <MudTabPanel Text="Automations" Icon="@Icons.Material.Outlined.AccountTree"
                  BadgeData="@(_workflows.Count > 0 ? _workflows.Count.ToString() : null)" BadgeColor="Color.Primary">
         <div class="d-flex justify-space-between align-center pa-4 animate-slide-in flex-wrap gap-2">
             <div class="d-flex align-center gap-3 flex-wrap">
-                <MudTextField T="string" Value="_workflowSearch" ValueChanged="OnWorkflowSearchChanged" Placeholder="Search workflows..." aria-label="Search workflows"
+                <MudTextField T="string" Value="_workflowSearch" ValueChanged="OnWorkflowSearchChanged" Placeholder="Search automations..." aria-label="Search automations"
                               Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                               Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 240px; max-width: 300px;"
                               Immediate="true" DebounceInterval="300" />
@@ -185,7 +185,7 @@
                 </MudButton>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
                            StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateWorkflowDialog">
-                    New Workflow
+                    New Automation
                 </MudButton>
             </div>
         </div>
@@ -205,8 +205,8 @@
             @if (_workflows.Count == 0)
             {
                 <EmptyState Icon="@Icons.Material.Outlined.AccountTree"
-                            Title="No workflows yet"
-                            Description="Create your first workflow manually or use AI to generate one."
+                            Title="No automations yet"
+                            Description="Create your first automation manually or use AI to generate one."
                             ActionText="AI Generate"
                             OnAction="@(() => _showGenerator = true)"
                             MinHeight="300px" />
@@ -214,7 +214,7 @@
             else
             {
                 <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
-                            Title="No workflows match your filters"
+                            Title="No automations match your filters"
                             Description="Try a different status or type filter."
                             ActionText="Clear filters"
                             OnAction="@(() => { _statusFilter = "All"; _typeFilter = "All"; })"
@@ -242,10 +242,10 @@
                 <MudDataGrid T="WorkflowDto" Items="FilteredWorkflows" Hover="true" Dense="true" Elevation="0"
                              MultiSelection="true" @bind-SelectedItems="_selectedWorkflows"
                              Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; overflow: hidden;"
-                             RowClick="@((DataGridRowClickEventArgs<WorkflowDto> args) => Navigation.NavigateTo($"/workflow-studio/designer/{args.Item.Id}"))">
+                             RowClick="@((DataGridRowClickEventArgs<WorkflowDto> args) => Navigation.NavigateTo($"/workflow-studio/automations/{args.Item.Id}"))">
                     <Columns>
                         <SelectColumn T="WorkflowDto" />
-                        <TemplateColumn Title="Workflow" SortBy="x => x.Name">
+                        <TemplateColumn Title="Automation" SortBy="x => x.Name">
                             <CellTemplate>
                                 <div class="d-flex align-center gap-2">
                                     <MudIcon Icon="@GetWorkflowTypeIcon(context.Item.Type)" Size="Size.Small"
@@ -261,6 +261,11 @@
                                         }
                                     </div>
                                 </div>
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <TemplateColumn Title="Trigger">
+                            <CellTemplate>
+                                <MudText Typo="Typo.body2">@(string.IsNullOrEmpty(context.Item.Trigger) ? "Manual" : context.Item.Trigger)</MudText>
                             </CellTemplate>
                         </TemplateColumn>
                         <TemplateColumn Title="Status">
@@ -481,10 +486,10 @@
                                 @* Action Bar *@
                                 <div class="d-flex gap-1 mt-3">
                                     <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                                               StartIcon="@Icons.Material.Filled.DesignServices"
-                                               OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/designer/{wf.Id}"))"
+                                               StartIcon="@Icons.Material.Filled.Visibility"
+                                               OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/automations/{wf.Id}"))"
                                                Style="flex: 1;">
-                                        Design
+                                        View
                                     </MudButton>
                                     @if (!wf.IsArchived)
                                     {
@@ -496,7 +501,7 @@
                                     }
                                     <MudTooltip Text="Edit">
                                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                                       OnClick="@(() => OpenEditWorkflowDialog(wf))" aria-label="Edit"
+                                                       OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/automations/{wf.Id}?edit=true"))" aria-label="Edit"
                                                        Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 6px;" />
                                     </MudTooltip>
                                 </div>
@@ -538,6 +543,10 @@
                         <MudSelectItem T="string" Value="@("Failed")">Failed</MudSelectItem>
                         <MudSelectItem T="string" Value="@("Pending")">Pending</MudSelectItem>
                     </MudSelect>
+                    <MudDatePicker @bind-Date="_runFromDate" Label="From" Clearable="true"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 130px; max-width: 150px;" />
+                    <MudDatePicker @bind-Date="_runToDate" Label="To" Clearable="true"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 130px; max-width: 150px;" />
                 </div>
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
                            StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadInstances">
@@ -583,7 +592,7 @@
                          Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; overflow: hidden;"
                          RowClick="@((DataGridRowClickEventArgs<WorkflowInstanceDto> args) => Navigation.NavigateTo($"/workflow-studio/runs/{args.Item.Id}"))">
                 <Columns>
-                    <TemplateColumn Title="Workflow" SortBy="x => x.WorkflowName">
+                    <TemplateColumn Title="Automation" SortBy="x => x.WorkflowName">
                         <CellTemplate>
                             <div class="d-flex align-center gap-2">
                                 <MudIcon Icon="@Icons.Material.Outlined.AccountTree" Size="Size.Small" Color="Color.Secondary" />
@@ -781,7 +790,7 @@
     <MudTabPanel Text="Schedules" Icon="@Icons.Material.Outlined.Schedule">
         <div class="pa-4 animate-slide-in">
             <div class="d-flex justify-space-between align-center mb-3">
-                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Workflow Triggers</MudText>
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Automation Triggers</MudText>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
                            StartIcon="@Icons.Material.Filled.Add" OnClick="AddSchedule">
                     New Schedule
@@ -934,6 +943,8 @@
     // Runs filters
     private string _runSearch = string.Empty;
     private string _runStatusFilter = "All";
+    private DateTime? _runFromDate;
+    private DateTime? _runToDate;
 
     // Generator
     private bool _showGenerator;
@@ -1025,6 +1036,12 @@
             if (!string.IsNullOrWhiteSpace(_runStatusFilter) && _runStatusFilter != "All")
                 result = result.Where(i => string.Equals(i.Status, _runStatusFilter, StringComparison.OrdinalIgnoreCase));
 
+            if (_runFromDate.HasValue)
+                result = result.Where(i => i.StartedAt.HasValue && i.StartedAt.Value.Date >= _runFromDate.Value.Date);
+
+            if (_runToDate.HasValue)
+                result = result.Where(i => i.StartedAt.HasValue && i.StartedAt.Value.Date <= _runToDate.Value.Date);
+
             return result.OrderByDescending(i => i.StartedAt).ToList();
         }
     }
@@ -1101,7 +1118,7 @@
         else if (prompt.Contains("employee")) type = "HR";
         else if (prompt.Contains("application") || prompt.Contains("approval")) type = "Approvals";
 
-        var name = "AI Generated Workflow";
+        var name = "AI Generated Automation";
         if (prompt.Contains("document verification")) name = "Document Verification Flow";
         else if (prompt.Contains("complaint")) name = "Citizen Complaint Flow";
         else if (prompt.Contains("payment")) name = "Payment Approval Flow";
@@ -1185,7 +1202,7 @@
                 StateHasChanged();
                 await Task.Delay(500);
 
-                Snackbar.Add($"Workflow '{name}' created! Open the designer to customize.", Severity.Success);
+                Snackbar.Add($"Automation '{name}' created! Open the designer to customize.", Severity.Success);
                 _showGenerator = false;
                 _generating = false;
                 await LoadWorkflows();
@@ -1229,8 +1246,8 @@
         catch (Exception ex)
         {
             _hasError = true;
-            _error = "Unable to load workflows. Please check your connection and try again.";
-            Snackbar.Add($"Failed to load workflows: {ex.Message}", Severity.Error);
+            _error = "Unable to load automations. Please check your connection and try again.";
+            Snackbar.Add($"Failed to load automations: {ex.Message}", Severity.Error);
         }
         finally { _loadingWorkflows = false; }
     }
@@ -1249,15 +1266,8 @@
 
     private async Task OpenCreateWorkflowDialog()
     {
-        var dialog = await Dialog.ShowAsync<CreateEditWorkflowDialog>("New Workflow");
-        var result = await dialog.Result;
-        if (result?.Canceled == false) await LoadWorkflows();
-    }
-
-    private async Task OpenEditWorkflowDialog(WorkflowDto w)
-    {
-        var parameters = new DialogParameters<CreateEditWorkflowDialog> { { x => x.EditId, w.Id.ToString() } };
-        var dialog = await Dialog.ShowAsync<CreateEditWorkflowDialog>("Edit Workflow", parameters);
+        var dialog = await Dialog.ShowAsync<NewAutomationWizardDialog>("New Automation",
+            new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true });
         var result = await dialog.Result;
         if (result?.Canceled == false) await LoadWorkflows();
     }
@@ -1269,7 +1279,7 @@
             var response = await Http.PostAsJsonAsync($"/api/v1/workflows/{workflow.Id}/execute", new { });
             if (response.IsSuccessStatusCode)
             {
-                Snackbar.Add("Workflow started", Severity.Success);
+                Snackbar.Add("Automation started", Severity.Success);
                 _activeTab = 1;
                 await LoadInstances();
                 StateHasChanged();
@@ -1293,7 +1303,7 @@
         try
         {
             await Http.DeleteAsync($"/api/v1/workflows/{workflow.Id}");
-            Snackbar.Add("Workflow deleted", Severity.Success);
+            Snackbar.Add("Automation deleted", Severity.Success);
             await LoadWorkflows();
         }
         catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
@@ -1315,7 +1325,7 @@
         try
         {
             await Http.PostAsJsonAsync("/api/v1/workflows/bulk-delete", new { Ids = ids });
-            Snackbar.Add($"{ids.Length} workflow{(ids.Length == 1 ? "" : "s")} deleted", Severity.Success);
+            Snackbar.Add($"{ids.Length} automation{(ids.Length == 1 ? "" : "s")} deleted", Severity.Success);
             _selectedWorkflows.Clear();
             await LoadWorkflows();
         }
@@ -1464,7 +1474,7 @@
         try
         {
             var sourceWf = await Http.GetFromJsonAsync<WorkflowRawDto>($"/api/v1/workflows/{workflow.Id}");
-            if (sourceWf is null) { Snackbar.Add("Failed to read workflow", Severity.Error); return; }
+            if (sourceWf is null) { Snackbar.Add("Failed to read automation", Severity.Error); return; }
 
             var response = await Http.PostAsJsonAsync("/api/v1/workflows", new
             {
@@ -1476,7 +1486,7 @@
 
             if (response.IsSuccessStatusCode)
             {
-                Snackbar.Add($"Workflow cloned as '{sourceWf.Name} (Copy)'", Severity.Success);
+                Snackbar.Add($"Automation cloned as '{sourceWf.Name} (Copy)'", Severity.Success);
                 await LoadWorkflows();
                 StateHasChanged();
             }
@@ -1498,7 +1508,7 @@
             var result = await Http.GetFromJsonAsync<ListResult<WorkflowInstanceDto>>("/api/v1/operations/workflow-instances?pageSize=100");
             _instances = result?.Items ?? new();
         }
-        catch { Snackbar.Add("Failed to load workflow runs.", Severity.Warning); }
+        catch { Snackbar.Add("Failed to load automation runs.", Severity.Warning); }
         finally { _loadingInstances = false; }
     }
 
@@ -1698,6 +1708,7 @@
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public string? Type { get; set; }
+        public string? Trigger { get; set; }
         public bool IsActive { get; set; }
         public bool IsArchived { get; set; }
         public int StepCount { get; set; }

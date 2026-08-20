@@ -278,6 +278,83 @@
                 </div>
             </MudPaper>
         }
+        else if (!_editMode)
+        {
+            @* ─── Simple Overview ─── *@
+            <MudPaper Elevation="0" Class="pa-5" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-lg);">
+                <div class="d-flex justify-space-between align-start flex-wrap gap-3 mb-4">
+                    <div class="d-flex align-center gap-3">
+                        @if (!string.IsNullOrEmpty(_selectedAssistant.AvatarUrl))
+                        {
+                            <MudAvatar Size="Size.Large" Style="border: 2px solid var(--r2-primary-light);">
+                                <MudImage Src="@_selectedAssistant.AvatarUrl" Alt="@_selectedAssistant.Name" />
+                            </MudAvatar>
+                        }
+                        else
+                        {
+                            <MudAvatar Color="@GetTypeColor(_selectedAssistant.Type)" Size="Size.Large" Style="border: 2px solid var(--r2-primary-light);">
+                                <MudIcon Icon="@GetTypeIcon(_selectedAssistant.Type)" />
+                            </MudAvatar>
+                        }
+                        <div>
+                            <div class="d-flex align-center gap-2">
+                                <MudText Typo="Typo.h6" Style="font-weight: 700;">@_selectedAssistant.Name</MudText>
+                                <StatusBadge Status="@(_selectedAssistant.PublishStatus == "Published" ? "Active" : _selectedAssistant.PublishStatus)" />
+                            </div>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">
+                                @(string.IsNullOrEmpty(_selectedAssistant.Description) ? "No description yet." : _selectedAssistant.Description)
+                            </MudText>
+                        </div>
+                    </div>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" StartIcon="@Icons.Material.Filled.Edit"
+                               OnClick="@(() => _editMode = true)">
+                        Edit Assistant
+                    </MudButton>
+                </div>
+
+                <MudGrid Class="mb-4">
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                            <div class="d-flex align-center gap-2 mb-1">
+                                <MudIcon Icon="@Icons.Material.Outlined.MenuBook" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Knowledge</MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Style="font-weight: 600;">
+                                @(_knowledgeBases.FirstOrDefault(kb => kb.Id == _editKnowledgeBaseId)?.Name ?? "Not connected")
+                            </MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                            <div class="d-flex align-center gap-2 mb-1">
+                                <MudIcon Icon="@Icons.Material.Outlined.Build" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Tools</MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@(_availableTools.Count(t => t.IsEnabled)) connected</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                            <div class="d-flex align-center gap-2 mb-1">
+                                <MudIcon Icon="@Icons.Material.Outlined.Hub" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Channels</MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@(_assistantChatbot is not null ? "Web Chat" : "None")</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                <div class="d-flex gap-2">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Chat" OnClick="OpenChat">
+                        Test Assistant
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.Science"
+                               OnClick="@(() => Navigation.NavigateTo($"/assistant-studio/playground/{_selectedAssistant!.Id}"))">
+                        Open Playground
+                    </MudButton>
+                </div>
+            </MudPaper>
+        }
         else
         {
             @* ─── Status Banner ─── *@
@@ -316,6 +393,11 @@
                     </div>
                 </MudAlert>
             }
+
+            <MudButton Variant="Variant.Text" Color="Color.Default" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2"
+                       OnClick="@(() => _editMode = false)">
+                Back to overview
+            </MudButton>
 
             <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-lg); overflow: hidden;">
                 @* ─── Editor Header ─── *@
@@ -908,6 +990,7 @@
     private bool _gridView;
     private int _activeTab;
     private bool _hasUnsavedChanges;
+    private bool _editMode;
 
     // Creator
     private bool _showCreator;
@@ -1256,6 +1339,7 @@
     {
         _selectedAssistant = assistant;
         _hasUnsavedChanges = false;
+        _editMode = false;
         _testMessages.Clear();
         _activeTab = 0;
         try

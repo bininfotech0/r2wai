@@ -16,9 +16,15 @@ else
         @foreach (var item in Linked)
         {
             <div class="d-flex justify-space-between align-center py-2 px-2">
-                <div class="d-flex align-center gap-2">
-                    <MudText Typo="Typo.body2" Style="font-weight: 600;">@item.Name</MudText>
-                    <StatusBadge Status="@item.Status" />
+                <div>
+                    <div class="d-flex align-center gap-2">
+                        <MudText Typo="Typo.body2" Style="font-weight: 600;">@item.Name</MudText>
+                        <StatusBadge Status="@item.Status" />
+                    </div>
+                    @if (!string.IsNullOrEmpty(item.Subtitle))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@item.Subtitle</MudText>
+                    }
                 </div>
                 <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Error" OnClick="@(() => OnUnlink.InvokeAsync(item.Id))">
                     Unlink
@@ -53,5 +59,5 @@ else
 
     private Guid? _selected;
 
-    public record LinkedItem(Guid Id, string Name, string Status);
+    public record LinkedItem(Guid Id, string Name, string Status, string? Subtitle = null);
 }

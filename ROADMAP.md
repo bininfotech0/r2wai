@@ -89,7 +89,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full target architecture and comp
 
 ## Current State Snapshot
 
-> Verified against the codebase 2026-06-23; security hardening pass completed 2026-07-14 (see [ENTERPRISE_AUDIT_REPORT.md](ENTERPRISE_AUDIT_REPORT.md)).
+> Verified against the codebase 2026-06-23; security hardening pass completed 2026-07-14 (see [ENTERPRISE_AUDIT_REPORT.md](ENTERPRISE_AUDIT_REPORT.md)). **This snapshot predates the Department/Application entities (added 2026-08-10) and the 2026-08-20 UI/UX redesign pass** — see [ARCHITECTURE.md](ARCHITECTURE.md#adoption-status) for current adoption status. That pass delivered role-based navigation (5 personas via `RolePersona`, UI-only — see README's [UI/UX & Role-Based Navigation](README.md#uiux--role-based-navigation) section), the Automations rename + wizard + simple detail/edit view, an Assistant Studio simple-view/edit split, an Integrations connection-test action, and closed a real gap where no role could ever be assigned to a user after creation. It does **not** touch Phases 1–2, 6 (Discovery Engine, Tool/API Gateway, AI Governance) below, which remain `[target]`.
 
 ### What exists and works
 
@@ -198,6 +198,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full target architecture and comp
 - Floating widget re-architecture: Website → R2WAI Floating Widget → Application ID → R2WAI Gateway → Application Assistant
 
 **Exit criteria:** each audience sees exactly its scope; anonymous visitors cannot reach any tool or internal knowledge.
+
+> **Partially delivered 2026-08-20** (UI navigation only — the scoped *data* access this phase also calls for, e.g. an Officer's "assigned cases" or a User's "own applications" filtered API results, is not built): `RolePersona` gives Super Admin/Department Admin/Officer/Citizen/Public each their own nav menu, and role assignment (previously impossible) now works end-to-end. What's still open: literal `Officer`/`DepartmentAdmin` role names in the DB (today it's a mapping from existing roles like `Admin`/`WorkflowManager`), the ABAC/scoped-query layer, and the floating-widget re-architecture.
 
 ---
 

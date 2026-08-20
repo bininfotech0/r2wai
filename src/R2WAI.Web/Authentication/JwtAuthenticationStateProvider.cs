@@ -170,30 +170,27 @@ public class JwtAuthenticationStateProvider(
                 }
             }
 
+            // JwtService builds the token from raw `new Claim(ClaimTypes.X, ...)` entries via
+            // JwtSecurityTokenHandler.WriteToken (no outbound short-name remapping), so every claim
+            // key in the payload is the actual .NET long-form URI (ClaimTypes.Role, ClaimTypes.Email,
+            // etc.) or a literal like "tenant_id" — never the short JWT-standard names ("role",
+            // "email"). Copying every payload entry over as-is (instead of a hardcoded short-name
+            // allowlist) means FindFirst(ClaimTypes.X)/FindAll(ClaimTypes.Role) downstream actually
+            // match, and any future claim the backend adds is picked up without another frontend fix.
             var claims = new List<Claim>();
-
-            if (keyValuePairs.TryGetValue("nameid", out var nameId))
-                claims.Add(new Claim(ClaimTypes.NameIdentifier, nameId.ToString()!));
-
-            if (keyValuePairs.TryGetValue("email", out var email))
-                claims.Add(new Claim(ClaimTypes.Email, email.ToString()!));
-
-            if (keyValuePairs.TryGetValue("tenant_id", out var tenantId))
-                claims.Add(new Claim("tenant_id", tenantId.ToString()!));
-
-            if (keyValuePairs.TryGetValue("unique_name", out var uniqueName))
-                claims.Add(new Claim(ClaimTypes.Name, uniqueName.ToString()!));
-
-            if (keyValuePairs.TryGetValue("role", out var role))
+            foreach (var (key, value) in keyValuePairs)
             {
-                if (role is JsonElement { ValueKind: JsonValueKind.Array } arr)
+                if (key is "exp" or "iat" or "nbf" or "iss" or "aud" or "jti")
+                    continue;
+
+                if (value is JsonElement { ValueKind: JsonValueKind.Array } arr)
                 {
                     foreach (var item in arr.EnumerateArray())
-                        claims.Add(new Claim(ClaimTypes.Role, item.GetString()!));
+                        claims.Add(new Claim(key, item.ToString()));
                 }
                 else
                 {
-                    claims.Add(new Claim(ClaimTypes.Role, role.ToString()!));
+                    claims.Add(new Claim(key, value?.ToString() ?? string.Empty));
                 }
             }
 

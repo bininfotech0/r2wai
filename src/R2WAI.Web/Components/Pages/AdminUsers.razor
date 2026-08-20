@@ -7,6 +7,12 @@
 <PageTitle>R2WAI - User Management</PageTitle>
 
 <PageHeader Title="User Management" Subtitle="Manage platform users and their access">
+    <MudTooltip Text="Dev-only: generates fake member accounts for load testing. Returns 404 outside Development.">
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Outlined.Groups" OnClick="SeedTestMembers" Disabled="_seeding">
+            @(_seeding ? "Seeding..." : "Seed 5000 Test Members")
+        </MudButton>
+    </MudTooltip>
     <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
                Class="btn-gradient"
                StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="OpenCreateUserDialog">
@@ -114,6 +120,7 @@
     private const int _pageSize = 20;
     private int _totalCount;
     private bool _hasMore;
+    private bool _seeding;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -211,6 +218,30 @@
             await LoadData();
         }
         catch (Exception ex) { Snackbar.Add($"Bulk delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task SeedTestMembers()
+    {
+        _seeding = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/v1/admin/dev/seed-test-members?count=5000", new { });
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Seeded 5000 test members.", Severity.Success);
+                await LoadData();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                Snackbar.Add("Test member seeding is only available in a Development environment.", Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add("Failed to seed test members.", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _seeding = false; }
     }
 
     private class UsersResult { public List<UserDto> Items { get; set; } = new(); public int TotalCount { get; set; } }

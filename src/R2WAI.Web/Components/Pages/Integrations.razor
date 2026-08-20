@@ -121,8 +121,31 @@
             </CellTemplate>
         </TemplateColumn>
         <PropertyColumn Property="x => x.CreatedAt" Title="Created" Format="yyyy-MM-dd" />
+        <TemplateColumn Title="Last Health Check">
+            <CellTemplate>
+                @if (_healthChecks.TryGetValue(context.Item.Id, out var check))
+                {
+                    <MudTooltip Text="@check.Message">
+                        <div class="d-flex align-center gap-1">
+                            <MudIcon Icon="@(check.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
+                                     Color="@(check.Success ? Color.Success : Color.Error)" Size="Size.Small" />
+                            <MudText Typo="Typo.caption">@FormatRelativeTime(check.At)</MudText>
+                        </div>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
+                }
+            </CellTemplate>
+        </TemplateColumn>
         <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
             <CellTemplate>
+                <MudTooltip Text="Test connection">
+                    <MudIconButton Icon="@Icons.Material.Filled.NetworkCheck" Size="Size.Small" Color="Color.Info"
+                                   Disabled="@(_testingId == context.Item.Id)"
+                                   OnClick="@(() => TestIntegration(context.Item))" aria-label="Test connection" />
+                </MudTooltip>
                 <MudTooltip Text="@(context.Item.IsActive ? "Deactivate" : "Activate")">
                     <MudIconButton Icon="@(context.Item.IsActive ? Icons.Material.Filled.ToggleOn : Icons.Material.Filled.ToggleOff)"
                                    Size="Size.Small"
@@ -161,6 +184,8 @@
     private List<IntegrationDto> _integrations = new();
     private string _searchTerm = string.Empty;
     private bool _loading = true;
+    private readonly Dictionary<Guid, (bool Success, string Message, DateTime At)> _healthChecks = new();
+    private Guid? _testingId;
 
     // Marketplace
     private string _categoryFilter = "All";
@@ -391,6 +416,35 @@
             await LoadIntegrations();
     }
 
+    private async Task TestIntegration(IntegrationDto integration)
+    {
+        _testingId = integration.Id;
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/integrations/{integration.Id}/test", new { });
+            var result = await response.Content.ReadFromJsonAsync<TestResultDto>();
+            var success = result?.Success ?? false;
+            var message = result?.Message ?? "No response from integration.";
+            _healthChecks[integration.Id] = (success, message, DateTime.Now);
+            Snackbar.Add(message, success ? Severity.Success : Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            _healthChecks[integration.Id] = (false, ex.Message, DateTime.Now);
+            Snackbar.Add($"Test failed: {ex.Message}", Severity.Error);
+        }
+        finally { _testingId = null; }
+    }
+
+    private static string FormatRelativeTime(DateTime timestamp)
+    {
+        var diff = DateTime.Now - timestamp;
+        if (diff.TotalMinutes < 1) return "Just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        return $"{(int)diff.TotalDays}d ago";
+    }
+
     private async Task ToggleIntegration(IntegrationDto integration)
     {
         try
@@ -432,6 +486,7 @@
     }
 
     // DTOs
+    private class TestResultDto { public bool Success { get; set; } public string? Message { get; set; } }
     private class IntegrationsResult { public List<IntegrationDto> Items { get; set; } = new(); }
     private class IntegrationDto
     {

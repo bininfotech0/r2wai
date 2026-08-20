@@ -15,6 +15,7 @@ global using R2WAI.Domain.Events;
 global using R2WAI.Application.Common.Interfaces;
 global using R2WAI.Application.Common.Models;
 global using R2WAI.Application.Common.Exceptions;
+global using R2WAI.Application.Common.Security;
 global using R2WAI.Application.Features.Chat.DTOs;
 global using R2WAI.Application.Features.Documents.DTOs;
 global using R2WAI.Application.Features.KnowledgeBases.DTOs;

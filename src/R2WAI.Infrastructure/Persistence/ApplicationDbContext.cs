@@ -45,6 +45,12 @@ public interface ITenantDbContext
     DbSet<TestRun> TestRuns { get; }
     DbSet<TestCaseResult> TestCaseResults { get; }
     DbSet<AccessRequest> AccessRequests { get; }
+    DbSet<MemberWallet> MemberWallets { get; }
+    DbSet<PointsTransaction> PointsTransactions { get; }
+    DbSet<MemberEvent> MemberEvents { get; }
+    DbSet<EventAttendance> EventAttendances { get; }
+    DbSet<WithdrawalRequest> WithdrawalRequests { get; }
+    DbSet<PlanUpgradeRequest> PlanUpgradeRequests { get; }
 }
 
 public class ApplicationDbContext : DbContext, ITenantDbContext
@@ -108,6 +114,12 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     public DbSet<TestRun> TestRuns => Set<TestRun>();
     public DbSet<TestCaseResult> TestCaseResults => Set<TestCaseResult>();
     public DbSet<AccessRequest> AccessRequests => Set<AccessRequest>();
+    public DbSet<MemberWallet> MemberWallets => Set<MemberWallet>();
+    public DbSet<PointsTransaction> PointsTransactions => Set<PointsTransaction>();
+    public DbSet<MemberEvent> MemberEvents => Set<MemberEvent>();
+    public DbSet<EventAttendance> EventAttendances => Set<EventAttendance>();
+    public DbSet<WithdrawalRequest> WithdrawalRequests => Set<WithdrawalRequest>();
+    public DbSet<PlanUpgradeRequest> PlanUpgradeRequests => Set<PlanUpgradeRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -189,6 +201,13 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
         return result;
     }
 
+    private static readonly HashSet<string> SensitiveAuditFields = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PasswordHash", "RefreshTokenHash", "PasswordResetToken", "MfaSecret",
+        "AadhaarNumberEncrypted", "AadhaarNumberHash",
+        "ApiKeyEncrypted", "SecretHash", "ClientSecret", "EncryptionKey"
+    };
+
     private List<AuditEntry> OnBeforeSaveAudit()
     {
         var entries = new List<AuditEntry>();
@@ -212,12 +231,14 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
                 OldValues = entry.State == EntityState.Modified
                     ? JsonSerializer.Serialize(entry.Properties
                         .Where(p => p.IsModified && !p.Metadata.IsKey())
-                        .ToDictionary(p => p.Metadata.Name, p => p.OriginalValue))
+                        .ToDictionary(p => p.Metadata.Name,
+                            p => SensitiveAuditFields.Contains(p.Metadata.Name) ? "***REDACTED***" : p.OriginalValue))
                     : null,
                 NewValues = entry.State != EntityState.Deleted
                     ? JsonSerializer.Serialize(entry.Properties
                         .Where(p => p.IsModified || entry.State == EntityState.Added)
-                        .ToDictionary(p => p.Metadata.Name, p => p.CurrentValue))
+                        .ToDictionary(p => p.Metadata.Name,
+                            p => SensitiveAuditFields.Contains(p.Metadata.Name) ? "***REDACTED***" : p.CurrentValue))
                     : null
             };
             entries.Add(auditEntry);

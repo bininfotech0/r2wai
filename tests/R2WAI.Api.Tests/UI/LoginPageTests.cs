@@ -21,7 +21,7 @@ public class LoginPageTests : BrowserTestBase
     {
         await NavigateAndWait("/login");
 
-        var emailInput = Page.Locator("input[type='email']").First;
+        var emailInput = Page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await emailInput.IsVisibleAsync(), "Email input should be visible");
     }
@@ -51,7 +51,7 @@ public class LoginPageTests : BrowserTestBase
     {
         await NavigateAndWait("/login");
 
-        var emailInput = Page.Locator("input[type='email']").First;
+        var emailInput = Page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         await emailInput.FillAsync("test@example.com");
 
@@ -67,7 +67,7 @@ public class LoginPageTests : BrowserTestBase
     {
         await NavigateAndWait("/login");
 
-        var emailInput = Page.Locator("input[type='email']").First;
+        var emailInput = Page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         await emailInput.FillAsync("bad@test.com");
 

@@ -50,16 +50,34 @@ Dependencies point inward (Clean Architecture): `Web → Api → Application →
 
 ## Features
 
-- **AI Assistants** — Create domain-specific assistants (HR, IT, Finance, Legal, Procurement) with configurable LLM providers, instructions, and attached knowledge bases
+- **AI Assistants** — Create domain-specific assistants (HR, IT, Finance, Legal, Procurement) with configurable LLM providers, instructions, and attached knowledge bases. The Assistant Studio defaults to a simple overview (name, status, knowledge/tools/channels summary, Test/Edit) — the full configuration editor is an explicit "Edit" action, not the default view.
 - **RAG Knowledge Bases** — Upload documents, process and embed them with pgvector, and enable semantic search with source citations
-- **Workflow Automation** — Design and execute multi-step business workflows on the Elsa engine, including approval chains, scheduling, and transform/notification steps
+- **Automations** (Workflow Automation) — Design and execute multi-step business workflows on the Elsa engine, including approval chains, scheduling, and transform/notification steps. Labeled **Automations** everywhere in the UI (the entity, routes, and API are still named `Workflow` — see [ARCHITECTURE.md](ARCHITECTURE.md#primary-ui-areas)). A 4-step wizard (Trigger → Actions → Conditions → Review) and a natural-language generator cover everyday creation; the visual Elsa-backed designer is an explicit "Advanced" option for complex cases.
 - **Approval Engine** — Policy-based multi-level approval routing with SLA tracking, escalation, and real-time notifications
 - **Enterprise Chatbots** — Build embeddable, multi-channel website chatbots backed by AI assistants and knowledge bases (anonymous visitors never get tool-calling access — see Security notes below)
-- **Integrations** — Configure external system connections (REST APIs, email) callable by AI assistants via the tool framework
+- **Integrations** — Configure external system connections (REST APIs, email) callable by AI assistants via the tool framework, with a one-click connection test and health status per integration
 - **Operations Center** — Monitor platform health, view AI usage, generate reports, and track the immutable audit trail
 - **Multi-Tenancy** — Isolated workspaces enforced via EF Core global query filters, with role-based access control
 - **Real-Time Streaming** — SSE-based chat streaming and SignalR live activity/notification feeds
 - **Voice** — Voice-enabled chat sessions for chatbots and assistants
+
+## UI/UX & Role-Based Navigation
+
+The web app follows a **Department → Application** hierarchy: a Department owns one or more `ConnectedApplication`s, and each application's workspace (`/applications/{id}`) exposes `Overview / AI Assistant / Automations / Test / Publish / Monitor / Settings` tabs — configuration for that one connected government system lives in one place instead of being scattered across separate top-level studios.
+
+Navigation is **role-based**, driven by `R2WAI.Web/Authentication/RolePersona.cs`, which maps the existing RBAC roles onto five UI personas without changing any backend authorization:
+
+| Persona | Maps from role(s) | Sees |
+|---|---|---|
+| **Super Admin** | `SystemAdmin` | Everything: Departments, Applications, Models, Security, Global Policies, System Monitor, Audit |
+| **Department Admin** | `Admin` | Applications, AI Assistant, Automations, Knowledge, Integrations, Monitor, user/role management for their scope |
+| **Officer** | `WorkflowManager`, `Editor`, `Contributor`, `UserManager` | Dashboard, AI Assistant, My Applications, Pending Work, Reports — a compact menu, no build/publish tooling |
+| **User / Citizen** | any authenticated user with no elevated role | My Applications, AI Assistant, Services, Notifications |
+| **Public** | unauthenticated | Chat/FAQ surfaces only (the embeddable chatbot widget) |
+
+This is a **UI-layer mapping only** — it changes what menu items render, not what the API allows. Every route stays protected by its own `[Authorize(Roles=...)]`/policy attribute and the MediatR `AuthorizationBehavior`, exactly as before; a user who can't see "Models" in the nav still can't call `/api/v1/admin/models` unless their JWT actually carries the `Admin`/`SystemAdmin` role. Assigning a role to a user (previously not possible anywhere in the app — see `AssignUserRolesCommand`) is now available from **Admin → Users**.
+
+**Progressive disclosure** is the default interaction pattern across CRUD: a simple card/list view, an "Edit" action that opens a modal (simple forms) or side drawer (medium configuration), and a full-screen builder only for genuinely complex configuration (the Automations visual designer). Delete always confirms first.
 
 ## Security notes
 

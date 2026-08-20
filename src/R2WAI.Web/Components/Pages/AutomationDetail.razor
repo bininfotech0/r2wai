@@ -1,0 +1,431 @@
+@page "/workflow-studio/automations/{Id:guid}"
+@attribute [Authorize]
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IDialogService Dialog
+
+<PageTitle>R2WAI - @(_automation?.Name ?? "Automation")</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-4" />
+}
+else if (_automation is null)
+{
+    <ErrorState Title="Automation not found" Description="This automation may have been removed." />
+}
+else
+{
+    <div class="d-flex justify-space-between align-start flex-wrap gap-3 mb-2">
+        <div>
+            <div class="d-flex align-center gap-2">
+                <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;">@_automation.Name</MudText>
+                <StatusBadge Status="@GetStatusLabel()" />
+            </div>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">
+                Created @_automation.CreatedAt.ToString("MMM d, yyyy")
+                @if (_automation.ModifiedAt is not null)
+                {
+                    <span>&middot; Updated @_automation.ModifiedAt.Value.ToString("MMM d, yyyy")</span>
+                }
+            </MudText>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow"
+                       Disabled="_actionInProgress" OnClick="TestAutomation">
+                Test
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" StartIcon="@Icons.Material.Filled.Edit"
+                       OnClick="@(() => _editOpen = true)">
+                Edit
+            </MudButton>
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <MudMenuItem Icon="@Icons.Material.Outlined.AccountTree" OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/designer/{Id}"))">
+                    Advanced Builder
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Outlined.ContentCopy" OnClick="DuplicateAutomation">Duplicate</MudMenuItem>
+                @if (!_automation.IsActive)
+                {
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Publish" OnClick="PublishAutomation">Publish</MudMenuItem>
+                }
+                else
+                {
+                    <MudMenuItem Icon="@Icons.Material.Outlined.Unpublished" OnClick="UnpublishAutomation">Unpublish</MudMenuItem>
+                }
+                <MudMenuItem Icon="@Icons.Material.Outlined.Archive" OnClick="ArchiveAutomation">Archive</MudMenuItem>
+                <MudDivider />
+                <MudMenuItem Icon="@Icons.Material.Outlined.Delete" IconColor="Color.Error" OnClick="DeleteAutomation">Delete</MudMenuItem>
+            </MudMenu>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_automation.Description))
+    {
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">@_automation.Description</MudText>
+    }
+
+    <MudGrid Class="mb-4" Spacing="3">
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                <MudText Typo="Typo.body1" Style="font-weight: 700;">@(string.IsNullOrEmpty(_automation.Trigger) ? "Manual" : _automation.Trigger)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Trigger</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                <MudText Typo="Typo.h5" Style="font-weight: 700;">@_actionCount</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Actions</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                <MudText Typo="Typo.h5" Style="font-weight: 700;">@_conditionCount</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Conditions</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Class="pa-3 text-center" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+                <MudText Typo="Typo.h5" Style="font-weight: 700;">@_approvalCount</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Approvals</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Elevation="0" Class="pa-4 mb-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+        <MudGrid>
+            <MudItem xs="4" Class="text-center">
+                <MudText Typo="Typo.h6" Style="font-weight: 700;">@(_lastRun.HasValue ? FormatRelativeTime(_lastRun.Value) : "Never")</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Last Run</MudText>
+            </MudItem>
+            <MudItem xs="4" Class="text-center">
+                <MudText Typo="Typo.h6" Style="font-weight: 700;">@(_totalRuns > 0 ? $"{_successRate:F0}%" : "—")</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Success Rate</MudText>
+            </MudItem>
+            <MudItem xs="4" Class="text-center">
+                <MudText Typo="Typo.h6" Style="font-weight: 700;">@_totalRuns</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Total Executions</MudText>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlaylistPlay"
+               OnClick="@(() => Navigation.NavigateTo($"/workflow-studio?tab=1"))">
+        View all runs
+    </MudButton>
+}
+
+<MudDrawer @bind-Open="_editOpen" Anchor="Anchor.End" Elevation="2" Variant="DrawerVariant.Temporary" Width="420px">
+    @if (_automation is not null)
+    {
+        <div class="pa-4 d-flex flex-column" style="height: 100%;">
+            <div class="d-flex justify-space-between align-center mb-3">
+                <MudText Typo="Typo.h6">Edit Automation</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@(() => _editOpen = false)" aria-label="Close" />
+            </div>
+
+            <MudTabs Elevation="0" Rounded="true">
+                <MudTabPanel Text="General">
+                    <div class="pt-3">
+                        <MudTextField @bind-Value="_editName" Label="Name" Required="true" Variant="Variant.Outlined" Class="mb-3" />
+                        <MudTextField @bind-Value="_editDescription" Label="Description" Lines="3" Variant="Variant.Outlined" />
+                    </div>
+                </MudTabPanel>
+                <MudTabPanel Text="Settings">
+                    <div class="pt-3">
+                        <MudSwitch T="bool" Value="_automation.IsActive" ValueChanged="OnStatusToggled" Color="Color.Primary"
+                                   Label="@(_automation.IsActive ? "Active" : "Inactive")" />
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-3">
+                            Active automations run automatically when their trigger fires.
+                        </MudText>
+                        <MudDivider Class="my-3" />
+                        <MudLink Href="@($"/workflow-studio/designer/{Id}")" Underline="Underline.None">
+                            Advanced settings (trigger, steps, approvals) &rarr;
+                        </MudLink>
+                    </div>
+                </MudTabPanel>
+            </MudTabs>
+
+            <MudSpacer />
+            <div class="d-flex justify-end gap-2 mt-3">
+                <MudButton OnClick="@(() => _editOpen = false)">Cancel</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving" OnClick="SaveEdit">
+                    @(_saving ? "Saving..." : "Done")
+                </MudButton>
+            </div>
+        </div>
+    }
+</MudDrawer>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    [SupplyParameterFromQuery(Name = "edit")] public bool EditRequested { get; set; }
+
+    private AutomationDto? _automation;
+    private bool _loading = true;
+    private bool _actionInProgress;
+    private bool _editOpen;
+    private bool _saving;
+    private string _editName = string.Empty;
+    private string _editDescription = string.Empty;
+
+    private int _actionCount;
+    private int _conditionCount;
+    private int _approvalCount;
+
+    private int _totalRuns;
+    private double _successRate;
+    private DateTime? _lastRun;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAll();
+    }
+
+    private async Task LoadAll()
+    {
+        _loading = true;
+        try
+        {
+            await Task.WhenAll(LoadAutomation(), LoadRuns());
+            if (EditRequested && _automation is not null) _editOpen = true;
+        }
+        finally { _loading = false; }
+    }
+
+    private async Task LoadAutomation()
+    {
+        try
+        {
+            _automation = await Http.GetFromJsonAsync<AutomationDto>($"/api/v1/workflows/{Id}");
+            if (_automation is not null)
+            {
+                _editName = _automation.Name;
+                _editDescription = _automation.Description ?? string.Empty;
+                ComputeStepCounts();
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load automation: {ex.Message}", Severity.Error); }
+    }
+
+    private void ComputeStepCounts()
+    {
+        _actionCount = 0; _conditionCount = 0; _approvalCount = 0;
+        if (string.IsNullOrEmpty(_automation?.Steps)) return;
+
+        try
+        {
+            var steps = System.Text.Json.JsonSerializer.Deserialize<List<StepItem>>(_automation.Steps,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            _conditionCount = steps.Count(s => string.Equals(s.Action, "Condition", StringComparison.OrdinalIgnoreCase));
+            _approvalCount = steps.Count(s => string.Equals(s.Action, "Approval", StringComparison.OrdinalIgnoreCase));
+            _actionCount = steps.Count - _conditionCount - _approvalCount;
+        }
+        catch { }
+    }
+
+    private async Task LoadRuns()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<InstancesResult>($"/api/v1/operations/workflow-instances?workflowId={Id}&pageSize=200");
+            var items = result?.Items ?? new();
+            _totalRuns = items.Count;
+            var completed = items.Where(i => i.CompletedAt.HasValue).ToList();
+            var success = completed.Count(i => string.Equals(i.Status, "Completed", StringComparison.OrdinalIgnoreCase));
+            _successRate = completed.Count > 0 ? success * 100.0 / completed.Count : 0;
+            _lastRun = items.Where(i => i.StartedAt.HasValue).OrderByDescending(i => i.StartedAt).FirstOrDefault()?.StartedAt;
+        }
+        catch { /* runs are a secondary summary; failures shouldn't block the page */ }
+    }
+
+    private string GetStatusLabel()
+    {
+        if (_automation is null) return "Draft";
+        if (_automation.IsArchived) return "Archived";
+        return _automation.IsActive ? "Active" : "Draft";
+    }
+
+    private static string FormatRelativeTime(DateTime timestamp)
+    {
+        var diff = DateTime.Now - timestamp;
+        if (diff.TotalMinutes < 1) return "Just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        return $"{(int)diff.TotalDays}d ago";
+    }
+
+    private async Task TestAutomation()
+    {
+        _actionInProgress = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/workflows/{Id}/execute", new { });
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadFromJsonAsync<ExecuteResult>();
+                Snackbar.Add("Automation started", Severity.Success);
+                if (body?.Instance?.Id is Guid instanceId)
+                    Navigation.NavigateTo($"/workflow-studio/runs/{instanceId}");
+                else
+                    await LoadRuns();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Test failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Test failed: {ex.Message}", Severity.Error); }
+        finally { _actionInProgress = false; }
+    }
+
+    private async Task OnStatusToggled(bool active)
+    {
+        if (_automation is null) return;
+        _actionInProgress = true;
+        try
+        {
+            var endpoint = active ? "publish" : "unpublish";
+            var response = await Http.PostAsync($"/api/v1/workflows/{Id}/{endpoint}", null);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadAutomation();
+                Snackbar.Add(active ? "Automation activated" : "Automation deactivated", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to update status", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to update status: {ex.Message}", Severity.Error); }
+        finally { _actionInProgress = false; }
+    }
+
+    private async Task PublishAutomation() => await OnStatusToggled(true);
+    private async Task UnpublishAutomation() => await OnStatusToggled(false);
+
+    private async Task ArchiveAutomation()
+    {
+        try
+        {
+            var response = await Http.PostAsync($"/api/v1/workflows/{Id}/archive", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Automation archived", Severity.Success);
+                await LoadAutomation();
+            }
+            else { Snackbar.Add("Failed to archive automation", Severity.Error); }
+        }
+        catch (Exception ex) { Snackbar.Add($"Archive failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DuplicateAutomation()
+    {
+        if (_automation is null) return;
+        try
+        {
+            var payload = new
+            {
+                Name = $"{_automation.Name} (Copy)",
+                Description = _automation.Description,
+                Type = _automation.Type,
+                Trigger = _automation.Trigger,
+                Steps = _automation.Steps
+            };
+            var response = await Http.PostAsJsonAsync("/api/v1/workflows", payload);
+            if (response.IsSuccessStatusCode)
+            {
+                var created = await response.Content.ReadFromJsonAsync<AutomationDto>();
+                Snackbar.Add($"Automation cloned as '{payload.Name}'", Severity.Success);
+                if (created is not null) Navigation.NavigateTo($"/workflow-studio/automations/{created.Id}");
+            }
+            else { Snackbar.Add("Clone failed", Severity.Error); }
+        }
+        catch (Exception ex) { Snackbar.Add($"Clone failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task DeleteAutomation()
+    {
+        if (_automation is null) return;
+        var parameters = new DialogParameters<DeleteConfirmationDialog> { { x => x.ItemName, _automation.Name } };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/workflows/{Id}");
+            Snackbar.Add("Automation deleted", Severity.Success);
+            Navigation.NavigateTo("/workflow-studio");
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
+    }
+
+    private async Task SaveEdit()
+    {
+        if (_automation is null || string.IsNullOrWhiteSpace(_editName)) return;
+
+        _saving = true;
+        try
+        {
+            var payload = new
+            {
+                Name = _editName,
+                Description = (string?)(string.IsNullOrWhiteSpace(_editDescription) ? null : _editDescription),
+                Type = _automation.Type,
+                Trigger = _automation.Trigger,
+                Steps = _automation.Steps
+            };
+            var response = await Http.PutAsJsonAsync($"/api/v1/workflows/{Id}", payload);
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Automation updated", Severity.Success);
+                _editOpen = false;
+                await LoadAutomation();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                Snackbar.Add(string.IsNullOrWhiteSpace(body) ? "Failed to save automation" : body, Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }
+        finally { _saving = false; }
+    }
+
+    private class AutomationDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Type { get; set; }
+        public string? Trigger { get; set; }
+        public string? Steps { get; set; }
+        public bool IsActive { get; set; }
+        public string VersionStatus { get; set; } = "Draft";
+        public bool IsArchived => VersionStatus == "Archived";
+        public DateTime CreatedAt { get; set; }
+        public DateTime? ModifiedAt { get; set; }
+    }
+
+    private class StepItem
+    {
+        public int Order { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Action { get; set; }
+        public string? AssignedRole { get; set; }
+    }
+
+    private class InstancesResult { public List<InstanceItem> Items { get; set; } = new(); }
+    private class InstanceItem
+    {
+        public Guid Id { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime? StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+    }
+
+    private class ExecuteResult { public InstanceRef? Instance { get; set; } }
+    private class InstanceRef { public Guid Id { get; set; } }
+}

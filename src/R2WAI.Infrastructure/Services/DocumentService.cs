@@ -76,9 +76,20 @@ public class DocumentService : IDocumentService
             var text = await ExtractTextAsync(document, ct);
 
             var chunks = ChunkText(text, 1000, 200);
+            var piiTypes = PiiScanner.Scan(text);
+            if (piiTypes.Count > 0)
+            {
+                _logger.LogWarning("Document {DocumentId} contains possible PII ({PiiTypes}) — review before external sharing",
+                    document.Id, string.Join(", ", piiTypes));
+            }
 
             document.SetPageCount(chunks.Count);
-            document.SetMetadata(System.Text.Json.JsonSerializer.Serialize(new { Chunks = chunks.Count, Characters = text.Length }));
+            document.SetMetadata(System.Text.Json.JsonSerializer.Serialize(new
+            {
+                Chunks = chunks.Count,
+                Characters = text.Length,
+                PossiblePii = piiTypes
+            }));
 
             if (document.KnowledgeBaseId.HasValue && chunks.Count > 0)
             {

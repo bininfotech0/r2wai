@@ -10,6 +10,7 @@ public class ChatService : IChatService
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeService _dateTimeService;
     private readonly IStreamingNotificationService _streaming;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ChatService> _logger;
 
     public ChatService(
@@ -18,6 +19,7 @@ public class ChatService : IChatService
         ICurrentUserService currentUserService,
         IDateTimeService dateTimeService,
         IStreamingNotificationService streaming,
+        IServiceScopeFactory scopeFactory,
         ILogger<ChatService> logger)
     {
         _context = context;
@@ -25,6 +27,7 @@ public class ChatService : IChatService
         _currentUserService = currentUserService;
         _dateTimeService = dateTimeService;
         _streaming = streaming;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -102,7 +105,16 @@ public class ChatService : IChatService
             throw new NotFoundException(nameof(Conversation), conversationId);
 
         var messageId = Guid.NewGuid();
-        var message = conversation.AddMessage(messageId, null, MessageRole.User, content);
+        var piiTypes = PiiScanner.Scan(content);
+        if (piiTypes.Count > 0)
+        {
+            _logger.LogWarning("Message {MessageId} in conversation {ConversationId} contains possible PII ({PiiTypes}) — may be sent to an external AI provider",
+                messageId, conversationId, string.Join(", ", piiTypes));
+        }
+        var messageMetadata = piiTypes.Count > 0
+            ? System.Text.Json.JsonSerializer.Serialize(new { possiblePii = piiTypes })
+            : null;
+        var message = conversation.AddMessage(messageId, null, MessageRole.User, content, metadata: messageMetadata);
 
         if (attachments?.Count > 0)
         {
@@ -141,9 +153,20 @@ public class ChatService : IChatService
         }
 
         var aiResponse = responseBuffer.ToString();
-        var responseMessage = conversation.AddMessage(responseMessageId, messageId, MessageRole.Assistant, aiResponse);
 
-        await _context.SaveChangesAsync(ct);
+        // Saved via a fresh scope/DbContext rather than the ambient _context: the AI call above can run
+        // for minutes, and reusing a DbContext whose connection has sat idle that long risks a stale
+        // retry (EnableRetryOnFailure) producing a spurious DbUpdateConcurrencyException on this save.
+        Message responseMessage;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var freshContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var freshConversation = await freshContext.Conversations
+                .FirstOrDefaultAsync(c => c.Id == conversationId, ct)
+                ?? throw new NotFoundException(nameof(Conversation), conversationId);
+            responseMessage = freshConversation.AddMessage(responseMessageId, messageId, MessageRole.Assistant, aiResponse);
+            await freshContext.SaveChangesAsync(ct);
+        }
 
         await _streaming.SendStreamCompleteAsync(conversationId, ct);
 

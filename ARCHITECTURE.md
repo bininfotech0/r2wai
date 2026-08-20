@@ -122,6 +122,8 @@ Tenant
 └── AuditLog
 ```
 
+> **Status: implemented.** `Tenant → Department → ConnectedApplication` exists in the domain model (migration `20260810174027_AddDepartmentsAndApplications` and later) with full CRUD (`DepartmentsController`, `ApplicationsController`). The entity is named `ConnectedApplication`, not `Application`, to avoid colliding with the `R2WAI.Application` project namespace (see ADR-0001) — "Application" below refers to this entity. `ApplicationApi`, `ApplicationConfiguration`, `ApplicationVersion`, `NavigationDefinition`, and `GlobalPolicy` are likewise implemented. The one piece of this hierarchy still `[target]`: per-application scoping of `Integration`/`ModelConfiguration` records is partial (Integrations has no `applicationId` filter yet).
+
 ### Entity notes
 
 - **Tenant / Department / Application**: the three-level ownership hierarchy. `Application` is the central entity — it represents the external system (Property Tax, Revenue, Agriculture, HR, …) being connected.
@@ -359,6 +361,8 @@ SUPER ADMIN
 
 **Public is not a role in the same hierarchy** — it is an anonymous access context.
 
+> **Status: implemented as a UI-layer persona system, not new backend roles.** `R2WAI.Web/Authentication/RolePersona.cs` maps the *existing* seeded RBAC roles onto five navigation personas — `SystemAdmin`→**Super Admin**, `Admin`→**Department Admin**, `WorkflowManager`/`Editor`/`Contributor`/`UserManager`→**Officer**, plain authenticated `User`→**Citizen**, unauthenticated→**Public** — and `MainLayout.razor` renders a distinct nav per persona. This is deliberately additive: zero changes to `Program.cs` policies, `[Authorize(Roles=...)]` attributes, or the `AuthorizationBehavior` MediatR pipeline, so the actual authorization boundary is unchanged — only which menu items a user sees. A real "Officer"/"Department Admin"-named role and a UI to assign roles to users (previously missing entirely — see `AssignUserRolesCommand`) now exist, but the role *names* in the DB are still `Admin`/`WorkflowManager`/etc., not literally "Officer"/"Department Admin". Renaming the DB roles themselves, or building true ABAC per the target below, remains `[target]`.
+
 ### Access scopes
 
 | Context | Scope |
@@ -425,6 +429,8 @@ The many studios collapse to four primary areas plus Administration:
 Administration = platform section, not a studio.
 ```
 
+> **Status: implemented, with a UI-only rename.** Each `ConnectedApplication`'s workspace (`/applications/{id}`) now has dedicated `Overview / AI Assistant / Automations / Test / Publish / Monitor / Settings` tabs (`ApplicationWorkspace.razor`) — this is the "Application Studio" collapsed into one page per application rather than a separate top-level studio. "Workflow Studio" is labeled **Automations** everywhere a user sees it (page titles, nav, breadcrumbs); the route (`/workflow-studio`), the `Workflow` entity, and the API stay unchanged — this is a user-facing rename only, not the underlying `Workflow`→`Automation` entity rename the target model implies. Automations gained a 4-step creation wizard (Trigger → Actions → Conditions → Review) and a simple detail view + side-drawer edit, with the existing Elsa-backed visual designer demoted to an explicit "Advanced" action rather than the only way to create/edit one.
+
 ---
 
 ## Current Implementation Notes
@@ -457,14 +463,16 @@ Docker Compose is the deployment target (`docker/docker-compose.yml`: `r2wai-web
 | Knowledge / RAG (pgvector) | **Implemented, incomplete** | file-upload path works; text/URL source indexing is a known gap |
 | Workflows + Approvals (Elsa) | **Implemented, incomplete** | step chaining, visual designer, approval UI need completion |
 | Audit | **Implemented, needs expansion** | auto-populated on mutation; gateway invocations must be added |
-| Application (central entity) | **[target]** | not yet a first-class entity |
-| Department | **[target]** | currently implicit, not a domain entity |
+| Application (central entity) | **Implemented** | `ConnectedApplication`, with APIs, config, versioning |
+| Department | **Implemented** | first-class entity, `DepartmentsController` |
+| Role-based navigation (5 personas) | **Implemented, UI-only** | `RolePersona` maps existing DB roles to Public/Citizen/Officer/DepartmentAdmin/SuperAdmin nav; no new DB roles, no ABAC |
+| Role assignment (assign a role to a user) | **Implemented** | previously missing entirely — no UI or API path existed to grant a role after user creation |
 | Application Discovery Engine | **[target]** | net-new |
 | Tool/API Gateway + ABAC + Policies | **[target]** | net-new |
 | AI Governance (Model Registry) | **[target]** | net-new |
 | Assistant Channels (Chatbot merge) | **[target]** | migration of `Chatbot` into `Assistant → Channels` |
-| Adaptive wizard / default-hidden config | **[target]** | net-new UX |
-| Application Studio UI | **[target]** | net-new primary screen |
+| Adaptive wizard / default-hidden config | **Implemented for Automations** | 4-step wizard + Advanced-as-opt-in; AI Assistant/Knowledge/Integrations pages already matched this pattern before this work |
+| Application Studio UI | **Implemented as per-application workspace tabs** | `ApplicationWorkspace.razor`, not a separate top-level studio |
 
 ### P0 technical gaps to close before building new features
 

@@ -35,6 +35,8 @@ public class CreateModelCommandValidator : AbstractValidator<CreateModelCommand>
         RuleFor(v => v.TopP).InclusiveBetween(0, 1).When(v => v.TopP.HasValue);
         RuleFor(v => v.DataClassification).Must(v => Enum.TryParse<Domain.Enums.DataClassification>(v, true, out _))
             .WithMessage("DataClassification must be one of: Public, Internal, Confidential, Restricted.");
+        RuleFor(v => v.Provider).Must((v, provider) => !ValidationExtensions.ViolatesDataClassificationBoundary(v.DataClassification, provider))
+            .WithMessage("Confidential or Restricted data classification requires a local provider (Ollama) — external providers are not permitted for this sensitivity level.");
     }
 }
 

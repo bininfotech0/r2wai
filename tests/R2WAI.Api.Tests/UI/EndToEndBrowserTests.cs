@@ -20,7 +20,7 @@ public class EndToEndBrowserTests : BrowserTestBase
         var title = await Page.TitleAsync();
         Assert.Contains("R2WAI", title);
 
-        var emailInput = Page.Locator("input[type='email']").First;
+        var emailInput = Page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await emailInput.IsVisibleAsync());
 
@@ -95,7 +95,7 @@ public class EndToEndBrowserTests : BrowserTestBase
         await NavigateAndWait("/login");
         await TakeScreenshot("before_login_attempt");
 
-        var emailInput = Page.Locator("input[type='email']").First;
+        var emailInput = Page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         await emailInput.FillAsync("invalid@test.com");
 
@@ -143,7 +143,7 @@ public class EndToEndBrowserTests : BrowserTestBase
         var mudPaper = Page.Locator(".mud-paper").First;
         await mudPaper.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
 
-        var emailInput = Page.Locator("input[type='email']").First;
+        var emailInput = Page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         await emailInput.ClickAsync();
         await emailInput.FillAsync("test@example.com");
@@ -509,7 +509,7 @@ public class EndToEndBrowserTests : BrowserTestBase
         await NavigateAndWait("/login");
         await TakeScreenshot("mobile_375x812");
 
-        var emailInput = Page.Locator("input[type='email']").First;
+        var emailInput = Page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         Assert.True(await emailInput.IsVisibleAsync(), "Email input should be visible on mobile");
 
@@ -568,7 +568,7 @@ public class EndToEndBrowserTests : BrowserTestBase
         var mudPaper = Page.Locator(".mud-paper").First;
         await mudPaper.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
 
-        var emailInput = Page.Locator("[aria-label='Email address']");
+        var emailInput = Page.Locator("[aria-label='Email or Aadhaar number']");
         Assert.True(await emailInput.CountAsync() >= 1, "Email input should have aria-label");
 
         var passwordInput = Page.Locator("[aria-label='Password']");
@@ -797,7 +797,7 @@ public class EndToEndBrowserTests : BrowserTestBase
     {
         await NavigateAndWait("/login");
 
-        var emailInput = Page.Locator("input[type='email']").First;
+        var emailInput = Page.Locator("[aria-label='Email or Aadhaar number']").First;
         await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 30000 });
         await emailInput.FillAsync("admin@r2wai.io");
 

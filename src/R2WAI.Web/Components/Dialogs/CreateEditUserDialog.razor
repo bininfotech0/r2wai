@@ -136,11 +136,12 @@
         _saving = true;
         try
         {
+            Guid userId;
             if (_isEdit)
             {
+                userId = Guid.Parse(EditId!);
                 await Http.PutAsJsonAsync($"/api/v1/admin/users/{EditId}",
                     new { FirstName = _firstName, LastName = _lastName, MobileNumber = _mobileNumber });
-                Snackbar.Add("User updated", Severity.Success);
             }
             else
             {
@@ -149,10 +150,22 @@
                     Snackbar.Add("Password is required for new users", Severity.Warning);
                     return;
                 }
-                await Http.PostAsJsonAsync("/api/v1/admin/users",
+                var createResponse = await Http.PostAsJsonAsync("/api/v1/admin/users",
                     new { ExternalId = _email, Email = _email, FirstName = _firstName, LastName = _lastName, Password = _password });
-                Snackbar.Add("User created", Severity.Success);
+                var created = await createResponse.Content.ReadFromJsonAsync<UserEditDto>();
+                if (created is null)
+                {
+                    Snackbar.Add("User created, but could not assign roles — edit the user to set roles.", Severity.Warning);
+                    MudDialog.Close(DialogResult.Ok(true));
+                    return;
+                }
+                userId = created.Id;
             }
+
+            var roleIds = _availableRoles.Where(r => _selectedRoles.Contains(r.Name)).Select(r => r.Id).ToList();
+            await Http.PutAsJsonAsync($"/api/v1/admin/users/{userId}/roles", new { RoleIds = roleIds });
+
+            Snackbar.Add(_isEdit ? "User updated" : "User created", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
         }
         catch (Exception ex) { Snackbar.Add($"Save failed: {ex.Message}", Severity.Error); }

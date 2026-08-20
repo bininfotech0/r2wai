@@ -320,7 +320,7 @@ public class AuthenticatedBrowserTests : BrowserTestBase
         try
         {
             await NavigateAndWait("/login");
-            var emailInput = Page.Locator("input[type='email']").First;
+            var emailInput = Page.Locator("[aria-label='Email or Aadhaar number']").First;
             await emailInput.WaitForAsync(new LocatorWaitForOptions { Timeout = 15000 });
             await emailInput.FillAsync("admin@r2wai.io");
             var passwordInput = Page.Locator("input[type='password']").First;

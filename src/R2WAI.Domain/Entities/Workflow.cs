@@ -25,7 +25,7 @@ public sealed class Workflow : BaseEntity<Guid>
 
     public Workflow(Guid id, Guid tenantId, Guid userId, string name,
                     string? description = null, string? type = null,
-                    string? steps = null)
+                    string? steps = null, string? trigger = null)
     {
         Id = id;
         TenantId = tenantId;
@@ -34,6 +34,7 @@ public sealed class Workflow : BaseEntity<Guid>
         Description = description;
         Type = type;
         Steps = steps;
+        Trigger = trigger;
         CreatedAt = DateTime.UtcNow;
     }
 

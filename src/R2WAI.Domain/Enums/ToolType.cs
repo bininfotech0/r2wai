@@ -6,5 +6,6 @@ public enum ToolType
     Email,
     Database,
     Script,
-    Custom
+    Custom,
+    SemanticKernelFunction
 }

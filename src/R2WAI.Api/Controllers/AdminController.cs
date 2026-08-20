@@ -1,5 +1,7 @@
 using System.ClientModel;
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +12,8 @@ using OpenAI;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Admin.Commands;
 using R2WAI.Application.Features.Admin.Queries;
+using R2WAI.Application.Features.Members;
+using R2WAI.Domain.Entities;
 using R2WAI.Infrastructure.Persistence;
 
 namespace R2WAI.Api.Controllers;
@@ -17,7 +21,12 @@ namespace R2WAI.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "Admin,SystemAdmin")]
 [Route("api/v1/[controller]")]
-public class AdminController(IMediator mediator, ApplicationDbContext dbContext, IEncryptionService encryptionService, ILogger<AdminController> logger) : ControllerBase
+public class AdminController(
+    IMediator mediator,
+    ApplicationDbContext dbContext,
+    IEncryptionService encryptionService,
+    IWebHostEnvironment environment,
+    ILogger<AdminController> logger) : ControllerBase
 {
     private static (int page, int pageSize) ClampPagination(int page, int pageSize, int maxPageSize = 100)
     {
@@ -52,6 +61,16 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
     public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserCommand command, CancellationToken ct = default)
     {
         command = command with { Id = id };
+        var result = await mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    public record AssignUserRolesRequest(List<Guid> RoleIds);
+
+    [HttpPut("users/{id:guid}/roles")]
+    public async Task<IActionResult> AssignUserRoles(Guid id, [FromBody] AssignUserRolesRequest request, CancellationToken ct = default)
+    {
+        var command = new AssignUserRolesCommand { UserId = id, RoleIds = request.RoleIds };
         var result = await mediator.Send(command, ct);
         return Ok(result);
     }
@@ -639,6 +658,67 @@ public class AdminController(IMediator mediator, ApplicationDbContext dbContext,
             .ToList();
 
         return Ok(new { Days = trendDays, TopAssistants = topAssistants });
+    }
+
+    public record SeedTestMembersResponse(int Created, string Message);
+
+    // Dev-only bulk test data generator — must be structurally impossible to trigger against a
+    // real deployment. The class-level [Authorize(Roles="Admin,SystemAdmin")] handles auth; the
+    // IsDevelopment() check below is the second, independent gate (404s everywhere else).
+    [HttpPost("dev/seed-test-members")]
+    public async Task<IActionResult> SeedTestMembers([FromQuery] int count = 5000, CancellationToken ct = default)
+    {
+        if (!environment.IsDevelopment())
+            return NotFound();
+
+        count = Math.Clamp(count, 1, 10000);
+
+        var currentUser = HttpContext.RequestServices.GetRequiredService<ICurrentUserService>();
+        var passwordHasher = HttpContext.RequestServices.GetRequiredService<IPasswordHasher>();
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+
+        // Every seeded account shares one fixed password so QA can actually log into them.
+        var testPasswordHash = passwordHasher.Hash("Test@1234!");
+
+        const int batchSize = 500;
+        var seenHashes = new HashSet<string>();
+        var created = 0;
+
+        for (var batchStart = 0; batchStart < count; batchStart += batchSize)
+        {
+            var batchEnd = Math.Min(batchStart + batchSize, count);
+            for (var i = batchStart; i < batchEnd; i++)
+            {
+                string aadhaar;
+                string aadhaarHash;
+                do
+                {
+                    aadhaar = R2WAI.Api.Services.AadhaarTestNumberGenerator.Generate();
+                    aadhaarHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(aadhaar)));
+                } while (!seenHashes.Add(aadhaarHash));
+
+                var mobile = "9" + Random.Shared.Next(100000000, 999999999);
+                var member = Domain.Entities.User.CreateMember(
+                    Guid.NewGuid(), tenantId,
+                    encryptionService.Encrypt(aadhaar), aadhaarHash,
+                    mobile, "Test", $"Member{i + 1:D5}");
+                member.SetPasswordHash(testPasswordHash);
+
+                var referralCode = ReferralCodeGenerator.Generate() + i.ToString("D5");
+                var wallet = new MemberWallet(Guid.NewGuid(), tenantId, member.Id, referralCode);
+                wallet.AddPoints(Random.Shared.Next(0, 500));
+
+                await dbContext.Users.AddAsync(member, ct);
+                await dbContext.MemberWallets.AddAsync(wallet, ct);
+                created++;
+            }
+
+            await dbContext.SaveChangesAsync(ct);
+            dbContext.ChangeTracker.Clear();
+        }
+
+        logger.LogInformation("Seeded {Count} test members for tenant {TenantId}", created, tenantId);
+        return Ok(new SeedTestMembersResponse(created, $"Seeded {created} test members."));
     }
 
     private static bool IsAllowedEndpoint(string endpoint)
