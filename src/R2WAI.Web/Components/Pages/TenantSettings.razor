@@ -13,10 +13,15 @@
 }
 else
 {
-    <MudGrid>
+    <MudGrid Class="stagger-in">
         <MudItem xs="12" md="6">
-            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
-                <MudText Typo="Typo.h6" Class="mb-3">Organization Details</MudText>
+            <MudPaper Elevation="0" Class="pa-4 hover-lift" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+                <div class="d-flex align-center gap-2 mb-4">
+                    <div class="icon-container icon-container--primary">
+                        <MudIcon Icon="@Icons.Material.Outlined.Domain" Size="Size.Small" />
+                    </div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Organization Details</MudText>
+                </div>
                 <MudTextField @bind-Value="_name" Label="Organization Name" Class="mb-3"
                               Variant="Variant.Outlined" Margin="Margin.Dense" />
                 <MudTextField @bind-Value="_slug" Label="Slug (URL identifier)" Class="mb-3"
@@ -32,32 +37,66 @@ else
         </MudItem>
 
         <MudItem xs="12" md="6">
-            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
-                <MudText Typo="Typo.h6" Class="mb-3">Feature Flags</MudText>
-                <MudTooltip Text="Create and manage domain-specific AI assistants powered by Semantic Kernel.">
-                    <MudCheckBox @bind-Value="_featureAssistants" Label="AI Assistant Studio" Color="Color.Primary" />
-                </MudTooltip>
-                <MudTooltip Text="Visual workflow designer with approval chains and automated business processes.">
-                    <MudCheckBox @bind-Value="_featureWorkflows" Label="Workflow Studio" Color="Color.Primary" />
-                </MudTooltip>
-                <MudTooltip Text="Human-in-the-loop approval management with escalation policies.">
-                    <MudCheckBox @bind-Value="_featureApprovals" Label="Approval Engine" Color="Color.Primary" />
-                </MudTooltip>
-                <MudTooltip Text="Document ingestion, vector search, and retrieval-augmented generation.">
-                    <MudCheckBox @bind-Value="_featureKnowledge" Label="Knowledge & RAG" Color="Color.Primary" />
-                </MudTooltip>
-                <MudTooltip Text="Connect to external systems via REST APIs, databases, and email.">
-                    <MudCheckBox @bind-Value="_featureIntegrations" Label="Integrations" Color="Color.Primary" />
-                </MudTooltip>
-                <MudTooltip Text="Track platform usage metrics, active users, and resource consumption.">
-                    <MudCheckBox @bind-Value="_featureAnalytics" Label="Usage Analytics" Color="Color.Primary" />
-                </MudTooltip>
+            <MudPaper Elevation="0" Class="pa-4 hover-lift" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+                <div class="d-flex align-center gap-2 mb-2">
+                    <div class="icon-container icon-container--secondary">
+                        <MudIcon Icon="@Icons.Material.Outlined.ToggleOn" Size="Size.Small" />
+                    </div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Feature Flags</MudText>
+                </div>
+                <div class="settings-toggle-row">
+                    <div>
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">AI Assistant Studio</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Create and manage domain-specific AI assistants powered by Semantic Kernel.</MudText>
+                    </div>
+                    <MudCheckBox @bind-Value="_featureAssistants" Color="Color.Primary" />
+                </div>
+                <div class="settings-toggle-row">
+                    <div>
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">Workflow Studio</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Visual workflow designer with approval chains and automated business processes.</MudText>
+                    </div>
+                    <MudCheckBox @bind-Value="_featureWorkflows" Color="Color.Primary" />
+                </div>
+                <div class="settings-toggle-row">
+                    <div>
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">Approval Engine</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Human-in-the-loop approval management with escalation policies.</MudText>
+                    </div>
+                    <MudCheckBox @bind-Value="_featureApprovals" Color="Color.Primary" />
+                </div>
+                <div class="settings-toggle-row">
+                    <div>
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">Knowledge & RAG</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Document ingestion, vector search, and retrieval-augmented generation.</MudText>
+                    </div>
+                    <MudCheckBox @bind-Value="_featureKnowledge" Color="Color.Primary" />
+                </div>
+                <div class="settings-toggle-row">
+                    <div>
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">Integrations</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Connect to external systems via REST APIs, databases, and email.</MudText>
+                    </div>
+                    <MudCheckBox @bind-Value="_featureIntegrations" Color="Color.Primary" />
+                </div>
+                <div class="settings-toggle-row">
+                    <div>
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">Usage Analytics</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Track platform usage metrics, active users, and resource consumption.</MudText>
+                    </div>
+                    <MudCheckBox @bind-Value="_featureAnalytics" Color="Color.Primary" />
+                </div>
             </MudPaper>
         </MudItem>
 
         <MudItem xs="12" md="6">
-            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
-                <MudText Typo="Typo.h6" Class="mb-3">Limits</MudText>
+            <MudPaper Elevation="0" Class="pa-4 hover-lift" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+                <div class="d-flex align-center gap-2 mb-4">
+                    <div class="icon-container icon-container--warning">
+                        <MudIcon Icon="@Icons.Material.Outlined.Speed" Size="Size.Small" />
+                    </div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Limits</MudText>
+                </div>
                 <MudNumericField @bind-Value="_maxUsers" Label="Max Users" Min="1" Max="10000" Class="mb-3"
                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
                 <MudNumericField @bind-Value="_maxAssistants" Label="Max Assistants" Min="1" Max="100" Class="mb-3"
@@ -72,8 +111,13 @@ else
         </MudItem>
 
         <MudItem xs="12" md="6">
-            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
-                <MudText Typo="Typo.h6" Class="mb-3">Tenant Info</MudText>
+            <MudPaper Elevation="0" Class="pa-4 hover-lift" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+                <div class="d-flex align-center gap-2 mb-4">
+                    <div class="icon-container icon-container--success">
+                        <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" />
+                    </div>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Tenant Info</MudText>
+                </div>
                 <MudSimpleTable Dense="true" Elevation="0">
                     <tbody>
                         <tr><td><strong>Tenant ID</strong></td><td><CopyToClipboard Text="@_tenantId" Style="font-family:monospace; font-size:0.85rem;" /></td></tr>

@@ -109,6 +109,40 @@ else
         </MudGrid>
     </MudPaper>
 
+    @if (_steps.Count > 0)
+    {
+        <MudPaper Elevation="0" Class="pa-4 mb-4"
+                  Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; background: var(--mud-palette-background-grey, rgba(0, 0, 0, 0.02));">
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" Class="mb-3">Flow Steps</MudText>
+            <div class="d-flex flex-column gap-2">
+                @foreach (var step in _steps)
+                {
+                    <div class="d-flex align-center gap-2 pa-2"
+                         style="border-radius: 8px; background: var(--mud-palette-surface); border: 1px solid var(--mud-palette-divider);">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                        <div style="flex: 1; min-width: 0;">
+                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@step.Name</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @step.Action@(string.IsNullOrEmpty(step.AssignedRole) ? "" : $" · {step.AssignedRole}")
+                            </MudText>
+                        </div>
+                    </div>
+                }
+            </div>
+        </MudPaper>
+
+        <div class="d-flex gap-2 mb-3">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Outlined.AccountTree"
+                       OnClick="@(() => Navigation.NavigateTo($"/workflow-studio/designer/{Id}"))">
+                Edit in Builder
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient" StartIcon="@Icons.Material.Filled.PlayArrow"
+                       Disabled="_actionInProgress" OnClick="TestAutomation">
+                Run Now
+            </MudButton>
+        </div>
+    }
+
     <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlaylistPlay"
                OnClick="@(() => Navigation.NavigateTo($"/workflow-studio?tab=1"))">
         View all runs
@@ -172,6 +206,7 @@ else
     private int _actionCount;
     private int _conditionCount;
     private int _approvalCount;
+    private List<StepItem> _steps = new();
 
     private int _totalRuns;
     private double _successRate;
@@ -210,7 +245,7 @@ else
 
     private void ComputeStepCounts()
     {
-        _actionCount = 0; _conditionCount = 0; _approvalCount = 0;
+        _actionCount = 0; _conditionCount = 0; _approvalCount = 0; _steps = new();
         if (string.IsNullOrEmpty(_automation?.Steps)) return;
 
         try
@@ -220,6 +255,7 @@ else
             _conditionCount = steps.Count(s => string.Equals(s.Action, "Condition", StringComparison.OrdinalIgnoreCase));
             _approvalCount = steps.Count(s => string.Equals(s.Action, "Approval", StringComparison.OrdinalIgnoreCase));
             _actionCount = steps.Count - _conditionCount - _approvalCount;
+            _steps = steps.OrderBy(s => s.Order).ToList();
         }
         catch { }
     }
@@ -257,27 +293,21 @@ else
 
     private async Task TestAutomation()
     {
-        _actionInProgress = true;
-        try
+        if (_automation is null) return;
+
+        var parameters = new DialogParameters<TestAutomationDialog>
         {
-            var response = await Http.PostAsJsonAsync($"/api/v1/workflows/{Id}/execute", new { });
-            if (response.IsSuccessStatusCode)
-            {
-                var body = await response.Content.ReadFromJsonAsync<ExecuteResult>();
-                Snackbar.Add("Automation started", Severity.Success);
-                if (body?.Instance?.Id is Guid instanceId)
-                    Navigation.NavigateTo($"/workflow-studio/runs/{instanceId}");
-                else
-                    await LoadRuns();
-            }
-            else
-            {
-                var error = await response.Content.ReadAsStringAsync();
-                Snackbar.Add($"Test failed: {error}", Severity.Error);
-            }
-        }
-        catch (Exception ex) { Snackbar.Add($"Test failed: {ex.Message}", Severity.Error); }
-        finally { _actionInProgress = false; }
+            { x => x.WorkflowId, Id },
+            { x => x.WorkflowName, _automation.Name }
+        };
+        var dialog = await Dialog.ShowAsync<TestAutomationDialog>("Test Automation", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        if (result.Data is Guid instanceId && instanceId != Guid.Empty)
+            Navigation.NavigateTo($"/workflow-studio/runs/{instanceId}");
+        else
+            await LoadRuns();
     }
 
     private async Task OnStatusToggled(bool active)
@@ -426,6 +456,4 @@ else
         public DateTime? CompletedAt { get; set; }
     }
 
-    private class ExecuteResult { public InstanceRef? Instance { get; set; } }
-    private class InstanceRef { public Guid Id { get; set; } }
 }

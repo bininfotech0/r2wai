@@ -14,16 +14,16 @@
         else
         {
             <div class="d-flex align-center gap-4 mb-4">
-                <span><MudText Color="Color.Success" Typo="Typo.body2">@_run.PassedCount Passed</MudText></span>
-                <span><MudText Color="Color.Error" Typo="Typo.body2">@_run.FailedCount Failed</MudText></span>
-                <span><MudText Color="Color.Warning" Typo="Typo.body2">@_run.WarningCount Warning</MudText></span>
+                <span><MudText Color="Color.Success" Typo="Typo.body2" Style="font-weight: 600;">@_run.PassedCount Passed</MudText></span>
+                <span><MudText Color="Color.Error" Typo="Typo.body2" Style="font-weight: 600;">@_run.FailedCount Failed</MudText></span>
+                <span><MudText Color="Color.Warning" Typo="Typo.body2" Style="font-weight: 600;">@_run.WarningCount Warning</MudText></span>
             </div>
 
             @foreach (var result in _run.Results)
             {
-                <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: 10px;">
+                <MudPaper Elevation="0" Class="pa-3 mb-3" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-lg);">
                     <div class="d-flex justify-space-between align-center mb-2">
-                        <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">@result.TestCaseName</MudText>
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@result.TestCaseName</MudText>
                         <StatusBadge Status="@result.Status" />
                     </div>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Question</MudText>

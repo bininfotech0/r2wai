@@ -37,8 +37,8 @@ else if (_roles.Count == 0)
 }
 else
 {
-    <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); overflow-x: auto;">
-        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Style="min-width: 700px;">
+    <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); overflow-x: auto;">
+        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="permission-matrix" Style="min-width: 700px;">
             <thead>
                 <tr>
                     <th style="min-width: 220px; font-weight: 600; position: sticky; left: 0; background: var(--mud-palette-surface); z-index: 1;">
@@ -46,7 +46,7 @@ else
                     </th>
                     @foreach (var role in _roles)
                     {
-                        <th style="text-align: center; font-weight: 600; min-width: 110px;">
+                        <th style="text-align: center; font-weight: 600; min-width: 110px; border-left: 1px solid var(--mud-palette-divider);">
                             <div>@role.Name</div>
                             @if (role.IsSystem)
                             {
@@ -77,11 +77,14 @@ else
                             @foreach (var role in _roles)
                             {
                                 var roleName = role.Name;
-                                <td style="text-align: center;">
+                                <td style="text-align: center; border-left: 1px solid var(--mud-palette-divider);">
                                     <MudCheckBox T="bool"
                                                  Value="@(GetPermission(roleName, permKey))"
                                                  ValueChanged="@((bool v) => SetPermission(roleName, permKey, v))"
-                                                 Color="Color.Primary"
+                                                 Color="Color.Success"
+                                                 UncheckedColor="Color.Default"
+                                                 CheckedIcon="@Icons.Material.Filled.CheckCircle"
+                                                 UncheckedIcon="@Icons.Material.Filled.Remove"
                                                  Dense="true" />
                                 </td>
                             }
@@ -90,6 +93,16 @@ else
                 }
             </tbody>
         </MudSimpleTable>
+        <div class="d-flex align-center gap-4 pa-3" style="border-top: 1px solid var(--mud-palette-divider);">
+            <div class="d-flex align-center gap-1">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Allowed</MudText>
+            </div>
+            <div class="d-flex align-center gap-1">
+                <MudIcon Icon="@Icons.Material.Filled.Remove" Size="Size.Small" Style="opacity: 0.4;" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Not Allowed</MudText>
+            </div>
+        </div>
     </MudPaper>
 
     @if (_hasChanges)

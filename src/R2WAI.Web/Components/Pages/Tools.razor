@@ -7,101 +7,132 @@
 
 <PageHeader Title="Tool Registry" Subtitle="Built-in tools available to AI assistants and workflows" />
 
-<MudGrid Spacing="3">
-    @foreach (var tool in _tools)
-    {
-        <MudItem xs="12" sm="6" md="4">
-            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
-                <div class="d-flex align-center gap-3 mb-3">
-                    <MudAvatar Color="@tool.Color" Size="Size.Medium">
-                        <MudIcon Icon="@tool.Icon" />
-                    </MudAvatar>
-                    <div style="flex: 1;">
-                        <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@tool.Name</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">@tool.Type</MudText>
-                    </div>
-                    <MudSwitch T="bool" @bind-Value="tool.IsActive" Color="Color.Primary"
-                               aria-label="@($"Toggle {tool.Name}")" />
-                </div>
-                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">@tool.Description</MudText>
+<MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="tools-tabs mb-2">
+    <MudTabPanel Text="Tools">
+        <MudGrid Spacing="3" Class="mt-1">
+            @foreach (var tool in _tools)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
+                        <div class="d-flex align-center gap-3 mb-3">
+                            <MudAvatar Color="@tool.Color" Size="Size.Medium">
+                                <MudIcon Icon="@tool.Icon" />
+                            </MudAvatar>
+                            <div style="flex: 1;">
+                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@tool.Name</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined"
+                                         Style="font-size: 0.6875rem; height: 20px;">@tool.Type</MudChip>
+                            </div>
+                            <MudSwitch T="bool" @bind-Value="tool.IsActive" Color="Color.Primary"
+                                       aria-label="@($"Toggle {tool.Name}")" />
+                        </div>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">@tool.Description</MudText>
 
-                <div class="d-flex flex-wrap gap-1 mb-3">
-                    @foreach (var cap in tool.Capabilities)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Default"
-                                 Style="font-size: 0.6875rem; height: 22px;">@cap</MudChip>
-                    }
-                </div>
-
-                <div class="d-flex justify-space-between align-center">
-                    <MudChip T="string" Size="Size.Small" Color="@(tool.IsActive ? Color.Success : Color.Default)"
-                             Variant="Variant.Filled">
-                        @(tool.IsActive ? "Active" : "Inactive")
-                    </MudChip>
-                    @if (tool.RequiresConfig)
-                    {
-                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Filled.Settings"
-                                   OnClick="@(() => ToggleConfig(tool))">
-                            Configure
-                        </MudButton>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.caption" Color="Color.Success">
-                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Style="vertical-align: middle;" />
-                            Built-in
-                        </MudText>
-                    }
-                </div>
-
-                @if (tool.ShowConfig)
-                {
-                    <MudDivider Class="my-3" />
-                    <MudGrid Spacing="2">
-                        <MudItem xs="12">
-                            <MudTextField @bind-Value="tool.Endpoint" Label="Endpoint" Variant="Variant.Outlined"
-                                          Margin="Margin.Dense" Placeholder="@tool.EndpointPlaceholder" />
-                        </MudItem>
-                        <MudItem xs="6">
-                            <MudSelect T="string" @bind-Value="tool.AuthType" Label="Auth" Variant="Variant.Outlined"
-                                       Margin="Margin.Dense" Dense="true">
-                                <MudSelectItem T="string" Value="@("None")">None</MudSelectItem>
-                                <MudSelectItem T="string" Value="@("Bearer")">Bearer Token</MudSelectItem>
-                                <MudSelectItem T="string" Value="@("Basic")">Basic Auth</MudSelectItem>
-                                <MudSelectItem T="string" Value="@("ApiKey")">API Key</MudSelectItem>
-                            </MudSelect>
-                        </MudItem>
-                        <MudItem xs="6">
-                            <MudTextField @bind-Value="tool.ApiKey" Label="Credential" Variant="Variant.Outlined"
-                                          Margin="Margin.Dense" InputType="InputType.Password" />
-                        </MudItem>
-                        <MudItem xs="12" Class="d-flex gap-2 justify-end">
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
-                                       StartIcon="@Icons.Material.Filled.PlayArrow"
-                                       OnClick="@(() => TestTool(tool))" Disabled="tool.Testing">
-                                @(tool.Testing ? "Testing..." : "Test")
-                            </MudButton>
-                            <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary"
-                                       StartIcon="@Icons.Material.Filled.Save"
-                                       OnClick="@(() => SaveToolConfig(tool))" Disabled="tool.Saving">
-                                @(tool.Saving ? "Saving..." : "Save")
-                            </MudButton>
-                        </MudItem>
-                        @if (!string.IsNullOrEmpty(tool.TestResult))
+                        @if (!string.IsNullOrWhiteSpace(tool.Endpoint))
                         {
-                            <MudItem xs="12">
-                                <MudAlert Severity="@(tool.TestSuccess ? Severity.Success : Severity.Error)" Dense="true">
-                                    @tool.TestResult
-                                </MudAlert>
-                            </MudItem>
+                            <code class="tools-endpoint-chip mb-3">@tool.Endpoint</code>
                         }
-                    </MudGrid>
-                }
-            </MudPaper>
-        </MudItem>
-    }
-</MudGrid>
+
+                        <div class="d-flex flex-wrap gap-1 mb-3">
+                            @foreach (var cap in tool.Capabilities)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default"
+                                         Style="font-size: 0.6875rem; height: 22px;">@cap</MudChip>
+                            }
+                        </div>
+
+                        <div class="d-flex justify-space-between align-center flex-wrap gap-2">
+                            <div class="d-flex align-center gap-2">
+                                <StatusBadge Status="@(tool.IsActive ? "Active" : "Inactive")" />
+                                @if (tool.RequiresConfig && tool.AuthType != "None")
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined"
+                                             Style="font-size: 0.6875rem; height: 20px;">@tool.AuthType</MudChip>
+                                }
+                            </div>
+                            @if (tool.RequiresConfig)
+                            {
+                                <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Settings"
+                                           OnClick="@(() => ToggleConfig(tool))">
+                                    Configure
+                                </MudButton>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Success">
+                                    <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Style="vertical-align: middle;" />
+                                    Built-in
+                                </MudText>
+                            }
+                        </div>
+
+                        @if (tool.ShowConfig)
+                        {
+                            <MudDivider Class="my-3" />
+                            <MudGrid Spacing="2">
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="tool.Endpoint" Label="Endpoint" Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense" Placeholder="@tool.EndpointPlaceholder"
+                                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link" />
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudSelect T="string" @bind-Value="tool.AuthType" Label="Auth" Variant="Variant.Outlined"
+                                               Margin="Margin.Dense" Dense="true">
+                                        <MudSelectItem T="string" Value="@("None")">None</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("Bearer")">Bearer Token</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("Basic")">Basic Auth</MudSelectItem>
+                                        <MudSelectItem T="string" Value="@("ApiKey")">API Key</MudSelectItem>
+                                    </MudSelect>
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudTextField @bind-Value="tool.ApiKey" Label="Credential" Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense" InputType="InputType.Password" />
+                                </MudItem>
+                                <MudItem xs="12" Class="d-flex gap-2 justify-end">
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                                               OnClick="@(() => TestTool(tool))" Disabled="tool.Testing">
+                                        @(tool.Testing ? "Testing..." : "Test")
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.Save"
+                                               OnClick="@(() => SaveToolConfig(tool))" Disabled="tool.Saving">
+                                        @(tool.Saving ? "Saving..." : "Save")
+                                    </MudButton>
+                                </MudItem>
+                                @if (!string.IsNullOrEmpty(tool.TestResult))
+                                {
+                                    <MudItem xs="12">
+                                        <MudAlert Severity="@(tool.TestSuccess ? Severity.Success : Severity.Error)" Dense="true">
+                                            @tool.TestResult
+                                        </MudAlert>
+                                    </MudItem>
+                                }
+                            </MudGrid>
+                        }
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    </MudTabPanel>
+
+    <MudTabPanel Text="APIs">
+        <MudPaper Elevation="0" Class="mt-1" Style="border: 1px solid var(--mud-palette-divider);">
+            <EmptyState Icon="@Icons.Material.Outlined.Api" Title="No external API connections yet"
+                        Description="Standalone API connection management will appear here. For now, register REST endpoints as an HTTP tool above."
+                        MinHeight="220px" />
+        </MudPaper>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Webhooks">
+        <MudPaper Elevation="0" Class="mt-1" Style="border: 1px solid var(--mud-palette-divider);">
+            <EmptyState Icon="@Icons.Material.Outlined.Webhook" Title="No webhooks configured here"
+                        Description="Inbound webhook delivery is managed under Admin → Webhooks."
+                        MinHeight="220px" />
+        </MudPaper>
+    </MudTabPanel>
+</MudTabs>
 
 <MudText Typo="Typo.subtitle1" Class="mt-6 mb-2" Style="font-weight: 600;">How Tools Work</MudText>
 <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">

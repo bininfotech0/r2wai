@@ -35,12 +35,20 @@
             </MudButton>
         </div>
     }
-    <MudDataGrid T="UserDto" Items="_users" Hover="true" Dense="true" Loading="_loading" Elevation="0"
+    <MudDataGrid T="UserDto" Items="FilteredUsers" Hover="true" Dense="true" Loading="_loading" Elevation="0"
                  MultiSelection="true" @bind-SelectedItems="_selectedUsers">
         <ToolBarContent>
             <MudTextField T="string" Value="_search" ValueChanged="OnSearchChanged" Placeholder="Search users..." Immediate="true" DebounceInterval="300"
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                          Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 300px;" />
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 260px;" />
+            <MudSelect T="string" Value="_roleFilter" ValueChanged="@((string v) => _roleFilter = v)"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 180px;" Class="ml-2">
+                <MudSelectItem T="string" Value="@("All Roles")">All Roles</MudSelectItem>
+                @foreach (var role in _availableRoles)
+                {
+                    <MudSelectItem T="string" Value="@role.Name">@role.Name</MudSelectItem>
+                }
+            </MudSelect>
             <MudSpacer />
             <MudText Typo="Typo.caption" Color="Color.Secondary">@_users.Count of @_totalCount users</MudText>
         </ToolBarContent>
@@ -72,7 +80,9 @@
                     <div class="d-flex gap-1 flex-wrap">
                         @foreach (var role in context.Item.Roles)
                         {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@role</MudChip>
+                            <MudChip T="string" Size="Size.Small"
+                                     Color="@(role.Contains("Admin") ? Color.Primary : Color.Default)"
+                                     Variant="@(role.Contains("Admin") ? Variant.Filled : Variant.Outlined)">@role</MudChip>
                         }
                     </div>
                 </CellTemplate>
@@ -121,10 +131,30 @@
     private int _totalCount;
     private bool _hasMore;
     private bool _seeding;
+    private string _roleFilter = "All Roles";
+    private List<RoleOption> _availableRoles = new();
+
+    private IEnumerable<UserDto> FilteredUsers =>
+        _roleFilter == "All Roles" ? _users : _users.Where(u => u.Roles.Contains(_roleFilter));
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) await LoadData();
+        if (firstRender)
+        {
+            await LoadData();
+            await LoadRoles();
+        }
+    }
+
+    private async Task LoadRoles()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<RolesResult>("/api/v1/admin/roles?pageSize=100");
+            _availableRoles = result?.Items ?? new();
+            StateHasChanged();
+        }
+        catch { /* role filter is a convenience; ignore failures */ }
     }
 
     private async Task LoadData()
@@ -245,6 +275,8 @@
     }
 
     private class UsersResult { public List<UserDto> Items { get; set; } = new(); public int TotalCount { get; set; } }
+    private class RolesResult { public List<RoleOption> Items { get; set; } = new(); }
+    private class RoleOption { public Guid Id { get; set; } public string Name { get; set; } = string.Empty; }
     private class UserDto
     {
         public Guid Id { get; set; }

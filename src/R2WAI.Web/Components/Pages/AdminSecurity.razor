@@ -24,9 +24,27 @@ else
             </div>
             <MudNumericField @bind-Value="_minPasswordLength" Label="Minimum Password Length"
                              Min="6" Max="128" Class="mb-4" Variant="Variant.Outlined" Margin="Margin.Dense" />
-            <MudSwitch @bind-Value="_requireUppercase" Label="Require uppercase letter" Color="Color.Primary" Class="mb-2" />
-            <MudSwitch @bind-Value="_requireDigit" Label="Require digit" Color="Color.Primary" Class="mb-2" />
-            <MudSwitch @bind-Value="_requireSpecialChar" Label="Require special character" Color="Color.Primary" />
+            <div class="settings-toggle-row">
+                <div>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">Require uppercase letter</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Password must contain at least one uppercase character</MudText>
+                </div>
+                <MudSwitch @bind-Value="_requireUppercase" Color="Color.Primary" />
+            </div>
+            <div class="settings-toggle-row">
+                <div>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">Require digit</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Password must contain at least one number</MudText>
+                </div>
+                <MudSwitch @bind-Value="_requireDigit" Color="Color.Primary" />
+            </div>
+            <div class="settings-toggle-row">
+                <div>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">Require special character</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Password must contain a symbol such as !, @@, or #</MudText>
+                </div>
+                <MudSwitch @bind-Value="_requireSpecialChar" Color="Color.Primary" />
+            </div>
         </MudPaper>
     </MudItem>
 
@@ -53,10 +71,15 @@ else
                 </div>
                 <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Authentication</MudText>
             </div>
-            <MudSwitch @bind-Value="_enforceEntraId" Label="Enforce Entra ID (disable local login)" Color="Color.Primary" Class="mb-2" />
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                When enabled, users must authenticate through Microsoft Entra ID. Local password login will be disabled.
-            </MudText>
+            <div class="settings-toggle-row">
+                <div>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">Enforce Entra ID</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        When enabled, users must authenticate through Microsoft Entra ID. Local password login will be disabled.
+                    </MudText>
+                </div>
+                <MudSwitch @bind-Value="_enforceEntraId" Color="Color.Primary" />
+            </div>
         </MudPaper>
     </MudItem>
 

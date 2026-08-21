@@ -17,7 +17,7 @@
     </div>
 }
 
-<MudPaper Elevation="0" Class="pa-5 mb-5" Style="border: 1.5px solid var(--mud-palette-primary); border-radius: 16px; background: linear-gradient(135deg, rgba(124, 58, 237, 0.04) 0%, rgba(59, 130, 246, 0.03) 50%, rgba(16, 185, 129, 0.02) 100%); position: relative; overflow: hidden;">
+<MudPaper Elevation="0" Class="pa-5 mb-5" Style="border: 1.5px solid var(--mud-palette-primary); border-radius: 16px; background: linear-gradient(135deg, rgba(37, 99, 235, 0.05) 0%, rgba(37, 99, 235, 0.02) 50%, rgba(16, 185, 129, 0.02) 100%); position: relative; overflow: hidden;">
     <div class="d-flex justify-space-between align-center mb-3">
         <div>
             <MudText Typo="Typo.h5" Style="font-weight: 800; letter-spacing: -0.03em;" Class="gradient-text">Get started with R2WAI</MudText>
@@ -160,7 +160,7 @@
     private ElementReference _confettiRef;
     private int _completedCount => (_hasAssistant ? 1 : 0) + (_hasWorkflow ? 1 : 0) + (_hasDocuments ? 1 : 0);
 
-    private static readonly string[] _confettiColors = { "#7C3AED", "#3B82F6", "#10B981", "#A78BFA", "#F59E0B", "#EF4444", "#06B6D4" };
+    private static readonly string[] _confettiColors = { "#2563EB", "#60A5FA", "#10B981", "#7C3AED", "#F59E0B", "#EF4444", "#06B6D4" };
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

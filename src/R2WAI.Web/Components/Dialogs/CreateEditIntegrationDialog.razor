@@ -6,6 +6,20 @@
         <MudText Typo="Typo.h6">@(_isEdit ? "Configure Integration" : "Add Integration")</MudText>
     </TitleContent>
     <DialogContent>
+        <div class="d-flex align-center gap-3 pa-3 mb-4 integration-dialog-summary">
+            <MudAvatar Size="Size.Medium" Style="@($"background-color: {TypeColor(_type)}1A; color: {TypeColor(_type)};")">
+                <MudIcon Icon="@TypeIcon(_type)" Size="Size.Small" />
+            </MudAvatar>
+            <div style="min-width: 0;">
+                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;" Class="text-truncate">
+                    @(string.IsNullOrWhiteSpace(_name) ? "New Integration" : _name)
+                </MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @_type &middot; @(_isEdit ? (_isActive ? "Active" : "Inactive") : "Not yet saved")
+                </MudText>
+            </div>
+        </div>
+
         <MudGrid>
             @if (FromMarketplace && _isEdit)
             {
@@ -37,6 +51,7 @@
             <MudItem xs="12" sm="6">
                 <MudTextField @bind-Value="_endpointUrl" Label="Endpoint URL"
                               Placeholder="https://api.example.com"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Public"
                               HelperText="@(_hasPlaceholder ? "Replace {placeholders} with your actual account values" : null)"
                               Error="@_hasPlaceholder"
                               Variant="Variant.Outlined" />
@@ -63,6 +78,7 @@
                     <MudTextField @bind-Value="_authCredential"
                                   Label="Bearer Token"
                                   InputType="InputType.Password"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock"
                                   HelperText="Stored in configuration — keep this secret"
                                   Variant="Variant.Outlined" />
                 </MudItem>
@@ -73,6 +89,7 @@
                     <MudTextField @bind-Value="_authCredential"
                                   Label="API Key"
                                   InputType="InputType.Password"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.VpnKey"
                                   HelperText="Stored in configuration — keep this secret"
                                   Variant="Variant.Outlined" />
                 </MudItem>
@@ -80,20 +97,63 @@
             else if (_authType == "Basic")
             {
                 <MudItem xs="12" sm="4">
-                    <MudTextField @bind-Value="_authCredential" Label="Username" Variant="Variant.Outlined" />
+                    <MudTextField @bind-Value="_authCredential" Label="Username"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Person"
+                                  Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" sm="4">
                     <MudTextField @bind-Value="_authPassword" Label="Password"
-                                  InputType="InputType.Password" Variant="Variant.Outlined" />
+                                  InputType="InputType.Password"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudDivider Class="my-2" />
+                <div class="d-flex align-center gap-2">
+                    <MudCheckBox T="bool" Value="_isActive" Disabled="true" Color="Color.Primary" />
+                    <div>
+                        <MudText Typo="Typo.body2">Enabled</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @(_isActive ? "Active and receiving requests." : "Inactive.")
+                            @(_isEdit ? "Toggle status from the integrations list." : "New integrations start active.")
+                        </MudText>
+                    </div>
+                </div>
+            </MudItem>
+
+            @if (!string.IsNullOrEmpty(_testResult))
+            {
+                <MudItem xs="12">
+                    <MudAlert Severity="@(_testSuccess ? Severity.Success : Severity.Warning)" Dense="true">
+                        @_testResult
+                    </MudAlert>
                 </MudItem>
             }
         </MudGrid>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
-            @(_saving ? "Saving..." : "Save")
-        </MudButton>
+        <div class="d-flex justify-space-between align-center" style="width: 100%;">
+            @if (_isEdit)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           OnClick="TestConnection" Disabled="_testing">
+                    @(_testing ? "Testing..." : "Test Connection")
+                </MudButton>
+            }
+            else
+            {
+                <span></span>
+            }
+            <div class="d-flex gap-2">
+                <MudButton OnClick="Cancel">Cancel</MudButton>
+                <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving">
+                    @(_saving ? "Saving..." : "Save")
+                </MudButton>
+            </div>
+        </div>
     </DialogActions>
 </MudDialog>
 
@@ -112,8 +172,30 @@
     private string _authCredential = string.Empty;
     private string _authPassword = string.Empty;
     private bool _saving;
+    private bool _isActive = true;
+    private bool _testing;
+    private bool _testSuccess;
+    private string? _testResult;
 
     private bool _hasPlaceholder => _endpointUrl.Contains('{') && _endpointUrl.Contains('}');
+
+    private static string TypeIcon(string type) => type switch
+    {
+        "Http" => Icons.Material.Filled.Http,
+        "Database" => Icons.Material.Filled.Storage,
+        "Email" => Icons.Material.Filled.Email,
+        "Script" => Icons.Material.Filled.Code,
+        _ => Icons.Material.Filled.Extension,
+    };
+
+    private static string TypeColor(string type) => type switch
+    {
+        "Http" => "#3B82F6",
+        "Database" => "#7C3AED",
+        "Email" => "#10B981",
+        "Script" => "#F97316",
+        _ => "#6B7280",
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -128,6 +210,7 @@
                     _description = integration.Description ?? string.Empty;
                     _type = integration.Type ?? "Http";
                     _endpointUrl = integration.EndpointUrl ?? string.Empty;
+                    _isActive = integration.IsActive;
                     ParseConfiguration(integration.Configuration);
                 }
             }
@@ -198,6 +281,29 @@
 
     private void Cancel() => MudDialog.Cancel();
 
+    private async Task TestConnection()
+    {
+        if (!_isEdit || string.IsNullOrEmpty(EditId)) return;
+
+        _testing = true;
+        _testResult = null;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/integrations/{EditId}/test", new { });
+            var result = await response.Content.ReadFromJsonAsync<TestResultDto>();
+            _testSuccess = result?.Success ?? false;
+            _testResult = result?.Message ?? "No response from integration.";
+        }
+        catch (Exception ex)
+        {
+            _testSuccess = false;
+            _testResult = $"Connection test failed: {ex.Message}";
+        }
+        finally { _testing = false; StateHasChanged(); }
+    }
+
     private class IntegrationEditDto
     {
         public string Name { get; set; } = string.Empty;
@@ -205,5 +311,12 @@
         public string? Type { get; set; }
         public string? EndpointUrl { get; set; }
         public string? Configuration { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    private class TestResultDto
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
     }
 }

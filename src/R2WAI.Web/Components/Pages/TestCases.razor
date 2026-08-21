@@ -30,24 +30,21 @@
     </MudAlert>
 }
 
-<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
-    <MudGrid>
-        <MudItem xs="12" sm="6">
-            <MudTextField T="string" Value="_searchTerm" ValueChanged="OnSearchChanged" Placeholder="Search test cases..."
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                          Variant="Variant.Outlined" Margin="Margin.Dense"
-                          Immediate="true" DebounceInterval="300" />
-        </MudItem>
-        <MudItem xs="12" sm="6">
-            <MudSelect T="Guid?" Value="_assistantFilter" ValueChanged="OnAssistantFilterChanged"
-                       Label="Assistant" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
-                @foreach (var a in _assistants)
-                {
-                    <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.Name</MudSelectItem>
-                }
-            </MudSelect>
-        </MudItem>
-    </MudGrid>
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-lg);">
+    <div class="d-flex align-center gap-3 flex-wrap">
+        <MudTextField T="string" Value="_searchTerm" ValueChanged="OnSearchChanged" Placeholder="Search test cases..."
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 240px; max-width: 320px; flex: 1;"
+                      Immediate="true" DebounceInterval="300" />
+        <MudSelect T="Guid?" Value="_assistantFilter" ValueChanged="OnAssistantFilterChanged"
+                   Label="Assistant" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                   Style="min-width: 180px; max-width: 240px;">
+            @foreach (var a in _assistants)
+            {
+                <MudSelectItem T="Guid?" Value="@((Guid?)a.Id)">@a.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
 </MudPaper>
 
 @if (_loading)
@@ -62,7 +59,7 @@ else if (_testCases.Count == 0)
 }
 else
 {
-    <MudTable Items="_testCases" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+    <MudTable Items="_testCases" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-lg);">
         <HeaderContent>
             <MudTh>Name</MudTh>
             <MudTh>Assistant</MudTh>

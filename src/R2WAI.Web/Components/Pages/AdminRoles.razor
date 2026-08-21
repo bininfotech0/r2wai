@@ -13,93 +13,92 @@
     </MudButton>
 </PageHeader>
 
-<MudGrid Spacing="3">
-    <MudItem xs="12" md="5">
-        <div class="d-flex align-center gap-2 mb-3">
-            <div class="icon-container icon-container--primary">
-                <MudIcon Icon="@Icons.Material.Outlined.Group" Size="Size.Small" />
-            </div>
-            <MudText Typo="Typo.h6" Style="font-weight: 600;">Roles</MudText>
-        </div>
-        <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
-            @if (_loading)
-            {
-                <div class="pa-4"><LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Detail" /></div>
-            }
-            else
-            {
-                <MudList T="RoleDto" Dense="true" Class="stagger-in">
-                    @foreach (var role in _roles)
-                    {
-                        <MudListItem OnClick="@(() => SelectRole(role))"
-                                     Style="@(_selectedRole?.Id == role.Id ? "background-color: var(--mud-palette-primary-lighten);" : "")">
-                            <div class="d-flex justify-space-between align-center" style="width: 100%;">
-                                <div>
-                                    <MudText Typo="Typo.subtitle2">@role.Name</MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@(role.Description ?? "No description")</MudText>
-                                </div>
-                                <div class="d-flex align-center gap-1">
-                                    @if (role.IsSystem)
-                                    {
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">System</MudChip>
-                                    }
-                                    @if (!role.IsSystem)
-                                    {
-                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                                       OnClick="@(() => OpenEditRoleDialog(role))" aria-label="Edit role" />
-                                    }
-                                </div>
-                            </div>
-                        </MudListItem>
-                        <MudDivider />
-                    }
-                </MudList>
-            }
-        </MudPaper>
-    </MudItem>
+<div class="d-flex align-center gap-2 mb-3">
+    <div class="icon-container icon-container--primary">
+        <MudIcon Icon="@Icons.Material.Outlined.Group" Size="Size.Small" />
+    </div>
+    <MudText Typo="Typo.h6" Style="font-weight: 600;">Roles</MudText>
+</div>
 
-    <MudItem xs="12" md="7">
-        <div class="d-flex align-center gap-2 mb-3">
-            <div class="icon-container icon-container--secondary">
-                <MudIcon Icon="@Icons.Material.Outlined.Shield" Size="Size.Small" />
-            </div>
-            <MudText Typo="Typo.h6" Style="font-weight: 600;">
-                @(_selectedRole is not null ? $"Permissions — {_selectedRole.Name}" : "Permission Matrix")
-            </MudText>
-        </div>
-        <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
-            @if (_selectedRole is null)
-            {
-                <EmptyState Icon="@Icons.Material.Outlined.Shield" Title="Select a role"
-                            Description="Choose a role from the list to view and edit its permissions."
-                            MinHeight="300px" />
-            }
-            else if (_selectedRole.IsSystem)
-            {
-                <MudAlert Severity="Severity.Info" Class="mb-4">System roles cannot be modified.</MudAlert>
-            }
-            else
-            {
-                @foreach (var group in _permissionGroups)
-                {
-                    <MudText Typo="Typo.subtitle2" Class="mb-2 mt-3" Style="font-weight: 600;">@group.Category</MudText>
-                    <MudGrid Spacing="2">
-                        @foreach (var perm in group.Permissions)
+@if (_loading)
+{
+    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Cards" />
+}
+else
+{
+    <MudGrid Spacing="3" Class="stagger-in mb-5">
+        @foreach (var role in _roles)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="0" Style="@($"border: 1px solid {(_selectedRole?.Id == role.Id ? "var(--r2-primary)" : "var(--mud-palette-divider)")}; border-radius: var(--r2-radius-md); height: 100%; display: flex; flex-direction: column;")">
+                    <MudCardContent Style="flex: 1;">
+                        <div class="d-flex justify-space-between align-start mb-2 gap-2">
+                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@role.Name</MudText>
+                            @if (role.IsSystem)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">System</MudChip>
+                            }
+                        </div>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@(role.Description ?? "No description")</MudText>
+                    </MudCardContent>
+                    <MudCardActions Class="px-4 pb-3 pt-0">
+                        @if (!role.IsSystem)
                         {
-                            <MudItem xs="12" sm="6">
-                                <MudSwitch T="bool" Color="Color.Primary"
-                                           Value="@GetPermissionState(perm.Value)"
-                                           ValueChanged="@((bool v) => TogglePermission(perm.Value, v))"
-                                           Label="@perm.Label" />
-                            </MudItem>
+                            <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Edit" OnClick="@(() => OpenEditRoleDialog(role))">
+                                Edit
+                            </MudButton>
                         }
-                    </MudGrid>
-                    <MudDivider Class="my-2" />
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Outlined.Shield" OnClick="@(() => SelectRole(role))">
+                            Permissions
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+<div class="d-flex align-center gap-2 mb-3">
+    <div class="icon-container icon-container--secondary">
+        <MudIcon Icon="@Icons.Material.Outlined.Shield" Size="Size.Small" />
+    </div>
+    <MudText Typo="Typo.h6" Style="font-weight: 600;">
+        @(_selectedRole is not null ? $"Permissions — {_selectedRole.Name}" : "Permission Matrix")
+    </MudText>
+</div>
+<MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+    @if (_selectedRole is null)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.Shield" Title="Select a role"
+                    Description="Choose a role above to view and edit its permissions."
+                    MinHeight="300px" />
+    }
+    else if (_selectedRole.IsSystem)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">System roles cannot be modified.</MudAlert>
+    }
+    else
+    {
+        @foreach (var group in _permissionGroups)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-2 mt-3" Style="font-weight: 600;">@group.Category</MudText>
+            <MudGrid Spacing="2">
+                @foreach (var perm in group.Permissions)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudSwitch T="bool" Color="Color.Primary"
+                                   Value="@GetPermissionState(perm.Value)"
+                                   ValueChanged="@((bool v) => TogglePermission(perm.Value, v))"
+                                   Label="@perm.Label" />
+                    </MudItem>
                 }
-            }
-        </MudPaper>
-    </MudItem>
-</MudGrid>
+            </MudGrid>
+            <MudDivider Class="my-2" />
+        }
+    }
+</MudPaper>
 
 @code {
     private List<RoleDto> _roles = new();

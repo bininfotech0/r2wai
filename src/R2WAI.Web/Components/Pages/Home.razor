@@ -8,7 +8,7 @@
 
 <div class="d-flex justify-space-between align-start flex-wrap gap-3 greeting-section mb-4">
     <div>
-        <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;">Good @GetTimeOfDay(), @_userName 👋</MudText>
+        <MudText Typo="Typo.h4" Style="font-weight: 600;">Good @GetTimeOfDay(), @_userName 👋</MudText>
         <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-1" Style="line-height: 1.5;">Here's what's happening with your R2WAI platform.</MudText>
     </div>
     <div class="d-flex align-center gap-2">
@@ -34,87 +34,39 @@
 @* KPI Row *@
 <MudGrid Class="mb-4" Spacing="3">
     <MudItem xs="12" sm="6" md="4" lg="2">
-        <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
-                  @onclick="@(() => Navigation.NavigateTo("/applications"))" @onkeydown="@(e => NavigateOnEnter(e, "/applications"))"
-                  tabindex="0" role="button" aria-label="@($"Applications: {_totalApplications}. View all applications.")">
-            <div class="d-flex align-center gap-2 mb-2">
-                <div class="icon-container icon-container--secondary" style="width: 32px; height: 32px;">
-                    <MudIcon Icon="@Icons.Material.Outlined.Apps" Color="Color.Secondary" Size="Size.Small" />
-                </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Applications</MudText>
-            </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalApplications</MudText>
-            @RenderTrend(_applicationsTrendPercent)
-        </MudPaper>
+        <KpiCard Label="Applications" Value="@_totalApplications.ToString()" Icon="@Icons.Material.Outlined.Apps"
+                 IconColor="Color.Secondary" Delta="@DeltaFor(_applicationsTrendPercent)" Trend="@TrendFor(_applicationsTrendPercent)"
+                 OnClick="@(() => Navigation.NavigateTo("/applications"))"
+                 AriaLabel="@($"Applications: {_totalApplications}. View all applications.")" />
     </MudItem>
     <MudItem xs="12" sm="6" md="4" lg="2">
-        <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
-                  @onclick="@(() => Navigation.NavigateTo("/assistant-studio"))" @onkeydown="@(e => NavigateOnEnter(e, "/assistant-studio"))"
-                  tabindex="0" role="button" aria-label="@($"AI Assistants: {_totalAssistants}. View all assistants.")">
-            <div class="d-flex align-center gap-2 mb-2">
-                <div class="icon-container icon-container--primary" style="width: 32px; height: 32px;">
-                    <MudIcon Icon="@Icons.Material.Outlined.SmartToy" Color="Color.Primary" Size="Size.Small" />
-                </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">AI Assistants</MudText>
-            </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalAssistants</MudText>
-            @RenderTrend(_assistantsTrendPercent)
-        </MudPaper>
+        <KpiCard Label="AI Assistants" Value="@_totalAssistants.ToString()" Icon="@Icons.Material.Outlined.SmartToy"
+                 IconColor="Color.Primary" Delta="@DeltaFor(_assistantsTrendPercent)" Trend="@TrendFor(_assistantsTrendPercent)"
+                 OnClick="@(() => Navigation.NavigateTo("/assistant-studio"))"
+                 AriaLabel="@($"AI Assistants: {_totalAssistants}. View all assistants.")" />
     </MudItem>
     <MudItem xs="12" sm="6" md="4" lg="2">
-        <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
-                  @onclick="@(() => Navigation.NavigateTo("/workflow-studio"))" @onkeydown="@(e => NavigateOnEnter(e, "/workflow-studio"))"
-                  tabindex="0" role="button" aria-label="@($"Automations: {_totalWorkflows}. View all automations.")">
-            <div class="d-flex align-center gap-2 mb-2">
-                <div class="icon-container icon-container--secondary" style="width: 32px; height: 32px;">
-                    <MudIcon Icon="@Icons.Material.Outlined.AccountTree" Color="Color.Secondary" Size="Size.Small" />
-                </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Automations</MudText>
-            </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalWorkflows</MudText>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">@_activeWorkflows active</MudText>
-        </MudPaper>
+        <KpiCard Label="Automations" Value="@_totalWorkflows.ToString()" Icon="@Icons.Material.Outlined.AccountTree"
+                 IconColor="Color.Secondary" Subtitle="@($"{_activeWorkflows} active")"
+                 OnClick="@(() => Navigation.NavigateTo("/workflow-studio"))"
+                 AriaLabel="@($"Automations: {_totalWorkflows}. View all automations.")" />
     </MudItem>
     <MudItem xs="12" sm="6" md="4" lg="2">
-        <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
-                  @onclick="@(() => Navigation.NavigateTo("/workflow-studio?tab=1"))" @onkeydown="@(e => NavigateOnEnter(e, "/workflow-studio?tab=1"))"
-                  tabindex="0" role="button" aria-label="@($"Executions: {_totalExecutions}. View all runs.")">
-            <div class="d-flex align-center gap-2 mb-2">
-                <div class="icon-container icon-container--primary" style="width: 32px; height: 32px;">
-                    <MudIcon Icon="@Icons.Material.Outlined.PlaylistPlay" Color="Color.Primary" Size="Size.Small" />
-                </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Executions</MudText>
-            </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_totalExecutions</MudText>
-        </MudPaper>
+        <KpiCard Label="Executions" Value="@_totalExecutions.ToString()" Icon="@Icons.Material.Outlined.PlaylistPlay"
+                 IconColor="Color.Primary"
+                 OnClick="@(() => Navigation.NavigateTo("/workflow-studio?tab=1"))"
+                 AriaLabel="@($"Executions: {_totalExecutions}. View all runs.")" />
     </MudItem>
     <MudItem xs="12" sm="6" md="4" lg="2">
-        <MudPaper Class="pa-4 kpi-card" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
-            <div class="d-flex align-center gap-2 mb-2">
-                <div class="icon-container icon-container--warning" style="width: 32px; height: 32px;">
-                    <MudIcon Icon="@Icons.Material.Outlined.TrendingUp" Color="Color.Warning" Size="Size.Small" />
-                </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Success Rate</MudText>
-            </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">
-                @(_workflowSuccessRatePercent.HasValue ? $"{_workflowSuccessRatePercent.Value:F1}%" : "—")
-            </MudText>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">Last 30 days</MudText>
-        </MudPaper>
+        <KpiCard Label="Success Rate" Icon="@Icons.Material.Outlined.TrendingUp" IconColor="Color.Warning"
+                 Value="@(_workflowSuccessRatePercent.HasValue ? $"{_workflowSuccessRatePercent.Value:F1}%" : "—")"
+                 Subtitle="Last 30 days" />
     </MudItem>
     <MudItem xs="12" sm="6" md="4" lg="2">
-        <MudPaper Class="pa-4 kpi-card kpi-card--clickable" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); cursor: pointer; height: 100%;"
-                  @onclick="@(() => Navigation.NavigateTo("/admin/users"))" @onkeydown="@(e => NavigateOnEnter(e, "/admin/users"))"
-                  tabindex="0" role="button" aria-label="@($"Active Users: {_activeUsersByLogin}. View all users.")">
-            <div class="d-flex align-center gap-2 mb-2">
-                <div class="icon-container icon-container--primary" style="width: 32px; height: 32px;">
-                    <MudIcon Icon="@Icons.Material.Outlined.Groups" Color="Color.Primary" Size="Size.Small" />
-                </div>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-weight: 600;">Active Users</MudText>
-            </div>
-            <MudText Typo="Typo.h4" Style="font-weight: 800; letter-spacing: -0.03em;" Class="animate-count">@_activeUsersByLogin</MudText>
-            @RenderTrend(_activeUsersTrendPercent)
-        </MudPaper>
+        <KpiCard Label="Active Users" Value="@_activeUsersByLogin.ToString()" Icon="@Icons.Material.Outlined.Groups"
+                 IconColor="Color.Primary" Delta="@DeltaFor(_activeUsersTrendPercent)" Trend="@TrendFor(_activeUsersTrendPercent)"
+                 OnClick="@(() => Navigation.NavigateTo("/admin/users"))"
+                 AriaLabel="@($"Active Users: {_activeUsersByLogin}. View all users.")" />
     </MudItem>
 </MudGrid>
 
@@ -314,52 +266,35 @@
 
     <MudItem xs="12" md="4">
         <MudText Typo="Typo.h6" Class="mb-3 section-title">Quick Actions</MudText>
-        <MudPaper Elevation="0" Class="pa-2 mb-4" Style="border: 1px solid var(--mud-palette-divider);">
-            @foreach (var action in _quickActions)
-            {
-                <MudButton FullWidth="true" Variant="Variant.Text" Color="Color.Default" Class="justify-start pa-3 mb-1"
-                           StartIcon="@action.Icon" OnClick="@(() => Navigation.NavigateTo(action.Url))"
-                           Style="text-transform: none; font-weight: 500;">
-                    @action.Label
-                </MudButton>
-            }
+        <MudPaper Elevation="0" Class="pa-3 mb-4" Style="border: 1px solid var(--mud-palette-divider);">
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var action in _quickActions)
+                {
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default" Class="quick-action-chip"
+                               StartIcon="@action.Icon" OnClick="@(() => Navigation.NavigateTo(action.Url))"
+                               Style="text-transform: none; flex: 1 1 calc(50% - 8px); justify-content: flex-start;">
+                        @action.Label
+                    </MudButton>
+                }
+            </div>
         </MudPaper>
 
-        <div class="d-flex justify-space-between align-center mb-3">
-            <MudText Typo="Typo.h6" Class="section-title">Recent Activity</MudText>
-        </div>
-        <MudPaper Elevation="0" Class="pa-0 mb-4" Style="border: 1px solid var(--mud-palette-divider); overflow: hidden;">
-            @if (_loading)
-            {
-                <div class="pa-4">
-                    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Timeline" />
-                </div>
-            }
-            else if (_activities.Count == 0)
-            {
-                <EmptyState Icon="@Icons.Material.Filled.Timeline"
-                            Title="No recent activity"
-                            Description="Your recent actions will appear here."
-                            MinHeight="160px" />
-            }
-            else
-            {
-                <MudList T="string" Dense="true" Class="stagger-in">
-                    @foreach (var activity in _activities.Take(5))
-                    {
-                        <MudListItem Icon="@GetActivityIcon(activity.Action)" IconColor="@GetActivityColor(activity.Action)">
-                            <div style="width: 100%;">
-                                <MudText Typo="Typo.body2" Style="font-weight: 500;">@activity.Description</MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTimeAgo(activity.Timestamp)</MudText>
-                            </div>
-                        </MudListItem>
-                    }
-                </MudList>
-            }
-        </MudPaper>
+        @if (_loading)
+        {
+            <MudText Typo="Typo.h6" Class="mb-3 section-title">Recent Activity</MudText>
+            <MudPaper Elevation="0" Class="pa-4 mb-4" Style="border: 1px solid var(--mud-palette-divider);">
+                <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Timeline" />
+            </MudPaper>
+        }
+        else
+        {
+            <div class="mb-4">
+                <LiveActivityFeed Title="Recent Activity" MaxHeight="320px" Items="@BuildActivityFeedItems()" />
+            </div>
+        }
 
-        <MudText Typo="Typo.h6" Class="mb-3 section-title">System Status</MudText>
-        <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+        <MudText Typo="Typo.h6" Class="mb-3 section-title">System Health</MudText>
+        <MudPaper Elevation="0" Class="pa-4 mb-4" Style="border: 1px solid var(--mud-palette-divider);">
             @if (_healthChecks.Count > 0 || !_loading)
             {
                 <div class="d-flex align-center gap-2 mb-2">
@@ -398,6 +333,29 @@
                 </div>
             }
         </MudPaper>
+
+        @if (_integrations.Count > 0)
+        {
+            <MudText Typo="Typo.h6" Class="mb-3 section-title">Integration Status</MudText>
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+                <div class="stagger-in">
+                    @foreach (var integration in _integrations)
+                    {
+                        <div class="d-flex justify-space-between align-center py-1">
+                            <MudText Typo="Typo.caption" Style="font-weight: 500;">@integration.Name</MudText>
+                            <div class="d-flex align-center gap-2">
+                                <span class="health-dot health-dot--@(integration.IsActive ? "healthy" : "unhealthy")"></span>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@(integration.IsActive ? "Connected" : "Disconnected")</MudText>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Class="mt-2"
+                           OnClick="@(() => Navigation.NavigateTo("/workflow-studio/integrations"))">
+                    View all
+                </MudButton>
+            </MudPaper>
+        }
     </MudItem>
 </MudGrid>
 
@@ -427,6 +385,7 @@
     private List<AssistantLookupItem> _assistantsLookup = new();
     private List<ActivityItem> _activities = new();
     private List<HealthEntry> _healthChecks = new();
+    private List<IntegrationStatusItem> _integrations = new();
     private List<InsightItem> _insights = new();
     private bool _showGettingStarted;
     private List<KbSearchResultItem> _searchResults = new();
@@ -474,13 +433,14 @@
             var metricsTask = Http.GetFromJsonAsync<MetricsDto>("/api/v1/operations/metrics");
             var logsTask = Http.GetFromJsonAsync<LogsResult>("/api/v1/operations/audit-logs?pageSize=10");
             var healthTask = LoadHealth();
+            var integrationsTask = LoadIntegrations();
             var approvalsTask = LoadApprovals();
             var kbTask = Http.GetFromJsonAsync<KbListResult>("/api/v1/knowledgebases");
             var appsTask = Http.GetFromJsonAsync<AppsResult>("/api/v1/applications?page=1&pageSize=200");
             var assistantsTask = Http.GetFromJsonAsync<AssistantsResult>("/api/v1/assistants?page=1&pageSize=200");
             var executionsTask = Http.GetFromJsonAsync<InstancesCountResult>("/api/v1/operations/workflow-instances?pageSize=1");
 
-            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, approvalsTask, kbTask, appsTask, assistantsTask, executionsTask);
+            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, integrationsTask, approvalsTask, kbTask, appsTask, assistantsTask, executionsTask);
             var completed = await Task.WhenAny(allTasks, Task.Delay(Timeout.Infinite, cts.Token));
             if (completed != allTasks)
             {
@@ -643,6 +603,19 @@
         catch { _healthStatus = "Unreachable"; }
     }
 
+    private async Task LoadIntegrations()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<IntegrationsResult>("/api/v1/integrations");
+            _integrations = (result?.Items ?? new())
+                .Select(i => new IntegrationStatusItem { Name = i.Name, IsActive = i.IsActive })
+                .Take(5)
+                .ToList();
+        }
+        catch { }
+    }
+
     private void GenerateInsights()
     {
         if (_pendingApprovals > 3)
@@ -793,29 +766,20 @@
         return $"{before}<mark style=\"background: rgba(124, 58, 237, 0.15); padding: 2px 4px; border-radius: 3px; font-weight: 600;\">{match}</mark>{after}";
     }
 
-    private static RenderFragment RenderTrend(double? percent) => builder =>
-    {
-        if (percent is null) return;
-        var up = percent.Value >= 0;
-        builder.OpenElement(0, "div");
-        builder.AddAttribute(1, "class", "d-flex align-center gap-1 mt-1");
-        builder.OpenComponent<MudIcon>(2);
-        builder.AddAttribute(3, "Icon", up ? Icons.Material.Filled.ArrowUpward : Icons.Material.Filled.ArrowDownward);
-        builder.AddAttribute(4, "Color", up ? Color.Success : Color.Error);
-        builder.AddAttribute(5, "Size", Size.Small);
-        builder.AddAttribute(6, "Style", "font-size: 0.9rem;");
-        builder.CloseComponent();
-        builder.OpenComponent<MudText>(7);
-        builder.AddAttribute(8, "Typo", Typo.caption);
-        builder.AddAttribute(9, "Color", up ? Color.Success : Color.Error);
-        builder.AddAttribute(10, "Style", "font-weight: 600;");
-        builder.AddAttribute(11, "ChildContent", (RenderFragment)(b2 =>
+    private static string? DeltaFor(double? percent) =>
+        percent.HasValue ? $"{Math.Abs(percent.Value):F1}% vs last week" : null;
+
+    private static KpiCard.TrendDirection TrendFor(double? percent) =>
+        percent is >= 0 ? KpiCard.TrendDirection.Up : KpiCard.TrendDirection.Down;
+
+    private List<LiveActivityFeed.FeedItem> BuildActivityFeedItems() =>
+        _activities.Take(5).Select(a => new LiveActivityFeed.FeedItem
         {
-            b2.AddContent(0, $"{Math.Abs(percent.Value):F1}% vs last week");
-        }));
-        builder.CloseComponent();
-        builder.CloseElement();
-    };
+            Description = a.Description,
+            Source = a.EntityType,
+            Type = a.Action.ToLowerInvariant(),
+            Timestamp = a.Timestamp
+        }).ToList();
 
     private void NavigateOnEnter(KeyboardEventArgs e, string url)
     {
@@ -827,35 +791,6 @@
         var hour = DateTime.Now.Hour;
         return hour switch { < 12 => "morning", < 17 => "afternoon", _ => "evening" };
     }
-
-    private static string FormatTimeAgo(DateTime timestamp)
-    {
-        var diff = DateTime.Now - timestamp;
-        if (diff.TotalMinutes < 1) return "Just now";
-        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
-        return $"{(int)diff.TotalDays}d ago";
-    }
-
-    private string GetActivityIcon(string action) => action switch
-    {
-        "Create" => Icons.Material.Filled.AddCircle,
-        "Update" => Icons.Material.Filled.Edit,
-        "Delete" => Icons.Material.Filled.Delete,
-        "Publish" => Icons.Material.Filled.Publish,
-        "Execute" => Icons.Material.Filled.PlayArrow,
-        _ => Icons.Material.Filled.Info,
-    };
-
-    private Color GetActivityColor(string action) => action switch
-    {
-        "Create" => Color.Success,
-        "Update" => Color.Primary,
-        "Delete" => Color.Error,
-        "Publish" => Color.Info,
-        "Execute" => Color.Secondary,
-        _ => Color.Default,
-    };
 
     private record QuickAction(string Label, string Icon, string Url);
 
@@ -886,6 +821,9 @@
     }
     private class ApprovalsResult { public List<object> Items { get; set; } = new(); }
     private class HealthEntry { public string Name { get; set; } = string.Empty; public string Status { get; set; } = string.Empty; }
+    private class IntegrationStatusItem { public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
+    private class IntegrationsResult { public List<IntegrationSummaryDto> Items { get; set; } = new(); }
+    private class IntegrationSummaryDto { public string Name { get; set; } = string.Empty; public bool IsActive { get; set; } }
     private class ActivityItem
     {
         public string Action { get; set; } = string.Empty;

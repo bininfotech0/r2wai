@@ -1,0 +1,83 @@
+@inject AuthenticatedHttpClient Http
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.PlayArrow" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Test @WorkflowName</MudText>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Provide sample trigger data to run this automation with, or leave it empty to run with no input.
+        </MudText>
+        <MudTextField @bind-Value="_triggerData" Label="Trigger Data (JSON)" Variant="Variant.Outlined"
+                      Lines="8" Class="wf-json-field"
+                      Style="font-family: var(--r2-font-mono, monospace); font-size: 0.8125rem;"
+                      Placeholder="@("{\n  \"applicationId\": \"APP-10257\",\n  \"citizenId\": \"CIT-50812\"\n}")"
+                      Error="@(_jsonError is not null)" ErrorText="@_jsonError" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_running">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow"
+                   Disabled="_running" OnClick="RunTest">
+            @(_running ? "Running..." : "Run Test")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid WorkflowId { get; set; }
+    [Parameter] public string WorkflowName { get; set; } = "Automation";
+
+    private string _triggerData = string.Empty;
+    private string? _jsonError;
+    private bool _running;
+
+    private async Task RunTest()
+    {
+        _jsonError = null;
+        var data = _triggerData.Trim();
+        if (data.Length > 0)
+        {
+            try { System.Text.Json.JsonDocument.Parse(data); }
+            catch (System.Text.Json.JsonException ex)
+            {
+                _jsonError = $"Invalid JSON: {ex.Message}";
+                return;
+            }
+        }
+
+        _running = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync($"/api/v1/workflows/{WorkflowId}/execute",
+                new { Data = data.Length > 0 ? data : null });
+
+            if (response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadFromJsonAsync<ExecuteResult>();
+                Snackbar.Add("Automation started", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(body?.InstanceId ?? body?.Instance?.Id));
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Test failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Test failed: {ex.Message}", Severity.Error); }
+        finally { _running = false; }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class ExecuteResult
+    {
+        public Guid? InstanceId { get; set; }
+        public InstanceRef? Instance { get; set; }
+    }
+    private class InstanceRef { public Guid Id { get; set; } }
+}

@@ -4,8 +4,8 @@
   "description": "Enterprise AI platform for building assistants, automating workflows, and executing work with AI.",
   "start_url": "/",
   "display": "standalone",
-  "theme_color": "#7C3AED",
-  "background_color": "#0F0A1A",
+  "theme_color": "#2563EB",
+  "background_color": "#F8FAFC",
   "icons": [
     {
       "src": "favicon.svg",

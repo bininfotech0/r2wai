@@ -18,9 +18,8 @@
                 @if (_instance is not null)
                 {
                     <StatusBadge Status="@_instance.Status" />
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        Instance: @InstanceId[..Math.Min(8, InstanceId.Length)]...
-                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Instance:</MudText>
+                    <code class="monitor-id-chip">@InstanceId[..Math.Min(8, InstanceId.Length)]...</code>
                 }
             </div>
         </div>
@@ -94,10 +93,135 @@ else if (_instance is null)
 else
 {
     <MudGrid Spacing="3">
-        @* ── Left Panel: Instance Info & Metrics ── *@
+        @* ── Left Panel: Step Timeline (2/3 width, per wireframe) ── *@
+        <MudItem xs="12" md="8">
+            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
+                <div class="d-flex justify-space-between align-center mb-3">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Step Timeline</MudText>
+                    <MudToggleIconButton @bind-Toggled="_showRawOutput"
+                                         Icon="@Icons.Material.Outlined.Code"
+                                         ToggledIcon="@Icons.Material.Filled.Code"
+                                         Size="Size.Small"
+                                         ToggledColor="Color.Primary"
+                                         aria-label="Toggle raw output" />
+                </div>
+
+                @if (_steps.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Outlined.Timeline"
+                                Title="No step data available"
+                                Description="Step execution details will appear here once the workflow starts processing." />
+                }
+                else
+                {
+                    <MudTimeline TimelinePosition="TimelinePosition.Start">
+                        @for (int i = 0; i < _steps.Count; i++)
+                        {
+                            var step = _steps[i];
+                            var isCurrentStep = step.Status == "Running";
+                            <MudTimelineItem Color="@GetStepStatusColor(step.Status)" Size="Size.Medium"
+                                             Variant="Variant.Filled">
+                                <ItemDot>
+                                    <MudIcon Icon="@GetStepStatusIcon(step.Status)" Size="Size.Small" />
+                                </ItemDot>
+                                <ItemContent>
+                                    <MudPaper Class="pa-3" Elevation="0"
+                                              Style="@($"border: 1px solid var(--mud-palette-divider);{(isCurrentStep ? " border-left: 4px solid var(--mud-palette-primary); background: rgba(59,130,246,0.04);" : "")}")">
+                                        <div class="d-flex justify-space-between align-center">
+                                            <div class="d-flex align-center gap-2">
+                                                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@step.StepName</MudText>
+                                                @if (!string.IsNullOrEmpty(step.StepType))
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                                                             Style="font-size: 0.6875rem; height: 18px;">
+                                                        @step.StepType
+                                                    </MudChip>
+                                                }
+                                            </div>
+                                            <MudChip T="string" Size="Size.Small" Color="@GetStepStatusColor(step.Status)">
+                                                @step.Status
+                                            </MudChip>
+                                        </div>
+
+                                        @* Timing info *@
+                                        @if (step.StartedAt.HasValue)
+                                        {
+                                            <div class="d-flex gap-3 mt-1 flex-wrap">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small"
+                                                             Style="font-size: 12px; vertical-align: middle; margin-right: 2px;" />
+                                                    @step.StartedAt.Value.ToString("HH:mm:ss.fff")
+                                                </MudText>
+                                                @if (step.CompletedAt.HasValue)
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Size="Size.Small"
+                                                                 Style="font-size: 12px; vertical-align: middle; margin-right: 2px;" />
+                                                        @step.CompletedAt.Value.ToString("HH:mm:ss.fff")
+                                                    </MudText>
+                                                    <MudText Typo="Typo.caption" Style="font-weight: 600;">
+                                                        @FormatTimeSpan(step.CompletedAt.Value - step.StartedAt.Value)
+                                                    </MudText>
+                                                }
+                                            </div>
+                                        }
+
+                                        @* Output viewer *@
+                                        @if (!string.IsNullOrEmpty(step.Output))
+                                        {
+                                            <MudDivider Class="my-2" />
+                                            @if (_showRawOutput)
+                                            {
+                                                <div class="monitor-output-block" style="max-height: 200px;">
+                                                    <pre>@step.Output</pre>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="d-flex align-center gap-1">
+                                                    <MudIcon Icon="@Icons.Material.Outlined.Output" Size="Size.Small" Color="Color.Success"
+                                                             Style="font-size: 14px;" />
+                                                    <MudText Typo="Typo.caption" Color="Color.Success">
+                                                        @(step.Output.Length > 300 ? step.Output[..300] + "..." : step.Output)
+                                                    </MudText>
+                                                </div>
+                                                @if (step.Output.Length > 300)
+                                                {
+                                                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                                               OnClick="@(() => _expandedOutputStep = _expandedOutputStep == step ? null : step)">
+                                                        @(_expandedOutputStep == step ? "Show less" : "Show full output")
+                                                    </MudButton>
+                                                    @if (_expandedOutputStep == step)
+                                                    {
+                                                        <div class="monitor-output-block" style="max-height: 400px;">
+                                                            <pre>@step.Output</pre>
+                                                        </div>
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        @* Error display *@
+                                        @if (!string.IsNullOrEmpty(step.Error))
+                                        {
+                                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2"
+                                                      Style="font-size: 0.8rem;">
+                                                @step.Error
+                                            </MudAlert>
+                                        }
+                                    </MudPaper>
+                                </ItemContent>
+                            </MudTimelineItem>
+                        }
+                    </MudTimeline>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* ── Right Rail: Summary & Step Metrics (1/3 width, per wireframe) ── *@
         <MudItem xs="12" md="4">
             <MudPaper Elevation="0" Class="pa-4 mb-3" Style="border: 1px solid var(--mud-palette-divider);">
-                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" Class="mb-3">Execution Details</MudText>
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" Class="mb-3">Summary</MudText>
                 <MudSimpleTable Dense="true" Elevation="0">
                     <tbody>
                         <tr>
@@ -203,131 +327,6 @@ else
                     }
                 </MudPaper>
             }
-        </MudItem>
-
-        @* ── Right Panel: Timeline & Logs ── *@
-        <MudItem xs="12" md="8">
-            <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider);">
-                <div class="d-flex justify-space-between align-center mb-3">
-                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Step Timeline</MudText>
-                    <MudToggleIconButton @bind-Toggled="_showRawOutput"
-                                         Icon="@Icons.Material.Outlined.Code"
-                                         ToggledIcon="@Icons.Material.Filled.Code"
-                                         Size="Size.Small"
-                                         ToggledColor="Color.Primary"
-                                         aria-label="Toggle raw output" />
-                </div>
-
-                @if (_steps.Count == 0)
-                {
-                    <EmptyState Icon="@Icons.Material.Outlined.Timeline"
-                                Title="No step data available"
-                                Description="Step execution details will appear here once the workflow starts processing." />
-                }
-                else
-                {
-                    <MudTimeline TimelinePosition="TimelinePosition.Start">
-                        @for (int i = 0; i < _steps.Count; i++)
-                        {
-                            var step = _steps[i];
-                            var isCurrentStep = step.Status == "Running";
-                            <MudTimelineItem Color="@GetStepStatusColor(step.Status)" Size="Size.Medium"
-                                             Variant="Variant.Filled">
-                                <ItemDot>
-                                    <MudIcon Icon="@GetStepStatusIcon(step.Status)" Size="Size.Small" />
-                                </ItemDot>
-                                <ItemContent>
-                                    <MudPaper Class="pa-3" Elevation="0"
-                                              Style="@($"border: 1px solid var(--mud-palette-divider);{(isCurrentStep ? " border-left: 4px solid var(--mud-palette-primary); background: rgba(59,130,246,0.04);" : "")}")">
-                                        <div class="d-flex justify-space-between align-center">
-                                            <div class="d-flex align-center gap-2">
-                                                <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">@step.StepName</MudText>
-                                                @if (!string.IsNullOrEmpty(step.StepType))
-                                                {
-                                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
-                                                             Style="font-size: 0.6875rem; height: 18px;">
-                                                        @step.StepType
-                                                    </MudChip>
-                                                }
-                                            </div>
-                                            <MudChip T="string" Size="Size.Small" Color="@GetStepStatusColor(step.Status)">
-                                                @step.Status
-                                            </MudChip>
-                                        </div>
-
-                                        @* Timing info *@
-                                        @if (step.StartedAt.HasValue)
-                                        {
-                                            <div class="d-flex gap-3 mt-1 flex-wrap">
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Small"
-                                                             Style="font-size: 12px; vertical-align: middle; margin-right: 2px;" />
-                                                    @step.StartedAt.Value.ToString("HH:mm:ss.fff")
-                                                </MudText>
-                                                @if (step.CompletedAt.HasValue)
-                                                {
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Size="Size.Small"
-                                                                 Style="font-size: 12px; vertical-align: middle; margin-right: 2px;" />
-                                                        @step.CompletedAt.Value.ToString("HH:mm:ss.fff")
-                                                    </MudText>
-                                                    <MudText Typo="Typo.caption" Style="font-weight: 600;">
-                                                        @FormatTimeSpan(step.CompletedAt.Value - step.StartedAt.Value)
-                                                    </MudText>
-                                                }
-                                            </div>
-                                        }
-
-                                        @* Output viewer *@
-                                        @if (!string.IsNullOrEmpty(step.Output))
-                                        {
-                                            <MudDivider Class="my-2" />
-                                            @if (_showRawOutput)
-                                            {
-                                                <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: var(--r2-radius-sm); padding: 8px; overflow-x: auto; max-height: 200px;">
-                                                    <pre style="margin: 0; font-size: 0.75rem; font-family: 'Fira Code', monospace; white-space: pre-wrap; word-break: break-all; color: #374151;">@step.Output</pre>
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                                <div class="d-flex align-center gap-1">
-                                                    <MudIcon Icon="@Icons.Material.Outlined.Output" Size="Size.Small" Color="Color.Success"
-                                                             Style="font-size: 14px;" />
-                                                    <MudText Typo="Typo.caption" Color="Color.Success">
-                                                        @(step.Output.Length > 300 ? step.Output[..300] + "..." : step.Output)
-                                                    </MudText>
-                                                </div>
-                                                @if (step.Output.Length > 300)
-                                                {
-                                                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                                                               OnClick="@(() => _expandedOutputStep = _expandedOutputStep == step ? null : step)">
-                                                        @(_expandedOutputStep == step ? "Show less" : "Show full output")
-                                                    </MudButton>
-                                                    @if (_expandedOutputStep == step)
-                                                    {
-                                                        <div style="background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: var(--r2-radius-sm); padding: 8px; max-height: 400px; overflow: auto;">
-                                                            <pre style="margin: 0; font-size: 0.75rem; font-family: 'Fira Code', monospace; white-space: pre-wrap; word-break: break-all;">@step.Output</pre>
-                                                        </div>
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        @* Error display *@
-                                        @if (!string.IsNullOrEmpty(step.Error))
-                                        {
-                                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2"
-                                                      Style="font-size: 0.8rem;">
-                                                @step.Error
-                                            </MudAlert>
-                                        }
-                                    </MudPaper>
-                                </ItemContent>
-                            </MudTimelineItem>
-                        }
-                    </MudTimeline>
-                }
-            </MudPaper>
         </MudItem>
     </MudGrid>
 }

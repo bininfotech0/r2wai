@@ -19,7 +19,7 @@
                         {
                             <MudItem xs="6">
                                 <MudPaper Class="pa-3 cursor-pointer" Elevation="0"
-                                          Style="@($"border: 2px solid {(trigger == _selectedTrigger ? "var(--mud-palette-primary)" : "var(--mud-palette-divider)")}; border-radius: 10px; height: 100%;")"
+                                          Style="@($"border: 2px solid {(trigger == _selectedTrigger ? "var(--mud-palette-primary)" : "var(--mud-palette-divider)")}; background: {(trigger == _selectedTrigger ? "rgba(37, 99, 235, 0.08)" : "var(--mud-palette-surface)")}; border-radius: 10px; height: 100%; transition: all 0.15s ease;")"
                                           @onclick="@(() => _selectedTrigger = trigger)"
                                           @onkeydown="@(e => { if (e.Key is "Enter" or " ") _selectedTrigger = trigger; })"
                                           tabindex="0" role="button" aria-label="@($"Trigger: {trigger}")">

@@ -9,7 +9,7 @@
 
 <PageHeader Title="Audit Logs" Subtitle="View and export system audit trail" />
 
-<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
     <MudGrid>
         <MudItem xs="12" sm="2">
             <MudSelect T="string" @bind-Value="_filterAction" Label="Action" Clearable="true"
@@ -68,19 +68,29 @@
 
 <MudDataGrid T="AuditLogDto" Items="_logs" Hover="true" Dense="true"
              Loading="_loading" Elevation="0"
-             Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+             Style="border: 1px solid var(--mud-palette-divider);">
     <Columns>
-        <PropertyColumn Property="x => x.Timestamp" Title="Date/Time" Format="yyyy-MM-dd HH:mm:ss" />
+        <TemplateColumn Title="Time">
+            <CellTemplate>
+                <MudText Typo="Typo.body2" Class="r2-mono">@context.Item.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+            </CellTemplate>
+        </TemplateColumn>
         <PropertyColumn Property="x => x.UserName" Title="User" />
         <TemplateColumn Title="Action">
             <CellTemplate>
-                <MudChip T="string" Size="Size.Small" Color="@GetActionColor(context.Item.Action)">
+                <MudChip T="string" Size="Size.Small" Color="@GetActionColor(context.Item.Action)" Style="font-weight: 600;">
                     @context.Item.Action
                 </MudChip>
             </CellTemplate>
         </TemplateColumn>
-        <PropertyColumn Property="x => x.EntityType" Title="Entity" />
-        <PropertyColumn Property="x => x.EntityId" Title="Entity ID" />
+        <TemplateColumn Title="Resource">
+            <CellTemplate>
+                <div>
+                    <MudText Typo="Typo.body2">@context.Item.EntityType</MudText>
+                    <code class="monitor-id-chip">@context.Item.EntityId</code>
+                </div>
+            </CellTemplate>
+        </TemplateColumn>
         <TemplateColumn Title="Application">
             <CellTemplate>
                 @GetApplicationName(context.Item.ApplicationId)
@@ -92,9 +102,9 @@
                 @if (!string.IsNullOrEmpty(context.Item.CorrelationId))
                 {
                     <MudTooltip Text="@context.Item.CorrelationId">
-                        <span class="mud-text-secondary" style="font-family: monospace; font-size: 0.75rem;">
+                        <code class="monitor-id-chip">
                             @context.Item.CorrelationId[..Math.Min(8, context.Item.CorrelationId.Length)]
-                        </span>
+                        </code>
                     </MudTooltip>
                 }
             </CellTemplate>

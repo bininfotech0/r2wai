@@ -172,30 +172,18 @@ else if (_showGridView)
                             @{
                                 var testState = GetTestState(model.Id);
                             }
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
-                                     Color="@(testState == "success" ? Color.Success : testState == "failed" ? Color.Error : Color.Default)"
-                                     Style="font-size: 0.6875rem;">
-                                @if (testState == "success")
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Class="me-1" />
-                                    <span>Connected</span>
-                                }
-                                else if (testState == "failed")
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="me-1" />
-                                    <span>Failed</span>
-                                }
-                                else if (testState == "testing")
-                                {
+                            @if (testState == "testing")
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" Style="font-size: 0.6875rem;">
                                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="width:12px;height:12px;" Class="me-1" />
                                     <span>Testing</span>
-                                }
-                                else
-                                {
-                                    <MudIcon Icon="@Icons.Material.Outlined.HelpOutline" Size="Size.Small" Class="me-1" />
-                                    <span>Untested</span>
-                                }
-                            </MudChip>
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <StatusBadge Status="@(testState == "success" ? "Connected" : testState == "failed" ? "Failed" : "Untested")"
+                                             OverrideColor="@(testState == "success" ? Color.Success : testState == "failed" ? Color.Error : Color.Default)" />
+                            }
                         </div>
 
                         @* Error message *@
@@ -329,12 +317,12 @@ else
                 <MudTd>
                     @if (GetTestState(context.Id) == "success")
                     {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text" Style="font-size: 0.6875rem;">Connected</MudChip>
+                        <StatusBadge Status="Connected" OverrideColor="Color.Success" />
                     }
                     else if (GetTestState(context.Id) == "failed")
                     {
                         <MudTooltip Text="@GetTestError(context.Id)">
-                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Text" Style="font-size: 0.6875rem;">Failed</MudChip>
+                            <StatusBadge Status="Failed" OverrideColor="Color.Error" />
                         </MudTooltip>
                     }
                     else if (GetTestState(context.Id) == "testing")

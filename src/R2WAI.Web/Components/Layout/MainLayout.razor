@@ -73,17 +73,29 @@
                            OnClick="ToggleCopilot" aria-label="Toggle AI Copilot" Size="Size.Small" Class="ml-1" />
         </MudTooltip>
 
+        @* Help *@
+        <MudTooltip Text="Help" Placement="Placement.Bottom">
+            <MudIconButton Icon="@Icons.Material.Outlined.HelpOutline" Color="Color.Default"
+                           OnClick="@(() => Navigation.NavigateTo("/about"))" aria-label="Help" Size="Size.Small" />
+        </MudTooltip>
+
         @* User Menu *@
         <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true"
                  aria-label="User menu">
             <ActivatorContent>
-                <MudTooltip Text="Account menu" Placement="Placement.Bottom">
-                    <div @onclick="context.ToggleAsync" style="cursor: pointer; display: inline-flex; margin-left: 4px;">
-                        <MudAvatar Color="Color.Primary" Style="width: 32px; height: 32px; font-size: 0.75rem; background: var(--r2-gradient-primary);">
-                            @(_userEmail?.Length > 0 ? _userEmail[0].ToString().ToUpper() : "U")
-                        </MudAvatar>
+                <div @onclick="context.ToggleAsync" class="d-none d-sm-flex align-center gap-2"
+                     style="cursor: pointer; margin-left: 8px; padding: 4px 8px 4px 4px; border-radius: 10px; transition: background-color 0.15s ease;">
+                    <MudAvatar Color="Color.Primary" Style="width: 32px; height: 32px; font-size: 0.75rem; background: var(--r2-gradient-primary);">
+                        @(_userEmail?.Length > 0 ? _userEmail[0].ToString().ToUpper() : "U")
+                    </MudAvatar>
+                    <div class="d-none d-md-flex flex-column" style="line-height: 1.2;">
+                        <MudText Typo="Typo.caption" Style="font-weight: 600;">@_userEmail</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.6875rem;">@_personaLabel</MudText>
                     </div>
-                </MudTooltip>
+                    <MudIcon Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small" Color="Color.Secondary" Class="d-none d-md-flex" />
+                </div>
+                <MudIconButton Icon="@Icons.Material.Filled.MoreVert" Color="Color.Default" Size="Size.Small"
+                               OnClick="context.ToggleAsync" Class="d-flex d-sm-none" aria-label="Account menu" />
             </ActivatorContent>
             <ChildContent>
                 <MudMenuItem Href="/profile" Icon="@Icons.Material.Outlined.Person">
@@ -122,69 +134,55 @@
 
                     @if (persona == RolePersona.SuperAdmin)
                     {
-                        <MudNavGroup Title="Build" Icon="@Icons.Material.Outlined.Construction" Expanded="_buildExpanded" ExpandedChanged="@(v => _buildExpanded = v)" HideExpandIcon="false">
-                            <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">Applications</MudNavLink>
-                            <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">AI Assistant</MudNavLink>
-                            <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
-                            <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Build">Integrations</MudNavLink>
-                            <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Automations</MudNavLink>
-                        </MudNavGroup>
+                        <MudText Typo="Typo.caption" Class="px-4 pt-2 pb-1 nav-section-label">Main</MudText>
+                        <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">Applications</MudNavLink>
+                        <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">AI Assistants</MudNavLink>
+                        <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Automations</MudNavLink>
+                        <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
+                        <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Build">Integrations</MudNavLink>
+                        <MudNavLink Href="/assistant-studio/tools" Icon="@Icons.Material.Outlined.Extension">Tools &amp; APIs</MudNavLink>
+                        <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Channels</MudNavLink>
 
-                        <MudNavGroup Title="Test" Icon="@Icons.Material.Outlined.Science" Expanded="_testExpanded" ExpandedChanged="@(v => _testExpanded = v)" HideExpandIcon="false">
-                            <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.Chat">Playground</MudNavLink>
-                            <MudNavLink Href="/test-cases" Icon="@Icons.Material.Outlined.FactCheck">Test Cases</MudNavLink>
-                            <MudNavLink Href="/test-history" Icon="@Icons.Material.Outlined.History">Test History</MudNavLink>
-                        </MudNavGroup>
+                        <MudText Typo="Typo.caption" Class="px-4 pt-3 pb-1 nav-section-label">Manage</MudText>
+                        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users</MudNavLink>
+                        <MudNavLink Href="/admin/roles" Icon="@Icons.Material.Outlined.AdminPanelSettings">Roles &amp; Permissions</MudNavLink>
+                        <MudNavLink Href="/governance/departments" Icon="@Icons.Material.Outlined.CorporateFare">Departments</MudNavLink>
+                        <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">Models</MudNavLink>
+                        <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
+                        <MudNavLink Href="/governance" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Policy">Global Policies</MudNavLink>
+                        <MudNavLink Href="/admin/member-events" Icon="@Icons.Material.Outlined.Event">Member Events</MudNavLink>
 
-                        <MudNavGroup Title="Publish" Icon="@Icons.Material.Outlined.RocketLaunch" Expanded="_publishExpanded" ExpandedChanged="@(v => _publishExpanded = v)" HideExpandIcon="false">
-                            <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Channels</MudNavLink>
-                        </MudNavGroup>
-
-                        <MudNavGroup Title="Monitor" Icon="@Icons.Material.Outlined.MonitorHeart" Expanded="_monitorExpanded" ExpandedChanged="@(v => _monitorExpanded = v)" HideExpandIcon="false">
-                            <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Dashboard">System Monitor</MudNavLink>
-                            <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
-                            <MudNavLink Href="/workflow-studio?tab=1" Icon="@Icons.Material.Outlined.PlaylistPlay">Runs</MudNavLink>
-                            <MudNavLink Href="/operations/errors" Icon="@Icons.Material.Outlined.BugReport">Errors</MudNavLink>
-                            <MudNavLink Href="/operations/audit-logs" Icon="@Icons.Material.Outlined.History">Audit</MudNavLink>
-                        </MudNavGroup>
-
-                        <MudNavGroup Title="Manage" Icon="@Icons.Material.Outlined.AdminPanelSettings" Expanded="_manageExpanded" ExpandedChanged="@(v => _manageExpanded = v)" HideExpandIcon="false">
-                            <MudNavLink Href="/governance/departments" Icon="@Icons.Material.Outlined.CorporateFare">Departments</MudNavLink>
-                            <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users &amp; Roles</MudNavLink>
-                            <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">Models</MudNavLink>
-                            <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
-                            <MudNavLink Href="/governance" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Policy">Global Policies</MudNavLink>
-                            <MudNavLink Href="/admin/member-events" Icon="@Icons.Material.Outlined.Event">Member Events</MudNavLink>
-                            <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
-                        </MudNavGroup>
+                        <MudText Typo="Typo.caption" Class="px-4 pt-3 pb-1 nav-section-label">Operations</MudText>
+                        <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.Science">Test &amp; Playground</MudNavLink>
+                        <MudNavLink Href="/test-cases" Icon="@Icons.Material.Outlined.FactCheck">Test Cases</MudNavLink>
+                        <MudNavLink Href="/test-history" Icon="@Icons.Material.Outlined.History">Test History</MudNavLink>
+                        <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.MonitorHeart">Monitor</MudNavLink>
+                        <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
+                        <MudNavLink Href="/workflow-studio?tab=1" Icon="@Icons.Material.Outlined.PlaylistPlay">Runs</MudNavLink>
+                        <MudNavLink Href="/operations/errors" Icon="@Icons.Material.Outlined.BugReport">Errors</MudNavLink>
+                        <MudNavLink Href="/operations/audit-logs" Icon="@Icons.Material.Outlined.History">Logs &amp; Audit</MudNavLink>
+                        <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
                     }
                     else if (persona == RolePersona.DepartmentAdmin)
                     {
-                        <MudNavGroup Title="Build" Icon="@Icons.Material.Outlined.Construction" Expanded="_buildExpanded" ExpandedChanged="@(v => _buildExpanded = v)" HideExpandIcon="false">
-                            <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">Applications</MudNavLink>
-                            <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">AI Assistant</MudNavLink>
-                            <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
-                            <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Build">Integrations</MudNavLink>
-                            <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Automations</MudNavLink>
-                        </MudNavGroup>
+                        <MudText Typo="Typo.caption" Class="px-4 pt-2 pb-1 nav-section-label">Main</MudText>
+                        <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">Applications</MudNavLink>
+                        <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">AI Assistants</MudNavLink>
+                        <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Automations</MudNavLink>
+                        <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
+                        <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Build">Integrations</MudNavLink>
+                        <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Channels</MudNavLink>
 
-                        <MudNavGroup Title="Test" Icon="@Icons.Material.Outlined.Science" Expanded="_testExpanded" ExpandedChanged="@(v => _testExpanded = v)" HideExpandIcon="false">
-                            <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.Chat">Playground</MudNavLink>
-                            <MudNavLink Href="/test-cases" Icon="@Icons.Material.Outlined.FactCheck">Test Cases</MudNavLink>
-                            <MudNavLink Href="/test-history" Icon="@Icons.Material.Outlined.History">Test History</MudNavLink>
-                        </MudNavGroup>
+                        <MudText Typo="Typo.caption" Class="px-4 pt-3 pb-1 nav-section-label">Manage</MudText>
+                        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users &amp; Roles</MudNavLink>
+                        <MudNavLink Href="/admin/member-events" Icon="@Icons.Material.Outlined.Event">Member Events</MudNavLink>
+                        <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
 
-                        <MudNavGroup Title="Publish" Icon="@Icons.Material.Outlined.RocketLaunch" Expanded="_publishExpanded" ExpandedChanged="@(v => _publishExpanded = v)" HideExpandIcon="false">
-                            <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Channels</MudNavLink>
-                        </MudNavGroup>
-
+                        <MudText Typo="Typo.caption" Class="px-4 pt-3 pb-1 nav-section-label">Operations</MudText>
+                        <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.Science">Test &amp; Playground</MudNavLink>
+                        <MudNavLink Href="/test-cases" Icon="@Icons.Material.Outlined.FactCheck">Test Cases</MudNavLink>
+                        <MudNavLink Href="/test-history" Icon="@Icons.Material.Outlined.History">Test History</MudNavLink>
                         <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.MonitorHeart">Monitor</MudNavLink>
-
-                        <MudNavGroup Title="Manage" Icon="@Icons.Material.Outlined.AdminPanelSettings" Expanded="_manageExpanded" ExpandedChanged="@(v => _manageExpanded = v)" HideExpandIcon="false">
-                            <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users &amp; Roles</MudNavLink>
-                            <MudNavLink Href="/admin/member-events" Icon="@Icons.Material.Outlined.Event">Member Events</MudNavLink>
-                            <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
-                        </MudNavGroup>
                     }
                     else if (persona == RolePersona.Officer)
                     {
@@ -256,21 +254,13 @@
     private bool _copilotOpen;
     private bool _isNavigating;
     private string _userEmail = "Loading...";
+    private string _personaLabel = "";
     private int _pendingApprovalCount;
     private List<R2WAI.Web.Components.Shared.NotificationPanel.NotificationItem> _notifications = new();
     private Microsoft.AspNetCore.SignalR.Client.HubConnection? _hubConnection;
     private List<BreadcrumbItem> _breadcrumbs = new();
     private CommandPalette? _commandPalette;
     private DotNetObjectReference<MainLayout>? _dotNetRef;
-
-    // Build defaults open since it's the most-used area; Test/Publish/Monitor/Manage default
-    // closed but auto-expand when the current route lands inside them, so the active nav link
-    // is never hidden behind a collapsed group with no "you are here" cue.
-    private bool _buildExpanded = true;
-    private bool _testExpanded;
-    private bool _publishExpanded;
-    private bool _monitorExpanded;
-    private bool _manageExpanded;
 
     private int _unreadCount => _notifications.Count(n => !n.IsRead);
 
@@ -282,32 +272,7 @@
         Navigation.LocationChanged += OnLocationChanged;
         ThemeService.OnChange += StateHasChanged;
         Http.OnSessionExpired += HandleSessionExpired;
-        UpdateActiveGroupExpansion();
         UpdateBreadcrumbs();
-    }
-
-    private void UpdateActiveGroupExpansion()
-    {
-        var path = new Uri(Navigation.Uri).AbsolutePath;
-        var inPlayground = path.StartsWith("/assistant-studio/playground", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/test-cases", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/test-history", StringComparison.OrdinalIgnoreCase);
-
-        if (path.StartsWith("/applications", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/documents", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/templates", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/workflow-studio", StringComparison.OrdinalIgnoreCase)
-            || (path.StartsWith("/assistant-studio", StringComparison.OrdinalIgnoreCase) && !inPlayground))
-            _buildExpanded = true;
-        if (inPlayground)
-            _testExpanded = true;
-        if (path.StartsWith("/chatbots", StringComparison.OrdinalIgnoreCase))
-            _publishExpanded = true;
-        if (path.StartsWith("/operations", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/conversations", StringComparison.OrdinalIgnoreCase))
-            _monitorExpanded = true;
-        if (path.StartsWith("/admin/", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/settings", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/governance", StringComparison.OrdinalIgnoreCase))
-            _manageExpanded = true;
     }
 
     private void HandleSessionExpired()
@@ -330,6 +295,14 @@
                     var state = await AuthState;
                     var email = state.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
                     _userEmail = email ?? "User";
+                    _personaLabel = state.User.GetPersona() switch
+                    {
+                        RolePersona.SuperAdmin => "Super Admin",
+                        RolePersona.DepartmentAdmin => "Department Admin",
+                        RolePersona.Officer => "Officer",
+                        RolePersona.Citizen => "Citizen",
+                        _ => ""
+                    };
                     StateHasChanged();
                 }
             }
@@ -435,7 +408,6 @@
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         _isNavigating = true;
-        UpdateActiveGroupExpansion();
         InvokeAsync(StateHasChanged);
 
         _ = Task.Delay(400).ContinueWith(_ => InvokeAsync(() =>

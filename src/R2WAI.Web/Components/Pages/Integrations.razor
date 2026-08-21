@@ -6,29 +6,128 @@
 
 <PageTitle>R2WAI - Integrations</PageTitle>
 
-<PageHeader Title="Integrations" Subtitle="Connect to external systems and APIs" />
+<PageHeader Title="Integrations" Subtitle="Connect to external systems and APIs">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+        Add Integration
+    </MudButton>
+</PageHeader>
 
-<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
-    <MudGrid>
-        <MudItem xs="12" sm="6">
-            <MudTextField @bind-Value="_searchTerm" Placeholder="Search integrations..."
-                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                          Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
-        </MudItem>
-        <MudItem xs="12" sm="6" Class="d-flex justify-end">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
-                Add Integration
-            </MudButton>
-        </MudItem>
-    </MudGrid>
-</MudPaper>
+<MudTextField @bind-Value="_searchTerm" Placeholder="Search integrations..."
+              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+              Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true"
+              Class="mb-5" Style="max-width: 420px;" />
+
+@* ──────────────────── Installed Integrations ──────────────────── *@
+<div class="mb-6">
+    <div class="d-flex align-center justify-space-between mb-3">
+        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Installed (@FilteredIntegrations.Count())</MudText>
+        @if (!_loading && _integrations.Count > 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@FilteredIntegrations.Count() of @_integrations.Count shown</MudText>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Cards" />
+    }
+    else if (_integrations.Count == 0)
+    {
+        <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+            <EmptyState Icon="@Icons.Material.Outlined.Extension" Title="No integrations installed yet"
+                        Description="Browse the Connector Marketplace below to add your first integration." MinHeight="200px" />
+        </MudPaper>
+    }
+    else if (!FilteredIntegrations.Any())
+    {
+        <MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
+            <EmptyState Icon="@Icons.Material.Outlined.SearchOff" Title="No integrations match your search"
+                        Description="Try a different name." ActionText="Clear search"
+                        OnAction="@(() => _searchTerm = string.Empty)" MinHeight="200px" />
+        </MudPaper>
+    }
+    else
+    {
+        <MudGrid Spacing="3">
+            @foreach (var integration in FilteredIntegrations)
+            {
+                var category = GetIntegrationCategory(integration);
+                <MudItem xs="12" md="6" xl="4">
+                    <MudPaper Elevation="0" Class="pa-4 integration-card">
+                        <div class="d-flex align-start justify-space-between gap-2">
+                            <div class="d-flex align-center gap-3" style="min-width: 0;">
+                                <MudAvatar Size="Size.Medium" Style="@($"background-color: {GetCategoryColor(category)}1A; color: {GetCategoryColor(category)};")">
+                                    <MudIcon Icon="@GetCategoryIcon(category)" Size="Size.Small" />
+                                </MudAvatar>
+                                <div style="min-width: 0;">
+                                    <MudText Typo="Typo.subtitle2" Style="font-weight: 600;" Class="text-truncate">@integration.Name</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@category</MudText>
+                                </div>
+                            </div>
+                            <StatusBadge Status="@(integration.IsActive ? "Active" : "Inactive")" />
+                        </div>
+
+                        @if (NeedsSetup(integration))
+                        {
+                            <MudTooltip Text="Endpoint URL contains template placeholders or credentials are not configured — edit to add your account values and auth token">
+                                <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Small"
+                                         Icon="@Icons.Material.Outlined.Warning" Class="mt-3">
+                                    Setup Required
+                                </MudChip>
+                            </MudTooltip>
+                        }
+
+                        <div class="d-flex align-center justify-space-between mt-3 gap-2">
+                            @if (_healthChecks.TryGetValue(integration.Id, out var check))
+                            {
+                                <MudTooltip Text="@check.Message">
+                                    <div class="d-flex align-center gap-1">
+                                        <MudIcon Icon="@(check.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
+                                                 Color="@(check.Success ? Color.Success : Color.Error)" Size="Size.Small" />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Checked @FormatRelativeTime(check.At)</MudText>
+                                    </div>
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Added @integration.CreatedAt.ToString("yyyy-MM-dd")</MudText>
+                            }
+                            <div class="d-flex gap-1">
+                                <MudTooltip Text="Test connection">
+                                    <MudIconButton Icon="@Icons.Material.Filled.NetworkCheck" Size="Size.Small" Color="Color.Info"
+                                                   Disabled="@(_testingId == integration.Id)"
+                                                   OnClick="@(() => TestIntegration(integration))" aria-label="Test connection" />
+                                </MudTooltip>
+                                <MudTooltip Text="@(integration.IsActive ? "Deactivate" : "Activate")">
+                                    <MudIconButton Icon="@(integration.IsActive ? Icons.Material.Filled.ToggleOn : Icons.Material.Filled.ToggleOff)"
+                                                   Size="Size.Small"
+                                                   Color="@(integration.IsActive ? Color.Success : Color.Default)"
+                                                   OnClick="@(() => ToggleIntegration(integration))"
+                                                   aria-label="@(integration.IsActive ? "Deactivate" : "Activate")" />
+                                </MudTooltip>
+                                <MudTooltip Text="Configure">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   OnClick="@(() => OpenEditDialog(integration))" aria-label="Configure" />
+                                </MudTooltip>
+                                <MudTooltip Text="Delete">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   OnClick="@(() => DeleteIntegration(integration))" aria-label="Delete" />
+                                </MudTooltip>
+                            </div>
+                        </div>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</div>
 
 @* ──────────────────── Connector Marketplace ──────────────────── *@
-<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+<div>
     <div class="d-flex justify-space-between align-center mb-2">
         <div>
-            <MudText Typo="Typo.h6" Style="font-weight: 700;">Connector Marketplace</MudText>
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Available Integrations</MudText>
             <MudText Typo="Typo.caption" Color="Color.Secondary">Pre-built connectors — click to install</MudText>
         </div>
         <MudIcon Icon="@Icons.Material.Outlined.Store" Color="Color.Primary" />
@@ -49,8 +148,9 @@
     <MudGrid Spacing="3">
         @foreach (var connector in FilteredConnectors)
         {
+            var installed = _installedConnectors.Contains(connector.Name);
             <MudItem xs="12" sm="6" md="3">
-                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px; height: 100%; display: flex; flex-direction: column;">
+                <MudPaper Elevation="0" Class="@("pa-4 " + (installed ? "integration-tile integration-tile--installed" : "integration-tile integration-tile--available"))">
                     <div class="d-flex align-center gap-3 mb-3">
                         <MudAvatar Size="Size.Medium" Style="@($"background-color: {GetCategoryColor(connector.Category)}; color: white;")">
                             <MudIcon Icon="@GetCategoryIcon(connector.Category)" Size="Size.Small" />
@@ -68,7 +168,7 @@
                         @connector.Description
                     </MudText>
                     <div>
-                        @if (_installedConnectors.Contains(connector.Name))
+                        @if (installed)
                         {
                             <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
                                        StartIcon="@Icons.Material.Filled.Check" Disabled="true" FullWidth="true">
@@ -89,96 +189,7 @@
             </MudItem>
         }
     </MudGrid>
-</MudPaper>
-
-@* ──────────────────── Installed Integrations ──────────────────── *@
-<MudPaper Elevation="0" Style="border: 1px solid var(--mud-palette-divider);">
-<MudDataGrid T="IntegrationDto" Items="FilteredIntegrations" Hover="true" Dense="true" Loading="_loading" Elevation="0">
-    <ToolBarContent>
-        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Installed Integrations</MudText>
-        <MudSpacer />
-        <MudText Typo="Typo.caption" Color="Color.Secondary">@FilteredIntegrations.Count() of @_integrations.Count</MudText>
-    </ToolBarContent>
-    <Columns>
-        <PropertyColumn Property="x => x.Name" Title="Name" />
-        <PropertyColumn Property="x => x.Type" Title="Type" />
-        <TemplateColumn Title="Status">
-            <CellTemplate>
-                <div class="d-flex align-center gap-2">
-                    <MudChip T="string" Color="@(context.Item.IsActive ? Color.Success : Color.Default)" Size="Size.Small">
-                        @(context.Item.IsActive ? "Active" : "Inactive")
-                    </MudChip>
-                    @if (NeedsSetup(context.Item))
-                    {
-                        <MudTooltip Text="Endpoint URL contains template placeholders or credentials are not configured — edit to add your account values and auth token">
-                            <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Small"
-                                     Icon="@Icons.Material.Outlined.Warning">
-                                Setup Required
-                            </MudChip>
-                        </MudTooltip>
-                    }
-                </div>
-            </CellTemplate>
-        </TemplateColumn>
-        <PropertyColumn Property="x => x.CreatedAt" Title="Created" Format="yyyy-MM-dd" />
-        <TemplateColumn Title="Last Health Check">
-            <CellTemplate>
-                @if (_healthChecks.TryGetValue(context.Item.Id, out var check))
-                {
-                    <MudTooltip Text="@check.Message">
-                        <div class="d-flex align-center gap-1">
-                            <MudIcon Icon="@(check.Success ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Error)"
-                                     Color="@(check.Success ? Color.Success : Color.Error)" Size="Size.Small" />
-                            <MudText Typo="Typo.caption">@FormatRelativeTime(check.At)</MudText>
-                        </div>
-                    </MudTooltip>
-                }
-                else
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
-                }
-            </CellTemplate>
-        </TemplateColumn>
-        <TemplateColumn Title="Actions" Sortable="false" Filterable="false">
-            <CellTemplate>
-                <MudTooltip Text="Test connection">
-                    <MudIconButton Icon="@Icons.Material.Filled.NetworkCheck" Size="Size.Small" Color="Color.Info"
-                                   Disabled="@(_testingId == context.Item.Id)"
-                                   OnClick="@(() => TestIntegration(context.Item))" aria-label="Test connection" />
-                </MudTooltip>
-                <MudTooltip Text="@(context.Item.IsActive ? "Deactivate" : "Activate")">
-                    <MudIconButton Icon="@(context.Item.IsActive ? Icons.Material.Filled.ToggleOn : Icons.Material.Filled.ToggleOff)"
-                                   Size="Size.Small"
-                                   Color="@(context.Item.IsActive ? Color.Success : Color.Default)"
-                                   OnClick="@(() => ToggleIntegration(context.Item))"
-                                   aria-label="@(context.Item.IsActive ? "Deactivate" : "Activate")" />
-                </MudTooltip>
-                <MudTooltip Text="Configure">
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                   OnClick="@(() => OpenEditDialog(context.Item))" aria-label="Configure" />
-                </MudTooltip>
-                <MudTooltip Text="Delete">
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                   OnClick="@(() => DeleteIntegration(context.Item))" aria-label="Delete" />
-                </MudTooltip>
-            </CellTemplate>
-        </TemplateColumn>
-    </Columns>
-    <NoRecordsContent>
-        @if (_integrations.Count == 0)
-        {
-            <EmptyState Icon="@Icons.Material.Outlined.Extension" Title="No integrations installed yet"
-                        Description="Browse the Connector Marketplace above to add your first integration." MinHeight="200px" />
-        }
-        else
-        {
-            <EmptyState Icon="@Icons.Material.Outlined.SearchOff" Title="No integrations match your search"
-                        Description="Try a different name." ActionText="Clear search"
-                        OnAction="@(() => _searchTerm = string.Empty)" MinHeight="200px" />
-        }
-    </NoRecordsContent>
-</MudDataGrid>
-</MudPaper>
+</div>
 
 @code {
     private List<IntegrationDto> _integrations = new();
@@ -371,6 +382,13 @@
         "AI Automation" => "Http",
         _ => "Http"
     };
+
+    private static string GetIntegrationCategory(IntegrationDto integration)
+    {
+        var match = _marketplaceConnectors.FirstOrDefault(c =>
+            c.Name.Equals(integration.Name, StringComparison.OrdinalIgnoreCase));
+        return match?.Category ?? integration.Type;
+    }
 
     private static string GetCategoryColor(string category) => category switch
     {

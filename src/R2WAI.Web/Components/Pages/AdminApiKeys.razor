@@ -140,16 +140,8 @@ else
                     }
                 </MudTd>
                 <MudTd DataLabel="Status">
-                    @if (context.IsActive)
-                    {
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Success"
-                                 Style="font-size: 0.6875rem;">Active</MudChip>
-                    }
-                    else
-                    {
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Error"
-                                 Style="font-size: 0.6875rem;">Revoked</MudChip>
-                    }
+                    <StatusBadge Status="@(context.IsActive ? "Active" : "Revoked")"
+                                 OverrideColor="@(context.IsActive ? Color.Success : Color.Error)" />
                 </MudTd>
                 <MudTd>
                     <MudTooltip Text="Edit">

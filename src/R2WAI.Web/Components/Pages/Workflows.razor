@@ -265,7 +265,10 @@
                         </TemplateColumn>
                         <TemplateColumn Title="Trigger">
                             <CellTemplate>
-                                <MudText Typo="Typo.body2">@(string.IsNullOrEmpty(context.Item.Trigger) ? "Manual" : context.Item.Trigger)</MudText>
+                                <div class="d-flex align-center gap-2">
+                                    <MudIcon Icon="@GetTriggerIcon(context.Item.Trigger)" Size="Size.Small" Color="@GetTriggerColor(context.Item.Trigger)" />
+                                    <MudText Typo="Typo.body2">@(string.IsNullOrEmpty(context.Item.Trigger) ? "Manual" : context.Item.Trigger)</MudText>
+                                </div>
                             </CellTemplate>
                         </TemplateColumn>
                         <TemplateColumn Title="Status">
@@ -1274,23 +1277,18 @@
 
     private async Task ExecuteWorkflow(WorkflowDto workflow)
     {
-        try
+        var parameters = new DialogParameters<TestAutomationDialog>
         {
-            var response = await Http.PostAsJsonAsync($"/api/v1/workflows/{workflow.Id}/execute", new { });
-            if (response.IsSuccessStatusCode)
-            {
-                Snackbar.Add("Automation started", Severity.Success);
-                _activeTab = 1;
-                await LoadInstances();
-                StateHasChanged();
-            }
-            else
-            {
-                var error = await response.Content.ReadAsStringAsync();
-                Snackbar.Add($"Execute failed: {error}", Severity.Error);
-            }
-        }
-        catch (Exception ex) { Snackbar.Add($"Execute failed: {ex.Message}", Severity.Error); }
+            { x => x.WorkflowId, workflow.Id },
+            { x => x.WorkflowName, workflow.Name }
+        };
+        var dialog = await Dialog.ShowAsync<TestAutomationDialog>("Test Automation", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        _activeTab = 1;
+        await LoadInstances();
+        StateHasChanged();
     }
 
     private async Task DeleteWorkflow(WorkflowDto workflow)
@@ -1454,6 +1452,27 @@
         "hr" => "#3B82F6",
         _ => "#6B7280",
     };
+
+    private static string GetTriggerIcon(string? trigger)
+    {
+        var t = (trigger ?? "").ToLowerInvariant();
+        if (string.IsNullOrEmpty(t)) return Icons.Material.Outlined.TouchApp;
+        if (t == "schedule") return Icons.Material.Outlined.Schedule;
+        if (t == "webhook") return Icons.Material.Outlined.Webhook;
+        if (t.Contains("api")) return Icons.Material.Outlined.Public;
+        if (t.Contains("ai")) return Icons.Material.Outlined.SmartToy;
+        return Icons.Material.Outlined.RadioButtonChecked;
+    }
+
+    private static Color GetTriggerColor(string? trigger)
+    {
+        var t = (trigger ?? "").ToLowerInvariant();
+        if (string.IsNullOrEmpty(t)) return Color.Default;
+        if (t == "schedule") return Color.Tertiary;
+        if (t == "webhook") return Color.Success;
+        if (t.Contains("api") || t.Contains("ai")) return Color.Primary;
+        return Color.Warning;
+    }
 
     private static string GetIntegrationIcon(string? type) => (type ?? "").ToLowerInvariant() switch
     {
@@ -1705,14 +1724,31 @@
     private class WorkflowDto
     {
         public Guid Id { get; set; }
+        public Guid? ApplicationId { get; set; }
         public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public string? Type { get; set; }
         public string? Trigger { get; set; }
         public bool IsActive { get; set; }
         public bool IsArchived { get; set; }
-        public int StepCount { get; set; }
         public string? Steps { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? ModifiedAt { get; set; }
+
+        public int StepCount
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(Steps)) return 0;
+                try
+                {
+                    using var json = System.Text.Json.JsonDocument.Parse(Steps);
+                    return json.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array
+                        ? json.RootElement.GetArrayLength() : 0;
+                }
+                catch (System.Text.Json.JsonException) { return 0; }
+            }
+        }
     }
     private class WorkflowRawDto
     {

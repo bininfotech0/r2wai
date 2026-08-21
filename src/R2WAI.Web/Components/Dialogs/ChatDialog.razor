@@ -167,7 +167,7 @@
                               Margin="Margin.Dense" Style="flex: 1;" DisableUnderLine="true" />
                 <MudIconButton Icon="@Icons.Material.Filled.Send" Color="Color.Primary"
                                OnClick="SendMessage" Disabled="@(_sending || _streaming || string.IsNullOrWhiteSpace(_input))"
-                               Size="Size.Small" Style="background: var(--r2-gradient-primary, linear-gradient(135deg, #7C3AED, #6D28D9)); color: white; border-radius: 8px; width: 36px; height: 36px;"
+                               Size="Size.Small" Style="background: var(--r2-gradient-primary, linear-gradient(135deg, #2563EB, #1D4ED8)); color: white; border-radius: 8px; width: 36px; height: 36px;"
                                aria-label="Send message" />
             </div>
             @if (_sttSupported && _ttsSupported)
@@ -203,7 +203,7 @@
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: var(--r2-primary-light, #A78BFA);
+        background: var(--r2-primary-light, #60A5FA);
         animation: typingBounce 1.4s ease-in-out infinite;
     }
     .typing-dot:nth-child(2) { animation-delay: 0.2s; }

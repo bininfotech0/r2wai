@@ -19,7 +19,7 @@ else if (_runs.Count == 0)
 }
 else
 {
-    <MudTable Items="_runs" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: 12px;">
+    <MudTable Items="_runs" Hover="true" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-lg);">
         <HeaderContent>
             <MudTh>Started</MudTh>
             <MudTh>Status</MudTh>
@@ -35,7 +35,10 @@ else
             <MudTd DataLabel="Failed"><MudText Color="Color.Error">@context.FailedCount</MudText></MudTd>
             <MudTd DataLabel="Warning"><MudText Color="Color.Warning">@context.WarningCount</MudText></MudTd>
             <MudTd Style="text-align:right;">
-                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => ViewDetail(context))">View</MudButton>
+                <MudTooltip Text="View Details">
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary"
+                                   OnClick="@(() => ViewDetail(context))" aria-label="View Details" />
+                </MudTooltip>
             </MudTd>
         </RowTemplate>
     </MudTable>

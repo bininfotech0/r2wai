@@ -126,6 +126,14 @@ else
         <TemplateColumn Title="Status">
             <CellTemplate>
                 <StatusBadge Status="@context.Item.Status" />
+                @if (GetPossiblePii(context.Item).Count > 0)
+                {
+                    <MudTooltip Text="@($"Possible PII detected: {string.Join(", ", GetPossiblePii(context.Item))} — review before sharing externally")">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.WarningAmber" Class="ml-1">
+                            PII
+                        </MudChip>
+                    </MudTooltip>
+                }
             </CellTemplate>
         </TemplateColumn>
         <PropertyColumn Property="x => x.PageCount" Title="Pages" />
@@ -187,6 +195,19 @@ else
     private HashSet<Guid> _selectedDocIds = new();
     private Timer? _pollingTimer;
     private Dictionary<Guid, string> _lastKnownStatuses = new();
+
+    private static IReadOnlyList<string> GetPossiblePii(DocumentDto doc)
+    {
+        if (string.IsNullOrWhiteSpace(doc.Metadata)) return Array.Empty<string>();
+        try
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(doc.Metadata);
+            if (json.RootElement.TryGetProperty("PossiblePii", out var pii) && pii.ValueKind == System.Text.Json.JsonValueKind.Array)
+                return [.. pii.EnumerateArray().Select(e => e.GetString() ?? string.Empty).Where(s => s.Length > 0)];
+        }
+        catch (System.Text.Json.JsonException) { /* malformed/legacy metadata — treat as no PII flag */ }
+        return Array.Empty<string>();
+    }
 
     private IEnumerable<DocumentDto> _filteredDocuments =>
         string.IsNullOrWhiteSpace(_searchTerm)
@@ -462,6 +483,7 @@ else
         public string Status { get; set; } = string.Empty;
         public int? PageCount { get; set; }
         public Guid? KnowledgeBaseId { get; set; }
+        public string? Metadata { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 }

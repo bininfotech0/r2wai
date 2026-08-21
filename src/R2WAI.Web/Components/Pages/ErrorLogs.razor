@@ -74,7 +74,7 @@
                                 @if (!string.IsNullOrEmpty(error.CorrelationId))
                                 {
                                     <tr><td style="width:120px;"><strong>Correlation ID</strong></td>
-                                        <td style="font-family:monospace;">@error.CorrelationId</td></tr>
+                                        <td><code class="monitor-id-chip">@error.CorrelationId</code></td></tr>
                                 }
                                 @if (!string.IsNullOrEmpty(error.Source))
                                 {
@@ -85,9 +85,9 @@
                         @if (!string.IsNullOrEmpty(error.StackTrace))
                         {
                             <MudText Typo="Typo.subtitle2" Class="mt-2 mb-1">Stack Trace</MudText>
-                            <MudPaper Class="pa-2" Style="background: var(--mud-palette-background-gray); font-family: monospace; font-size: 12px; white-space: pre-wrap; overflow-x: auto; max-height: 300px;">
-                                @error.StackTrace
-                            </MudPaper>
+                            <div class="monitor-output-block" style="max-height: 300px;">
+                                <pre>@error.StackTrace</pre>
+                            </div>
                         }
                     </ChildContent>
                 </MudExpansionPanel>
