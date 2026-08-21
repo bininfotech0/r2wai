@@ -117,6 +117,37 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full target architecture and comp
 9. Security hardening (concurrency tokens, gateway controls)
 10. Production configuration validation
 
+> **2026-08-20 addendum — Tool/API Gateway (item 9) status:** `AiFunctionAuditFilter` now enforces
+> `RequiredRole`/`ApprovalRequired` on every Semantic Kernel tool call and writes a real `AuditLog` row,
+> verified end-to-end against a live LLM (denial correctly blocks `start_workflow`, audit row persists
+> with valid JSON metadata, the assistant's denial reply reaches the caller as a normal 200 response).
+> **2026-08-21 — the concurrency gap above is root-caused and fixed.** Reproduced deterministically
+> (no live LLM needed — `ChatConcurrencyRegressionTests.cs` drives `AiFunctionAuditFilter` through a
+> real, LLM-free Semantic Kernel function invocation against a Testcontainers Postgres) and confirmed via
+> `EnableSensitiveDataLogging` + full SQL trace: `AiFunctionAuditFilter`'s denial-audit write shared the
+> chat request's own `DbContext`, so its mid-call `SaveChanges()` flushed the request's pending
+> conversation/message entities early. Fix: the filter now writes its `AuditLog` through an isolated
+> `IServiceScopeFactory`-created scope (`AiFunctionAuditFilter.WriteAuditAsync`), decoupling the audit
+> side-effect from the caller's unit of work entirely. That's the complete, minimal fix.
+>
+> Three other changes drafted alongside that fix turned out to be unnecessary, and one was actively
+> harmful — removed after the isolated-scope fix alone was confirmed sufficient (test passes with
+> *only* that change in place):
+> - An "early save" of the user's message in `ChatWithAssistantCommandHandler`, added to shrink the
+>   window where entities sit uncommitted — **this introduced a second, different bug**: once the
+>   conversation is saved and transitions from `Added` to `Unchanged`, EF Core can no longer infer that
+>   a message added afterward via `conversation.AddMessage()` (discovered only through collection-
+>   navigation fixup, never explicitly `Add()`-ed) is new. It generates an `UPDATE` instead of an
+>   `INSERT`, matches zero rows, and throws the same `DbUpdateConcurrencyException` — just for a
+>   different entity, and reproducible without any audit write in play at all. Reverted.
+> - `UnitOfWork.SaveChangesAsync`'s retry-with-detach loop on `DbUpdateConcurrencyException` — a
+>   defensive safety net that silently detaches (drops) non-`Added` conflicting entries and retries.
+>   With the real cause fixed at the source, this masks data loss on any future concurrency bug rather
+>   than surfacing it. Reverted; a genuine conflict should fail loudly, not vanish.
+> - `MaxBatchSize(1)` on the Npgsql connection (disables statement batching app-wide) — a diagnostic aid
+>   from narrowing this down that never actually changed the failure (confirmed by the original
+>   debugging session and re-confirmed here). Reverted.
+
 ---
 
 ## Roadmap — Migration to the Application-centric Platform

@@ -377,6 +377,7 @@ public class DocumentService : IDocumentService
         ProcessingError = document.ProcessingError,
         PageCount = document.PageCount,
         KnowledgeBaseId = document.KnowledgeBaseId,
+        Metadata = document.Metadata,
         CreatedAt = document.CreatedAt
     };
 }

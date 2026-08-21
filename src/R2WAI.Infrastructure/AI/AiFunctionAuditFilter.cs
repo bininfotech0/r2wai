@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using R2WAI.Application.Common.Interfaces;
@@ -33,23 +34,20 @@ public class AiFunctionAuditFilter : IFunctionInvocationFilter
     private readonly ICurrentUserService _currentUser;
     private readonly IChatTraceCollector _traceCollector;
     private readonly IRepository<ToolDefinition> _toolDefinitions;
-    private readonly IRepository<AuditLog> _auditLogs;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public AiFunctionAuditFilter(
         ILogger<AiFunctionAuditFilter> logger,
         ICurrentUserService currentUser,
         IChatTraceCollector traceCollector,
         IRepository<ToolDefinition> toolDefinitions,
-        IRepository<AuditLog> auditLogs,
-        IUnitOfWork unitOfWork)
+        IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _currentUser = currentUser;
         _traceCollector = traceCollector;
         _toolDefinitions = toolDefinitions;
-        _auditLogs = auditLogs;
-        _unitOfWork = unitOfWork;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task OnFunctionInvocationAsync(FunctionInvocationContext context, Func<FunctionInvocationContext, Task> next)
@@ -135,9 +133,8 @@ public class AiFunctionAuditFilter : IFunctionInvocationFilter
     {
         if (!toolDef.AuditRequired || _currentUser.TenantId is not { } tenantId) return;
         var metadata = System.Text.Json.JsonSerializer.Serialize(new { status = "denied", reason, function });
-        await _auditLogs.AddAsync(new AuditLog(Guid.NewGuid(), tenantId, AuditAction.Execute, "ToolDefinition",
+        await WriteAuditAsync(new AuditLog(Guid.NewGuid(), tenantId, AuditAction.Execute, "ToolDefinition",
             toolDef.Id.ToString(), _currentUser.UserId, metadata: metadata));
-        await _unitOfWork.SaveChangesAsync();
     }
 
     private async Task WriteExecutionAuditAsync(ToolDefinition? toolDef, string function, bool success, string? error)
@@ -146,8 +143,22 @@ public class AiFunctionAuditFilter : IFunctionInvocationFilter
         var metadata = success
             ? System.Text.Json.JsonSerializer.Serialize(new { status = "executed", function })
             : System.Text.Json.JsonSerializer.Serialize(new { status = "failed", function, error });
-        await _auditLogs.AddAsync(new AuditLog(Guid.NewGuid(), tenantId, AuditAction.Execute, "ToolDefinition",
+        await WriteAuditAsync(new AuditLog(Guid.NewGuid(), tenantId, AuditAction.Execute, "ToolDefinition",
             toolDef?.Id.ToString() ?? function, _currentUser.UserId, metadata: metadata));
-        await _unitOfWork.SaveChangesAsync();
+    }
+
+    // Written via a fresh scope/DbContext rather than the ambient one: the chat request that triggered
+    // this tool call can hold its own DbContext tracking a growing set of entities (conversation,
+    // messages, usage counters) across a multi-minute AI call. Sharing that DbContext for an audit write
+    // entangles this fire-and-forget side effect with the caller's own unit of work, and an incidental
+    // concurrency hiccup on either side then corrupts both. An isolated scope keeps the audit write a
+    // clean, independent transaction no matter what state the caller's DbContext is in.
+    private async Task WriteAuditAsync(AuditLog auditLog)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var auditLogs = scope.ServiceProvider.GetRequiredService<IRepository<AuditLog>>();
+        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        await auditLogs.AddAsync(auditLog);
+        await unitOfWork.SaveChangesAsync();
     }
 }

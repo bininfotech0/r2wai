@@ -11,5 +11,6 @@ public class DocumentDto
     public string? ProcessingError { get; init; }
     public int? PageCount { get; init; }
     public Guid? KnowledgeBaseId { get; init; }
+    public string? Metadata { get; init; }
     public DateTime CreatedAt { get; init; }
 }
