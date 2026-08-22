@@ -18,6 +18,7 @@ public class WorkflowsController(
     IWorkflowBridge workflowBridge,
     ApplicationDbContext dbContext,
     IConfiguration configuration,
+    IAIService aiService,
     ILogger<WorkflowsController> logger) : ControllerBase
 {
     private Guid CurrentUserId
@@ -48,6 +49,54 @@ public class WorkflowsController(
         logger.LogInformation("Creating workflow: {Name}", command.Name);
         var result = await mediator.Send(command, ct);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+    }
+
+    public record DraftWorkflowRequest(string Description);
+
+    // Bounded natural-language "what do you want to automate?" step for the New Automation wizard.
+    // Deliberately uses IAIService.GenerateResponseAsync (tools disabled), not IAgentRuntime: this
+    // call only needs to extract structured JSON from a fixed vocabulary, and FunctionChoiceBehavior
+    // .Auto() (what IAgentRuntime always enables) would let the model choose to call a tool — e.g.
+    // start_workflow — instead of returning the draft, which is not a risk worth taking for a
+    // suggestion the admin still has to review and click through before anything is created.
+    private static readonly string[] KnownTriggers =
+        ["Application Submitted", "Application Updated", "Payment Received", "Form Submitted", "Schedule", "Webhook"];
+    private static readonly string[] KnownActions =
+        ["Verify Documents", "Get Application Details", "Assign Officer", "Send Notification", "Update Application Status", "Create Task"];
+
+    [HttpPost("draft")]
+    public async Task<IActionResult> DraftFromDescription([FromBody] DraftWorkflowRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Description))
+            return BadRequest(new { error = "Description is required" });
+
+        try
+        {
+            var prompt =
+                "You are helping a non-technical user configure a business process automation. " +
+                "Based on their description below, pick the single best-matching trigger and the ordered " +
+                "list of actions from the fixed options given, and any simple conditions implied. " +
+                "Return ONLY a valid JSON object — no markdown, no explanation.\n\n" +
+                $"Description: {request.Description}\n\n" +
+                $"Available triggers (pick exactly one, or null if none fit): {string.Join(", ", KnownTriggers)}\n" +
+                $"Available actions (pick zero or more, in the order they should run): {string.Join(", ", KnownActions)}\n\n" +
+                "JSON format:\n" +
+                "{\n" +
+                "  \"name\": \"<short automation name, 2-6 words>\",\n" +
+                "  \"trigger\": \"<one of the triggers above, or null>\",\n" +
+                "  \"actions\": [\"<action label>\", ...],\n" +
+                "  \"conditions\": [{\"field\": \"<field name>\", \"operator\": \"<Is equal to|Is not equal to|Contains|Greater than|Less than>\", \"value\": \"<value>\"}]\n" +
+                "}";
+
+            var raw = await aiService.GenerateResponseAsync(prompt, ct: ct);
+            var draft = WorkflowDraftParser.Parse(raw, KnownTriggers, KnownActions);
+            return Ok(draft);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Automation draft generation failed for description: {Description}", request.Description);
+            return Ok(new WorkflowDraft(null, null, [], []));
+        }
     }
 
     [HttpGet]

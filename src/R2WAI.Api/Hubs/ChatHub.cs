@@ -14,17 +14,20 @@ public class ChatHub : Hub
     private readonly ILogger<ChatHub> _logger;
     private readonly IAIService _aiService;
     private readonly IKnowledgeBaseService _knowledgeBaseService;
+    private readonly IPromptTemplateService _promptTemplateService;
 
     public ChatHub(
         ApplicationDbContext dbContext,
         ILogger<ChatHub> logger,
         IAIService aiService,
-        IKnowledgeBaseService knowledgeBaseService)
+        IKnowledgeBaseService knowledgeBaseService,
+        IPromptTemplateService promptTemplateService)
     {
         _dbContext = dbContext;
         _logger = logger;
         _aiService = aiService;
         _knowledgeBaseService = knowledgeBaseService;
+        _promptTemplateService = promptTemplateService;
     }
 
     public override async Task OnConnectedAsync()
@@ -181,7 +184,9 @@ public class ChatHub : Hub
                 }
             }
 
-            var systemPrompt = (assistant.SystemPrompt ?? "You are a helpful AI assistant.")
+            var basePrompt = assistant.SystemPrompt
+                ?? await _promptTemplateService.GetActiveTemplateAsync(assistant.Type, assistant.TenantId, Context.ConnectionAborted);
+            var systemPrompt = basePrompt
                 + $"\n\n[Assistant context: your assistant ID is {assistant.Id}, your name is \"{assistant.Name}\"" +
                   (!string.IsNullOrWhiteSpace(assistant.Description)
                       ? $", and your purpose is: {assistant.Description}"

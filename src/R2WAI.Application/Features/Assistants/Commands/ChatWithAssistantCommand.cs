@@ -31,9 +31,11 @@ public class ChatWithAssistantCommandValidator : AbstractValidator<ChatWithAssis
 public class ChatWithAssistantCommandHandler(
     IRepository<AssistantDefinition> assistantRepo,
     IRepository<Conversation> conversationRepo,
+    IRepository<Message> messageRepo,
     IRepository<KnowledgeBase> kbRepo,
     IKnowledgeBaseService knowledgeBaseService,
     IAIService aiService,
+    IPromptTemplateService promptTemplateService,
     IChatTraceCollector traceCollector,
     ICurrentUserService currentUser,
     IUnitOfWork unitOfWork,
@@ -65,7 +67,11 @@ public class ChatWithAssistantCommandHandler(
             await conversationRepo.AddAsync(conversation, cancellationToken);
         }
 
-        conversation.AddMessage(Guid.NewGuid(), null, MessageRole.User, command.Message);
+        var userMessage = conversation.AddMessage(Guid.NewGuid(), null, MessageRole.User, command.Message);
+        // Existing conversations are loaded (tracked Unchanged), not Add()-ed: EF Core cannot tell a
+        // client-generated-Guid child discovered only via navigation fixup is new rather than existing,
+        // and defaults to Modified — which throws DbUpdateConcurrencyException (0 rows) on save.
+        await messageRepo.AddAsync(userMessage, cancellationToken);
 
         string? context = null;
         List<CitationDto>? citations = null;
@@ -95,7 +101,9 @@ public class ChatWithAssistantCommandHandler(
             }
         }
 
-        var systemPrompt = (assistant.SystemPrompt ?? "You are a helpful AI assistant.")
+        var basePrompt = assistant.SystemPrompt
+            ?? await promptTemplateService.GetActiveTemplateAsync(assistant.Type, tenantId, cancellationToken);
+        var systemPrompt = basePrompt
             + $"\n\n[Assistant context: your assistant ID is {assistant.Id}, your name is \"{assistant.Name}\"" +
               (!string.IsNullOrWhiteSpace(assistant.Description)
                   ? $", and your purpose is: {assistant.Description}"
@@ -110,7 +118,8 @@ public class ChatWithAssistantCommandHandler(
             enableTools: true,
             ct: cancellationToken);
 
-        conversation.AddMessage(Guid.NewGuid(), null, MessageRole.Assistant, reply);
+        var assistantMessage = conversation.AddMessage(Guid.NewGuid(), null, MessageRole.Assistant, reply);
+        await messageRepo.AddAsync(assistantMessage, cancellationToken);
         assistant.IncrementUsageCount();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

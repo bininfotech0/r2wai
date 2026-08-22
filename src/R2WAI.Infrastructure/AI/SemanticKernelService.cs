@@ -4,10 +4,6 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Microsoft.SemanticKernel.Plugins.Core;
-using OpenAI;
-using R2WAI.Application.Common.Exceptions;
-using System.ClientModel;
-using System.ClientModel.Primitives;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -21,6 +17,7 @@ public class SemanticKernelService : IAIService
     private readonly IConfiguration _configuration;
     private readonly ILogger<SemanticKernelService> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ModelGateway.IModelGateway _modelGateway;
     private static readonly ConcurrentDictionary<string, (Kernel Kernel, DateTime CreatedAt)> _kernels = new();
     private static readonly TimeSpan KernelMaxAge = TimeSpan.FromHours(1);
 
@@ -34,21 +31,6 @@ public class SemanticKernelService : IAIService
     // the provider is known to reject it avoids the code path that causes the growth, without
     // requiring the actual leak (still undiagnosed) to be fixed first.
     private static readonly ConcurrentDictionary<string, bool> _embeddingsKnownUnsupported = new();
-
-    // The OpenAI client SDK's default NetworkTimeout, combined with a 3-attempt retry policy,
-    // lets a single unresponsive provider turn into a multi-minute hang per call (confirmed: one
-    // chat call took ~305s before failing). A deterministic error (e.g. "this model doesn't
-    // support embeddings") will never succeed on retry either, so retrying it three times just
-    // triples the wait for no benefit. Bounding each attempt keeps worst case bounded too.
-    //
-    // Cloud providers (OpenAI, Z.ai) are fast enough that 45s is already generous. A self-hosted
-    // Ollama model doing real CPU-bound inference is a different story: a legitimate, correct
-    // chat completion here was observed taking ~82-94 seconds, well past 45s — so the first
-    // version of this fix caused real, working requests to fail with a timeout error instead of
-    // just returning slowly. Ollama gets a longer budget to reflect that its normal latency
-    // profile is fundamentally different, not because it's expected to hang.
-    private static readonly TimeSpan AiClientNetworkTimeout = TimeSpan.FromSeconds(45);
-    private static readonly TimeSpan OllamaNetworkTimeout = TimeSpan.FromSeconds(150);
 
     // Some models (notably smaller/local ones via Ollama) don't reliably emit real structured
     // tool_calls -- instead they print a function-call-shaped JSON object as plain assistant
@@ -74,16 +56,18 @@ public class SemanticKernelService : IAIService
     public SemanticKernelService(
         IConfiguration configuration,
         ILogger<SemanticKernelService> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ModelGateway.IModelGateway modelGateway)
     {
         _configuration = configuration;
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _modelGateway = modelGateway;
     }
 
     public async Task<string> GenerateResponseAsync(string prompt, string? systemPrompt = null, string? context = null, CancellationToken ct = default)
     {
-        var kernel = GetOrCreateKernel();
+        var kernel = await GetOrCreateKernelAsync(ct: ct);
 
         if (kernel.Services.GetService<IChatCompletionService>() is null)
         {
@@ -105,7 +89,7 @@ public class SemanticKernelService : IAIService
 
     public async IAsyncEnumerable<string> GenerateStreamingResponseAsync(string prompt, string? systemPrompt = null, string? context = null, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var kernel = GetOrCreateKernel();
+        var kernel = await GetOrCreateKernelAsync(ct: ct);
         var fullPrompt = BuildPrompt(prompt, systemPrompt, context);
 
         var function = kernel.CreateFunctionFromPrompt(fullPrompt, new OpenAIPromptExecutionSettings
@@ -125,7 +109,7 @@ public class SemanticKernelService : IAIService
 
     public async Task<string> SummarizeTextAsync(string text, int maxLength = 500, CancellationToken ct = default)
     {
-        var kernel = GetOrCreateKernel();
+        var kernel = await GetOrCreateKernelAsync(ct: ct);
         var prompt = $"Summarize the following text in {maxLength} characters or less:\n\n{TruncateInputText(text)}";
 
         var function = kernel.CreateFunctionFromPrompt(prompt, new OpenAIPromptExecutionSettings
@@ -140,7 +124,7 @@ public class SemanticKernelService : IAIService
 
     public async Task<string> ExtractDataAsync(string text, string schema, CancellationToken ct = default)
     {
-        var kernel = GetOrCreateKernel();
+        var kernel = await GetOrCreateKernelAsync(ct: ct);
         var prompt = $"Extract data from the following text according to this schema: {schema}\n\nText:\n{TruncateInputText(text)}";
 
         var function = kernel.CreateFunctionFromPrompt(prompt, new OpenAIPromptExecutionSettings
@@ -155,7 +139,7 @@ public class SemanticKernelService : IAIService
 
     public async Task<string> CompareDocumentsAsync(string sourceText, string targetText, CancellationToken ct = default)
     {
-        var kernel = GetOrCreateKernel();
+        var kernel = await GetOrCreateKernelAsync(ct: ct);
         var prompt = $"Compare the following two documents and provide a detailed analysis of similarities and differences:\n\nDocument 1:\n{TruncateInputText(sourceText)}\n\nDocument 2:\n{TruncateInputText(targetText)}";
 
         var function = kernel.CreateFunctionFromPrompt(prompt, new OpenAIPromptExecutionSettings
@@ -170,7 +154,7 @@ public class SemanticKernelService : IAIService
 
     public async Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, CancellationToken ct = default)
     {
-        var kernel = GetOrCreateKernel(enableTools);
+        var kernel = await GetOrCreateKernelAsync(enableTools, ct);
 
         var chatCompletion = kernel.Services.GetService<IChatCompletionService>();
         if (chatCompletion is null)
@@ -203,7 +187,7 @@ public class SemanticKernelService : IAIService
 
     public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var kernel = GetOrCreateKernel(enableTools);
+        var kernel = await GetOrCreateKernelAsync(enableTools, ct);
 
         var chatCompletion = kernel.Services.GetService<IChatCompletionService>();
         if (chatCompletion is null)
@@ -299,7 +283,7 @@ public class SemanticKernelService : IAIService
         if (_embeddingsKnownUnsupported.ContainsKey("default"))
             return [];
 
-        var kernel = GetOrCreateKernel();
+        var kernel = await GetOrCreateKernelAsync(ct: ct);
         var embeddingGenerator = kernel.Services.GetService<IEmbeddingGenerator<string, Embedding<float>>>();
         if (embeddingGenerator is null)
         {
@@ -326,7 +310,7 @@ public class SemanticKernelService : IAIService
             return [];
         }
 
-        var kernel = GetOrCreateKernel();
+        var kernel = await GetOrCreateKernelAsync(ct: ct);
         var embeddingGenerator = kernel.Services.GetService<IEmbeddingGenerator<string, Embedding<float>>>();
         if (embeddingGenerator is null)
         {
@@ -376,7 +360,7 @@ public class SemanticKernelService : IAIService
 
     public async Task<string> AnswerQuestionAsync(string question, string context, CancellationToken ct = default)
     {
-        var kernel = GetOrCreateKernel();
+        var kernel = await GetOrCreateKernelAsync(ct: ct);
         var prompt = $"Answer the question based on the provided context.\n\nContext:\n{TruncateInputText(context)}\n\nQuestion: {question}\n\nAnswer:";
 
         var function = kernel.CreateFunctionFromPrompt(prompt, new OpenAIPromptExecutionSettings
@@ -423,7 +407,7 @@ public class SemanticKernelService : IAIService
             : text[..MaxInputChars] + "\n...[truncated]";
     }
 
-    private Kernel GetOrCreateKernel(bool enableTools = false)
+    private async Task<Kernel> GetOrCreateKernelAsync(bool enableTools = false, CancellationToken ct = default)
     {
         var baseKernel = GetOrCreateBaseKernel();
 
@@ -456,6 +440,13 @@ public class SemanticKernelService : IAIService
             var assistantPlugin = _serviceProvider.GetRequiredService<AI.Plugins.AssistantPlugin>();
             kernel.Plugins.AddFromObject(assistantPlugin);
 
+            // Tenant-registered API tools (Integrations/Tools & APIs UI) — the Tool/Integration
+            // Registry bridge. Optional (a tenant with none registered gets no extra plugin).
+            var dynamicToolFactory = _serviceProvider.GetRequiredService<DynamicTools.DynamicToolFunctionFactory>();
+            var dynamicPlugin = await dynamicToolFactory.BuildPluginAsync(ct);
+            if (dynamicPlugin is not null)
+                kernel.Plugins.Add(dynamicPlugin);
+
             var auditFilter = _serviceProvider.GetRequiredService<AiFunctionAuditFilter>();
             kernel.FunctionInvocationFilters.Add(auditFilter);
         }
@@ -482,72 +473,15 @@ public class SemanticKernelService : IAIService
 
     private Kernel CreateKernel()
     {
-        {
-            var builder = Kernel.CreateBuilder();
+        var builder = Kernel.CreateBuilder();
 
-            var provider = (_configuration["AI:Provider"] ?? "openai").ToLowerInvariant();
+        // Provider selection/configuration (openai/ollama/zai/...) lives behind IModelGateway —
+        // this class no longer reads "AI:Provider" or constructs an OpenAIClient itself.
+        _modelGateway.ConfigureKernel(builder);
 
-            if (provider == "ollama")
-            {
-                var ollamaEndpoint = _configuration["AI:Ollama:Endpoint"]
-                    ?? throw new ConfigurationException("AI:Ollama:Endpoint must be configured when using Ollama provider.");
-                var ollamaModel = _configuration["AI:Ollama:ModelId"] ?? "qwen2.5-coder:7b";
-                var embeddingModel = _configuration["AI:Ollama:EmbeddingModel"] ?? ollamaModel;
-                var ollamaV1 = new Uri($"{ollamaEndpoint.TrimEnd('/')}/v1");
+        builder.Plugins.AddFromType<ConversationSummaryPlugin>();
+        builder.Plugins.AddFromType<TimePlugin>();
 
-                // Retries=1 (not the SDK default of several): a local Ollama model that rejects a
-                // request (e.g. "this model doesn't support embeddings") returns the same
-                // deterministic error every time, so retrying it repeatedly only multiplies
-                // latency and resource use for zero chance of success.
-                var ollamaClient = new OpenAIClient(new ApiKeyCredential("ollama"), new OpenAIClientOptions { Endpoint = ollamaV1, RetryPolicy = new ClientRetryPolicy(1), NetworkTimeout = OllamaNetworkTimeout });
-                builder.AddOpenAIChatCompletion(ollamaModel, ollamaClient);
-                builder.AddOpenAIEmbeddingGenerator(embeddingModel, ollamaClient);
-
-                _logger.LogInformation("AI provider: Ollama at {Endpoint}, model: {Model}", ollamaEndpoint, ollamaModel);
-            }
-            else if (provider == "zai")
-            {
-                // Z.ai models (e.g. GLM-5.2) via any OpenAI-compatible hosted endpoint
-                // (e.g. NVIDIA NIM: https://integrate.api.nvidia.com/v1). No embedding
-                // model is configured here — these are chat/reasoning models, not embedders.
-                var zaiApiKey = _configuration["AI:ZAI:ApiKey"]
-                    ?? throw new ConfigurationException("AI:ZAI:ApiKey must be configured when using the zai provider.");
-                var zaiEndpoint = _configuration["AI:ZAI:Endpoint"] ?? "https://integrate.api.nvidia.com/v1";
-                var zaiModel = _configuration["AI:ZAI:ModelId"] ?? "z-ai/glm-5.2";
-
-                var zaiClient = new OpenAIClient(new ApiKeyCredential(zaiApiKey), new OpenAIClientOptions { Endpoint = new Uri(zaiEndpoint), RetryPolicy = new ClientRetryPolicy(3), NetworkTimeout = AiClientNetworkTimeout });
-                builder.AddOpenAIChatCompletion(zaiModel, zaiClient);
-
-                _logger.LogInformation("AI provider: Z.ai at {Endpoint}, model: {Model}", zaiEndpoint, zaiModel);
-            }
-            else
-            {
-                var apiKey = _configuration["AI:OpenAI:ApiKey"] ?? _configuration["OpenAI:ApiKey"] ?? string.Empty;
-                var modelId = _configuration["AI:OpenAI:ModelId"] ?? "gpt-4o";
-                var endpoint = _configuration["AI:OpenAI:Endpoint"];
-
-                if (!string.IsNullOrEmpty(apiKey))
-                {
-                    var clientOptions = new OpenAIClientOptions { RetryPolicy = new ClientRetryPolicy(3), NetworkTimeout = AiClientNetworkTimeout };
-                    if (!string.IsNullOrEmpty(endpoint))
-                        clientOptions.Endpoint = new Uri(endpoint);
-
-                    var client = new OpenAIClient(new ApiKeyCredential(apiKey), clientOptions);
-                    builder.AddOpenAIChatCompletion(modelId, client);
-                    builder.AddOpenAIEmbeddingGenerator("text-embedding-3-small", client);
-
-                    _logger.LogInformation("AI provider: OpenAI, model: {Model}", modelId);
-                }
-                else
-                {
-                    _logger.LogWarning("No AI provider configured. Set AI:OpenAI:ApiKey or AI:Provider=ollama");
-                }
-            }
-
-            builder.Plugins.AddFromType<ConversationSummaryPlugin>();
-            builder.Plugins.AddFromType<TimePlugin>();
-
-            return builder.Build();
-        }
+        return builder.Build();
     }
 }

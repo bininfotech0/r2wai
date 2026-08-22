@@ -6,28 +6,31 @@ namespace R2WAI.Infrastructure.Services;
 public class ChatService : IChatService
 {
     private readonly ApplicationDbContext _context;
-    private readonly IAIService _aiService;
+    private readonly IAgentRuntime _agentRuntime;
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeService _dateTimeService;
     private readonly IStreamingNotificationService _streaming;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IConversationMemoryService _conversationMemory;
     private readonly ILogger<ChatService> _logger;
 
     public ChatService(
         ApplicationDbContext context,
-        IAIService aiService,
+        IAgentRuntime agentRuntime,
         ICurrentUserService currentUserService,
         IDateTimeService dateTimeService,
         IStreamingNotificationService streaming,
         IServiceScopeFactory scopeFactory,
+        IConversationMemoryService conversationMemory,
         ILogger<ChatService> logger)
     {
         _context = context;
-        _aiService = aiService;
+        _agentRuntime = agentRuntime;
         _currentUserService = currentUserService;
         _dateTimeService = dateTimeService;
         _streaming = streaming;
         _scopeFactory = scopeFactory;
+        _conversationMemory = conversationMemory;
         _logger = logger;
     }
 
@@ -115,6 +118,11 @@ public class ChatService : IChatService
             ? System.Text.Json.JsonSerializer.Serialize(new { possiblePii = piiTypes })
             : null;
         var message = conversation.AddMessage(messageId, null, MessageRole.User, content, metadata: messageMetadata);
+        // Conversation was loaded (not newly Add()-ed), so it's tracked Unchanged: EF Core cannot tell
+        // a client-generated-Guid child discovered only via navigation fixup is new rather than existing,
+        // and defaults to Modified — which throws DbUpdateConcurrencyException (0 rows) on save. Adding
+        // the message explicitly removes the ambiguity.
+        _context.Messages.Add(message);
 
         if (attachments?.Count > 0)
         {
@@ -131,22 +139,13 @@ public class ChatService : IChatService
 
         await _context.SaveChangesAsync(ct);
 
-        var recentMessages = await _context.Messages
-            .Where(m => m.ConversationId == conversationId)
-            .OrderByDescending(m => m.CreatedAt)
-            .Take(20)
-            .OrderBy(m => m.CreatedAt)
-            .Select(m => new { m.Role, m.Content })
-            .ToListAsync(ct);
-
-        var history = string.Join("\n", recentMessages
-            .Select(m => $"{(m.Role == MessageRole.User ? "User" : "Assistant")}: {m.Content}"));
+        var history = await _conversationMemory.BuildConversationContextAsync(conversationId, ct);
 
         var responseBuffer = new StringBuilder();
         var responseMessageId = Guid.NewGuid();
         var conversationGroup = $"conversation_{conversationId}";
 
-        await foreach (var chunk in _aiService.StreamChatAsync(content, history, null, enableTools: true, ct: ct))
+        await foreach (var chunk in _agentRuntime.StreamAsync(content, history, null, ct))
         {
             responseBuffer.Append(chunk);
             await _streaming.SendStreamChunkAsync(conversationId, chunk, ct);
@@ -165,6 +164,7 @@ public class ChatService : IChatService
                 .FirstOrDefaultAsync(c => c.Id == conversationId, ct)
                 ?? throw new NotFoundException(nameof(Conversation), conversationId);
             responseMessage = freshConversation.AddMessage(responseMessageId, messageId, MessageRole.Assistant, aiResponse);
+            freshContext.Messages.Add(responseMessage);
             await freshContext.SaveChangesAsync(ct);
         }
 

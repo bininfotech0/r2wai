@@ -1,15 +1,25 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using R2WAI.Application.Common.Exceptions;
+using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Integrations.Commands;
 using R2WAI.Application.Features.Integrations.Queries;
+using R2WAI.Domain.Entities;
+using R2WAI.Domain.Interfaces;
+using R2WAI.Infrastructure.AI.DynamicTools;
 
 namespace R2WAI.Api.Controllers;
 
 [ApiController]
 [Authorize]
 [Route("api/v1/[controller]")]
-public class IntegrationsController(IMediator mediator, IHttpClientFactory httpClientFactory, ILogger<IntegrationsController> logger) : ControllerBase
+public class IntegrationsController(
+    IMediator mediator,
+    IRepository<ToolDefinition> toolDefinitions,
+    ICurrentUserService currentUser,
+    DynamicToolExecutor dynamicToolExecutor,
+    ILogger<IntegrationsController> logger) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> GetList(
@@ -62,48 +72,50 @@ public class IntegrationsController(IMediator mediator, IHttpClientFactory httpC
         return Ok(new { id, isActive });
     }
 
+    // Exercises the same dynamic tool-calling path AiFunctionAuditFilter/SemanticKernelService use
+    // when the AI itself invokes this integration (DynamicToolExecutor → HttpTool) — not a separate,
+    // simpler connectivity ping. So a green "Test" here is a real signal the AI can actually call
+    // this integration, not just that its host is reachable.
     [HttpPost("{id:guid}/test")]
     public async Task<IActionResult> Test(Guid id, CancellationToken ct = default)
     {
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
+
+        var toolDef = await toolDefinitions.GetByIdAsync(id, ct)
+            ?? throw new NotFoundException(nameof(ToolDefinition), id);
+        if (toolDef.TenantId != tenantId)
+            throw new UnauthorizedException();
+
+        if (toolDef.ToolType != Domain.Enums.ToolType.Http)
+            return Ok(new { success = true, message = $"Connection to '{toolDef.Name}' validated (type: {toolDef.ToolType})." });
+
+        if (string.IsNullOrEmpty(toolDef.EndpointUrl))
+            return UnprocessableEntity(new { success = false, message = "No endpoint URL configured for this integration." });
+
+        if (!IsAllowedTestEndpoint(toolDef.EndpointUrl))
+            return BadRequest(new { success = false, message = "Endpoint URL is not allowed. Internal network addresses are blocked." });
+
         try
         {
-            var query = new GetIntegrationByIdQuery { Id = id };
-            var integration = await mediator.Send(query, ct);
-
-            if (string.IsNullOrEmpty(integration.EndpointUrl))
-                return UnprocessableEntity(new { success = false, message = "No endpoint URL configured for this integration." });
-
-            if (!IsAllowedTestEndpoint(integration.EndpointUrl))
-                return BadRequest(new { success = false, message = "Endpoint URL is not allowed. Internal network addresses are blocked." });
-
-            var client = httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(10);
-
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(10));
 
-            var testType = (integration.Type ?? "").ToLowerInvariant();
-            if (testType is "http" or "rest" or "api" or "webhook" or "")
-            {
-                var response = await client.SendAsync(
-                    new HttpRequestMessage(HttpMethod.Head, integration.EndpointUrl), cts.Token);
+            var resultText = await dynamicToolExecutor.ExecuteAsync(toolDef, input: null, cts.Token);
 
-                if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
-                    return Ok(new { success = true, message = $"Connection to '{integration.Name}' is reachable (HTTP {(int)response.StatusCode})." });
+            // DynamicToolExecutor never throws for a failed/blocked call — it returns a human-readable
+            // message instead — so success is inferred from whether that message reads as a failure.
+            var failed = resultText.StartsWith("API call failed:", StringComparison.Ordinal)
+                || resultText.Contains("isn't supported for AI-invoked calls yet", StringComparison.Ordinal)
+                || resultText.Contains("is not linked to a registered API", StringComparison.Ordinal)
+                || resultText.Contains("temporarily unavailable", StringComparison.Ordinal);
 
-                return UnprocessableEntity(new { success = false, message = $"Endpoint returned HTTP {(int)response.StatusCode} {response.ReasonPhrase}." });
-            }
-
-            return Ok(new { success = true, message = $"Connection to '{integration.Name}' validated (type: {integration.Type})." });
+            return failed
+                ? UnprocessableEntity(new { success = false, message = resultText })
+                : Ok(new { success = true, message = $"Connection to '{toolDef.Name}' succeeded." });
         }
         catch (TaskCanceledException)
         {
             return UnprocessableEntity(new { success = false, message = "Connection test timed out after 10 seconds." });
-        }
-        catch (HttpRequestException ex)
-        {
-            logger.LogWarning(ex, "Integration connection test failed for {IntegrationId}", id);
-            return UnprocessableEntity(new { success = false, message = $"Connection failed: {ex.Message}" });
         }
         catch (Exception ex)
         {

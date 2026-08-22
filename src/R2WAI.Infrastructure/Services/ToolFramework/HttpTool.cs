@@ -34,23 +34,33 @@ public sealed class HttpTool : ITool
             context.Parameters.TryGetValue("method", out var methodObj);
             context.Parameters.TryGetValue("path", out var pathObj);
             context.Parameters.TryGetValue("body", out var bodyObj);
+            context.Parameters.TryGetValue("baseUrl", out var baseUrlObj);
+            context.Parameters.TryGetValue("authorizationHeader", out var authHeaderObj);
 
             var method = methodObj?.ToString() ?? "GET";
             var path = pathObj?.ToString() ?? "";
-            var url = _options.BaseUrl.TrimEnd('/') + "/" + path.TrimStart('/');
+            var baseUrl = baseUrlObj as string ?? _options.BaseUrl;
+            var url = baseUrl.TrimEnd('/') + "/" + path.TrimStart('/');
 
             _logger.LogInformation("HttpTool executing {Method} {Url}", method, url);
 
-            HttpResponseMessage response;
-            if (string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase))
+            // A body that's already a JSON string (e.g. from a dynamically-built tool call) is sent
+            // as-is; anything else is serialized.
+            var content = bodyObj switch
             {
-                var content = bodyObj is not null ? JsonSerializer.Serialize(bodyObj) : null;
-                response = await _httpClient.PostAsync(url, content is not null ? new StringContent(content, System.Text.Encoding.UTF8, "application/json") : null, context.CancellationToken);
-            }
-            else
-            {
-                response = await _httpClient.GetAsync(url, context.CancellationToken);
-            }
+                null => null,
+                string raw when !string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase) => raw,
+                _ when !string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase) => JsonSerializer.Serialize(bodyObj),
+                _ => null
+            };
+
+            using var request = new HttpRequestMessage(new HttpMethod(method), url);
+            if (content is not null)
+                request.Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json");
+            if (authHeaderObj is string authHeader && !string.IsNullOrWhiteSpace(authHeader))
+                request.Headers.TryAddWithoutValidation("Authorization", authHeader);
+
+            var response = await _httpClient.SendAsync(request, context.CancellationToken);
 
             var responseBody = await response.Content.ReadAsStringAsync(context.CancellationToken);
             sw.Stop();

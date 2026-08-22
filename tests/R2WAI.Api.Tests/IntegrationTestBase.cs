@@ -20,12 +20,16 @@ public class IntegrationTestBase : IClassFixture<R2WAIWebApplicationFactory>
         Client = factory.CreateClient();
     }
 
-    protected async Task<string> GetAuthTokenAsync()
+    protected Task<string> GetAuthTokenAsync() => GetAuthTokenAsync("admin@r2wai.io", "R2wai_Admin!2026");
+
+    protected async Task<string> GetAuthTokenAsync(string email, string password)
     {
+        await Factory.EnsureSeededAsync();
+
         var response = await Client.PostAsJsonAsync("/api/v1/auth/login", new
         {
-            Email = "admin@r2wai.io",
-            Password = "R2wai_Admin!2026"
+            Email = email,
+            Password = password
         });
 
         if (!response.IsSuccessStatusCode)
@@ -35,9 +39,14 @@ public class IntegrationTestBase : IClassFixture<R2WAIWebApplicationFactory>
         return result?.Token ?? string.Empty;
     }
 
-    protected async Task<HttpClient> GetAuthenticatedClientAsync()
+    protected Task<HttpClient> GetAuthenticatedClientAsync() => GetAuthenticatedClientAsync("admin@r2wai.io", "R2wai_Admin!2026");
+
+    // "user@r2wai.io" / "R2wai_User!2026" is the seeded plain-User-role account (ApplicationDbContextSeed)
+    // — use this to exercise role-matrix negative tests (asserting a non-admin is actually denied),
+    // as opposed to the admin overload every other flow test uses.
+    protected async Task<HttpClient> GetAuthenticatedClientAsync(string email, string password)
     {
-        var token = await GetAuthTokenAsync();
+        var token = await GetAuthTokenAsync(email, password);
         var client = Factory.CreateClient();
         if (!string.IsNullOrEmpty(token))
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);

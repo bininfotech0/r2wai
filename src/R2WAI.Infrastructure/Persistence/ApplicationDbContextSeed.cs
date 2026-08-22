@@ -9,6 +9,7 @@ public static class ApplicationDbContextSeed
 {
     private static readonly Guid DefaultTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly Guid AdminUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid StandardUserId = Guid.Parse("00000000-0000-0000-0000-000000000002");
     private static readonly Guid AdminRoleId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly Guid UserRoleId = Guid.Parse("00000000-0000-0000-0000-000000000002");
     private static readonly Guid EditorRoleId = Guid.Parse("00000000-0000-0000-0000-000000000003");
@@ -63,6 +64,17 @@ public static class ApplicationDbContextSeed
 
         var adminUserRole = new UserRole(AdminUserId, AdminRoleId);
 
+        // A plain-"User"-role account exists purely so role-matrix tests have something to assert
+        // *against* — every seeded account before this was Admin, so no test could ever tell the
+        // difference between "authorization is enforced" and "the only account happens to be an
+        // admin". See tests/R2WAI.Api.Tests/Security/RoleMatrixSecurityTests.cs.
+        var standardUser = new User(
+            StandardUserId, DefaultTenantId,
+            "user@r2wai.io", "user@r2wai.io",
+            "Standard", "User");
+        standardUser.SetPasswordHash(new PasswordHasher().Hash("R2wai_User!2026"));
+        var standardUserRole = new UserRole(StandardUserId, UserRoleId);
+
         var defaultModel = new ModelConfiguration(
             DefaultModelId, DefaultTenantId,
             "GPT-4o", "OpenAI", "gpt-4o",
@@ -73,8 +85,8 @@ public static class ApplicationDbContextSeed
 
         context.Tenants.Add(tenant);
         context.Roles.AddRange(adminRole, userRole, editorRole, contributorRole, workflowManagerRole, userManagerRole);
-        context.Users.Add(adminUser);
-        context.UserRoles.Add(adminUserRole);
+        context.Users.AddRange(adminUser, standardUser);
+        context.UserRoles.AddRange(adminUserRole, standardUserRole);
         context.ModelConfigurations.Add(defaultModel);
 
         // --- Demo Assistants ---

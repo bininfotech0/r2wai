@@ -37,6 +37,7 @@ public interface ITenantDbContext
     DbSet<ApprovalRequest> ApprovalRequests { get; }
     DbSet<ApprovalPolicy> ApprovalPolicies { get; }
     DbSet<ToolDefinition> ToolDefinitions { get; }
+    DbSet<PromptTemplate> PromptTemplates { get; }
     DbSet<WorkflowSchedule> WorkflowSchedules { get; }
     DbSet<WebhookEndpoint> WebhookEndpoints { get; }
     DbSet<ApiKey> ApiKeys { get; }
@@ -106,6 +107,7 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
     public DbSet<ApprovalPolicy> ApprovalPolicies => Set<ApprovalPolicy>();
     public DbSet<ToolDefinition> ToolDefinitions => Set<ToolDefinition>();
+    public DbSet<PromptTemplate> PromptTemplates => Set<PromptTemplate>();
     public DbSet<WorkflowSchedule> WorkflowSchedules => Set<WorkflowSchedule>();
     public DbSet<WebhookEndpoint> WebhookEndpoints => Set<WebhookEndpoint>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();

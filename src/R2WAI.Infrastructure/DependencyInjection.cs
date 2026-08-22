@@ -91,6 +91,10 @@ public static class DependencyInjection
         services.AddSingleton<IRequestMetricsStore, RequestMetricsStore>();
         services.AddHostedService<BackgroundTaskProcessor>();
 
+        services.AddSingleton<AI.ModelGateway.IModelProvider, AI.ModelGateway.OpenAiModelProvider>();
+        services.AddSingleton<AI.ModelGateway.IModelProvider, AI.ModelGateway.OllamaModelProvider>();
+        services.AddSingleton<AI.ModelGateway.IModelProvider, AI.ModelGateway.ZaiModelProvider>();
+        services.AddSingleton<AI.ModelGateway.IModelGateway, AI.ModelGateway.ModelGateway>();
         services.AddScoped<IAIService, SemanticKernelService>();
         services.AddScoped<DocumentPlugin>();
         services.AddScoped<RAGPlugin>();
@@ -98,6 +102,12 @@ public static class DependencyInjection
         services.AddScoped<AssistantPlugin>();
         services.AddScoped<IChatTraceCollector, ChatTraceCollector>();
         services.AddScoped<AiFunctionAuditFilter>();
+        services.AddScoped<IToolExecutionPolicyService, ToolExecutionPolicyService>();
+        services.AddScoped<IPromptTemplateService, AI.Prompts.PromptTemplateService>();
+        services.AddScoped<IConversationMemoryService, AI.ConversationMemoryService>();
+        services.AddScoped<IAgentRuntime, AI.AgentRuntime>();
+        services.AddScoped<AI.DynamicTools.DynamicToolExecutor>();
+        services.AddScoped<AI.DynamicTools.DynamicToolFunctionFactory>();
 
         services.AddScoped<IVectorStoreService, PgVectorService>();
 

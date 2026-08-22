@@ -19,8 +19,8 @@
             <MudSelectItem T="int" Value="30">Last 30 days</MudSelectItem>
         </MudSelect>
         <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="btn-gradient"
-                   StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Navigation.NavigateTo("/applications/new"))">
-            Add Application
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => Navigation.NavigateTo("/assistant-studio"))">
+            New Assistant
         </MudButton>
     </div>
 </div>
@@ -33,12 +33,6 @@
 
 @* KPI Row *@
 <MudGrid Class="mb-4" Spacing="3">
-    <MudItem xs="12" sm="6" md="4" lg="2">
-        <KpiCard Label="Applications" Value="@_totalApplications.ToString()" Icon="@Icons.Material.Outlined.Apps"
-                 IconColor="Color.Secondary" Delta="@DeltaFor(_applicationsTrendPercent)" Trend="@TrendFor(_applicationsTrendPercent)"
-                 OnClick="@(() => Navigation.NavigateTo("/applications"))"
-                 AriaLabel="@($"Applications: {_totalApplications}. View all applications.")" />
-    </MudItem>
     <MudItem xs="12" sm="6" md="4" lg="2">
         <KpiCard Label="AI Assistants" Value="@_totalAssistants.ToString()" Icon="@Icons.Material.Outlined.SmartToy"
                  IconColor="Color.Primary" Delta="@DeltaFor(_assistantsTrendPercent)" Trend="@TrendFor(_assistantsTrendPercent)"
@@ -87,16 +81,16 @@
     </MudItem>
     <MudItem xs="12" md="5">
         <MudPaper Class="pa-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); height: 100%;">
-            <MudText Typo="Typo.subtitle1" Class="mb-3" Style="font-weight: 700;">Application Status</MudText>
-            @if (_totalApplications == 0)
+            <MudText Typo="Typo.subtitle1" Class="mb-3" Style="font-weight: 700;">Automations by Status</MudText>
+            @if (_totalWorkflows == 0)
             {
-                <EmptyState Icon="@Icons.Material.Outlined.Apps" Title="No applications yet"
-                            Description="Connect your first application to see its status here." MinHeight="180px" />
+                <EmptyState Icon="@Icons.Material.Outlined.AccountTree" Title="No automations yet"
+                            Description="Create your first automation to see its status here." MinHeight="180px" />
             }
             else
             {
                 <div class="d-flex justify-center">
-                    <DonutChart Segments="_statusSegments" Size="160" CenterLabel="Total" CenterValue="@_totalApplications.ToString()" />
+                    <DonutChart Segments="_workflowStatusSegments" Size="160" CenterLabel="Total" CenterValue="@_totalWorkflows.ToString()" />
                 </div>
             }
         </MudPaper>
@@ -210,12 +204,12 @@
     </div>
 }
 
-@* Recent Applications + Right Rail *@
+@* Recent Automations + Right Rail *@
 <MudGrid Spacing="3">
     <MudItem xs="12" md="8">
         <div class="d-flex justify-space-between align-center mb-3">
-            <MudText Typo="Typo.h6" Class="section-title">Recent Applications</MudText>
-            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" OnClick="@(() => Navigation.NavigateTo("/applications"))">
+            <MudText Typo="Typo.h6" Class="section-title">Recent Automations</MudText>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" OnClick="@(() => Navigation.NavigateTo("/workflow-studio"))">
                 View all
             </MudButton>
         </div>
@@ -226,33 +220,29 @@
                     <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Table" />
                 </div>
             }
-            else if (_applications.Count == 0)
+            else if (_recentWorkflows.Count == 0)
             {
-                <EmptyState Icon="@Icons.Material.Outlined.Apps"
-                            Title="No applications yet"
-                            Description="Connect your first government application and R2WAI will help you register its APIs, knowledge, and capabilities."
-                            ActionText="Add Application" OnAction="@(() => Navigation.NavigateTo("/applications/new"))" />
+                <EmptyState Icon="@Icons.Material.Outlined.AccountTree"
+                            Title="No automations yet"
+                            Description="Create your first automation to put a business process on autopilot."
+                            ActionText="New Automation" OnAction="@(() => Navigation.NavigateTo("/workflow-studio"))" />
             }
             else
             {
                 <div style="overflow-x: auto;">
-                <MudTable T="ApplicationSummary" Items="_applications" Hover="true" Dense="true" Elevation="0" RowsPerPage="5">
+                <MudTable T="WorkflowSummary" Items="_recentWorkflows" Hover="true" Dense="true" Elevation="0" RowsPerPage="5">
                     <HeaderContent>
                         <MudTh>Name</MudTh>
-                        <MudTh>Assistant</MudTh>
+                        <MudTh>Trigger</MudTh>
                         <MudTh>Status</MudTh>
                         <MudTh>Last updated</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Name">
-                            <MudLink Href="@($"/applications/{context.Id}")" Underline="Underline.None" Style="font-weight: 600;">@context.Name</MudLink>
-                            @if (!string.IsNullOrEmpty(context.BaseUrl))
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@context.BaseUrl</MudText>
-                            }
+                            <MudLink Href="@($"/workflow-studio/automations/{context.Id}")" Underline="Underline.None" Style="font-weight: 600;">@context.Name</MudLink>
                         </MudTd>
-                        <MudTd DataLabel="Assistant">@(GetAssistantName(context.Id) ?? "—")</MudTd>
-                        <MudTd DataLabel="Status"><StatusBadge Status="@context.Status" /></MudTd>
+                        <MudTd DataLabel="Trigger">@(context.Trigger ?? "—")</MudTd>
+                        <MudTd DataLabel="Status"><StatusBadge Status="@context.VersionStatus" /></MudTd>
                         <MudTd DataLabel="Last updated">@((context.ModifiedAt ?? context.CreatedAt).ToString("MMM d, yyyy"))</MudTd>
                     </RowTemplate>
                     <PagerContent>
@@ -372,17 +362,14 @@
     private int _totalWorkflows;
     private int _totalDocuments;
     private int _totalKnowledgeBases;
-    private int _totalApplications;
     private int _totalConversations;
     private int _totalExecutions;
     private int _activeUsersByLogin;
     private double? _workflowSuccessRatePercent;
-    private double? _applicationsTrendPercent;
     private double? _assistantsTrendPercent;
     private double? _conversationsTrendPercent;
     private double? _activeUsersTrendPercent;
-    private List<ApplicationSummary> _applications = new();
-    private List<AssistantLookupItem> _assistantsLookup = new();
+    private List<WorkflowSummary> _recentWorkflows = new();
     private List<ActivityItem> _activities = new();
     private List<HealthEntry> _healthChecks = new();
     private List<IntegrationStatusItem> _integrations = new();
@@ -395,11 +382,10 @@
     private int _dailyTrendDays = 7;
     private List<LineChart.ChartSeries> _trendSeries = new();
     private List<string> _trendXLabels = new();
-    private List<DonutChart.ChartSegment> _statusSegments = new();
+    private List<DonutChart.ChartSegment> _workflowStatusSegments = new();
 
     private readonly List<QuickAction> _quickActions = new()
     {
-        new("New Application", Icons.Material.Filled.Add, "/applications/new"),
         new("Create Assistant", Icons.Material.Filled.SmartToy, "/assistant-studio"),
         new("Add Knowledge", Icons.Material.Filled.MenuBook, "/assistant-studio/knowledge"),
         new("Add Tool / API", Icons.Material.Filled.Build, "/assistant-studio/tools"),
@@ -436,11 +422,10 @@
             var integrationsTask = LoadIntegrations();
             var approvalsTask = LoadApprovals();
             var kbTask = Http.GetFromJsonAsync<KbListResult>("/api/v1/knowledgebases");
-            var appsTask = Http.GetFromJsonAsync<AppsResult>("/api/v1/applications?page=1&pageSize=200");
-            var assistantsTask = Http.GetFromJsonAsync<AssistantsResult>("/api/v1/assistants?page=1&pageSize=200");
+            var workflowsTask = Http.GetFromJsonAsync<WorkflowsResult>("/api/v1/workflows?page=1&pageSize=5");
             var executionsTask = Http.GetFromJsonAsync<InstancesCountResult>("/api/v1/operations/workflow-instances?pageSize=1");
 
-            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, integrationsTask, approvalsTask, kbTask, appsTask, assistantsTask, executionsTask);
+            var allTasks = Task.WhenAll(metricsTask, logsTask, healthTask, integrationsTask, approvalsTask, kbTask, workflowsTask, executionsTask);
             var completed = await Task.WhenAny(allTasks, Task.Delay(Timeout.Infinite, cts.Token));
             if (completed != allTasks)
             {
@@ -460,7 +445,6 @@
                 _completedToday = metrics.CompletedToday;
                 _activeUsersByLogin = metrics.ActiveUsersByLogin;
                 _workflowSuccessRatePercent = metrics.WorkflowSuccessRatePercent;
-                _applicationsTrendPercent = metrics.ApplicationsTrendPercent;
                 _assistantsTrendPercent = metrics.AssistantsTrendPercent;
                 _conversationsTrendPercent = metrics.ConversationsTrendPercent;
                 _activeUsersTrendPercent = metrics.ActiveUsersTrendPercent;
@@ -471,16 +455,10 @@
 
             _knowledgeBases = kbTask.Result?.Items ?? new();
 
-            var apps = appsTask.Result;
-            _totalApplications = apps?.TotalCount ?? 0;
-            _applications = (apps?.Items ?? new())
-                .OrderByDescending(a => a.ModifiedAt ?? a.CreatedAt)
+            _recentWorkflows = (workflowsTask.Result?.Items ?? new())
+                .OrderByDescending(w => w.ModifiedAt ?? w.CreatedAt)
                 .ToList();
-            BuildStatusSegments();
-
-            _assistantsLookup = (assistantsTask.Result?.Items ?? new())
-                .Where(a => a.ApplicationId.HasValue)
-                .ToList();
+            BuildWorkflowStatusSegments();
 
             _activities = (logsTask.Result?.Items ?? new())
                 .Select(l => new ActivityItem
@@ -509,23 +487,18 @@
         await LoadDailyTrend();
     }
 
-    private void BuildStatusSegments()
+    private void BuildWorkflowStatusSegments()
     {
-        // Bucket the 7-value ApplicationStatus enum into the 4 display buckets the chart shows:
-        // Discovering/Configuring (pre-launch) fold into Draft; Disabled folds into Archived.
-        int Count(Func<string, bool> match) => _applications.Count(a => match(a.Status));
-
-        _statusSegments = new List<DonutChart.ChartSegment>
+        // Only Active/Inactive is available from the already-loaded metrics counts (no per-workflow
+        // status breakdown is fetched on this page) — an honest coarse split rather than fabricating
+        // finer buckets the data doesn't support.
+        var inactive = Math.Max(0, _totalWorkflows - _activeWorkflows);
+        _workflowStatusSegments = new List<DonutChart.ChartSegment>
         {
-            new() { Label = "Published", Value = Count(s => s.Equals("Published", StringComparison.OrdinalIgnoreCase)), Color = "var(--mud-palette-success)" },
-            new() { Label = "Testing", Value = Count(s => s.Equals("Testing", StringComparison.OrdinalIgnoreCase)), Color = "var(--mud-palette-info)" },
-            new() { Label = "Draft", Value = Count(s => s.Equals("Draft", StringComparison.OrdinalIgnoreCase) || s.Equals("Discovering", StringComparison.OrdinalIgnoreCase) || s.Equals("Configuring", StringComparison.OrdinalIgnoreCase)), Color = "var(--mud-palette-warning)" },
-            new() { Label = "Archived", Value = Count(s => s.Equals("Archived", StringComparison.OrdinalIgnoreCase) || s.Equals("Disabled", StringComparison.OrdinalIgnoreCase)), Color = "var(--mud-palette-text-secondary)" },
+            new() { Label = "Active", Value = _activeWorkflows, Color = "var(--mud-palette-success)" },
+            new() { Label = "Inactive", Value = inactive, Color = "var(--mud-palette-text-secondary)" },
         };
     }
-
-    private string? GetAssistantName(Guid applicationId) =>
-        _assistantsLookup.FirstOrDefault(a => a.ApplicationId == applicationId)?.Name;
 
     private async Task OnDailyTrendDaysChanged(int days)
     {
@@ -838,23 +811,16 @@
         public string ActionText { get; set; } = string.Empty;
         public string? ActionUrl { get; set; }
     }
-    private class AppsResult { public List<ApplicationSummary> Items { get; set; } = new(); public int TotalCount { get; set; } }
     private class InstancesCountResult { public int TotalCount { get; set; } }
-    private class ApplicationSummary
+    private class WorkflowsResult { public List<WorkflowSummary> Items { get; set; } = new(); public int TotalCount { get; set; } }
+    private class WorkflowSummary
     {
         public Guid Id { get; set; }
         public string Name { get; set; } = string.Empty;
-        public string? BaseUrl { get; set; }
-        public string Status { get; set; } = string.Empty;
+        public string? Trigger { get; set; }
+        public string VersionStatus { get; set; } = "Draft";
         public DateTime CreatedAt { get; set; }
         public DateTime? ModifiedAt { get; set; }
-    }
-    private class AssistantsResult { public List<AssistantLookupItem> Items { get; set; } = new(); }
-    private class AssistantLookupItem
-    {
-        public Guid Id { get; set; }
-        public Guid? ApplicationId { get; set; }
-        public string Name { get; set; } = string.Empty;
     }
     private class KbListResult { public List<KnowledgeBaseListDto> Items { get; set; } = new(); }
     private class KnowledgeBaseListDto

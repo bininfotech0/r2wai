@@ -462,8 +462,8 @@
                 <MudTabs @bind-ActivePanelIndex="_activeTab" Elevation="0" Rounded="false" ApplyEffectsToContainer="true"
                          Class="editor-tabs">
 
-                    @* ── Configuration Tab ── *@
-                    <MudTabPanel Text="Configuration" Icon="@Icons.Material.Outlined.Settings">
+                    @* ── General Tab ── *@
+                    <MudTabPanel Text="General" Icon="@Icons.Material.Outlined.Info">
                         <MudGrid Spacing="3">
                             <MudItem xs="12" sm="8">
                                 <MudTextField @bind-Value="_editName" Label="Assistant Name" Variant="Variant.Outlined"
@@ -497,30 +497,20 @@
                                               Margin="Margin.Dense" Lines="2"
                                               HelperText="Brief description shown to users when selecting this assistant" />
                             </MudItem>
-                            <MudItem xs="12" sm="6">
-                                <MudSelect T="Guid?" @bind-Value="_editModelId" Label="AI Model" Clearable="true"
-                                           Variant="Variant.Outlined" Margin="Margin.Dense"
-                                           HelperText="Which AI model powers this assistant">
-                                    @foreach (var model in _models)
-                                    {
-                                        <MudSelectItem T="Guid?" Value="@((Guid?)model.Id)">@model.Name (@model.Provider)</MudSelectItem>
-                                    }
-                                </MudSelect>
+                            <MudItem xs="12" sm="8">
+                                <MudTextField @bind-Value="_editTags" Label="Tags" Variant="Variant.Outlined"
+                                              Margin="Margin.Dense" HelperText="Comma-separated tags for search and categorization"
+                                              Placeholder="e.g. onboarding, benefits, leave" />
                             </MudItem>
-                            <MudItem xs="12" sm="6">
-                                <MudSelect T="Guid?" @bind-Value="_editWorkflowId" Label="Linked Workflow" Clearable="true"
-                                           Variant="Variant.Outlined" Margin="Margin.Dense"
-                                           HelperText="Trigger workflow on specific intents">
-                                    @foreach (var wf in _workflows)
-                                    {
-                                        <MudSelectItem T="Guid?" Value="@((Guid?)wf.Id)">@wf.Name</MudSelectItem>
-                                    }
-                                </MudSelect>
+                            <MudItem xs="12" sm="4">
+                                <MudTextField @bind-Value="_editAvatarUrl" Label="Avatar URL" Variant="Variant.Outlined"
+                                              Margin="Margin.Dense" Placeholder="https://..." />
                             </MudItem>
                         </MudGrid>
+                    </MudTabPanel>
 
-                        @* ─── System Prompt ─── *@
-                        <MudDivider Class="my-4" />
+                    @* ── Instructions Tab ── *@
+                    <MudTabPanel Text="Instructions" Icon="@Icons.Material.Outlined.Edit">
                         <div class="d-flex justify-space-between align-center mb-3">
                             <div>
                                 <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">System Prompt</MudText>
@@ -535,56 +525,9 @@
                                 }
                             </MudMenu>
                         </div>
-                        <MarkdownEditor @bind-Value="_editSystemPrompt" Lines="10"
+                        <MarkdownEditor @bind-Value="_editSystemPrompt" Lines="14"
                                         Placeholder="Define how the assistant should behave and respond. Be specific about its role, expertise, tone, and boundaries..."
-                                        HelperText="Use markdown to format instructions. Bold for emphasis, code blocks for examples, lists for rules." />
-
-                        @* ─── Advanced Configuration ─── *@
-                        <MudDivider Class="my-4" />
-                        <MudExpansionPanels Elevation="0" Dense="true">
-                            <MudExpansionPanel Text="Advanced Configuration" Icon="@Icons.Material.Outlined.Tune">
-                                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="font-weight: 700;">Response Settings</MudText>
-                                <MudGrid Spacing="3" Class="mb-4">
-                                    <MudItem xs="12" sm="4">
-                                        <MudSelect T="string" @bind-Value="_editTone" Label="Tone" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                            <MudSelectItem T="string" Value="@("Professional")">Professional</MudSelectItem>
-                                            <MudSelectItem T="string" Value="@("Friendly")">Friendly</MudSelectItem>
-                                            <MudSelectItem T="string" Value="@("Concise")">Concise</MudSelectItem>
-                                            <MudSelectItem T="string" Value="@("Detailed")">Detailed</MudSelectItem>
-                                            <MudSelectItem T="string" Value="@("Technical")">Technical</MudSelectItem>
-                                        </MudSelect>
-                                    </MudItem>
-                                    <MudItem xs="12" sm="4">
-                                        <MudSelect T="string" @bind-Value="_editResponseLength" Label="Response Length" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                            <MudSelectItem T="string" Value="@("Short")">Short (1-2 paragraphs)</MudSelectItem>
-                                            <MudSelectItem T="string" Value="@("Medium")">Medium (3-5 paragraphs)</MudSelectItem>
-                                            <MudSelectItem T="string" Value="@("Long")">Long (detailed)</MudSelectItem>
-                                            <MudSelectItem T="string" Value="@("Auto")">Auto (context-aware)</MudSelectItem>
-                                        </MudSelect>
-                                    </MudItem>
-                                    <MudItem xs="12" sm="4">
-                                        <MudSelect T="string" @bind-Value="_editResponseFormat" Label="Format" Variant="Variant.Outlined" Margin="Margin.Dense">
-                                            <MudSelectItem T="string" Value="@("Markdown")">Markdown</MudSelectItem>
-                                            <MudSelectItem T="string" Value="@("Plain Text")">Plain Text</MudSelectItem>
-                                            <MudSelectItem T="string" Value="@("Structured")">Structured (lists/tables)</MudSelectItem>
-                                        </MudSelect>
-                                    </MudItem>
-                                </MudGrid>
-
-                                <MudText Typo="Typo.subtitle2" Class="mb-3" Style="font-weight: 700;">Metadata</MudText>
-                                <MudGrid Spacing="3">
-                                    <MudItem xs="12" sm="8">
-                                        <MudTextField @bind-Value="_editTags" Label="Tags" Variant="Variant.Outlined"
-                                                      Margin="Margin.Dense" HelperText="Comma-separated tags for search and categorization"
-                                                      Placeholder="e.g. onboarding, benefits, leave" />
-                                    </MudItem>
-                                    <MudItem xs="12" sm="4">
-                                        <MudTextField @bind-Value="_editAvatarUrl" Label="Avatar URL" Variant="Variant.Outlined"
-                                                      Margin="Margin.Dense" Placeholder="https://..." />
-                                    </MudItem>
-                                </MudGrid>
-                            </MudExpansionPanel>
-                        </MudExpansionPanels>
+                                        HelperText="Use markdown to format instructions. Bold for emphasis, code blocks for examples, lists for rules. Templates reflect this tenant's saved overrides (Prompt Management) where configured, falling back to the platform default." />
                     </MudTabPanel>
 
                     @* ── Knowledge Tab ── *@
@@ -655,8 +598,8 @@
                         }
                     </MudTabPanel>
 
-                    @* ── Capabilities Tab ── *@
-                    <MudTabPanel Text="Capabilities" Icon="@Icons.Material.Outlined.Build" BadgeData="@(_availableTools.Count(t => t.IsEnabled))"
+                    @* ── Tools Tab ── *@
+                    <MudTabPanel Text="Tools" Icon="@Icons.Material.Outlined.Build" BadgeData="@(_availableTools.Count(t => t.IsEnabled))"
                                  BadgeColor="Color.Primary">
                         <div class="mb-4">
                             <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Available Capabilities</MudText>
@@ -690,8 +633,37 @@
                         }
                     </MudTabPanel>
 
-                    @* ── Conversation Starters Tab ── *@
-                    <MudTabPanel Text="Starters" Icon="@Icons.Material.Outlined.Chat">
+                    @* ── Behavior Tab ── *@
+                    <MudTabPanel Text="Behavior" Icon="@Icons.Material.Outlined.Tune">
+                        <MudText Typo="Typo.subtitle2" Class="mb-3" Style="font-weight: 700;">Response Style</MudText>
+                        <MudGrid Spacing="3" Class="mb-4">
+                            <MudItem xs="12" sm="4">
+                                <MudSelect T="string" @bind-Value="_editTone" Label="Tone" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    <MudSelectItem T="string" Value="@("Professional")">Professional</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Friendly")">Friendly</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Concise")">Concise</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Detailed")">Detailed</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Technical")">Technical</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudSelect T="string" @bind-Value="_editResponseLength" Label="Response Length" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    <MudSelectItem T="string" Value="@("Short")">Short (1-2 paragraphs)</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Medium")">Medium (3-5 paragraphs)</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Long")">Long (detailed)</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Auto")">Auto (context-aware)</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="4">
+                                <MudSelect T="string" @bind-Value="_editResponseFormat" Label="Format" Variant="Variant.Outlined" Margin="Margin.Dense">
+                                    <MudSelectItem T="string" Value="@("Markdown")">Markdown</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Plain Text")">Plain Text</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Structured")">Structured (lists/tables)</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudDivider Class="my-4" />
                         <div class="d-flex justify-space-between align-center mb-4">
                             <div>
                                 <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Welcome Message & Conversation Starters</MudText>
@@ -760,7 +732,152 @@
                     </MudTabPanel>
 
                     @* ── Quick Test Tab ── *@
-                    <MudTabPanel Text="Quick Test" Icon="@Icons.Material.Outlined.PlayArrow">
+                    @* ── Security Tab ── *@
+                    <MudTabPanel Text="Security" Icon="@Icons.Material.Outlined.Shield">
+                        <div class="mb-4">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Governance & Authorization</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Every tool call this assistant makes is checked against this tenant's role and policy
+                                configuration before it runs — the AI never decides authorization itself.
+                            </MudText>
+                        </div>
+
+                        <MudPaper Elevation="0" Class="pa-4 mb-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+                            <MudText Typo="Typo.body2" Class="mb-3" Style="font-weight: 600;">Tools this assistant can use</MudText>
+                            @if (_availableTools.Any(t => t.IsEnabled))
+                            {
+                                <div class="d-flex flex-column gap-2">
+                                    @foreach (var tool in _availableTools.Where(t => t.IsEnabled))
+                                    {
+                                        <div class="d-flex justify-space-between align-center pa-2" style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm);">
+                                            <div class="d-flex align-center gap-2">
+                                                <MudIcon Icon="@tool.Icon" Size="Size.Small" Color="Color.Primary" />
+                                                <MudText Typo="Typo.body2">@tool.Name</MudText>
+                                            </div>
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@tool.Category</MudChip>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">No tools enabled — see the Tools tab.</MudText>
+                            }
+                        </MudPaper>
+
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                            Role requirements, approval rules, and risk-level policy for individual tools are managed
+                            tenant-wide by a Super Admin under
+                            <MudLink Href="/admin/security">Security</MudLink> and
+                            <MudLink Href="/governance">Global Policies</MudLink> — not per assistant. This keeps
+                            authorization consistent across every assistant and automation.
+                        </MudAlert>
+                    </MudTabPanel>
+
+                    @* ── Channels Tab ── *@
+                    <MudTabPanel Text="Channels" Icon="@Icons.Material.Outlined.Hub">
+                        <div class="mb-4">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Channels</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Where this assistant can be reached</MudText>
+                        </div>
+
+                        @if (_channelLoading)
+                        {
+                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" />
+                        }
+
+                        <MudGrid Spacing="3">
+                            <MudItem xs="12" sm="6">
+                                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%;">
+                                    <div class="d-flex justify-space-between align-center mb-2">
+                                        <div class="d-flex align-center gap-2">
+                                            <MudIcon Icon="@Icons.Material.Outlined.Language" Color="Color.Primary" Size="Size.Small" />
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Website</MudText>
+                                        </div>
+                                        @if (_assistantChatbot is not null)
+                                        {
+                                            <StatusBadge Status="@_assistantChatbot.Status" />
+                                        }
+                                    </div>
+                                    @if (_assistantChatbot is null)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                                            Embed this assistant as a floating chat widget on a website.
+                                        </MudText>
+                                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.Add" Disabled="_channelLoading"
+                                                   OnClick="CreateWebsiteChannel">
+                                            Add Website Channel
+                                        </MudButton>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
+                                            Live at a public, credential-free embed — no secrets are ever sent to the browser.
+                                        </MudText>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="OpenChannelConfigure">Configure</MudButton>
+                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="PreviewChannel">Preview</MudButton>
+                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="OpenChannelEmbedCode">
+                                                Get Embed Code
+                                            </MudButton>
+                                        </div>
+                                    }
+                                </MudPaper>
+                            </MudItem>
+                            @foreach (var (icon, label) in new[]
+                            {
+                                (Icons.Material.Outlined.Apps, "Application"),
+                                (Icons.Material.Outlined.PhoneIphone, "Mobile"),
+                                (Icons.Material.Outlined.Api, "API"),
+                            })
+                            {
+                                <MudItem xs="12" sm="6">
+                                    <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%; opacity: 0.6;">
+                                        <div class="d-flex align-center gap-2 mb-2">
+                                            <MudIcon Icon="@icon" Size="Size.Small" />
+                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">@label</MudText>
+                                        </div>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Not yet available in this release.</MudText>
+                                    </MudPaper>
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    </MudTabPanel>
+
+                    @* ── Advanced Tab ── *@
+                    <MudTabPanel Text="Advanced" Icon="@Icons.Material.Outlined.Settings">
+                        <MudText Typo="Typo.subtitle2" Class="mb-3" Style="font-weight: 700;">Model & Automation</MudText>
+                        <MudGrid Spacing="3" Class="mb-4">
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="Guid?" @bind-Value="_editModelId" Label="AI Model" Clearable="true"
+                                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                                           HelperText="Which approved AI model powers this assistant">
+                                    @foreach (var model in _models)
+                                    {
+                                        <MudSelectItem T="Guid?" Value="@((Guid?)model.Id)">@model.Name (@model.Provider)</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="Guid?" @bind-Value="_editWorkflowId" Label="Linked Workflow" Clearable="true"
+                                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                                           HelperText="Trigger workflow on specific intents">
+                                    @foreach (var wf in _workflows)
+                                    {
+                                        <MudSelectItem T="Guid?" Value="@((Guid?)wf.Id)">@wf.Name</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudDivider Class="my-4" />
+                        <div class="d-flex justify-space-between align-center mb-3">
+                            <div>
+                                <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Quick Test</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Send a raw test message through this assistant's current configuration</MudText>
+                            </div>
+                        </div>
                         <MudPaper Elevation="0" Class="pa-0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 55vh; display: flex; flex-direction: column; overflow: hidden;">
                             @* Chat header *@
                             <div class="d-flex justify-space-between align-center pa-3" style="border-bottom: 1px solid var(--mud-palette-divider); background: var(--r2-gradient-surface);">
@@ -862,76 +979,6 @@
                                 </div>
                             </div>
                         </MudPaper>
-                    </MudTabPanel>
-
-                    <MudTabPanel Text="Channels" Icon="@Icons.Material.Outlined.Hub">
-                        <div class="mb-4">
-                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Channels</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Where this assistant can be reached</MudText>
-                        </div>
-
-                        @if (_channelLoading)
-                        {
-                            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" />
-                        }
-
-                        <MudGrid Spacing="3">
-                            <MudItem xs="12" sm="6">
-                                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%;">
-                                    <div class="d-flex justify-space-between align-center mb-2">
-                                        <div class="d-flex align-center gap-2">
-                                            <MudIcon Icon="@Icons.Material.Outlined.Language" Color="Color.Primary" Size="Size.Small" />
-                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">Website</MudText>
-                                        </div>
-                                        @if (_assistantChatbot is not null)
-                                        {
-                                            <StatusBadge Status="@_assistantChatbot.Status" />
-                                        }
-                                    </div>
-                                    @if (_assistantChatbot is null)
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
-                                            Embed this assistant as a floating chat widget on a website.
-                                        </MudText>
-                                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
-                                                   StartIcon="@Icons.Material.Filled.Add" Disabled="_channelLoading"
-                                                   OnClick="CreateWebsiteChannel">
-                                            Add Website Channel
-                                        </MudButton>
-                                    }
-                                    else
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
-                                            Live at a public, credential-free embed — no secrets are ever sent to the browser.
-                                        </MudText>
-                                        <div class="d-flex gap-2 flex-wrap">
-                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="OpenChannelConfigure">Configure</MudButton>
-                                            <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="PreviewChannel">Preview</MudButton>
-                                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="OpenChannelEmbedCode">
-                                                Get Embed Code
-                                            </MudButton>
-                                        </div>
-                                    }
-                                </MudPaper>
-                            </MudItem>
-                            @foreach (var (icon, label) in new[]
-                            {
-                                (Icons.Material.Outlined.Apps, "Application"),
-                                (Icons.Material.Outlined.PhoneIphone, "Mobile"),
-                                (Icons.Material.Outlined.Api, "API"),
-                            })
-                            {
-                                <MudItem xs="12" sm="6">
-                                    <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%; opacity: 0.6;">
-                                        <div class="d-flex align-center gap-2 mb-2">
-                                            <MudIcon Icon="@icon" Size="Size.Small" />
-                                            <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">@label</MudText>
-                                        </div>
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Not yet available in this release.</MudText>
-                                    </MudPaper>
-                                </MudItem>
-                            }
-                        </MudGrid>
                     </MudTabPanel>
                 </MudTabs>
             </MudPaper>

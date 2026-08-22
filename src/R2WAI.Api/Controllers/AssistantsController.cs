@@ -19,6 +19,8 @@ public class AssistantsController(
     ApplicationDbContext dbContext,
     IAIService aiService,
     IKnowledgeBaseService knowledgeBaseService,
+    IPromptTemplateService promptTemplateService,
+    ICurrentUserService currentUser,
     ILogger<AssistantsController> logger) : ControllerBase
 {
     [HttpPost]
@@ -72,9 +74,14 @@ public class AssistantsController(
     }
 
     [HttpGet("prompt-templates")]
-    public IActionResult GetPromptTemplates()
+    public async Task<IActionResult> GetPromptTemplates(CancellationToken ct = default)
     {
-        var templates = R2WAI.Infrastructure.AI.Prompts.SystemPromptTemplates.GetAll();
+        if (currentUser.TenantId is not { } tenantId)
+            return Ok(new { items = SystemPromptTemplates.GetAll().Select(t => new { type = t.Key, prompt = t.Value }) });
+
+        // Tenant-overridden templates (Prompt Management) take precedence over the static defaults —
+        // GetAllActiveTemplatesAsync already merges the two.
+        var templates = await promptTemplateService.GetAllActiveTemplatesAsync(tenantId, ct);
         return Ok(new { items = templates.Select(t => new { type = t.Key, prompt = t.Value }) });
     }
 
@@ -174,7 +181,9 @@ public class AssistantsController(
             }
         }
 
-        var systemPrompt = (assistant.SystemPrompt ?? "You are a helpful AI assistant.")
+        var basePrompt = assistant.SystemPrompt
+            ?? await promptTemplateService.GetActiveTemplateAsync(assistant.Type, assistant.TenantId, streamCt);
+        var systemPrompt = basePrompt
             + $"\n\n[Assistant context: your assistant ID is {assistant.Id}, your name is \"{assistant.Name}\"" +
               (!string.IsNullOrWhiteSpace(assistant.Description)
                   ? $", and your purpose is: {assistant.Description}"
@@ -266,7 +275,9 @@ public class AssistantsController(
             : desc.Contains("procure") || desc.Contains("vendor") || desc.Contains("purchase") ? "Procurement"
             : "General";
 
-        var templates = SystemPromptTemplates.GetAll();
+        var templates = currentUser.TenantId is { } tenantIdForFallback
+            ? await promptTemplateService.GetAllActiveTemplatesAsync(tenantIdForFallback, ct)
+            : SystemPromptTemplates.GetAll();
         var systemPrompt = templates.TryGetValue(type, out var tmpl) ? tmpl : templates["General"];
         var name = type == "General" ? "General Assistant" : $"{type} Assistant";
 

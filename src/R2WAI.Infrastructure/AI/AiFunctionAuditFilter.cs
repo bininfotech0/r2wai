@@ -13,7 +13,8 @@ public enum GovernanceDecision
 {
     Allow,
     DenyMissingRole,
-    DenyApprovalRequired
+    DenyApprovalRequired,
+    DenyPolicyRiskCeiling
 }
 
 /// <summary>
@@ -34,6 +35,7 @@ public class AiFunctionAuditFilter : IFunctionInvocationFilter
     private readonly ICurrentUserService _currentUser;
     private readonly IChatTraceCollector _traceCollector;
     private readonly IRepository<ToolDefinition> _toolDefinitions;
+    private readonly IToolExecutionPolicyService _policyService;
     private readonly IServiceScopeFactory _scopeFactory;
 
     public AiFunctionAuditFilter(
@@ -41,12 +43,14 @@ public class AiFunctionAuditFilter : IFunctionInvocationFilter
         ICurrentUserService currentUser,
         IChatTraceCollector traceCollector,
         IRepository<ToolDefinition> toolDefinitions,
+        IToolExecutionPolicyService policyService,
         IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _currentUser = currentUser;
         _traceCollector = traceCollector;
         _toolDefinitions = toolDefinitions;
+        _policyService = policyService;
         _scopeFactory = scopeFactory;
     }
 
@@ -60,12 +64,27 @@ public class AiFunctionAuditFilter : IFunctionInvocationFilter
             "AI invoked function {Plugin}.{Function} with args {Arguments} (User {UserId}, Tenant {TenantId})",
             plugin, function, context.Arguments, _currentUser.UserId, _currentUser.TenantId);
 
+        // Matches by Name + TenantId only (not further scoped by ApplicationId): this used to also
+        // require ApplicationId == null, which silently excluded every application-scoped
+        // ToolDefinition from governance. That was harmless while those rows were never actually
+        // callable, but the dynamic Tool/Integration Registry bridge (DynamicToolFunctionFactory)
+        // now makes them real SK functions — so they must be governed the same as built-in ones.
         var toolDef = _currentUser.TenantId.HasValue
             ? await _toolDefinitions.FirstOrDefaultAsync(
-                t => t.Name == function && t.ApplicationId == null && t.TenantId == _currentUser.TenantId.Value)
+                t => t.Name == function && t.TenantId == _currentUser.TenantId.Value)
             : null;
 
         var decision = EvaluateGovernance(toolDef, _currentUser.Roles);
+
+        // Policy Engine: an optional, tenant-configured tightening layer on top of the baseline
+        // decision above — it can only turn an Allow into a Deny, never the reverse, so a tenant
+        // with no policy configured (the default/current-day case) sees byte-identical behavior.
+        if (decision == GovernanceDecision.Allow && toolDef is not null && _currentUser.TenantId is { } policyTenantId)
+        {
+            var maxRiskLevel = await _policyService.GetMaxRiskLevelAsync(policyTenantId);
+            if (ToolExecutionPolicyEvaluator.ExceedsCeiling(toolDef.RiskLevel, maxRiskLevel))
+                decision = GovernanceDecision.DenyPolicyRiskCeiling;
+        }
 
         if (decision == GovernanceDecision.DenyMissingRole)
         {
@@ -82,6 +101,15 @@ public class AiFunctionAuditFilter : IFunctionInvocationFilter
             await WriteDenialAuditAsync(toolDef!, function, "approval required");
             context.Result = new FunctionResult(context.Function,
                 "This action requires administrator approval and cannot be performed automatically yet.");
+            return;
+        }
+
+        if (decision == GovernanceDecision.DenyPolicyRiskCeiling)
+        {
+            _logger.LogWarning("Denied {Function} — tool risk level {RiskLevel} exceeds this tenant's configured ToolExecution policy ceiling", function, toolDef!.RiskLevel);
+            await WriteDenialAuditAsync(toolDef!, function, "exceeds policy risk ceiling");
+            context.Result = new FunctionResult(context.Function,
+                "This action's risk level exceeds what this tenant's policy allows the AI to perform automatically.");
             return;
         }
 

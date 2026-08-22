@@ -4,132 +4,208 @@
 @inject ISnackbar Snackbar
 @inject IDialogService Dialog
 
-<PageTitle>R2WAI - Knowledge Bases</PageTitle>
+<PageTitle>R2WAI - Knowledge</PageTitle>
 
-<PageHeader Title="Knowledge Bases" Subtitle="Manage RAG knowledge collections and documents">
-    <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" Class="mr-2"
-               StartIcon="@(_selectMode ? Icons.Material.Filled.Close : Icons.Material.Outlined.CheckBox)"
-               OnClick="ToggleSelectMode">
-        @(_selectMode ? "Cancel" : "Select")
-    </MudButton>
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
-               Class="btn-gradient"
-               StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
-        New Knowledge Base
-    </MudButton>
-</PageHeader>
+<PageHeader Title="Knowledge" Subtitle="Knowledge bases, documents and RAG-powered search in one place" />
 
-@if (_selectMode && _selectedIds.Count > 0)
-{
-    <div class="d-flex align-center gap-2 mb-3">
-        <MudText Typo="Typo.body2" Style="font-weight: 600;">@_selectedIds.Count selected</MudText>
-        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="BulkDeleteKnowledgeBases">
-            Delete Selected
-        </MudButton>
-        <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
-                   OnClick="@(() => _selectedIds.Clear())">
-            Clear
-        </MudButton>
-    </div>
-}
-
-<MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
-    <MudTextField T="string" Value="_searchTerm" ValueChanged="OnSearchChanged" Placeholder="Search knowledge bases..."
-                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                  Variant="Variant.Outlined" Margin="Margin.Dense"
-                  Immediate="true" DebounceInterval="300" />
-</MudPaper>
-
-@if (_loading)
-{
-    <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Cards" />
-}
-else if (_hasError)
-{
-    <ErrorState ErrorMessage="@_error" OnRetry="LoadKnowledgeBases" />
-}
-else if (_knowledgeBases.Count == 0)
-{
-    @if (string.IsNullOrWhiteSpace(_searchTerm))
-    {
-        <EmptyState Icon="@Icons.Material.Outlined.MenuBook"
-                    Title="No knowledge bases found"
-                    Description="Create your first knowledge base to start indexing documents for RAG."
-                    ActionText="New Knowledge Base"
-                    OnAction="OpenCreateDialog"
-                    MinHeight="300px" />
-    }
-    else
-    {
-        <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
-                    Title="No knowledge bases match your search"
-                    Description="Try a different search term."
-                    ActionText="Clear search"
-                    OnAction="@(() => OnSearchChanged(string.Empty))"
-                    MinHeight="300px" />
-    }
-}
-else
-{
-    <MudGrid Spacing="3" Class="stagger-in">
-        @foreach (var kb in _knowledgeBases)
-        {
-            <MudItem xs="12" sm="6" md="4">
-                <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%;">
-                    <div class="d-flex justify-space-between align-center mb-3">
-                        <div class="d-flex align-center gap-2">
-                            @if (_selectMode)
-                            {
-                                <MudCheckBox T="bool" Value="@_selectedIds.Contains(kb.Id)"
-                                             ValueChanged="@(v => ToggleSelected(kb.Id, v))" Dense="true" />
-                            }
-                            <div class="icon-container icon-container--primary">
-                                <MudIcon Icon="@Icons.Material.Outlined.MenuBook" Color="Color.Primary" Size="Size.Small" />
-                            </div>
-                            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@kb.Name</MudText>
-                        </div>
-                        <StatusBadge Status="@kb.Status" />
-                    </div>
-                    <div class="d-flex flex-column gap-1 mb-4">
-                        @if (!string.IsNullOrEmpty(kb.Description))
-                        {
-                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@kb.Description</MudText>
-                        }
-                        <div class="d-flex justify-space-between">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Documents</MudText>
-                            <MudText Typo="Typo.body2" Style="font-weight: 800; letter-spacing: -0.03em;">@kb.DocumentCount</MudText>
-                        </div>
-                        <div class="d-flex justify-space-between">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Created</MudText>
-                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@kb.CreatedAt.ToString("yyyy-MM-dd")</MudText>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" FullWidth="true"
-                                   OnClick="@(() => OpenDetailDialog(kb))">
-                            View
-                        </MudButton>
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                       OnClick="@(() => OpenEditDialog(kb))" aria-label="Edit" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                       OnClick="@(() => DeleteKnowledgeBase(kb))" aria-label="Delete" />
-                    </div>
-                </MudPaper>
-            </MudItem>
-        }
-    </MudGrid>
-
-    @if (_hasMore && !_loading)
-    {
-        <div class="d-flex justify-center pa-3">
-            <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                       OnClick="LoadMore" StartIcon="@Icons.Material.Filled.ExpandMore">
-                Load More (@(_totalCount - _knowledgeBases.Count) remaining)
+<MudTabs Elevation="0" Rounded="false" ApplyEffectsToContainer="true"
+         ActivePanelIndex="_activeTab" ActivePanelIndexChanged="OnActiveTabChanged">
+    <MudTabPanel Text="Knowledge Bases" Icon="@Icons.Material.Outlined.MenuBook">
+        <div class="d-flex justify-end gap-2 mb-3">
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                       StartIcon="@(_selectMode ? Icons.Material.Filled.Close : Icons.Material.Outlined.CheckBox)"
+                       OnClick="ToggleSelectMode">
+                @(_selectMode ? "Cancel" : "Select")
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                       Class="btn-gradient"
+                       StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateDialog">
+                New Knowledge Base
             </MudButton>
         </div>
-    }
-}
+
+        @if (_selectMode && _selectedIds.Count > 0)
+        {
+            <div class="d-flex align-center gap-2 mb-3">
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">@_selectedIds.Count selected</MudText>
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.DeleteSweep" OnClick="BulkDeleteKnowledgeBases">
+                    Delete Selected
+                </MudButton>
+                <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                           OnClick="@(() => _selectedIds.Clear())">
+                    Clear
+                </MudButton>
+            </div>
+        }
+
+        <MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+            <MudTextField T="string" Value="_searchTerm" ValueChanged="OnSearchChanged" Placeholder="Search knowledge bases..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Immediate="true" DebounceInterval="300" />
+        </MudPaper>
+
+        @if (_loading)
+        {
+            <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Cards" />
+        }
+        else if (_hasError)
+        {
+            <ErrorState ErrorMessage="@_error" OnRetry="LoadKnowledgeBases" />
+        }
+        else if (_knowledgeBases.Count == 0)
+        {
+            @if (string.IsNullOrWhiteSpace(_searchTerm))
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.MenuBook"
+                            Title="No knowledge bases found"
+                            Description="Create your first knowledge base to start indexing documents for RAG."
+                            ActionText="New Knowledge Base"
+                            OnAction="OpenCreateDialog"
+                            MinHeight="300px" />
+            }
+            else
+            {
+                <EmptyState Icon="@Icons.Material.Outlined.SearchOff"
+                            Title="No knowledge bases match your search"
+                            Description="Try a different search term."
+                            ActionText="Clear search"
+                            OnAction="@(() => OnSearchChanged(string.Empty))"
+                            MinHeight="300px" />
+            }
+        }
+        else
+        {
+            <MudGrid Spacing="3" Class="stagger-in">
+                @foreach (var kb in _knowledgeBases)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="0" Class="pa-4" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md); height: 100%;">
+                            <div class="d-flex justify-space-between align-center mb-3">
+                                <div class="d-flex align-center gap-2">
+                                    @if (_selectMode)
+                                    {
+                                        <MudCheckBox T="bool" Value="@_selectedIds.Contains(kb.Id)"
+                                                     ValueChanged="@(v => ToggleSelected(kb.Id, v))" Dense="true" />
+                                    }
+                                    <div class="icon-container icon-container--primary">
+                                        <MudIcon Icon="@Icons.Material.Outlined.MenuBook" Color="Color.Primary" Size="Size.Small" />
+                                    </div>
+                                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@kb.Name</MudText>
+                                </div>
+                                <StatusBadge Status="@kb.Status" />
+                            </div>
+                            <div class="d-flex flex-column gap-1 mb-4">
+                                @if (!string.IsNullOrEmpty(kb.Description))
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">@kb.Description</MudText>
+                                }
+                                <div class="d-flex justify-space-between">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Documents</MudText>
+                                    <MudText Typo="Typo.body2" Style="font-weight: 800; letter-spacing: -0.03em;">@kb.DocumentCount</MudText>
+                                </div>
+                                <div class="d-flex justify-space-between">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Created</MudText>
+                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@kb.CreatedAt.ToString("yyyy-MM-dd")</MudText>
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary" FullWidth="true"
+                                           OnClick="@(() => OpenDetailDialog(kb))">
+                                    View
+                                </MudButton>
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               OnClick="@(() => OpenEditDialog(kb))" aria-label="Edit" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => DeleteKnowledgeBase(kb))" aria-label="Delete" />
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            @if (_hasMore && !_loading)
+            {
+                <div class="d-flex justify-center pa-3">
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                               OnClick="LoadMore" StartIcon="@Icons.Material.Filled.ExpandMore">
+                        Load More (@(_totalCount - _knowledgeBases.Count) remaining)
+                    </MudButton>
+                </div>
+            }
+        }
+    </MudTabPanel>
+
+    @* ── Documents Tab ──
+         A lightweight, real (not mocked) browse/upload surface reusing the same dialogs and API as
+         the full Document Management page at /documents — not a duplicate of that page's SignalR
+         live-status/bulk-delete/drag-drop machinery. Power users still have /documents for that. *@
+    <MudTabPanel Text="Documents" Icon="@Icons.Material.Outlined.Description">
+        <div class="d-flex justify-space-between align-center mb-3">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Documents feeding your knowledge bases, across all sources.</MudText>
+            <div class="d-flex gap-2">
+                <MudButton Variant="Variant.Text" Color="Color.Default" Size="Size.Small"
+                           EndIcon="@Icons.Material.Filled.OpenInNew" Href="/documents">
+                    Open full document manager
+                </MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                           Class="btn-gradient" StartIcon="@Icons.Material.Filled.Upload" OnClick="OpenUploadDialog">
+                    Upload Document
+                </MudButton>
+            </div>
+        </div>
+
+        <MudPaper Class="pa-4 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-md);">
+            <MudTextField T="string" Value="_documentSearchTerm" ValueChanged="OnDocumentSearchChanged" Placeholder="Search documents..."
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Immediate="true" DebounceInterval="300" />
+        </MudPaper>
+
+        @if (_documentsLoading)
+        {
+            <LoadingSkeleton Variant="LoadingSkeleton.SkeletonVariant.Detail" />
+        }
+        else if (FilteredDocuments.Count == 0)
+        {
+            <EmptyState Icon="@Icons.Material.Outlined.Description"
+                        Title="No documents yet"
+                        Description="Upload documents to make them searchable by your assistants."
+                        ActionText="Upload Document"
+                        OnAction="OpenUploadDialog"
+                        MinHeight="200px" />
+        }
+        else
+        {
+            <MudDataGrid T="DocumentSummaryDto" Items="FilteredDocuments" Dense="true" Hover="true" Elevation="0"
+                         Style="border: 1px solid var(--mud-palette-divider); border-radius: var(--r2-radius-sm);">
+                <Columns>
+                    <TemplateColumn Title="Document">
+                        <CellTemplate>
+                            <MudLink OnClick="@(() => OpenDocumentDetailDialog(context.Item))" Style="cursor: pointer;">
+                                @context.Item.Name
+                            </MudLink>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn Property="x => x.FileType" Title="Type" />
+                    <TemplateColumn Title="Status">
+                        <CellTemplate>
+                            <StatusBadge Status="@context.Item.Status" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <PropertyColumn Property="x => x.CreatedAt" Title="Added" Format="yyyy-MM-dd" />
+                    <TemplateColumn Title="" Sortable="false">
+                        <CellTemplate>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => DeleteDocument(context.Item))" aria-label="Delete document" />
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+            </MudDataGrid>
+        }
+    </MudTabPanel>
+</MudTabs>
 
 @code {
     private List<KnowledgeBaseDto> _knowledgeBases = new();
@@ -144,10 +220,85 @@ else
     private bool _selectMode;
     private HashSet<Guid> _selectedIds = new();
 
+    private int _activeTab;
+    private bool _documentsLoaded;
+    private bool _documentsLoading;
+    private List<DocumentSummaryDto> _documents = new();
+    private string _documentSearchTerm = string.Empty;
+
+    private IReadOnlyList<DocumentSummaryDto> FilteredDocuments =>
+        string.IsNullOrWhiteSpace(_documentSearchTerm)
+            ? _documents
+            : _documents.Where(d => d.Name.Contains(_documentSearchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+
     private void ToggleSelectMode()
     {
         _selectMode = !_selectMode;
         _selectedIds.Clear();
+    }
+
+    private async Task OnActiveTabChanged(int index)
+    {
+        _activeTab = index;
+        if (index == 1 && !_documentsLoaded)
+            await LoadDocuments();
+    }
+
+    private void OnDocumentSearchChanged(string value) => _documentSearchTerm = value;
+
+    private async Task LoadDocuments()
+    {
+        _documentsLoading = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<DocumentsResult>("/api/v1/documents?page=1&pageSize=100");
+            _documents = result?.Items ?? new();
+            _documentsLoaded = true;
+        }
+        catch (Exception ex) { Snackbar.Add($"Failed to load documents: {ex.Message}", Severity.Error); }
+        finally { _documentsLoading = false; }
+    }
+
+    private async Task OpenUploadDialog()
+    {
+        var dialog = await Dialog.ShowAsync<UploadDocumentDialog>("Upload Document");
+        var result = await dialog.Result;
+        if (result?.Canceled == false)
+        {
+            _documentsLoaded = false;
+            await LoadDocuments();
+        }
+    }
+
+    private async Task OpenDocumentDetailDialog(DocumentSummaryDto doc)
+    {
+        var parameters = new DialogParameters<DocumentDetailDialog>
+        {
+            { x => x.DocumentId, doc.Id.ToString() },
+            { x => x.DocumentName, doc.Name }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await Dialog.ShowAsync<DocumentDetailDialog>(doc.Name, parameters, options);
+    }
+
+    private async Task DeleteDocument(DocumentSummaryDto doc)
+    {
+        var parameters = new DialogParameters<DeleteConfirmationDialog>
+        {
+            { x => x.ItemName, doc.Name }
+        };
+        var dialog = await Dialog.ShowAsync<DeleteConfirmationDialog>("Confirm Delete", parameters);
+        var result = await dialog.Result;
+        if (result?.Canceled != false) return;
+
+        try
+        {
+            await Http.DeleteAsync($"/api/v1/documents/{doc.Id}");
+            Snackbar.Add("Document deleted", Severity.Success);
+            _documentsLoaded = false;
+            await LoadDocuments();
+        }
+        catch (Exception ex) { Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error); }
     }
 
     private void ToggleSelected(Guid id, bool selected)
@@ -281,6 +432,16 @@ else
         public string? Description { get; set; }
         public string Status { get; set; } = string.Empty;
         public int DocumentCount { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private class DocumentsResult { public List<DocumentSummaryDto> Items { get; set; } = new(); public int TotalCount { get; set; } }
+    private class DocumentSummaryDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string FileType { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
     }
 }

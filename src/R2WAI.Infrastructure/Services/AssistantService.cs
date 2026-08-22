@@ -7,17 +7,20 @@ public class AssistantService : IAssistantService
     private readonly ApplicationDbContext _context;
     private readonly IAIService _aiService;
     private readonly IKnowledgeBaseService _knowledgeBaseService;
+    private readonly IPromptTemplateService _promptTemplateService;
     private readonly ILogger<AssistantService> _logger;
 
     public AssistantService(
         ApplicationDbContext context,
         IAIService aiService,
         IKnowledgeBaseService knowledgeBaseService,
+        IPromptTemplateService promptTemplateService,
         ILogger<AssistantService> logger)
     {
         _context = context;
         _aiService = aiService;
         _knowledgeBaseService = knowledgeBaseService;
+        _promptTemplateService = promptTemplateService;
         _logger = logger;
     }
 
@@ -81,7 +84,7 @@ public class AssistantService : IAssistantService
             throw new NotFoundException(nameof(AssistantDefinition), id);
 
         var systemPrompt = assistant.SystemPrompt
-            ?? R2WAI.Infrastructure.AI.Prompts.SystemPromptTemplates.GetTemplate(assistant.Type);
+            ?? await _promptTemplateService.GetActiveTemplateAsync(assistant.Type, assistant.TenantId, ct);
 
         var contextParts = new List<string>();
 

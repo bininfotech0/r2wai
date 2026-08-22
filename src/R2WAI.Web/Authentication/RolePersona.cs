@@ -6,13 +6,15 @@ namespace R2WAI.Web.Authentication;
 /// UI-only navigation persona. Does not affect authorization — the API enforces access via its
 /// own [Authorize(Roles/Policy)] attributes regardless of what this resolves to. This exists purely
 /// to pick which simplified nav menu a signed-in user sees.
+/// Three user-facing tiers (SUPER ADMIN / ADMIN / USER) plus Public for anonymous access, per the
+/// platform's final role model. The underlying DB roles (Admin/SystemAdmin/User/Editor/Contributor/
+/// WorkflowManager/UserManager) are unchanged and remain the actual authorization boundary.
 /// </summary>
 public enum RolePersona
 {
     Public,
-    Citizen,
-    Officer,
-    DepartmentAdmin,
+    User,
+    Admin,
     SuperAdmin
 }
 
@@ -28,12 +30,9 @@ public static class RolePersonaExtensions
         if (roles.Contains("SystemAdmin"))
             return RolePersona.SuperAdmin;
 
-        if (roles.Contains("Admin"))
-            return RolePersona.DepartmentAdmin;
+        if (roles.Contains("Admin") || roles.Contains("WorkflowManager") || roles.Contains("Editor") || roles.Contains("Contributor") || roles.Contains("UserManager"))
+            return RolePersona.Admin;
 
-        if (roles.Contains("WorkflowManager") || roles.Contains("Editor") || roles.Contains("Contributor") || roles.Contains("UserManager"))
-            return RolePersona.Officer;
-
-        return RolePersona.Citizen;
+        return RolePersona.User;
     }
 }

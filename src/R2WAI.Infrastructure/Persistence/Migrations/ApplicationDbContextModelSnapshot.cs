@@ -1669,6 +1669,48 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("PointsTransactions", (string)null);
                 });
 
+            modelBuilder.Entity("R2WAI.Domain.Entities.PromptTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssistantType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "AssistantType", "IsActive");
+
+                    b.ToTable("PromptTemplates", (string)null);
+                });
+
             modelBuilder.Entity("R2WAI.Domain.Entities.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2938,6 +2980,17 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("RelatedEvent");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.PromptTemplate", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.Role", b =>

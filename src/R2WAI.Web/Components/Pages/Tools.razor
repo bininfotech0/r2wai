@@ -2,10 +2,11 @@
 @attribute [Authorize]
 @inject AuthenticatedHttpClient Http
 @inject ISnackbar Snackbar
+@inject IDialogService Dialog
 
-<PageTitle>R2WAI - Tools</PageTitle>
+<PageTitle>R2WAI - Tools & APIs</PageTitle>
 
-<PageHeader Title="Tool Registry" Subtitle="Built-in tools available to AI assistants and workflows" />
+<PageHeader Title="Tools & APIs" Subtitle="Built-in tool types AI assistants can use — add one to configure and connect it" />
 
 <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" Class="tools-tabs mb-2">
     <MudTabPanel Text="Tools">
@@ -28,9 +29,9 @@
                         </div>
                         <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">@tool.Description</MudText>
 
-                        @if (!string.IsNullOrWhiteSpace(tool.Endpoint))
+                        @if (!string.IsNullOrWhiteSpace(tool.EndpointPlaceholder))
                         {
-                            <code class="tools-endpoint-chip mb-3">@tool.Endpoint</code>
+                            <code class="tools-endpoint-chip mb-3">@tool.EndpointPlaceholder</code>
                         }
 
                         <div class="d-flex flex-wrap gap-1 mb-3">
@@ -53,9 +54,9 @@
                             @if (tool.RequiresConfig)
                             {
                                 <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
-                                           StartIcon="@Icons.Material.Filled.Settings"
-                                           OnClick="@(() => ToggleConfig(tool))">
-                                    Configure
+                                           StartIcon="@Icons.Material.Filled.Add" Disabled="@(_addingTool == tool.Name)"
+                                           OnClick="@(() => AddToIntegrations(tool))">
+                                    @(_addingTool == tool.Name ? "Adding..." : "Add & Configure")
                                 </MudButton>
                             }
                             else
@@ -66,51 +67,6 @@
                                 </MudText>
                             }
                         </div>
-
-                        @if (tool.ShowConfig)
-                        {
-                            <MudDivider Class="my-3" />
-                            <MudGrid Spacing="2">
-                                <MudItem xs="12">
-                                    <MudTextField @bind-Value="tool.Endpoint" Label="Endpoint" Variant="Variant.Outlined"
-                                                  Margin="Margin.Dense" Placeholder="@tool.EndpointPlaceholder"
-                                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Link" />
-                                </MudItem>
-                                <MudItem xs="6">
-                                    <MudSelect T="string" @bind-Value="tool.AuthType" Label="Auth" Variant="Variant.Outlined"
-                                               Margin="Margin.Dense" Dense="true">
-                                        <MudSelectItem T="string" Value="@("None")">None</MudSelectItem>
-                                        <MudSelectItem T="string" Value="@("Bearer")">Bearer Token</MudSelectItem>
-                                        <MudSelectItem T="string" Value="@("Basic")">Basic Auth</MudSelectItem>
-                                        <MudSelectItem T="string" Value="@("ApiKey")">API Key</MudSelectItem>
-                                    </MudSelect>
-                                </MudItem>
-                                <MudItem xs="6">
-                                    <MudTextField @bind-Value="tool.ApiKey" Label="Credential" Variant="Variant.Outlined"
-                                                  Margin="Margin.Dense" InputType="InputType.Password" />
-                                </MudItem>
-                                <MudItem xs="12" Class="d-flex gap-2 justify-end">
-                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
-                                               StartIcon="@Icons.Material.Filled.PlayArrow"
-                                               OnClick="@(() => TestTool(tool))" Disabled="tool.Testing">
-                                        @(tool.Testing ? "Testing..." : "Test")
-                                    </MudButton>
-                                    <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Primary"
-                                               StartIcon="@Icons.Material.Filled.Save"
-                                               OnClick="@(() => SaveToolConfig(tool))" Disabled="tool.Saving">
-                                        @(tool.Saving ? "Saving..." : "Save")
-                                    </MudButton>
-                                </MudItem>
-                                @if (!string.IsNullOrEmpty(tool.TestResult))
-                                {
-                                    <MudItem xs="12">
-                                        <MudAlert Severity="@(tool.TestSuccess ? Severity.Success : Severity.Error)" Dense="true">
-                                            @tool.TestResult
-                                        </MudAlert>
-                                    </MudItem>
-                                }
-                            </MudGrid>
-                        }
                     </MudPaper>
                 </MudItem>
             }
@@ -193,63 +149,16 @@
             Capabilities = ["Text extraction", "Summarization", "Q&A", "Comparison"] },
     };
 
-    private void ToggleConfig(ToolItem tool)
+    private string? _addingTool;
+
+    // Creates a real ToolDefinition (via the same endpoint Integrations.razor's marketplace install
+    // uses) from this template, then opens the same CreateEditIntegrationDialog to add credentials —
+    // this hands off into the one real, working Add→Configure→Test→Connected flow (Phase 11) instead
+    // of the local Test/Save form that used to live on this page (it posted to a nonexistent
+    // "/api/v1/integrations/test-connection" endpoint and an invalid Type value — both always failed).
+    private async Task AddToIntegrations(ToolItem tool)
     {
-        tool.ShowConfig = !tool.ShowConfig;
-        tool.TestResult = string.Empty;
-    }
-
-    private async Task TestTool(ToolItem tool)
-    {
-        if (string.IsNullOrWhiteSpace(tool.Endpoint))
-        {
-            Snackbar.Add("Enter an endpoint before testing.", Severity.Warning);
-            return;
-        }
-
-        tool.Testing = true;
-        tool.TestResult = string.Empty;
-        StateHasChanged();
-
-        try
-        {
-            var response = await Http.PostAsJsonAsync("/api/v1/integrations/test-connection", new
-            {
-                Name = tool.Name,
-                Type = tool.Type,
-                Endpoint = tool.Endpoint,
-                AuthType = tool.AuthType,
-                Credentials = tool.ApiKey
-            });
-
-            if (response.IsSuccessStatusCode)
-            {
-                tool.TestSuccess = true;
-                tool.TestResult = $"Connected to {tool.Endpoint} successfully.";
-            }
-            else
-            {
-                tool.TestSuccess = false;
-                tool.TestResult = $"Connection failed ({(int)response.StatusCode}). Check endpoint and credentials.";
-            }
-        }
-        catch
-        {
-            tool.TestSuccess = false;
-            tool.TestResult = "Connection test failed. Verify the endpoint is reachable.";
-        }
-        finally { tool.Testing = false; StateHasChanged(); }
-    }
-
-    private async Task SaveToolConfig(ToolItem tool)
-    {
-        if (string.IsNullOrWhiteSpace(tool.Endpoint))
-        {
-            Snackbar.Add("Enter an endpoint before saving.", Severity.Warning);
-            return;
-        }
-
-        tool.Saving = true;
+        _addingTool = tool.Name;
         StateHasChanged();
 
         try
@@ -257,27 +166,32 @@
             var response = await Http.PostAsJsonAsync("/api/v1/integrations", new
             {
                 Name = tool.Name,
-                Type = tool.Type == "HTTP Connector" ? "rest" : tool.Type == "SMTP Connector" ? "email" : "database",
-                Endpoint = tool.Endpoint,
-                AuthType = tool.AuthType,
-                Description = tool.Description
+                Type = "Http",
+                Description = tool.Description,
+                EndpointUrl = tool.EndpointPlaceholder,
+                Configuration = System.Text.Json.JsonSerializer.Serialize(new { AuthType = "None" }),
             });
 
-            if (response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
             {
-                Snackbar.Add($"{tool.Name} configuration saved.", Severity.Success);
-                tool.ShowConfig = false;
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Couldn't add '{tool.Name}': {error}", Severity.Error);
+                return;
             }
-            else
+
+            var id = await response.Content.ReadFromJsonAsync<Guid>();
+            var parameters = new DialogParameters<CreateEditIntegrationDialog>
             {
-                Snackbar.Add($"Save failed ({(int)response.StatusCode}). Please try again.", Severity.Error);
-            }
+                { x => x.EditId, id.ToString() },
+                { x => x.FromMarketplace, true }
+            };
+            await Dialog.ShowAsync<CreateEditIntegrationDialog>($"Configure {tool.Name}", parameters);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Save failed: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Couldn't add '{tool.Name}': {ex.Message}", Severity.Error);
         }
-        finally { tool.Saving = false; StateHasChanged(); }
+        finally { _addingTool = null; StateHasChanged(); }
     }
 
     private class ToolItem
@@ -290,14 +204,7 @@
         public bool IsActive { get; set; }
         public bool RequiresConfig { get; set; }
         public string[] Capabilities { get; set; } = [];
-        public bool ShowConfig { get; set; }
-        public string Endpoint { get; set; } = string.Empty;
         public string EndpointPlaceholder { get; set; } = string.Empty;
         public string AuthType { get; set; } = "None";
-        public string ApiKey { get; set; } = string.Empty;
-        public bool Testing { get; set; }
-        public bool Saving { get; set; }
-        public string TestResult { get; set; } = string.Empty;
-        public bool TestSuccess { get; set; }
     }
 }

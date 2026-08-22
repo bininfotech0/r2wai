@@ -124,80 +124,50 @@
         <MudNavMenu Class="mt-2">
             <MudNavLink Href="/" Icon="@Icons.Material.Outlined.SpaceDashboard" Match="NavLinkMatch.All">Home</MudNavLink>
 
-            @* Persona-based nav: each signed-in user sees exactly one of the four blocks below,
-               matching R2WAI.Web.Authentication.RolePersona's priority order (SuperAdmin > DepartmentAdmin
-               > Officer > Citizen). This is UI-only simplification — the API independently enforces access
-               via its own [Authorize(Roles/Policy)] attributes regardless of what nav a user sees. *@
+            @* Persona-based nav: each signed-in user sees exactly one of the three blocks below,
+               matching R2WAI.Web.Authentication.RolePersona's priority order (SuperAdmin > Admin > User).
+               This is UI-only simplification — the API independently enforces access via its own
+               [Authorize(Roles/Policy)] attributes regardless of what nav a user sees. Department,
+               ConnectedApplication and other technical/backend-only concepts are deliberately not linked
+               here; their pages and routes still exist for compatibility/internal use, just unlinked from
+               primary navigation. *@
             <AuthorizeView Context="_navAuth">
                 <Authorized>
                     @{ var persona = _navAuth.User.GetPersona(); }
 
                     @if (persona == RolePersona.SuperAdmin)
                     {
-                        <MudText Typo="Typo.caption" Class="px-4 pt-2 pb-1 nav-section-label">Main</MudText>
-                        <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">Applications</MudNavLink>
+                        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users &amp; Roles</MudNavLink>
+                        <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">AI Models</MudNavLink>
+                        <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
+                        <MudNavLink Href="/governance" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Policy">Global Policies</MudNavLink>
+                        <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.MonitorHeart">System Health</MudNavLink>
+                        <MudNavLink Href="/operations/audit-logs" Icon="@Icons.Material.Outlined.History">Audit</MudNavLink>
+                        <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
+                    }
+                    else if (persona == RolePersona.Admin)
+                    {
                         <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">AI Assistants</MudNavLink>
                         <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Automations</MudNavLink>
                         <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
                         <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Build">Integrations</MudNavLink>
                         <MudNavLink Href="/assistant-studio/tools" Icon="@Icons.Material.Outlined.Extension">Tools &amp; APIs</MudNavLink>
-                        <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Channels</MudNavLink>
-
-                        <MudText Typo="Typo.caption" Class="px-4 pt-3 pb-1 nav-section-label">Manage</MudText>
+                        <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.Science">Test &amp; Playground</MudNavLink>
+                        @* No standalone Publish page yet — surfaces via each Assistant/Automation's own publish action until a unified view exists (later phase). Points at Automations, where a workflow's draft/publish status already lives. *@
+                        <MudNavLink Href="/workflow-studio" Icon="@Icons.Material.Outlined.PublishedWithChanges">Publish</MudNavLink>
+                        <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.MonitorHeart">Monitor</MudNavLink>
                         <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users</MudNavLink>
-                        <MudNavLink Href="/admin/roles" Icon="@Icons.Material.Outlined.AdminPanelSettings">Roles &amp; Permissions</MudNavLink>
-                        <MudNavLink Href="/governance/departments" Icon="@Icons.Material.Outlined.CorporateFare">Departments</MudNavLink>
-                        <MudNavLink Href="/admin/models" Icon="@Icons.Material.Outlined.ModelTraining">Models</MudNavLink>
-                        <MudNavLink Href="/admin/security" Icon="@Icons.Material.Outlined.Lock">Security</MudNavLink>
-                        <MudNavLink Href="/governance" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Policy">Global Policies</MudNavLink>
-                        <MudNavLink Href="/admin/member-events" Icon="@Icons.Material.Outlined.Event">Member Events</MudNavLink>
-
-                        <MudText Typo="Typo.caption" Class="px-4 pt-3 pb-1 nav-section-label">Operations</MudText>
-                        <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.Science">Test &amp; Playground</MudNavLink>
-                        <MudNavLink Href="/test-cases" Icon="@Icons.Material.Outlined.FactCheck">Test Cases</MudNavLink>
-                        <MudNavLink Href="/test-history" Icon="@Icons.Material.Outlined.History">Test History</MudNavLink>
-                        <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.MonitorHeart">Monitor</MudNavLink>
-                        <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">Conversations</MudNavLink>
-                        <MudNavLink Href="/workflow-studio?tab=1" Icon="@Icons.Material.Outlined.PlaylistPlay">Runs</MudNavLink>
-                        <MudNavLink Href="/operations/errors" Icon="@Icons.Material.Outlined.BugReport">Errors</MudNavLink>
-                        <MudNavLink Href="/operations/audit-logs" Icon="@Icons.Material.Outlined.History">Logs &amp; Audit</MudNavLink>
                         <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
-                    }
-                    else if (persona == RolePersona.DepartmentAdmin)
-                    {
-                        <MudText Typo="Typo.caption" Class="px-4 pt-2 pb-1 nav-section-label">Main</MudText>
-                        <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">Applications</MudNavLink>
-                        <MudNavLink Href="/assistant-studio" Icon="@Icons.Material.Outlined.SmartToy">AI Assistants</MudNavLink>
-                        <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Automations</MudNavLink>
-                        <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
-                        <MudNavLink Href="/workflow-studio/integrations" Icon="@Icons.Material.Outlined.Build">Integrations</MudNavLink>
-                        <MudNavLink Href="/chatbots" Icon="@Icons.Material.Outlined.Forum">Channels</MudNavLink>
-
-                        <MudText Typo="Typo.caption" Class="px-4 pt-3 pb-1 nav-section-label">Manage</MudText>
-                        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Outlined.PeopleAlt">Users &amp; Roles</MudNavLink>
-                        <MudNavLink Href="/admin/member-events" Icon="@Icons.Material.Outlined.Event">Member Events</MudNavLink>
-                        <MudNavLink Href="/settings" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Settings">Settings</MudNavLink>
-
-                        <MudText Typo="Typo.caption" Class="px-4 pt-3 pb-1 nav-section-label">Operations</MudText>
-                        <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.Science">Test &amp; Playground</MudNavLink>
-                        <MudNavLink Href="/test-cases" Icon="@Icons.Material.Outlined.FactCheck">Test Cases</MudNavLink>
-                        <MudNavLink Href="/test-history" Icon="@Icons.Material.Outlined.History">Test History</MudNavLink>
-                        <MudNavLink Href="/operations" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.MonitorHeart">Monitor</MudNavLink>
-                    }
-                    else if (persona == RolePersona.Officer)
-                    {
-                        <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.SmartToy">AI Assistant</MudNavLink>
-                        <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">My Applications</MudNavLink>
-                        <MudNavLink Href="/inbox" Icon="@Icons.Material.Outlined.PendingActions">Pending Work</MudNavLink>
-                        <MudNavLink Href="/operations/reports" Icon="@Icons.Material.Outlined.Assessment">Reports</MudNavLink>
                     }
                     else
                     {
-                        @* Citizen persona — default for any signed-in user without an elevated role. *@
+                        @* User persona — default for any signed-in user without an elevated role. *@
                         <MudNavLink Href="/assistant-studio/playground" Icon="@Icons.Material.Outlined.SmartToy">AI Assistant</MudNavLink>
-                        <MudNavLink Href="/applications" Icon="@Icons.Material.Outlined.Apps">My Applications</MudNavLink>
-                        <MudNavLink Href="/templates" Icon="@Icons.Material.Outlined.Category">Services</MudNavLink>
+                        <MudNavLink Href="/workflow-studio" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.AccountTree">Automations</MudNavLink>
+                        <MudNavLink Href="/assistant-studio/knowledge" Icon="@Icons.Material.Outlined.MenuBook">Knowledge</MudNavLink>
+                        <MudNavLink Href="/conversations" Icon="@Icons.Material.Outlined.ChatBubbleOutline">My Activity</MudNavLink>
                         <MudNavLink Href="/inbox" Icon="@Icons.Material.Outlined.NotificationsActive">Notifications</MudNavLink>
+                        <MudNavLink Href="/profile" Icon="@Icons.Material.Outlined.Person">Profile</MudNavLink>
                     }
                 </Authorized>
             </AuthorizeView>
@@ -226,9 +196,9 @@
         <MudIcon Icon="@(IsActiveRoute("/", true) ? Icons.Material.Filled.SpaceDashboard : Icons.Material.Outlined.SpaceDashboard)" Class="mobile-nav-icon" />
         <span class="mobile-nav-label">Home</span>
     </a>
-    <a href="/applications" class="mobile-bottom-nav-item @(IsActiveRoute("/applications") ? "active" : "")">
-        <MudIcon Icon="@(IsActiveRoute("/applications") ? Icons.Material.Filled.Apps : Icons.Material.Outlined.Apps)" Class="mobile-nav-icon" />
-        <span class="mobile-nav-label">Build</span>
+    <a href="/assistant-studio" class="mobile-bottom-nav-item @(IsActiveRoute("/assistant-studio") ? "active" : "")">
+        <MudIcon Icon="@(IsActiveRoute("/assistant-studio") ? Icons.Material.Filled.SmartToy : Icons.Material.Outlined.SmartToy)" Class="mobile-nav-icon" />
+        <span class="mobile-nav-label">Assistants</span>
     </a>
     <a href="/inbox" class="mobile-bottom-nav-item @(IsActiveRoute("/inbox") ? "active" : "")" style="position: relative;">
         @if (_pendingApprovalCount > 0)
@@ -298,9 +268,8 @@
                     _personaLabel = state.User.GetPersona() switch
                     {
                         RolePersona.SuperAdmin => "Super Admin",
-                        RolePersona.DepartmentAdmin => "Department Admin",
-                        RolePersona.Officer => "Officer",
-                        RolePersona.Citizen => "Citizen",
+                        RolePersona.Admin => "Admin",
+                        RolePersona.User => "User",
                         _ => ""
                     };
                     StateHasChanged();

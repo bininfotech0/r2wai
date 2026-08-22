@@ -32,7 +32,7 @@ public class RedesignBrowserTests : BrowserTestBase
     }
 
     [Fact]
-    public async Task SuperAdmin_Nav_ShowsManageGroupWithDepartmentsAndModels()
+    public async Task SuperAdmin_Nav_ShowsGovernanceItems_NotDepartmentsOrApplications()
     {
         if (!await TryLogin()) return;
 
@@ -40,44 +40,78 @@ public class RedesignBrowserTests : BrowserTestBase
         var nav = Page.Locator("nav, .mud-drawer").First;
         var content = await nav.InnerTextAsync();
 
-        Assert.Contains("Departments", content);
-        Assert.Contains("Models", content);
+        Assert.Contains("Users & Roles", content);
+        Assert.Contains("AI Models", content);
         Assert.Contains("Security", content);
+        Assert.Contains("Global Policies", content);
         Assert.Contains("Audit", content);
+        // Department/Application are retained backend-only; removed from primary nav for every persona.
+        Assert.DoesNotContain("Departments", content);
+        Assert.DoesNotContain("Applications", content);
     }
 
     [Fact]
-    public async Task Officer_Nav_ShowsCompactPersonaMenu_NotBuildOrManageGroups()
+    public async Task Admin_Nav_ShowsOperationsItems_NotSuperAdminGovernanceItems()
     {
+        // WorkflowManager/Editor/Contributor/UserManager DB roles (the former "Officer" persona)
+        // now fold into the same ADMIN nav tier as the "Admin" DB role — this proves that.
         if (!await TryLogin("officer@r2wai.io", "Test@1234!")) return;
 
         await NavigateAndWait("/");
-        await TakeScreenshot("nav_officer_home");
+        await TakeScreenshot("nav_admin_home");
 
         var nav = Page.Locator("nav, .mud-drawer").First;
         var content = await nav.InnerTextAsync();
 
-        Assert.Contains("Pending Work", content);
-        Assert.Contains("My Applications", content);
-        Assert.DoesNotContain("Departments", content); // SuperAdmin-only
-        Assert.DoesNotContain("Publish", content); // DepartmentAdmin/SuperAdmin-only group
+        Assert.Contains("AI Assistants", content);
+        Assert.Contains("Automations", content);
+        Assert.Contains("Knowledge", content);
+        Assert.Contains("Integrations", content);
+        Assert.Contains("Tools & APIs", content);
+        Assert.Contains("Test & Playground", content);
+        Assert.Contains("Monitor", content);
+        Assert.DoesNotContain("Departments", content); // SUPER ADMIN-only
+        Assert.DoesNotContain("Global Policies", content); // SUPER ADMIN-only
+        Assert.DoesNotContain("AI Models", content); // SUPER ADMIN-only
     }
 
     [Fact]
-    public async Task DepartmentAdmin_Nav_ShowsBuildGroup_NotSuperAdminManageItems()
+    public async Task Admin_Nav_ShowsUsersAndRolesConsolidation()
     {
         if (!await TryLogin("deptadmin@r2wai.io", "Test@1234!")) return;
 
         await NavigateAndWait("/");
-        await TakeScreenshot("nav_deptadmin_home");
+        await TakeScreenshot("nav_admin_users");
 
         var nav = Page.Locator("nav, .mud-drawer").First;
         var content = await nav.InnerTextAsync();
 
         Assert.Contains("Automations", content);
-        Assert.Contains("Users & Roles", content);
-        Assert.DoesNotContain("Departments", content); // SuperAdmin-only
-        Assert.DoesNotContain("Global Policies", content); // SuperAdmin-only
+        Assert.Contains("Users", content);
+        Assert.DoesNotContain("Departments", content); // SUPER ADMIN-only
+        Assert.DoesNotContain("Global Policies", content); // SUPER ADMIN-only
+    }
+
+    [Fact]
+    public async Task User_Nav_ShowsDailyUsageItems_NotAdminOrSuperAdminItems()
+    {
+        if (!await TryLogin("user@r2wai.io", "Test@1234!")) return;
+
+        await NavigateAndWait("/");
+        await TakeScreenshot("nav_user_home");
+
+        var nav = Page.Locator("nav, .mud-drawer").First;
+        var content = await nav.InnerTextAsync();
+
+        Assert.Contains("AI Assistant", content);
+        Assert.Contains("Automations", content);
+        Assert.Contains("Knowledge", content);
+        Assert.Contains("My Activity", content);
+        Assert.Contains("Notifications", content);
+        Assert.Contains("Profile", content);
+        Assert.DoesNotContain("Users & Roles", content); // ADMIN/SUPER ADMIN-only
+        Assert.DoesNotContain("Integrations", content); // ADMIN/SUPER ADMIN-only
+        Assert.DoesNotContain("Tools & APIs", content); // ADMIN/SUPER ADMIN-only
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -100,7 +134,7 @@ public class RedesignBrowserTests : BrowserTestBase
     }
 
     [Fact]
-    public async Task AutomationsPage_NewAutomationButton_OpensWizardWithFourSteps()
+    public async Task AutomationsPage_NewAutomationButton_OpensWizardWithFiveSteps_StartingOnDescribe()
     {
         if (!await TryLogin()) return;
 
@@ -112,14 +146,24 @@ public class RedesignBrowserTests : BrowserTestBase
 
         var dialog = Page.Locator(".mud-dialog").First;
         await dialog.WaitForAsync(new LocatorWaitForOptions { Timeout = 15000 });
-        await TakeScreenshot("new_automation_wizard_step1");
+        await TakeScreenshot("new_automation_wizard_step0_describe");
 
         var dialogContent = await dialog.InnerTextAsync();
+        Assert.Contains("Describe", dialogContent);
         Assert.Contains("Trigger", dialogContent);
         Assert.Contains("Actions", dialogContent);
         Assert.Contains("Conditions", dialogContent);
         Assert.Contains("Review", dialogContent);
-        Assert.Contains("Application Submitted", dialogContent);
+        Assert.Contains("What do you want to automate?", dialogContent);
+        Assert.Contains("Draft with AI", dialogContent);
+
+        // Advance past the optional natural-language step to reach the manual Trigger picker.
+        var nextButton = dialog.GetByRole(AriaRole.Button, new() { Name = "Next", Exact = true });
+        await nextButton.ClickAsync();
+        await TakeScreenshot("new_automation_wizard_step1_trigger");
+
+        var triggerStepContent = await dialog.InnerTextAsync();
+        Assert.Contains("Application Submitted", triggerStepContent);
     }
 
     [Fact]
