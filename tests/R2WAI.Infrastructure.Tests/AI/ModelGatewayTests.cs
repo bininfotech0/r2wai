@@ -125,6 +125,20 @@ public class ModelGatewayTests
     }
 
     [Fact]
+    public void FallbackProviderName_Null_WhenUnset()
+    {
+        var gateway = BuildGateway(Config([]));
+        Assert.Null(gateway.FallbackProviderName);
+    }
+
+    [Fact]
+    public void FallbackProviderName_ReturnsConfiguredValue_LowercasedAndTrimmed()
+    {
+        var gateway = BuildGateway(Config(new() { ["AI:FallbackProvider"] = "OLLAMA" }));
+        Assert.Equal("ollama", gateway.FallbackProviderName);
+    }
+
+    [Fact]
     public void ConfigureKernel_UnrecognizedProvider_FallsBackToOpenAi()
     {
         var gateway = BuildGateway(Config(new()

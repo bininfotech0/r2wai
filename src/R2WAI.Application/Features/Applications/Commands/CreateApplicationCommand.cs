@@ -5,7 +5,7 @@ namespace R2WAI.Application.Features.Applications.Commands;
 
 public record CreateApplicationCommand : IRequest<ApplicationDto>
 {
-    public Guid DepartmentId { get; init; }
+    public Guid? DepartmentId { get; init; }
     public string Name { get; init; } = string.Empty;
     public string Code { get; init; } = string.Empty;
     public string? Description { get; init; }
@@ -17,7 +17,9 @@ public class CreateApplicationCommandValidator : AbstractValidator<CreateApplica
 {
     public CreateApplicationCommandValidator()
     {
-        RuleFor(v => v.DepartmentId).NotEmpty();
+        // DepartmentId is intentionally unvalidated: a connected system must be creatable without
+        // an organisational container (R2WAI 2.0 product decision). The handler still rejects a
+        // supplied id that does not resolve inside the caller's tenant.
         RuleFor(v => v.Name).NotEmpty().MaximumLength(500);
         RuleFor(v => v.Code).NotEmpty().MaximumLength(100);
         RuleFor(v => v.Description).MaximumLength(2000);
@@ -36,11 +38,28 @@ public class CreateApplicationCommandHandler(
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
 
-        var department = await departmentRepo.GetByIdAsync(command.DepartmentId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Department), command.DepartmentId);
+        if (command.DepartmentId.HasValue)
+        {
+            var department = await departmentRepo.GetByIdAsync(command.DepartmentId.Value, cancellationToken);
 
-        if (department.TenantId != tenantId)
-            throw new NotFoundException(nameof(Department), command.DepartmentId);
+            // Null and cross-tenant are deliberately indistinguishable: a caller must not be able
+            // to probe another tenant's department ids by comparing error responses.
+            if (department is null || department.TenantId != tenantId)
+                throw new NotFoundException(nameof(Department), command.DepartmentId.Value);
+        }
+
+        // Code uniqueness is enforced by the database, but the raw Postgres error is poor UX, and
+        // the constraint differs by scope: department-scoped systems are unique per
+        // (tenant, department, code), department-less ones per (tenant, code) via a filtered index.
+        // The tenant filter is applied by the global query filter, so this cannot see other tenants.
+        // This check is a courtesy for the user; the unique index remains the authority.
+        var existingWithCode = await applicationRepo.FirstOrDefaultAsync(
+            a => a.Code == command.Code && a.DepartmentId == command.DepartmentId,
+            cancellationToken);
+
+        if (existingWithCode is not null)
+            throw new ValidationException(nameof(command.Code),
+                $"Code '{command.Code}' is already used by another connected system in this scope.");
 
         var application = new ConnectedApplication(
             Guid.NewGuid(), tenantId, command.DepartmentId, command.Name, command.Code,

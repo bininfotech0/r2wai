@@ -13,7 +13,7 @@ public class AccessRequestConfiguration : IEntityTypeConfiguration<AccessRequest
         builder.Property(a => a.FullName).IsRequired().HasMaxLength(200);
         builder.Property(a => a.Email).IsRequired().HasMaxLength(256);
         builder.Property(a => a.Organization).IsRequired().HasMaxLength(200);
-        builder.Property(a => a.Department).IsRequired().HasMaxLength(100);
+        builder.Property(a => a.Department).HasMaxLength(100);
         builder.Property(a => a.Reason).HasMaxLength(2000);
         builder.Property(a => a.Status).IsRequired().HasConversion<string>().HasMaxLength(20);
 

@@ -6,5 +6,4 @@
   <Project Path="..\tests\R2WAI.Domain.Tests\R2WAI.Domain.Tests.csproj" />
   <Project Path="..\tests\R2WAI.Application.Tests\R2WAI.Application.Tests.csproj" />
   <Project Path="..\tests\R2WAI.Infrastructure.Tests\R2WAI.Infrastructure.Tests.csproj" />
-  <Project Path="R2WAI.Web/R2WAI.Web.csproj" />
 </Solution>

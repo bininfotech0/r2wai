@@ -24,6 +24,9 @@ public class InvokeSemanticKernelActivity : Activity<string>
     [Input(Description = "Temperature for response generation (0.0 - 1.0, default 0.7).")]
     public Input<double> Temperature { get; set; } = new(0.7);
 
+    [Input(Description = "Tenant this workflow run belongs to — used to resolve the tenant's default AI Model.")]
+    public Input<string> TenantId { get; set; } = default!;
+
     [Output(Description = "The AI-generated response text.")]
     public Output<string> Response { get; set; } = default!;
 
@@ -45,9 +48,17 @@ public class InvokeSemanticKernelActivity : Activity<string>
 
         var aiService = context.GetRequiredService<IAIService>();
 
+        ResolvedModelConfig? modelConfig = null;
+        var tenantIdStr = context.Get(TenantId);
+        if (Guid.TryParse(tenantIdStr, out var tenantId))
+        {
+            var modelConfigResolver = context.GetRequiredService<IModelConfigurationResolver>();
+            modelConfig = await modelConfigResolver.ResolveAsync(null, tenantId, context.CancellationToken);
+        }
+
         var fullPrompt = BuildPrompt(prompt, systemPrompt, ctx);
 
-        var result = await aiService.GenerateResponseAsync(fullPrompt, systemPrompt, ctx, context.CancellationToken);
+        var result = await aiService.GenerateResponseAsync(fullPrompt, systemPrompt, ctx, modelConfig, maxTokens, temperature, context.CancellationToken);
 
         context.Set(Response, result);
         context.Set(Result, result);

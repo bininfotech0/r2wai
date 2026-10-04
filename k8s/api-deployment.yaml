@@ -1,0 +1,111 @@
+# Requires a Secret named "r2wai-secrets" in this namespace (NOT defined in this repo — create it
+# per-environment via your cluster's real secret manager) with these keys:
+#   ConnectionStrings__DefaultConnection   Full Npgsql connection string. Point this at a managed
+#                                           Postgres instance (RDS/Cloud SQL/Azure Database) — this
+#                                           repo deliberately does not ship a Postgres manifest;
+#                                           running your primary datastore as an unmanaged in-cluster
+#                                           pod is not a production-appropriate default.
+#   Authentication__Jwt__SecretKey         >= 32 random bytes, base64 or plain — see JwtService.
+#   Security__EncryptionKey                32-byte key, base64-encoded (AES-256) — see IEncryptionService.
+#   Authentication__ApiKeys__0__Key        A real, rotatable API key for the seeded default key row.
+#   Bootstrap__AdminEmail / Bootstrap__AdminPassword   (first start only, optional) The initial
+#                                           administrator, created ONLY on an empty database (>= 12
+#                                           character password). Demo accounts with public passwords
+#                                           are never created here (Database__SeedDemoData is unset);
+#                                           remove the password from the Secret after the first start.
+# Example (fill in real values, never commit them):
+#   kubectl create secret generic r2wai-secrets -n r2wai \
+#     --from-literal=ConnectionStrings__DefaultConnection='Host=...;Database=r2wai;Username=...;Password=...' \
+#     --from-literal=Authentication__Jwt__SecretKey='...' \
+#     --from-literal=Security__EncryptionKey='...' \
+#     --from-literal=Authentication__ApiKeys__0__Key='...'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: api
+spec:
+  # Deliberately 1 (and the HPA below pinned to 1) until the background sweepers are lease-based:
+  # every replica currently runs WorkflowSchedule / WorkflowDelayResume / Escalation / DataRetention
+  # with no claim or lock, so >1 replica fires scheduled workflows and resumes delayed runs once PER
+  # REPLICA (duplicate external side effects). See docs/audit/R2WAI-IQ200-AUDIT-2026-09-20.md, P0-3.
+  replicas: 1
+  selector:
+    matchLabels:
+      component: api
+  template:
+    metadata:
+      labels:
+        app: r2wai
+        component: api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/OWNER/REPO-api:latest # kustomize edit set image before applying — see cd.yml
+          # docker/Dockerfile.api already creates and switches to a non-root "appuser" (RUN
+          # groupadd/useradd + USER appuser) — runAsNonRoot here just enforces what the image
+          # already does by default, not a new constraint on it. No readOnlyRootFilesystem: the
+          # app writes to /app/App_Data/Storage (Storage__Provider=Local, this ConfigMap),
+          # /app/Logs, and the OS temp dir (DocumentService.ExtractTextAsync) — doable with 3
+          # explicit emptyDir mounts, but not added here without a live cluster to verify it
+          # against; flagged as a real follow-on, not silently skipped.
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: r2wai-config
+            - secretRef:
+                name: r2wai-secrets
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "250m", memory: "384Mi" }
+            limits: { cpu: "1", memory: "768Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: api
+spec:
+  selector:
+    component: api
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: r2wai-api
+  namespace: r2wai
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: r2wai-api
+  # Pinned to 1 — see the note on `replicas` above (audit P0-3). Raise only after the sweepers are safe.
+  minReplicas: 1
+  maxReplicas: 1
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }

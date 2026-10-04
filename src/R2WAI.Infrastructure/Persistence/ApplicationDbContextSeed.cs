@@ -10,13 +10,15 @@ public static class ApplicationDbContextSeed
     private static readonly Guid DefaultTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly Guid AdminUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly Guid StandardUserId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+    private static readonly Guid DepartmentAdminUserId = Guid.Parse("00000000-0000-0000-0000-000000000003");
     private static readonly Guid AdminRoleId = Guid.Parse("00000000-0000-0000-0000-000000000001");
     private static readonly Guid UserRoleId = Guid.Parse("00000000-0000-0000-0000-000000000002");
-    private static readonly Guid EditorRoleId = Guid.Parse("00000000-0000-0000-0000-000000000003");
-    private static readonly Guid ContributorRoleId = Guid.Parse("00000000-0000-0000-0000-000000000004");
-    private static readonly Guid WorkflowManagerRoleId = Guid.Parse("00000000-0000-0000-0000-000000000005");
-    private static readonly Guid UserManagerRoleId = Guid.Parse("00000000-0000-0000-0000-000000000006");
+    private static readonly Guid SystemAdminRoleId = Guid.Parse("00000000-0000-0000-0000-000000000007");
     private static readonly Guid DefaultModelId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid OtherTenantId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+    private static readonly Guid OtherTenantAdminRoleId = Guid.Parse("00000000-0000-0000-0000-000000000101");
+    private static readonly Guid OtherTenantAdminUserId = Guid.Parse("00000000-0000-0000-0000-000000000101");
+    private static readonly Guid CrossTenantProbeAssistantId = Guid.Parse("00000000-0000-0000-0000-000000000501");
 
     public static async Task SeedAsync(ApplicationDbContext context, CancellationToken cancellationToken = default)
     {
@@ -32,29 +34,27 @@ public static class ApplicationDbContextSeed
         var adminRole = new Role(AdminRoleId, DefaultTenantId, "Admin", "System administrator with full access", true);
         adminRole.SetPermissions(Permission.All.ToString());
 
+        // Referenced throughout the API as [Authorize(Roles="Admin,SystemAdmin")] (AdminController,
+        // ApiKeysController, DepartmentsController, GovernanceController, MembersController,
+        // OperationsController, WebhooksController) and required for the frontend's SuperAdmin nav
+        // persona (Tools & APIs / AI Models / Security & Policies — see roleNav.ts) — but never
+        // actually seeded anywhere, so no user could ever hold it. Confirmed live: with only the
+        // Admin role, admin@r2wai.io's nav never showed those three pages at all, even though their
+        // backend routes work fine. Seeded here and granted to the bootstrap admin alongside Admin
+        // (additive — every existing Admin-only behavior is unaffected) so the platform actually has
+        // one reachable top-tier account, matching what a fresh deployment needs on day one.
+        var systemAdminRole = new Role(SystemAdminRoleId, DefaultTenantId, "SystemAdmin", "Platform-wide super administrator", true);
+        systemAdminRole.SetPermissions(Permission.All.ToString());
+
         var userRole = new Role(UserRoleId, DefaultTenantId, "User", "Standard user with basic access", true);
         userRole.SetPermissions(
             (Permission.ConversationRead | Permission.ConversationSend | Permission.DocumentRead |
              Permission.DocumentUpload | Permission.KnowledgeBaseRead | Permission.ChatbotRead).ToString());
 
-        var editorRole = new Role(EditorRoleId, DefaultTenantId, "Editor", "Can manage documents and content", true);
-        editorRole.SetPermissions(
-            (Permission.DocumentRead | Permission.DocumentUpload | Permission.DocumentDelete |
-             Permission.ConversationRead | Permission.ConversationSend | Permission.KnowledgeBaseRead).ToString());
-
-        var contributorRole = new Role(ContributorRoleId, DefaultTenantId, "Contributor", "Can contribute documents", true);
-        contributorRole.SetPermissions(
-            (Permission.DocumentRead | Permission.DocumentUpload | Permission.ConversationRead |
-             Permission.ConversationSend).ToString());
-
-        var workflowManagerRole = new Role(WorkflowManagerRoleId, DefaultTenantId, "WorkflowManager", "Can manage workflows", true);
-        workflowManagerRole.SetPermissions(
-            (Permission.WorkflowManage | Permission.ConversationRead | Permission.ConversationSend).ToString());
-
-        var userManagerRole = new Role(UserManagerRoleId, DefaultTenantId, "UserManager", "Can manage users", true);
-        userManagerRole.SetPermissions(
-            (Permission.UserRead | Permission.UserCreate | Permission.UserUpdate | Permission.UserDelete |
-             Permission.RoleRead | Permission.ConversationRead).ToString());
+        // Editor/Contributor/WorkflowManager/UserManager retired 2026-08-29 (CollapseRbacToThreeRoles
+        // migration): the nav (roleNav.ts) already mapped all four straight to the "Admin" persona,
+        // so the extra granularity was UI-invisible and security-relevant-only-in-theory. The real
+        // RBAC model is now exactly the 3 roles the nav implies — Admin/User/SystemAdmin.
 
         var adminUser = new User(
             AdminUserId, DefaultTenantId,
@@ -63,6 +63,7 @@ public static class ApplicationDbContextSeed
         adminUser.SetPasswordHash(new PasswordHasher().Hash("R2wai_Admin!2026"));
 
         var adminUserRole = new UserRole(AdminUserId, AdminRoleId);
+        var adminUserSystemAdminRole = new UserRole(AdminUserId, SystemAdminRoleId);
 
         // A plain-"User"-role account exists purely so role-matrix tests have something to assert
         // *against* — every seeded account before this was Admin, so no test could ever tell the
@@ -75,6 +76,21 @@ public static class ApplicationDbContextSeed
         standardUser.SetPasswordHash(new PasswordHasher().Hash("R2wai_User!2026"));
         var standardUserRole = new UserRole(StandardUserId, UserRoleId);
 
+        // A plain-"Admin"-role account WITHOUT SystemAdmin — every prior seeded "admin" account
+        // held both roles together, so no test could ever tell "Super Admin-only routes are
+        // actually enforced" apart from "the only Admin account happens to also be a SystemAdmin".
+        // Confirmed live this session: GovernanceController/CapabilitiesController writes/
+        // AdminController's /models routes previously accepted plain Admin too, even though
+        // roleNav.ts hides Security & Policies / Tools & APIs / AI Models from the Admin persona
+        // entirely — exactly the "UI permission treated as security" failure the checklist warns
+        // about. See RoleMatrixSecurityTests.
+        var departmentAdminUser = new User(
+            DepartmentAdminUserId, DefaultTenantId,
+            "deptadmin@r2wai.io", "deptadmin@r2wai.io",
+            "Department", "Admin");
+        departmentAdminUser.SetPasswordHash(new PasswordHasher().Hash("R2wai_DeptAdmin!2026"));
+        var departmentAdminUserRole = new UserRole(DepartmentAdminUserId, AdminRoleId);
+
         var defaultModel = new ModelConfiguration(
             DefaultModelId, DefaultTenantId,
             "GPT-4o", "OpenAI", "gpt-4o",
@@ -84,167 +100,10 @@ public static class ApplicationDbContextSeed
         defaultModel.Activate();
 
         context.Tenants.Add(tenant);
-        context.Roles.AddRange(adminRole, userRole, editorRole, contributorRole, workflowManagerRole, userManagerRole);
-        context.Users.AddRange(adminUser, standardUser);
-        context.UserRoles.AddRange(adminUserRole, standardUserRole);
+        context.Roles.AddRange(adminRole, userRole, systemAdminRole);
+        context.Users.AddRange(adminUser, standardUser, departmentAdminUser);
+        context.UserRoles.AddRange(adminUserRole, adminUserSystemAdminRole, standardUserRole, departmentAdminUserRole);
         context.ModelConfigurations.Add(defaultModel);
-
-        // --- Demo Assistants ---
-        var hrAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000101"),
-            DefaultTenantId, "HR Onboarding Assistant", AssistantType.HR,
-            DefaultModelId, null);
-        hrAssistant.UpdateDetails("HR Onboarding Assistant",
-            "Helps new employees navigate onboarding, policies, and benefits.",
-            "You are an HR onboarding assistant for our organization. Help new employees understand company policies, benefits enrollment, team introductions, and first-week tasks. Be welcoming, professional, and thorough.",
-            null, null);
-        hrAssistant.Publish();
-
-        var itAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000102"),
-            DefaultTenantId, "IT Helpdesk", AssistantType.IT,
-            DefaultModelId, null);
-        itAssistant.UpdateDetails("IT Helpdesk",
-            "Troubleshoots common IT issues, password resets, and software access.",
-            "You are an IT helpdesk assistant. Help employees with password resets, VPN setup, software installation, printer issues, and access requests. Provide step-by-step instructions. Escalate complex issues to the IT team.",
-            null, null);
-        itAssistant.Publish();
-
-        var financeAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000103"),
-            DefaultTenantId, "Finance FAQ", AssistantType.Finance,
-            DefaultModelId, null);
-        financeAssistant.UpdateDetails("Finance FAQ",
-            "Answers questions about expense reports, budgets, and financial policies.",
-            "You are a finance assistant. Help employees with expense report submissions, budget inquiries, reimbursement policies, and procurement processes. Reference company financial policies when applicable.",
-            null, null);
-        financeAssistant.Publish();
-
-        var wordPressAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000105"),
-            DefaultTenantId, "WordPress Assistant", AssistantType.WordPress,
-            DefaultModelId, null);
-        wordPressAssistant.UpdateDetails("WordPress Assistant",
-            "Helps with WordPress SEO, plugin/theme guidance, content publishing, and site maintenance.",
-            R2WAI.Infrastructure.AI.Prompts.SystemPromptTemplates.GetTemplate(AssistantType.WordPress),
-            null, null);
-        wordPressAssistant.Publish();
-
-        var strapiAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000106"),
-            DefaultTenantId, "Strapi Assistant", AssistantType.Strapi,
-            DefaultModelId, null);
-        strapiAssistant.UpdateDetails("Strapi Assistant",
-            "Helps with Strapi content-type modeling, roles/permissions, API tokens, and REST/GraphQL queries.",
-            R2WAI.Infrastructure.AI.Prompts.SystemPromptTemplates.GetTemplate(AssistantType.Strapi),
-            null, null);
-        strapiAssistant.Publish();
-
-        var joomlaAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000107"),
-            DefaultTenantId, "Joomla Assistant", AssistantType.Joomla,
-            DefaultModelId, null);
-        joomlaAssistant.UpdateDetails("Joomla Assistant",
-            "Helps with Joomla articles, menus, extensions, user ACL, and SEF/SEO configuration.",
-            R2WAI.Infrastructure.AI.Prompts.SystemPromptTemplates.GetTemplate(AssistantType.Joomla),
-            null, null);
-        joomlaAssistant.Publish();
-
-        var drupalAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000108"),
-            DefaultTenantId, "Drupal Assistant", AssistantType.Drupal,
-            DefaultModelId, null);
-        drupalAssistant.UpdateDetails("Drupal Assistant",
-            "Helps with Drupal content types, taxonomy, Views, modules, and roles/permissions.",
-            R2WAI.Infrastructure.AI.Prompts.SystemPromptTemplates.GetTemplate(AssistantType.Drupal),
-            null, null);
-        drupalAssistant.Publish();
-
-        var shopifyAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000109"),
-            DefaultTenantId, "Shopify Assistant", AssistantType.Shopify,
-            DefaultModelId, null);
-        shopifyAssistant.UpdateDetails("Shopify Assistant",
-            "Helps with Shopify products, theme/Liquid basics, apps, discounts, and order management.",
-            R2WAI.Infrastructure.AI.Prompts.SystemPromptTemplates.GetTemplate(AssistantType.Shopify),
-            null, null);
-        shopifyAssistant.Publish();
-
-        var salesforceAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000110"),
-            DefaultTenantId, "Salesforce Assistant", AssistantType.Salesforce,
-            DefaultModelId, null);
-        salesforceAssistant.UpdateDetails("Salesforce Assistant",
-            "Helps with leads/opportunities, reports and dashboards, flows, and roles/permission sets.",
-            R2WAI.Infrastructure.AI.Prompts.SystemPromptTemplates.GetTemplate(AssistantType.Salesforce),
-            null, null);
-        salesforceAssistant.Publish();
-
-        var sapAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000111"),
-            DefaultTenantId, "SAP Assistant", AssistantType.SAP,
-            DefaultModelId, null);
-        sapAssistant.UpdateDetails("SAP Assistant",
-            "Helps with SAP T-codes, master data, core modules (FI/CO, MM, SD), and approval workflows.",
-            R2WAI.Infrastructure.AI.Prompts.SystemPromptTemplates.GetTemplate(AssistantType.SAP),
-            null, null);
-        sapAssistant.Publish();
-
-        context.AssistantDefinitions.AddRange(
-            wordPressAssistant, strapiAssistant, joomlaAssistant, drupalAssistant,
-            shopifyAssistant, salesforceAssistant, sapAssistant);
-
-        // --- Coaching Center Admissions Assistant (EdTech demo) ---
-        var coachingKnowledgeBase = new KnowledgeBase(
-            Guid.Parse("00000000-0000-0000-0000-000000000501"),
-            DefaultTenantId, AdminUserId, "Coaching Center FAQs",
-            "Admissions, fees, batch timings, and exam-update knowledge base for the coaching center demo.");
-        coachingKnowledgeBase.UpdateStatus(KnowledgeBaseStatus.Active);
-
-        var coachingKnowledgeSource = new KnowledgeBaseSource(
-            Guid.Parse("00000000-0000-0000-0000-000000000502"),
-            coachingKnowledgeBase.Id, "text", null, null,
-            """
-            Admissions: Batches run for Classes 8-12, JEE/NEET foundation, and JSSC/JPSC competitive exam coaching.
-            New batches start on the 1st and 15th of every month. Admission requires a filled form, previous marksheet copy, and the first installment.
-            Fees: Foundation batches Rs. 3,500/month, JEE/NEET batches Rs. 6,000/month, JSSC/JPSC batches Rs. 4,500/month. Sibling discount 10%.
-            Fees are due by the 5th of each month; a late fee of Rs. 200 applies after the 10th. Payment link is sent via WhatsApp.
-            Demo classes: Every student gets one free demo class before enrolling. Demo slots are available Mon-Sat, 4 PM-7 PM.
-            Timings: Morning batch 6 AM-8 AM, evening batches 4 PM-9 PM. Sunday doubt-clearing session 10 AM-1 PM.
-            Results & exams: JSSC/JPSC exam dates, admit card releases, and cutoff updates are broadcast to all enrolled students via WhatsApp as soon as official notifications are out.
-            Location: Bistupur, Jamshedpur, Jharkhand. Contact: admissions@coachingcenter.example, +91-90000-00000.
-            """);
-        coachingKnowledgeSource.MarkIndexed(1);
-        coachingKnowledgeBase.AddSource(coachingKnowledgeSource);
-        coachingKnowledgeBase.IncrementDocumentCount();
-
-        var coachingAssistant = new AssistantDefinition(
-            Guid.Parse("00000000-0000-0000-0000-000000000104"),
-            DefaultTenantId, "Coaching Center Admissions Assistant", AssistantType.CoachingCenter,
-            DefaultModelId, coachingKnowledgeBase.Id);
-        coachingAssistant.UpdateDetails("Coaching Center Admissions Assistant",
-            "Answers admission, fee, batch, and exam queries for a coaching center and captures student leads.",
-            "You are an admissions assistant for a coaching center in Jamshedpur, Jharkhand. Answer questions about courses, batch timings, fees, and demo-class booking in simple Hindi or English, whichever the student uses. When a prospective student shares their name, class, phone number, or subject interest, acknowledge it warmly and let them know a counsellor will follow up. Reference exam dates and results (JSSC/JPSC) from the knowledge base when asked.",
-            null, null,
-            tags: """["coaching","admissions","edtech","jharkhand"]""");
-        coachingAssistant.Publish();
-
-        context.KnowledgeBases.Add(coachingKnowledgeBase);
-        context.AssistantDefinitions.AddRange(hrAssistant, itAssistant, financeAssistant, coachingAssistant);
-
-        var admissionsChatbot = new Chatbot(
-            Guid.Parse("00000000-0000-0000-0000-000000000401"),
-            DefaultTenantId, AdminUserId, "Admission Enquiry Bot",
-            coachingKnowledgeBase.Id, DefaultModelId);
-        admissionsChatbot.UpdateDetails(
-            "Admission Enquiry Bot",
-            "Embeddable widget answering admission, fee, and batch questions and capturing student leads 24/7.",
-            "Namaste! Ask me about courses, fees, batch timings, or book a free demo class.",
-            """["What courses do you offer?","What are the fees for JEE/NEET batches?","How do I book a free demo class?","When is the next JSSC exam?"]""",
-            "You are an admissions assistant for a coaching center in Jamshedpur, Jharkhand. Answer questions about courses, batch timings, fees, and demo-class booking in simple Hindi or English, whichever the student uses.");
-        admissionsChatbot.UpdateStatus(ChatbotStatus.Active);
-
-        context.Chatbots.Add(admissionsChatbot);
 
         // --- Demo Workflows ---
         var invoiceWorkflow = new Workflow(
@@ -331,12 +190,92 @@ public static class ApplicationDbContextSeed
 
         context.Applications.AddRange(taxPortal, permitSystem);
 
+        // --- R2WAI Studio: initial Application + AI Assistant set ---
+        // Five fresh Draft assistants, one per application, replacing the removed demo assistants
+        // above. Capability lists stay empty (KnowledgeBaseId/Tools null) until real application/API
+        // requirements are configured per ADR — see BusinessCapabilities cleanup task. "Niryaat" is the
+        // one accepted spelling; do not introduce Nriyaat/Niryat elsewhere.
+        var employeePortal = new ConnectedApplication(
+            Guid.Parse("00000000-0000-0000-0000-000000000801"),
+            DefaultTenantId, digitalServicesDept.Id, "Employee Portal", "EMP-PORTAL",
+            "Employee self-service portal.");
+
+        var supplierPortal = new ConnectedApplication(
+            Guid.Parse("00000000-0000-0000-0000-000000000802"),
+            DefaultTenantId, digitalServicesDept.Id, "Supplier Portal", "SUP-PORTAL",
+            "Supplier-facing services and business processes.");
+
+        var samparkPortal = new ConnectedApplication(
+            Guid.Parse("00000000-0000-0000-0000-000000000803"),
+            DefaultTenantId, digitalServicesDept.Id, "Sampark Portal", "SAMPARK-PORTAL",
+            "Sampark Portal services.");
+
+        var niryaatPortal = new ConnectedApplication(
+            Guid.Parse("00000000-0000-0000-0000-000000000804"),
+            DefaultTenantId, digitalServicesDept.Id, "Niryaat Portal", "NIRYAAT-PORTAL",
+            "Niryaat Portal services.");
+
+        var enterpriseApp = new ConnectedApplication(
+            Guid.Parse("00000000-0000-0000-0000-000000000805"),
+            DefaultTenantId, digitalServicesDept.Id, "Enterprise / Cross Application", "ENTERPRISE",
+            "Future cross-application enterprise scope.");
+
+        context.Applications.AddRange(employeePortal, supplierPortal, samparkPortal, niryaatPortal, enterpriseApp);
+
+        var employeeAssistant = new AssistantDefinition(
+            Guid.Parse("00000000-0000-0000-0000-000000000901"),
+            DefaultTenantId, "Employee Assistant", AssistantType.General, DefaultModelId, null);
+        employeeAssistant.UpdateDetails("Employee Assistant",
+            "Employee self-service and intelligent access to Employee Portal capabilities.",
+            "You are the Employee Assistant for the Employee Portal. Help employees with self-service tasks and questions. Only reference capabilities that have been explicitly configured for you — do not claim to perform actions you cannot verify.",
+            null, null);
+        employeeAssistant.AssignApplication(employeePortal.Id);
+
+        var supplierAssistant = new AssistantDefinition(
+            Guid.Parse("00000000-0000-0000-0000-000000000902"),
+            DefaultTenantId, "Supplier Assistant", AssistantType.General, DefaultModelId, null);
+        supplierAssistant.UpdateDetails("Supplier Assistant",
+            "Supplier-facing intelligent access to supplier information, services and business processes.",
+            "You are the Supplier Assistant for the Supplier Portal. Help suppliers with information, services, and business processes. Only reference capabilities that have been explicitly configured for you — do not claim to perform actions you cannot verify.",
+            null, null);
+        supplierAssistant.AssignApplication(supplierPortal.Id);
+
+        var samparkAssistant = new AssistantDefinition(
+            Guid.Parse("00000000-0000-0000-0000-000000000903"),
+            DefaultTenantId, "Sampark Assistant", AssistantType.General, DefaultModelId, null);
+        samparkAssistant.UpdateDetails("Sampark Assistant",
+            "Intelligent access to Sampark Portal services.",
+            "You are the Sampark Assistant for the Sampark Portal. Only reference capabilities that have been explicitly configured for you — do not claim to perform actions you cannot verify.",
+            null, null);
+        samparkAssistant.AssignApplication(samparkPortal.Id);
+
+        var niryaatAssistant = new AssistantDefinition(
+            Guid.Parse("00000000-0000-0000-0000-000000000904"),
+            DefaultTenantId, "Niryaat Assistant", AssistantType.General, DefaultModelId, null);
+        niryaatAssistant.UpdateDetails("Niryaat Assistant",
+            "Intelligent access to Niryaat Portal services.",
+            "You are the Niryaat Assistant for the Niryaat Portal. Only reference capabilities that have been explicitly configured for you — do not claim to perform actions you cannot verify.",
+            null, null);
+        niryaatAssistant.AssignApplication(niryaatPortal.Id);
+
+        var enterpriseAssistant = new AssistantDefinition(
+            Guid.Parse("00000000-0000-0000-0000-000000000905"),
+            DefaultTenantId, "Enterprise Assistant", AssistantType.General, DefaultModelId, null);
+        enterpriseAssistant.UpdateDetails("Enterprise Assistant",
+            "Future cross-application enterprise assistant.",
+            "You are the Enterprise Assistant, scoped for future cross-application enterprise use. Only reference capabilities that have been explicitly configured for you — do not claim to perform actions you cannot verify.",
+            null, null);
+        enterpriseAssistant.AssignApplication(enterpriseApp.Id);
+
+        context.AssistantDefinitions.AddRange(
+            employeeAssistant, supplierAssistant, samparkAssistant, niryaatAssistant, enterpriseAssistant);
+
         // --- Demo Approval Policy ---
         var approvalPolicy = new ApprovalPolicy(
             Guid.Parse("00000000-0000-0000-0000-000000000301"),
             DefaultTenantId, "Default Approval Policy",
             "Standard approval chain for all workflows",
-            null, """["Admin","WorkflowManager"]""", 1, 60, """["Admin"]""");
+            null, """["Admin"]""", 1, 60, """["Admin"]""");
 
         context.ApprovalPolicies.Add(approvalPolicy);
 
@@ -371,6 +310,30 @@ public static class ApplicationDbContextSeed
             tool.ConfigureGovernance(riskLevel, requiredRole: null, confirmationRequired: false, approvalRequired: false, auditRequired: true);
             context.ToolDefinitions.Add(tool);
         }
+
+        // --- Second tenant, exists purely so cross-tenant isolation can actually be regression-tested.
+        // Every account seeded above this line belongs to the one DefaultTenantId — no prior test could
+        // tell "tenant isolation is enforced" apart from "there's only ever been one tenant to query
+        // against". Mirrors the same reasoning as the standardUser/departmentAdminUser accounts above.
+        var otherTenant = new Tenant(OtherTenantId, "Other Tenant", "other-tenant");
+        var otherTenantAdminRole = new Role(OtherTenantAdminRoleId, OtherTenantId, "Admin", "System administrator with full access", true);
+        otherTenantAdminRole.SetPermissions(Permission.All.ToString());
+        var otherTenantAdminUser = new User(
+            OtherTenantAdminUserId, OtherTenantId,
+            "othertenant-admin@r2wai.io", "othertenant-admin@r2wai.io",
+            "Other", "TenantAdmin");
+        otherTenantAdminUser.SetPasswordHash(new PasswordHasher().Hash("R2wai_OtherTenant!2026"));
+        var otherTenantAdminUserRole = new UserRole(OtherTenantAdminUserId, OtherTenantAdminRoleId);
+        // A real resource under DefaultTenantId for cross-tenant tests to attempt reaching — the EF
+        // global tenant filter should make this invisible (404, not 403) to any othertenant-admin request.
+        var crossTenantProbeAssistant = new AssistantDefinition(
+            CrossTenantProbeAssistantId, DefaultTenantId, "Cross-Tenant Isolation Probe", AssistantType.General);
+
+        context.Tenants.Add(otherTenant);
+        context.Roles.Add(otherTenantAdminRole);
+        context.Users.Add(otherTenantAdminUser);
+        context.UserRoles.Add(otherTenantAdminUserRole);
+        context.AssistantDefinitions.Add(crossTenantProbeAssistant);
 
         await context.SaveChangesAsync(cancellationToken);
     }

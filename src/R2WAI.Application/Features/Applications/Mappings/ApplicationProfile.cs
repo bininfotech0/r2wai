@@ -14,7 +14,8 @@ public class ApplicationProfile : Profile
         CreateMap<Department, DepartmentDto>();
 
         CreateMap<ApplicationApi, ApplicationApiDto>()
-            .ForMember(d => d.AuthScheme, opt => opt.MapFrom(s => s.AuthScheme.ToString()));
+            .ForMember(d => d.AuthScheme, opt => opt.MapFrom(s => s.AuthScheme.ToString()))
+            .ForMember(d => d.HasCredential, opt => opt.MapFrom(s => !string.IsNullOrEmpty(s.CredentialSecretEncrypted)));
 
         CreateMap<ApplicationConfiguration, ApplicationConfigurationDto>();
 

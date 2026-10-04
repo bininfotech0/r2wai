@@ -1,0 +1,71 @@
+# Default-deny ingress for the namespace, then explicit allows for the three real traffic paths.
+# ingress.yaml's own comment establishes the shape this relies on: everything external routes to
+# r2wai-studio only (its baked-in nginx.conf proxies /api/ and /hubs/ to r2wai-api internally) — so
+# r2wai-api and redis never need to accept traffic from outside this namespace at all, only from
+# each other's specific caller.
+#
+# studio's own ingress rule is deliberately left open to any source (no namespaceSelector/
+# podSelector restriction) rather than guessing at a specific ingress-controller namespace label
+# (commonly "ingress-nginx", but this varies per cluster and isn't declared anywhere else in this
+# repo) — getting that guess wrong would silently break all external access with no live cluster
+# here to catch it. studio is the intended public entry point regardless, so an open rule for it
+# specifically doesn't weaken what this policy is actually protecting (api, redis).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: r2wai
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-studio
+  namespace: r2wai
+spec:
+  podSelector:
+    matchLabels:
+      component: studio
+  policyTypes: ["Ingress"]
+  ingress:
+    - from: [] # see this file's own top comment for why studio specifically stays open
+      ports:
+        - port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-studio-to-api
+  namespace: r2wai
+spec:
+  podSelector:
+    matchLabels:
+      component: api
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: studio
+      ports:
+        - port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-redis
+  namespace: r2wai
+spec:
+  podSelector:
+    matchLabels:
+      component: redis
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: api
+      ports:
+        - port: 6379

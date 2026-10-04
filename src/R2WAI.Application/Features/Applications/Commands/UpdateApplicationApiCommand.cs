@@ -10,6 +10,11 @@ public record UpdateApplicationApiCommand : IRequest<ApplicationApiDto>
     public string BaseUrl { get; init; } = string.Empty;
     public ApiAuthScheme AuthScheme { get; init; } = ApiAuthScheme.None;
     public string? CredentialRef { get; init; }
+
+    // Left null/empty to keep the existing stored secret unchanged — the edit dialog never
+    // round-trips the decrypted value, so "no change" must not mean "clear the credential".
+    public string? CredentialSecret { get; init; }
+    public string? CredentialHeaderName { get; init; }
     public string? OpenApiSource { get; init; }
 }
 
@@ -21,6 +26,7 @@ public class UpdateApplicationApiCommandValidator : AbstractValidator<UpdateAppl
         RuleFor(v => v.Name).NotEmpty().MaximumLength(200);
         RuleFor(v => v.BaseUrl).NotEmpty().MaximumLength(500).MustBeValidHttpUrl();
         RuleFor(v => v.CredentialRef).MaximumLength(200);
+        RuleFor(v => v.CredentialHeaderName).MaximumLength(200);
         RuleFor(v => v.OpenApiSource).MaximumLength(1000);
     }
 }
@@ -28,6 +34,7 @@ public class UpdateApplicationApiCommandValidator : AbstractValidator<UpdateAppl
 public class UpdateApplicationApiCommandHandler(
     IRepository<ApplicationApi> apiRepo,
     IUnitOfWork unitOfWork,
+    IEncryptionService encryptionService,
     IMapper mapper) : IRequestHandler<UpdateApplicationApiCommand, ApplicationApiDto>
 {
     public async Task<ApplicationApiDto> Handle(UpdateApplicationApiCommand command, CancellationToken cancellationToken)
@@ -36,6 +43,11 @@ public class UpdateApplicationApiCommandHandler(
             ?? throw new NotFoundException(nameof(ApplicationApi), command.Id);
 
         api.UpdateDetails(command.Name, command.BaseUrl, command.AuthScheme, command.CredentialRef, command.OpenApiSource);
+
+        if (!string.IsNullOrEmpty(command.CredentialSecret))
+            api.SetCredential(encryptionService.Encrypt(command.CredentialSecret), command.CredentialHeaderName);
+        else if (command.CredentialHeaderName != api.CredentialHeaderName)
+            api.SetCredential(api.CredentialSecretEncrypted, command.CredentialHeaderName);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

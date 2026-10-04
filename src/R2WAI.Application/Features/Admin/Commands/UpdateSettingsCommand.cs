@@ -4,6 +4,12 @@ namespace R2WAI.Application.Features.Admin.Commands;
 
 public record UpdateSettingsCommand : IRequest<SettingsDto>, IAuthorizedRequest
 {
+    // Organization Details (General settings) — Tenant.Name/Slug/Domain are
+    // real fields with a real Tenant.UpdateDetails method; they just weren't
+    // exposed through this DTO/command before, so this page silently no-opped.
+    public string? TenantName { get; init; }
+    public string? TenantSlug { get; init; }
+    public string? TenantDomain { get; init; }
     public string? TenantSettings { get; init; }
     public string? Features { get; init; }
     public string[] RequiredRoles => ["Admin", "SystemAdmin"];
@@ -49,6 +55,9 @@ public class UpdateSettingsCommandHandler(
         var tenant = await tenantRepo.GetByIdAsync(tenantId, cancellationToken)
             ?? throw new NotFoundException(nameof(Tenant), tenantId);
 
+        if (command.TenantName is not null)
+            tenant.UpdateDetails(command.TenantName, command.TenantSlug ?? tenant.Slug, command.TenantDomain);
+
         if (command.TenantSettings is not null)
             tenant.UpdateSettings(command.TenantSettings);
 
@@ -60,6 +69,9 @@ public class UpdateSettingsCommandHandler(
         return new SettingsDto
         {
             TenantId = tenant.Id,
+            TenantName = tenant.Name,
+            TenantSlug = tenant.Slug,
+            TenantDomain = tenant.Domain,
             TenantSettings = tenant.Settings,
             Features = tenant.Features,
         };

@@ -5,7 +5,7 @@ public record GetUsersQuery : IRequest<PagedResult<UserDto>>, IAuthorizedRequest
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
     public string? Search { get; init; }
-    public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
 }
 
 public class GetUsersQueryHandler(
@@ -44,7 +44,7 @@ public class GetUsersQueryHandler(
 public record GetUserByIdQuery : IRequest<UserDto>, IAuthorizedRequest
 {
     public Guid Id { get; init; }
-    public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
 }
 
 public class GetUserByIdQueryHandler(

@@ -17,6 +17,7 @@ public class ChatWithAssistantCommandHandlerTests
         var tenantId = Guid.NewGuid();
         var userId = Guid.NewGuid();
         var assistant = new AssistantDefinition(Guid.NewGuid(), tenantId, "HR Bot", AssistantType.HR);
+        assistant.Publish();
 
         var assistantRepoMock = new Mock<IRepository<AssistantDefinition>>();
         assistantRepoMock.Setup(r => r.GetByIdAsync(assistant.Id, It.IsAny<CancellationToken>())).ReturnsAsync(assistant);
@@ -25,12 +26,13 @@ public class ChatWithAssistantCommandHandlerTests
         var messageRepoMock = new Mock<IRepository<Message>>();
         var kbRepoMock = new Mock<IRepository<KnowledgeBase>>();
         var knowledgeBaseServiceMock = new Mock<IKnowledgeBaseService>();
+        var agenticRetrievalMock = new Mock<IAgenticRetrievalOrchestrator>();
 
         string? capturedSystemPrompt = null;
         var aiServiceMock = new Mock<IAIService>();
         aiServiceMock
-            .Setup(a => a.ChatAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback<string, string?, string?, bool, CancellationToken>((_, _, sysPrompt, _, _) => capturedSystemPrompt = sysPrompt)
+            .Setup(a => a.ChatAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<ResolvedModelConfig?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string?, string?, bool, ResolvedModelConfig?, IReadOnlyCollection<Guid>?, CancellationToken>((_, _, sysPrompt, _, _, _, _) => capturedSystemPrompt = sysPrompt)
             .ReturnsAsync("AI reply");
 
         var promptTemplateServiceMock = new Mock<IPromptTemplateService>();
@@ -47,10 +49,19 @@ public class ChatWithAssistantCommandHandlerTests
 
         var uowMock = new Mock<IUnitOfWork>();
         var loggerMock = new Mock<ILogger<ChatWithAssistantCommandHandler>>();
+        var modelConfigResolverMock = new Mock<IModelConfigurationResolver>();
+        var aiUsagePolicyServiceMock = new Mock<IAiUsagePolicyService>();
+        aiUsagePolicyServiceMock.Setup(p => p.IsUnderCapAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var piiPolicyServiceMock = new Mock<IPiiPolicyService>();
+        piiPolicyServiceMock
+            .Setup(p => p.CheckAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string text, Guid _, CancellationToken _) => new PiiCheckResult(false, text, []));
+        var auditLogRepoMock = new Mock<IRepository<AuditLog>>();
 
         var handler = new ChatWithAssistantCommandHandler(
             assistantRepoMock.Object, conversationRepoMock.Object, messageRepoMock.Object, kbRepoMock.Object,
-            knowledgeBaseServiceMock.Object, aiServiceMock.Object, promptTemplateServiceMock.Object,
+            knowledgeBaseServiceMock.Object, agenticRetrievalMock.Object, aiServiceMock.Object, promptTemplateServiceMock.Object,
+            modelConfigResolverMock.Object, aiUsagePolicyServiceMock.Object, piiPolicyServiceMock.Object, auditLogRepoMock.Object,
             traceCollectorMock.Object, currentUserMock.Object, uowMock.Object, loggerMock.Object);
 
         var command = new ChatWithAssistantCommand { AssistantId = assistant.Id, Message = "Hello" };
@@ -69,6 +80,7 @@ public class ChatWithAssistantCommandHandlerTests
         var tenantId = Guid.NewGuid();
         var assistant = new AssistantDefinition(Guid.NewGuid(), tenantId, "Custom Bot", AssistantType.General);
         assistant.UpdateDetails("Custom Bot", null, "You are a very specific custom assistant.", null, null);
+        assistant.Publish();
 
         var assistantRepoMock = new Mock<IRepository<AssistantDefinition>>();
         assistantRepoMock.Setup(r => r.GetByIdAsync(assistant.Id, It.IsAny<CancellationToken>())).ReturnsAsync(assistant);
@@ -77,12 +89,13 @@ public class ChatWithAssistantCommandHandlerTests
         var messageRepoMock = new Mock<IRepository<Message>>();
         var kbRepoMock = new Mock<IRepository<KnowledgeBase>>();
         var knowledgeBaseServiceMock = new Mock<IKnowledgeBaseService>();
+        var agenticRetrievalMock = new Mock<IAgenticRetrievalOrchestrator>();
 
         string? capturedSystemPrompt = null;
         var aiServiceMock = new Mock<IAIService>();
         aiServiceMock
-            .Setup(a => a.ChatAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .Callback<string, string?, string?, bool, CancellationToken>((_, _, sysPrompt, _, _) => capturedSystemPrompt = sysPrompt)
+            .Setup(a => a.ChatAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<ResolvedModelConfig?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string?, string?, bool, ResolvedModelConfig?, IReadOnlyCollection<Guid>?, CancellationToken>((_, _, sysPrompt, _, _, _, _) => capturedSystemPrompt = sysPrompt)
             .ReturnsAsync("AI reply");
 
         var promptTemplateServiceMock = new Mock<IPromptTemplateService>();
@@ -96,10 +109,19 @@ public class ChatWithAssistantCommandHandlerTests
 
         var uowMock = new Mock<IUnitOfWork>();
         var loggerMock = new Mock<ILogger<ChatWithAssistantCommandHandler>>();
+        var modelConfigResolverMock = new Mock<IModelConfigurationResolver>();
+        var aiUsagePolicyServiceMock = new Mock<IAiUsagePolicyService>();
+        aiUsagePolicyServiceMock.Setup(p => p.IsUnderCapAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var piiPolicyServiceMock = new Mock<IPiiPolicyService>();
+        piiPolicyServiceMock
+            .Setup(p => p.CheckAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string text, Guid _, CancellationToken _) => new PiiCheckResult(false, text, []));
+        var auditLogRepoMock = new Mock<IRepository<AuditLog>>();
 
         var handler = new ChatWithAssistantCommandHandler(
             assistantRepoMock.Object, conversationRepoMock.Object, messageRepoMock.Object, kbRepoMock.Object,
-            knowledgeBaseServiceMock.Object, aiServiceMock.Object, promptTemplateServiceMock.Object,
+            knowledgeBaseServiceMock.Object, agenticRetrievalMock.Object, aiServiceMock.Object, promptTemplateServiceMock.Object,
+            modelConfigResolverMock.Object, aiUsagePolicyServiceMock.Object, piiPolicyServiceMock.Object, auditLogRepoMock.Object,
             traceCollectorMock.Object, currentUserMock.Object, uowMock.Object, loggerMock.Object);
 
         var command = new ChatWithAssistantCommand { AssistantId = assistant.Id, Message = "Hello" };

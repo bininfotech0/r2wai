@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace R2WAI.Infrastructure.Persistence.Configurations;
@@ -9,6 +10,12 @@ public class AssistantDefinitionConfiguration : IEntityTypeConfiguration<Assista
         builder.ToTable("AssistantDefinitions");
 
         builder.HasKey(a => a.Id);
+
+        // Optimistic concurrency via Postgres's built-in xmin system column — a shadow property, not
+        // a real new column, so no migration needed. Guards the publish/status-transition race the
+        // Workspace Boundary Audit flagged (concurrent publishes were a silent last-write-wins with
+        // no conflict signal at all).
+        builder.Property<uint>("xmin").IsRowVersion().HasColumnName("xmin");
 
         builder.Property(a => a.Name)
             .IsRequired()

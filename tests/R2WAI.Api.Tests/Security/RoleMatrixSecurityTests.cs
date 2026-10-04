@@ -20,7 +20,6 @@ public class RoleMatrixSecurityTests : IntegrationTestBase
     [
         ["/api/v1/admin/users"],
         ["/api/v1/admin/roles"],
-        ["/api/v1/admin/access-requests"],
         ["/api/v1/governance/policies"],
     ];
 
@@ -66,9 +65,9 @@ public class RoleMatrixSecurityTests : IntegrationTestBase
     [Fact]
     public async Task StandardUser_CannotManageWorkflows()
     {
-        // Policy-based ("CanManageWorkflows" = Admin,WorkflowManager), not role-based — a different
-        // enforcement mechanism than the [Authorize(Roles=...)] routes above, worth covering
-        // separately since a bug in one wouldn't necessarily show up in the other.
+        // Policy-based ("CanManageWorkflows" = Admin only, post-CollapseRbacToThreeRoles), not
+        // role-based — a different enforcement mechanism than the [Authorize(Roles=...)] routes
+        // above, worth covering separately since a bug in one wouldn't necessarily show up in the other.
         var client = await GetAuthenticatedClientAsync("user@r2wai.io", "R2wai_User!2026");
         if (client.DefaultRequestHeaders.Authorization is null) return;
 
@@ -78,6 +77,125 @@ public class RoleMatrixSecurityTests : IntegrationTestBase
             Type = "sequential",
             Steps = "[]"
         });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PlainAdmin_CanManageWorkflows()
+    {
+        // Regression guard for the RBAC collapse (CollapseRbacToThreeRoles): "CanManageWorkflows"
+        // used to admit Admin OR WorkflowManager. Every WorkflowManager holder was migrated onto
+        // Admin — this proves that migration path still passes the policy, i.e. nobody who could
+        // manage workflows before the collapse lost that ability. "deptadmin@r2wai.io" (plain
+        // Admin, no SystemAdmin) is the right account: it isolates the Admin-role grant specifically.
+        var client = await GetAuthenticatedClientAsync("deptadmin@r2wai.io", "R2wai_DeptAdmin!2026");
+        if (client.DefaultRequestHeaders.Authorization is null) return;
+
+        var response = await client.PostAsJsonAsync("/api/v1/workflows", new
+        {
+            Name = "RBAC Collapse Regression Probe",
+            Type = "sequential",
+            Steps = "[]"
+        });
+
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    public static IEnumerable<object[]> SuperAdminOnlyGetRoutes =>
+    [
+        ["/api/v1/governance/policies"],
+        ["/api/v1/admin/models"],
+        // P0-5 (2026-09-20 audit): AccessRequest is a pre-tenant, platform-wide signup queue — a plain
+        // tenant Admin used to be able to read every pending request platform-wide and approve one
+        // into their OWN tenant, regardless of which organization the requester named. Moved here from
+        // AdminOnlyGetRoutes, where the shared seeded "admin" account (holds both Admin and SystemAdmin)
+        // couldn't have told the difference — deptadmin@r2wai.io (Admin only) is what actually proves
+        // the narrower grant.
+        ["/api/v1/admin/access-requests"],
+    ];
+
+    [Theory]
+    [MemberData(nameof(SuperAdminOnlyGetRoutes))]
+    public async Task PlainAdmin_CannotReadSuperAdminOnlyRoute(string route)
+    {
+        // "deptadmin@r2wai.io" holds Admin only, no SystemAdmin — closes the gap RoleMatrixSecurityTests
+        // couldn't previously catch: every prior seeded "admin" account held both roles together, so
+        // nothing could tell "Super Admin-only routes are enforced server-side" apart from "the only
+        // Admin account happens to also be a SystemAdmin". roleNav.ts hides Security & Policies and AI
+        // Models from the Admin persona entirely — the backend must actually agree, not just the nav.
+        var client = await GetAuthenticatedClientAsync("deptadmin@r2wai.io", "R2wai_DeptAdmin!2026");
+        if (client.DefaultRequestHeaders.Authorization is null) return;
+
+        var response = await client.GetAsync(route);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [MemberData(nameof(SuperAdminOnlyGetRoutes))]
+    public async Task SystemAdmin_CanReadSuperAdminOnlyRoute(string route)
+    {
+        var client = await GetAuthenticatedClientAsync();
+        if (client.DefaultRequestHeaders.Authorization is null) return;
+
+        var response = await client.GetAsync(route);
+
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PlainAdmin_CannotCreateCapability()
+    {
+        // Tools & APIs is also Super Admin-only per roleNav.ts — CapabilitiesController's writes were
+        // previously reachable by any authenticated user at all, not just a misplaced plain Admin.
+        var client = await GetAuthenticatedClientAsync("deptadmin@r2wai.io", "R2wai_DeptAdmin!2026");
+        if (client.DefaultRequestHeaders.Authorization is null) return;
+
+        var response = await client.PostAsJsonAsync("/api/v1/capabilities", new
+        {
+            Name = "Should Not Be Created",
+            Description = "role-matrix probe",
+            RiskLevel = "Low",
+        });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PlainAdmin_CanReadCapabilities()
+    {
+        // The Assistant editor's Tools tab (Admin-reachable, not Super Admin-only) lists capabilities
+        // read-only to populate its "+Add Tool" picker — the fix above must not break that real path.
+        var client = await GetAuthenticatedClientAsync("deptadmin@r2wai.io", "R2wai_DeptAdmin!2026");
+        if (client.DefaultRequestHeaders.Authorization is null) return;
+
+        var response = await client.GetAsync("/api/v1/capabilities?page=1&pageSize=20");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PlainAdmin_CannotApproveAccessRequest()
+    {
+        // Same P0-5 gap as the GET route above, on the write path: a plain tenant Admin approving an
+        // access request used to create the new account under their OWN tenant.
+        var client = await GetAuthenticatedClientAsync("deptadmin@r2wai.io", "R2wai_DeptAdmin!2026");
+        if (client.DefaultRequestHeaders.Authorization is null) return;
+
+        var response = await client.PostAsync($"/api/v1/admin/access-requests/{Guid.NewGuid()}/approve", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task PlainAdmin_CannotRejectAccessRequest()
+    {
+        var client = await GetAuthenticatedClientAsync("deptadmin@r2wai.io", "R2wai_DeptAdmin!2026");
+        if (client.DefaultRequestHeaders.Authorization is null) return;
+
+        var response = await client.PostAsync($"/api/v1/admin/access-requests/{Guid.NewGuid()}/reject", null);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }

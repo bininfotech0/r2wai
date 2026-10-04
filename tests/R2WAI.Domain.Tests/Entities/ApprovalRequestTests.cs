@@ -77,11 +77,62 @@ public class ApprovalRequestTests
     }
 
     [Fact]
-    public void SetElsaBookmarkId_SetsBookmarkId()
+    public void Create_WithoutAWorkflow_IsAPendingRequestWithASubject()
+    {
+        var request = new ApprovalRequest(Guid.NewGuid(), Guid.NewGuid(), workflowInstanceId: null, workflowId: null,
+            requesterId: Guid.NewGuid(), subject: "Submit supplier ABC Industries");
+
+        Assert.Null(request.WorkflowInstanceId);
+        Assert.Null(request.WorkflowId);
+        Assert.Equal("Submit supplier ABC Industries", request.Subject);
+        Assert.Equal(ApprovalStatus.Pending, request.Status);
+    }
+
+    [Fact]
+    public void An_overlong_subject_is_capped_rather_than_failing_the_request()
+    {
+        var request = new ApprovalRequest(Guid.NewGuid(), Guid.NewGuid(), null, null, Guid.NewGuid(),
+            subject: new string('x', ApprovalRequest.MaxSubjectLength + 50));
+
+        Assert.Equal(ApprovalRequest.MaxSubjectLength, request.Subject!.Length);
+    }
+
+    [Fact]
+    public void A_request_without_a_workflow_goes_through_the_same_decisions()
+    {
+        var approved = new ApprovalRequest(Guid.NewGuid(), Guid.NewGuid(), null, null, Guid.NewGuid());
+        approved.Approve("ok");
+        Assert.Equal(ApprovalStatus.Approved, approved.Status);
+
+        var rejected = new ApprovalRequest(Guid.NewGuid(), Guid.NewGuid(), null, null, Guid.NewGuid());
+        rejected.Reject("no");
+        Assert.Equal(ApprovalStatus.Rejected, rejected.Status);
+
+        var escalated = new ApprovalRequest(Guid.NewGuid(), Guid.NewGuid(), null, null, Guid.NewGuid());
+        escalated.Escalate();
+        Assert.Equal(ApprovalStatus.Escalated, escalated.Status);
+    }
+
+    [Fact]
+    public void RecordDeferredExecutionResult_WithNoPriorComments_SetsComments()
     {
         var request = CreateDefault();
-        request.SetElsaBookmarkId("bookmark-123");
-        Assert.Equal("bookmark-123", request.ElsaBookmarkId);
+        request.Approve();
+
+        request.RecordDeferredExecutionResult("{\"status\":\"ok\"}");
+
+        Assert.Equal("Executed: {\"status\":\"ok\"}", request.Comments);
+    }
+
+    [Fact]
+    public void RecordDeferredExecutionResult_AppendsToAnExistingApprovalComment_DoesNotOverwriteIt()
+    {
+        var request = CreateDefault();
+        request.Approve("Looks fine to me");
+
+        request.RecordDeferredExecutionResult("done");
+
+        Assert.Equal("Looks fine to me\n\nExecuted: done", request.Comments);
     }
 
     private static ApprovalRequest CreateDefault()

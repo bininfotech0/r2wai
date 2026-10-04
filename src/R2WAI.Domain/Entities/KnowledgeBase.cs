@@ -17,6 +17,7 @@ public sealed class KnowledgeBase : BaseEntity<Guid>
     public int DocumentCount { get; private set; }
     public string? VectorCollectionName { get; private set; }
     public string? Metadata { get; private set; }
+    public DataClassification DataClassification { get; private set; } = DataClassification.Internal;
 
     public Tenant Tenant { get; private set; } = null!;
     public User User { get; private set; } = null!;
@@ -86,6 +87,12 @@ public sealed class KnowledgeBase : BaseEntity<Guid>
     public void AssignApplication(Guid? applicationId)
     {
         ApplicationId = applicationId;
+        MarkAsModified();
+    }
+
+    public void SetDataClassification(DataClassification classification)
+    {
+        DataClassification = classification;
         MarkAsModified();
     }
 }

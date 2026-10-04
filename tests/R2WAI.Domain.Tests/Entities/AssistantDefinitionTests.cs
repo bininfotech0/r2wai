@@ -129,6 +129,36 @@ public class AssistantDefinitionTests
         Assert.NotNull(assistant.ModifiedAt);
     }
 
+    [Fact]
+    public void UnlinkKnowledgeBase_ClearsKnowledgeBaseId()
+    {
+        // UpdateAssistantCommandHandler previously had no way to clear a KB once set — its
+        // `if (KnowledgeBaseId.HasValue)` guard never fired for an explicit null. This is the
+        // domain-level half of that fix (UnlinkKnowledgeBase flag on the command is the other).
+        var assistant = CreateDefault();
+        assistant.LinkKnowledgeBase(Guid.NewGuid());
+
+        assistant.UnlinkKnowledgeBase();
+
+        Assert.Null(assistant.KnowledgeBaseId);
+        Assert.NotNull(assistant.ModifiedAt);
+    }
+
+    [Fact]
+    public void UnlinkModelConfiguration_ClearsModelConfigId()
+    {
+        // Same bug, same fix shape, for the model selector: AssistantStudioPage's "Use tenant
+        // default" option (value "") serialized to modelConfigurationId: undefined — omitted, not
+        // cleared — so the control looked like it worked but silently didn't.
+        var assistant = CreateDefault();
+        assistant.LinkModelConfiguration(Guid.NewGuid());
+
+        assistant.UnlinkModelConfiguration();
+
+        Assert.Null(assistant.ModelConfigurationId);
+        Assert.NotNull(assistant.ModifiedAt);
+    }
+
     [Theory]
     [InlineData(AssistantType.General)]
     [InlineData(AssistantType.HR)]
@@ -155,6 +185,98 @@ public class AssistantDefinitionTests
 
         assistant.Publish();
         Assert.True(assistant.IsActive);
+    }
+
+    [Fact]
+    public void GetEnabledToolIds_NeverConfigured_ReturnsNull()
+    {
+        var assistant = CreateDefault();
+        Assert.Null(assistant.GetEnabledToolIds());
+    }
+
+    [Fact]
+    public void DenyAllToolsByDefault_MakesGetEnabledToolIdsReturnEmptyNotNull()
+    {
+        // P0-4 (2026-09-20 audit): a brand-new assistant must start deny-by-default, not silently get
+        // every tool via GetEnabledToolIds' null-means-all fallback (that fallback exists only to keep
+        // already-created assistants working unchanged).
+        var assistant = CreateDefault();
+
+        assistant.DenyAllToolsByDefault();
+
+        var result = assistant.GetEnabledToolIds();
+        Assert.NotNull(result);
+        Assert.Empty(result);
+        Assert.NotNull(assistant.ModifiedAt);
+    }
+
+    [Fact]
+    public void GetEnabledToolIds_ExplicitlyEmptyArray_ReturnsEmptyNotNull()
+    {
+        var assistant = CreateDefault();
+        assistant.UpdateDetails("Test", null, null, "[]", null);
+
+        var result = assistant.GetEnabledToolIds();
+
+        Assert.NotNull(result);
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void GetEnabledToolIds_ValidGuidArray_ReturnsParsedIds()
+    {
+        var id1 = Guid.NewGuid();
+        var id2 = Guid.NewGuid();
+        var assistant = CreateDefault();
+        assistant.UpdateDetails("Test", null, null, $"[\"{id1}\",\"{id2}\"]", null);
+
+        var result = assistant.GetEnabledToolIds();
+
+        Assert.NotNull(result);
+        Assert.Equal([id1, id2], result);
+    }
+
+    [Fact]
+    public void GetEnabledToolIds_MalformedJson_ReturnsNull()
+    {
+        var assistant = CreateDefault();
+        assistant.UpdateDetails("Test", null, null, "not valid json", null);
+
+        Assert.Null(assistant.GetEnabledToolIds());
+    }
+
+    [Fact]
+    public void GetBehaviorSettings_NeverConfigured_ReturnsNull()
+    {
+        var assistant = CreateDefault();
+        Assert.Null(assistant.GetBehaviorSettings());
+    }
+
+    [Fact]
+    public void GetBehaviorSettings_ValidJson_ParsesAllFields()
+    {
+        var assistant = CreateDefault();
+        assistant.UpdateDetails("Test", null, null, null,
+            "{\"responseStyle\":\"Concise\",\"answerLength\":\"Brief\",\"citationsEnabled\":false,\"askClarification\":true,\"temperature\":0.3,\"maxOutputTokens\":800}");
+
+        var settings = assistant.GetBehaviorSettings();
+
+        Assert.NotNull(settings);
+        Assert.Equal("Concise", settings.ResponseStyle);
+        Assert.Equal("Brief", settings.AnswerLength);
+        Assert.False(settings.CitationsEnabled);
+        Assert.True(settings.AskClarification);
+        Assert.Equal(0.3, settings.Temperature);
+        Assert.Equal(800, settings.MaxOutputTokens);
+    }
+
+    [Fact]
+    public void GetBehaviorSettings_MalformedJson_ReturnsNull()
+    {
+        var assistant = CreateDefault();
+        assistant.UpdateDetails("Test", null, null, null, "not valid json");
+
+        Assert.Null(assistant.GetBehaviorSettings());
     }
 
     private static AssistantDefinition CreateDefault()

@@ -57,7 +57,7 @@ public class ConversationMemoryService : IConversationMemoryService
         string? summary = null;
         try
         {
-            summary = await _aiService.SummarizeTextAsync(olderText, SummaryMaxLength, ct);
+            summary = await _aiService.SummarizeTextAsync(olderText, SummaryMaxLength, ct: ct);
         }
         catch (Exception ex)
         {

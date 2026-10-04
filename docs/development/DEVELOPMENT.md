@@ -39,14 +39,15 @@ dotnet run
 
 The API starts on `http://localhost:5000` with Swagger at `/swagger`.
 
-### 4. Start the web app
+### 4. Start the Studio (React SPA)
 
 ```bash
-cd src/R2WAI.Web
-dotnet run
+cd src/R2WAI.Client
+npm install
+npm run dev
 ```
 
-The Blazor Server web app starts on `https://localhost:3000` and `http://localhost:3001`.
+Studio starts on `http://localhost:5173`, proxying `/api` and `/hubs` to the backend at `:5000` (see `vite.config.ts`).
 
 ## Database Migrations
 
@@ -131,9 +132,6 @@ dotnet build R2WAI.slnx
 # Run API
 dotnet run --project src/R2WAI.Api
 
-# Run web app
-dotnet run --project src/R2WAI.Web
-
 # Watch mode
 dotnet watch --project src/R2WAI.Api
 
@@ -142,6 +140,17 @@ dotnet test R2WAI.slnx
 
 # Code format
 dotnet format R2WAI.slnx
+```
+
+### Frontend (`src/R2WAI.Client`)
+
+```bash
+npm install
+npm run dev      # Vite dev server, localhost:5173
+npm run build    # tsc -b && vite build
+npm run lint     # oxlint
+npm test         # vitest run
+npm run e2e      # playwright test — needs the gateway stack running, see e2e/playwright.config.ts
 ```
 
 ### Docker

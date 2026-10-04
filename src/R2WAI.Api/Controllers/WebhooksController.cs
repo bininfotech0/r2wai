@@ -14,6 +14,8 @@ public class WebhooksController(ApplicationDbContext dbContext, ILogger<Webhooks
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var query = dbContext.WebhookEndpoints
             .Where(w => !w.IsDeleted)
             .OrderByDescending(w => w.CreatedAt);

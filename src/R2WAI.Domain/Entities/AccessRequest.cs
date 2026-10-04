@@ -8,7 +8,7 @@ public sealed class AccessRequest : BaseEntity<Guid>
     public string FullName { get; private set; }
     public string Email { get; private set; }
     public string Organization { get; private set; }
-    public string Department { get; private set; }
+    public string? Department { get; private set; }
     public string? Reason { get; private set; }
     public AccessRequestStatus Status { get; private set; }
     public DateTime? ReviewedAt { get; private set; }
@@ -17,7 +17,7 @@ public sealed class AccessRequest : BaseEntity<Guid>
 
     private AccessRequest() { }
 
-    public AccessRequest(Guid id, string fullName, string email, string organization, string department, string? reason)
+    public AccessRequest(Guid id, string fullName, string email, string organization, string? department, string? reason)
     {
         Id = id;
         FullName = fullName;

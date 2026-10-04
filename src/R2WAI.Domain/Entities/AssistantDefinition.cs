@@ -56,6 +56,52 @@ public sealed class AssistantDefinition : BaseEntity<Guid>
         MarkAsModified();
     }
 
+    // Called once, right after construction, so a brand-new assistant starts deny-by-default (least
+    // privilege) instead of silently getting every tool in the tenant — GetEnabledToolIds' null-means-
+    // all fallback exists only to keep already-created assistants working unchanged, not as the
+    // intended state for a new one. An admin opts a new assistant into tools via the Tools tab (which
+    // calls UpdateDetails), same as before.
+    public void DenyAllToolsByDefault()
+    {
+        Tools = "[]";
+        MarkAsModified();
+    }
+
+    // Null means the Tools tab was never touched — every caller of this must treat that as "not
+    // configured" (attach every available tool), not "configured to zero tools", or every existing
+    // assistant that predates this filtering would silently lose all tool access. An explicitly
+    // empty "[]" (the admin unchecked every capability) correctly returns an empty, non-null set.
+    public IReadOnlyCollection<Guid>? GetEnabledToolIds()
+    {
+        if (Tools is null) return null;
+        try
+        {
+            var ids = System.Text.Json.JsonSerializer.Deserialize<List<Guid>>(Tools);
+            return ids ?? [];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    // Null on empty/missing/malformed Settings — every knob in AssistantBehaviorSettings is optional,
+    // so "not configured" and "explicitly left at default" are indistinguishable here, and both
+    // correctly result in no behavior change (callers only act on non-null individual properties).
+    public AssistantBehaviorSettings? GetBehaviorSettings()
+    {
+        if (string.IsNullOrWhiteSpace(Settings)) return null;
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<AssistantBehaviorSettings>(Settings,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
     public void Activate()
     {
         IsActive = true;
@@ -109,9 +155,21 @@ public sealed class AssistantDefinition : BaseEntity<Guid>
         MarkAsModified();
     }
 
+    public void UnlinkModelConfiguration()
+    {
+        ModelConfigurationId = null;
+        MarkAsModified();
+    }
+
     public void LinkKnowledgeBase(Guid knowledgeBaseId)
     {
         KnowledgeBaseId = knowledgeBaseId;
+        MarkAsModified();
+    }
+
+    public void UnlinkKnowledgeBase()
+    {
+        KnowledgeBaseId = null;
         MarkAsModified();
     }
 

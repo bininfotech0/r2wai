@@ -20,7 +20,7 @@ R2WAI is a self-hosted, multi-tenant enterprise platform that combines:
 - **Integrations Marketplace** — 20+ connectors (Salesforce, Slack, Jira, GitHub, etc.)
 - **Operations Center** — Real-time monitoring, AI usage analytics, audit logs
 
-**Tech stack (for context):** .NET 10 / Blazor Server / MudBlazor UI / PostgreSQL + pgvector / Redis / MinIO / SignalR / SSE streaming
+**Tech stack (for context):** .NET 10 / React SPA (TypeScript, MUI) / PostgreSQL + pgvector / Redis / MinIO / SignalR / SSE streaming
 
 **Scale:** 42 UI pages, 15 API controllers, 64 permission flags, 5 user roles
 

@@ -22,4 +22,30 @@ public class SignalRStreamingService : IStreamingNotificationService
     {
         await _hubContext.Clients.Group($"conversation_{conversationId}").SendAsync("StreamComplete", ct);
     }
+
+    public async Task SendStreamErrorAsync(Guid conversationId, string message, CancellationToken ct = default)
+    {
+        await _hubContext.Clients.Group($"conversation_{conversationId}").SendAsync("StreamError", new { message }, ct);
+    }
+
+    public async Task SendToolCallStartedAsync(Guid conversationId, string toolName, CancellationToken ct = default)
+    {
+        await _hubContext.Clients.Group($"conversation_{conversationId}").SendAsync("ToolCallStarted", new { toolName }, ct);
+    }
+
+    public async Task SendToolCallCompletedAsync(Guid conversationId, string toolName, bool success, CancellationToken ct = default)
+    {
+        await _hubContext.Clients.Group($"conversation_{conversationId}").SendAsync("ToolCallCompleted", new { toolName, success }, ct);
+    }
+
+    public async Task NotifyMessageCreatedAsync(Guid conversationId, Guid messageId, string role, string content, CancellationToken ct = default)
+    {
+        await _hubContext.Clients.Group($"conversation_{conversationId}").SendAsync("MessageCreated", new
+        {
+            conversationId,
+            messageId,
+            role,
+            content
+        }, ct);
+    }
 }

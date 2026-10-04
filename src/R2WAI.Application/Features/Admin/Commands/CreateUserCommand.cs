@@ -11,7 +11,7 @@ public record CreateUserCommand : IRequest<UserDto>, IAuthorizedRequest
     public string LastName { get; init; } = string.Empty;
     public string? AvatarUrl { get; init; }
     public string? Password { get; init; }
-    public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
 }
 
 public class CreateUserCommandValidator : AbstractValidator<CreateUserCommand>

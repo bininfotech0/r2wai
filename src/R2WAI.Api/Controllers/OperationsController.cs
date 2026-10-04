@@ -22,6 +22,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
         [FromQuery] Guid? userId = null,
         [FromQuery] Guid? applicationId = null,
         [FromQuery] string? entityType = null,
+        [FromQuery] string? entityId = null,
         [FromQuery] string? action = null,
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null,
@@ -38,6 +39,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
             UserId = userId,
             ApplicationId = applicationId,
             EntityType = entityType,
+            EntityId = entityId,
             Action = parsedAction,
             From = from,
             To = to,
@@ -122,19 +124,11 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
         });
     }
 
-    [HttpGet("metrics/prometheus")]
-    [Authorize(Roles = "Admin,SystemAdmin")]
-    public IActionResult GetPrometheusMetrics()
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("# HELP r2wai_up Whether the R2WAI API is up");
-        sb.AppendLine("# TYPE r2wai_up gauge");
-        sb.AppendLine("r2wai_up 1");
-        sb.AppendLine("# HELP r2wai_info R2WAI build info");
-        sb.AppendLine("# TYPE r2wai_info gauge");
-        sb.AppendLine("r2wai_info{version=\"2.0\"} 1");
-        return Content(sb.ToString(), "text/plain; version=0.0.4; charset=utf-8");
-    }
+    // Real Prometheus scraping now lives at the unauthenticated /metrics/prometheus endpoint
+    // (Program.cs's app.MapPrometheusScrapingEndpoint, backed by the OpenTelemetry Meter) --
+    // this hand-written stub (two hardcoded gauges) is gone; it was also unreachable by the
+    // scrape config anyway ([Authorize(Roles = "Admin,SystemAdmin")] against an unauthenticated
+    // Prometheus scrape target has 401'd every attempt since the monitoring stack was added).
 
     [HttpGet("metrics")]
     public async Task<IActionResult> GetMetrics(CancellationToken ct = default)

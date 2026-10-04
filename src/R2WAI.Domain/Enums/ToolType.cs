@@ -7,5 +7,6 @@ public enum ToolType
     Database,
     Script,
     Custom,
-    SemanticKernelFunction
+    SemanticKernelFunction,
+    Mcp
 }

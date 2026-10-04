@@ -16,6 +16,13 @@ public sealed class WorkflowStepExecution : BaseEntity<Guid>
     public string? Error { get; private set; }
     public string? Variables { get; private set; }
 
+    // Implementation plan Phase 5: this row is reused across a retry, not recreated —
+    // StepStatusNotificationHandler.ResolveStepExecutionAsync finds the same (WorkflowInstanceId,
+    // StepIndex) row and calls Start() again when WorkflowBridge.RetryFailedStepAsync re-runs a
+    // failed step. AttemptCount is how many times that has actually happened, for observability —
+    // a step Failed then Completed with AttemptCount 2 is a real retry, not a first-try success.
+    public int AttemptCount { get; private set; }
+
     public WorkflowInstance WorkflowInstance { get; private set; } = null!;
 
     private WorkflowStepExecution() { StepName = string.Empty; }
@@ -36,6 +43,7 @@ public sealed class WorkflowStepExecution : BaseEntity<Guid>
     {
         Status = WorkflowStepStatus.Running;
         StartedAt = DateTime.UtcNow;
+        AttemptCount++;
         MarkAsModified();
     }
 

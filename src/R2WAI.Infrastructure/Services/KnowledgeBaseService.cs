@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using R2WAI.Infrastructure.AI.Policies;
 using R2WAI.Infrastructure.VectorStore;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -16,6 +17,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
     private readonly IAIService _aiService;
     private readonly IVectorStoreService _vectorStore;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IKnowledgePolicyService _knowledgePolicyService;
     private readonly ILogger<KnowledgeBaseService> _logger;
 
     public KnowledgeBaseService(
@@ -23,25 +25,28 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         IAIService aiService,
         IVectorStoreService vectorStore,
         IHttpClientFactory httpClientFactory,
+        IKnowledgePolicyService knowledgePolicyService,
         ILogger<KnowledgeBaseService> logger)
     {
         _context = context;
         _aiService = aiService;
         _vectorStore = vectorStore;
         _httpClientFactory = httpClientFactory;
+        _knowledgePolicyService = knowledgePolicyService;
         _logger = logger;
     }
 
-    public async Task<KnowledgeBaseDto> CreateKnowledgeBaseAsync(Guid tenantId, Guid userId, string name, string? description, CancellationToken ct = default)
+    public async Task<KnowledgeBaseDto> CreateKnowledgeBaseAsync(Guid tenantId, Guid userId, string name, string? description, string dataClassification = "Internal", CancellationToken ct = default)
     {
         var knowledgeBase = new KnowledgeBase(Guid.NewGuid(), tenantId, userId, name, description);
+        knowledgeBase.SetDataClassification(Enum.Parse<Domain.Enums.DataClassification>(dataClassification, true));
         var collectionName = $"kb_{knowledgeBase.Id:N}";
         knowledgeBase.ConfigureEmbedding("text-embedding-3-small", 1000, 200, collectionName);
 
         await _context.KnowledgeBases.AddAsync(knowledgeBase, ct);
         await _context.SaveChangesAsync(ct);
 
-        await _vectorStore.CreateCollectionAsync(collectionName, 1536, ct);
+        await _vectorStore.CreateCollectionAsync(collectionName, ct: ct);
         knowledgeBase.UpdateStatus(KnowledgeBaseStatus.Active);
         await _context.SaveChangesAsync(ct);
 
@@ -126,6 +131,12 @@ public class KnowledgeBaseService : IKnowledgeBaseService
                     using var indexingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                     indexingCts.CancelAfter(IndexingTimeout);
 
+                    // Re-indexing a source replaces its vectors instead of appending a second copy —
+                    // see DeterministicChunkId. Without this the old chunk count has to go first,
+                    // because a source that got shorter leaves stale high-index chunks behind that
+                    // the upsert can no longer overwrite.
+                    await DeleteSourceVectorsQuietlyAsync(kb.VectorCollectionName, source.Id, indexingCts.Token);
+
                     var embeddings = await _aiService.GenerateEmbeddingsAsync(chunks, indexingCts.Token);
                     var vectors = new List<(Guid Id, float[] Vector, Dictionary<string, object> Payload)>();
 
@@ -135,7 +146,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
                         if (embedding is null || embedding.Count == 0) continue;
 
                         vectors.Add((
-                            Guid.NewGuid(),
+                            DeterministicChunkId.ForSourceChunk(source.Id, i),
                             [.. embedding],
                             new Dictionary<string, object>
                             {
@@ -178,12 +189,26 @@ public class KnowledgeBaseService : IKnowledgeBaseService
             Url = source.Url,
             Content = source.Content?.Length > 200 ? source.Content[..200] + "..." : source.Content,
             Status = source.Status,
+            ChunkCount = source.ChunkCount,
+            IndexedAt = source.IndexedAt,
+            Error = source.Error,
             CreatedAt = source.CreatedAt
         };
     }
 
     private async Task<string> FetchUrlTextAsync(string url, CancellationToken ct)
     {
+        // EgressGuard: this is a server-side fetch of a tenant-supplied URL, so without the guard a
+        // tenant admin could point a knowledge source at the cloud metadata endpoint
+        // (169.254.169.254) or an internal service and read the response straight back as indexed
+        // text. Every other outbound-fetch path in the codebase already goes through this
+        // (DynamicToolExecutor, McpClientAdapter, OpenApiImportService, IntegrationsController) —
+        // this one was the remaining gap, and the guard is only meaningful at the real dispatch
+        // point, not on some separate "test" button.
+        if (!Security.EgressGuard.IsAllowedUrl(url))
+            throw new InvalidOperationException(
+                "URL is not an allowed ingestion target (private, link-local, or non-HTTP address).");
+
         var client = _httpClientFactory.CreateClient();
         client.Timeout = TimeSpan.FromSeconds(20);
         client.DefaultRequestHeaders.UserAgent.ParseAdd("R2WAI-KnowledgeIndexer/1.0");
@@ -219,41 +244,71 @@ public class KnowledgeBaseService : IKnowledgeBaseService
 
         if (!string.IsNullOrEmpty(kb.VectorCollectionName))
         {
-            try
-            {
-                var searchVector = await _aiService.GenerateEmbeddingAsync(source.Content ?? string.Empty, ct);
-                var results = await _vectorStore.SearchVectorsAsync(
-                    kb.VectorCollectionName, [.. searchVector], 100, ct);
-
-                var matchingPointIds = results
-                    .Where(r => r.Payload?.ContainsKey("sourceId") == true &&
-                                r.Payload["sourceId"]?.ToString() == id.ToString())
-                    .Select(r => r.Id)
-                    .ToList();
-
-                if (matchingPointIds.Count > 0)
-                {
-                    await _vectorStore.DeleteVectorsAsync(kb.VectorCollectionName, matchingPointIds, ct);
-                    _logger.LogInformation("Removed {Count} vectors for source {SourceId}", matchingPointIds.Count, id);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to remove vectors for source {SourceId}", id);
-            }
+            await DeleteSourceVectorsQuietlyAsync(kb.VectorCollectionName, id, ct);
         }
 
         _context.KnowledgeBaseSources.Remove(source);
         await _context.SaveChangesAsync(ct);
     }
 
-    public async Task<PagedResult<SearchResultDto>> SearchKnowledgeBaseAsync(Guid knowledgeBaseId, string query, int page, int pageSize, CancellationToken ct = default)
+    /// <summary>
+    /// Purges a source's vectors, logging rather than throwing on failure. Used on the paths where a
+    /// vector-store outage must not block the caller's own bookkeeping — but note this is exactly the
+    /// swallow-everything shape that let orphaned vectors accumulate unnoticed for so long, so it is
+    /// deliberately confined to one place where it is at least logged at Warning with the source id.
+    /// </summary>
+    private async Task DeleteSourceVectorsQuietlyAsync(string collectionName, Guid sourceId, CancellationToken ct)
     {
-        var kb = await _context.KnowledgeBases
-            .FirstOrDefaultAsync(k => k.Id == knowledgeBaseId, ct);
+        try
+        {
+            await _vectorStore.DeleteVectorsBySourceAsync(collectionName, sourceId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to remove vectors for source {SourceId} from {Collection}", sourceId, collectionName);
+        }
+    }
+
+    public async Task<PagedResult<SearchResultDto>> SearchKnowledgeBaseAsync(Guid knowledgeBaseId, string query, int page, int pageSize, CancellationToken ct = default, Guid? expectedTenantId = null)
+    {
+        // IgnoreQueryFilters only when the caller supplied expectedTenantId — an [AllowAnonymous]
+        // caller with no ambient tenant_id claim (see ChatbotsController) would otherwise always get
+        // NotFound here under the fail-closed tenant filter (P0-5), silently killing RAG grounding
+        // for every knowledge-base-linked public chatbot. The explicit equality check below is what
+        // keeps this safe: it's not a bypass, it's substituting a caller-verified tenant match for
+        // the ambient-claim-based one. Every other (authenticated) caller passes null and gets
+        // byte-identical ambient-filtered behavior — do not default this to IgnoreQueryFilters.
+        var kbQuery = expectedTenantId.HasValue
+            ? _context.KnowledgeBases.IgnoreQueryFilters().Where(k => k.TenantId == expectedTenantId.Value)
+            : _context.KnowledgeBases;
+        var kb = await kbQuery.FirstOrDefaultAsync(k => k.Id == knowledgeBaseId, ct);
 
         if (kb is null)
             throw new NotFoundException(nameof(KnowledgeBase), knowledgeBaseId);
+
+        // Policy Engine: an optional, tenant-configured data-classification ceiling on what a RAG
+        // search may pull into an AI prompt — additive tightening, a tenant with no "Knowledge" policy
+        // configured sees byte-identical behavior. Enforced once here rather than at each of the chat
+        // entry points that call this method, so no caller can accidentally bypass it.
+        var maxClassification = await _knowledgePolicyService.GetMaxClassificationAsync(kb.TenantId, ct);
+        if (KnowledgePolicyEvaluator.ExceedsCeiling(kb.DataClassification.ToString(), maxClassification))
+        {
+            _logger.LogWarning(
+                "Blocked RAG search of KB {KbId} — its {Classification} classification exceeds tenant {TenantId}'s configured Knowledge policy ceiling of {Ceiling}",
+                knowledgeBaseId, kb.DataClassification, kb.TenantId, maxClassification);
+            await _context.AuditLogs.AddAsync(new AuditLog(Guid.NewGuid(), kb.TenantId, AuditAction.Execute, "GlobalPolicy",
+                "Knowledge", userId: null, metadata: JsonSerializer.Serialize(new
+                {
+                    status = "blocked",
+                    reason = "knowledge base classification exceeds policy ceiling",
+                    knowledgeBaseId,
+                    classification = kb.DataClassification.ToString(),
+                    ceiling = maxClassification
+                })), ct);
+            await _context.SaveChangesAsync(ct);
+
+            return new PagedResult<SearchResultDto> { Items = [], TotalCount = 0, Page = page, PageSize = pageSize };
+        }
 
         var results = new List<SearchResultDto>();
 
@@ -261,9 +316,19 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         {
             try
             {
+                // ApplicationConfiguration.RagThreshold is the tenant's per-application "RAG relevance
+                // threshold" control, surfaced in the Studio UI. It was persisted, validated
+                // (InclusiveBetween(0,1)), snapshotted per version and rolled back — and never read
+                // by any query, so the control users configured had provably zero effect. Resolved
+                // here, from the knowledge base's own linked application, so all nine callers get the
+                // behaviour they were always promised. Defaults to 0.7 (no floor) when the KB is not
+                // attached to an application or the application has no config row yet, which is the
+                // same value the entity seeds.
+                var minRelevance = await ResolveRagThresholdAsync(kb, ct);
+
                 var queryVector = await _aiService.GenerateEmbeddingAsync(query, ct);
                 var searchResults = await _vectorStore.HybridSearchAsync(
-                    kb.VectorCollectionName, [.. queryVector], query, pageSize, 0.7f, ct);
+                    kb.VectorCollectionName, [.. queryVector], query, pageSize, 0.7f, minRelevance, ct);
 
                 results.AddRange(searchResults.Select(r => new SearchResultDto
                 {
@@ -294,6 +359,21 @@ public class KnowledgeBaseService : IKnowledgeBaseService
             PageSize = pageSize
         };
     }
+
+    private async Task<float> ResolveRagThresholdAsync(KnowledgeBase kb, CancellationToken ct)
+    {
+        if (kb.ApplicationId is not { } applicationId)
+            return DefaultRagThreshold;
+
+        var configured = await _context.ApplicationConfigurations
+            .Where(c => c.ApplicationId == applicationId)
+            .Select(c => (double?)c.RagThreshold)
+            .FirstOrDefaultAsync(ct);
+
+        return (float)(configured ?? DefaultRagThreshold);
+    }
+
+    private static readonly float DefaultRagThreshold = 0.7f;
 
     public async Task<PagedResult<KnowledgeBaseDto>> GetKnowledgeBasesAsync(Guid tenantId, int page, int pageSize, CancellationToken ct = default)
     {
@@ -340,6 +420,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         ChunkSize = kb.ChunkSize,
         ChunkOverlap = kb.ChunkOverlap,
         DocumentCount = kb.DocumentCount,
+        DataClassification = kb.DataClassification.ToString(),
         CreatedAt = kb.CreatedAt,
         Sources = kb.Sources?.Select(s => new KnowledgeBaseSourceDto
         {
@@ -349,6 +430,9 @@ public class KnowledgeBaseService : IKnowledgeBaseService
             Url = s.Url,
             Content = s.Content?.Length > 200 ? s.Content[..200] + "..." : s.Content,
             Status = s.Status,
+            ChunkCount = s.ChunkCount,
+            IndexedAt = s.IndexedAt,
+            Error = s.Error,
             CreatedAt = s.CreatedAt
         }).ToList() ?? []
     };

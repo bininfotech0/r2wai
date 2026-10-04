@@ -20,6 +20,7 @@ public class AskDocumentCommandValidator : AbstractValidator<AskDocumentCommand>
 public class AskDocumentCommandHandler(
     IRepository<Document> documentRepo,
     IAIService aiService,
+    IModelConfigurationResolver modelConfigResolver,
     IStorageService storageService) : IRequestHandler<AskDocumentCommand, string>
 {
     public async Task<string> Handle(AskDocumentCommand command, CancellationToken cancellationToken)
@@ -31,6 +32,7 @@ public class AskDocumentCommandHandler(
         using var reader = new StreamReader(stream);
         var content = await reader.ReadToEndAsync(cancellationToken);
 
-        return await aiService.AnswerQuestionAsync(command.Question, content, cancellationToken);
+        var modelConfig = await modelConfigResolver.ResolveAsync(null, document.TenantId, cancellationToken);
+        return await aiService.AnswerQuestionAsync(command.Question, content, modelConfig, cancellationToken);
     }
 }

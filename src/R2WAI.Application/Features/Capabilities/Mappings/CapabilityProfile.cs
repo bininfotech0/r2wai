@@ -8,5 +8,6 @@ public class CapabilityProfile : Profile
     public CapabilityProfile()
     {
         CreateMap<ToolDefinition, CapabilityDto>();
+        CreateMap<ToolDefinitionVersion, ToolDefinitionVersionDto>();
     }
 }

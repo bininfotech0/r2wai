@@ -14,5 +14,6 @@ global using R2WAI.Application.Features.Applications.Queries;
 global using R2WAI.Application.Features.Applications.DTOs;
 global using R2WAI.Domain.Entities;
 global using R2WAI.Domain.Enums;
+global using R2WAI.Domain.Events;
 global using R2WAI.Domain.Interfaces;
 global using Xunit;

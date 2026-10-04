@@ -6,6 +6,7 @@ public record CreateKnowledgeBaseCommand : IRequest<KnowledgeBaseDto>
 {
     public string Name { get; init; } = string.Empty;
     public string? Description { get; init; }
+    public string DataClassification { get; init; } = "Internal";
 }
 
 public class CreateKnowledgeBaseCommandValidator : AbstractValidator<CreateKnowledgeBaseCommand>
@@ -15,6 +16,8 @@ public class CreateKnowledgeBaseCommandValidator : AbstractValidator<CreateKnowl
         RuleFor(v => v.Name)
             .NotEmpty().WithMessage("Name is required.")
             .MaximumLength(200).WithMessage("Name must not exceed 200 characters.");
+        RuleFor(v => v.DataClassification).Must(v => Enum.TryParse<Domain.Enums.DataClassification>(v, true, out _))
+            .WithMessage("DataClassification must be one of: Public, Internal, Confidential, Restricted.");
     }
 }
 
@@ -28,6 +31,6 @@ public class CreateKnowledgeBaseCommandHandler(
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
 
         return await knowledgeBaseService.CreateKnowledgeBaseAsync(
-            tenantId, userId, command.Name, command.Description, cancellationToken);
+            tenantId, userId, command.Name, command.Description, command.DataClassification, cancellationToken);
     }
 }

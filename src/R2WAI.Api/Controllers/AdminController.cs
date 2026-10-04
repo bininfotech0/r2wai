@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -12,8 +13,8 @@ using OpenAI;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Admin.Commands;
 using R2WAI.Application.Features.Admin.Queries;
-using R2WAI.Application.Features.Members;
 using R2WAI.Domain.Entities;
+using R2WAI.Infrastructure.AI.ModelGateway;
 using R2WAI.Infrastructure.Persistence;
 
 namespace R2WAI.Api.Controllers;
@@ -26,121 +27,45 @@ public class AdminController(
     ApplicationDbContext dbContext,
     IEncryptionService encryptionService,
     IWebHostEnvironment environment,
+    IDataRetentionService dataRetentionService,
     ILogger<AdminController> logger) : ControllerBase
 {
+    // Runs the DataRetention Policy Engine sweep (Phase 2) on demand, rather than only on
+    // DataRetentionBackgroundService's hourly schedule — useful for an admin who just tightened a
+    // retention policy and wants it applied now, and for live verification without waiting an hour.
+    [HttpPost("data-retention/run")]
+    public async Task<IActionResult> RunDataRetentionSweep(CancellationToken ct = default)
+    {
+        var result = await dataRetentionService.RunSweepAsync(ct);
+        logger.LogInformation("Data retention sweep run on demand: {TenantsSwept} tenants, {Messages} messages, {Conversations} conversations, {Documents} documents purged",
+            result.TenantsSwept, result.MessagesPurged, result.ConversationsPurged, result.DocumentsPurged);
+        return Ok(result);
+    }
+
     private static (int page, int pageSize) ClampPagination(int page, int pageSize, int maxPageSize = 100)
     {
         return (Math.Max(1, page), Math.Clamp(pageSize, 1, maxPageSize));
     }
 
-    [HttpGet("users")]
-    public async Task<IActionResult> GetUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, CancellationToken ct = default)
-    {
-        (page, pageSize) = ClampPagination(page, pageSize);
-        var query = new GetUsersQuery { Page = page, PageSize = pageSize, Search = search };
-        var result = await mediator.Send(query, ct);
-        return Ok(result);
-    }
+    // User CRUD (GetUsers/GetUserById/CreateUser/UpdateUser/AssignUserRoles/DeleteUser/
+    // BulkDeleteUsers/InviteUser) moved to UserManagementController — this class's
+    // [Authorize(Roles="Admin,SystemAdmin")] excluded the UserManager role from ever managing users,
+    // despite a "CanManageUsers" policy existing specifically to allow it (defined in Program.cs, never
+    // applied anywhere — confirmed live). See UserManagementController's class doc comment for why a
+    // method-level policy override here couldn't have fixed it.
 
-    [HttpGet("users/{id:guid}")]
-    public async Task<IActionResult> GetUserById(Guid id, CancellationToken ct = default)
-    {
-        var result = await mediator.Send(new GetUserByIdQuery { Id = id }, ct);
-        return Ok(result);
-    }
-
-    [HttpPost("users")]
-    public async Task<IActionResult> CreateUser([FromBody] CreateUserCommand command, CancellationToken ct = default)
-    {
-        logger.LogInformation("Creating user: {Email}", command.Email);
-        var result = await mediator.Send(command, ct);
-        return CreatedAtAction("GetUsers", new { id = result.Id }, result);
-    }
-
-    [HttpPut("users/{id:guid}")]
-    public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserCommand command, CancellationToken ct = default)
-    {
-        command = command with { Id = id };
-        var result = await mediator.Send(command, ct);
-        return Ok(result);
-    }
-
-    public record AssignUserRolesRequest(List<Guid> RoleIds);
-
-    [HttpPut("users/{id:guid}/roles")]
-    public async Task<IActionResult> AssignUserRoles(Guid id, [FromBody] AssignUserRolesRequest request, CancellationToken ct = default)
-    {
-        var command = new AssignUserRolesCommand { UserId = id, RoleIds = request.RoleIds };
-        var result = await mediator.Send(command, ct);
-        return Ok(result);
-    }
-
-    [HttpDelete("users/{id:guid}")]
-    public async Task<IActionResult> DeleteUser(Guid id, CancellationToken ct = default)
-    {
-        var command = new DeleteUserCommand { Id = id };
-        await mediator.Send(command, ct);
-        return NoContent();
-    }
-
-    public record BulkDeleteRequest(Guid[] Ids);
-
-    [HttpPost("users/bulk-delete")]
-    public async Task<IActionResult> BulkDeleteUsers([FromBody] BulkDeleteRequest request, CancellationToken ct = default)
-    {
-        await mediator.Send(new BulkDeleteUsersCommand { Ids = request.Ids }, ct);
-        return NoContent();
-    }
-
-    public record InviteUserRequest(string Email, string? Role = null);
-
-    [HttpPost("users/invite")]
-    public async Task<IActionResult> InviteUser([FromBody] InviteUserRequest request, CancellationToken ct = default)
-    {
-        var emailService = HttpContext.RequestServices.GetRequiredService<IEmailService>();
-        var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
-        var jwtService = HttpContext.RequestServices.GetRequiredService<R2WAI.Infrastructure.Authentication.JwtService>();
-
-        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
-
-        // The invite email tells the recipient to "use this code to create your account", so the
-        // code has to actually be redeemable — it used to be generated, emailed, and discarded with
-        // nothing in the DB to check it against, and no endpoint that could check it even if there
-        // were. Reuses the same create-user-then-set-a-reset-token pattern already proven for access
-        // request approval: create the account now, then let the invitee set their own password via
-        // the existing Reset Password page using this same token as the "reset code".
-        var existingUser = await dbContext.Users.IgnoreQueryFilters()
-            .Where(u => !u.IsDeleted).FirstOrDefaultAsync(u => u.Email == request.Email && u.TenantId == tenantId, ct);
-        if (existingUser is not null)
-            return Conflict(new { error = "A user with this email already exists." });
-
-        var inviter = await dbContext.Users.FindAsync([currentUser.UserId], ct);
-        var tenant = await dbContext.Tenants.FindAsync([tenantId], ct);
-
-        var localPart = request.Email.Split('@')[0];
-        var newUser = new Domain.Entities.User(Guid.NewGuid(), tenantId, request.Email, request.Email, localPart, string.Empty);
-
-        var tokenBytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
-        var inviteToken = Convert.ToBase64String(tokenBytes).Replace("+", "-").Replace("/", "_").TrimEnd('=');
-        newUser.SetPasswordResetToken(jwtService.HashRefreshToken(inviteToken), DateTime.UtcNow.AddDays(7));
-
-        // Role assignment isn't wired here — the same gap existed in the original code (the Role
-        // field was accepted and silently ignored). Left as-is rather than bolted on as a side
-        // effect of this fix; role assignment is a separate, already-existing admin action
-        // (see the roles endpoints below) that can be applied to the new user after creation.
-        await dbContext.Users.AddAsync(newUser, ct);
-        await dbContext.SaveChangesAsync(ct);
-
-        await emailService.SendUserInviteAsync(
-            request.Email,
-            inviter is not null ? $"{inviter.FirstName} {inviter.LastName}" : "Admin",
-            tenant?.Name ?? "R2WAI",
-            inviteToken, ct);
-
-        logger.LogInformation("User invitation sent to {Email}, account {UserId} created", request.Email, newUser.Id);
-        return Ok(new { message = $"Invitation sent to {request.Email}", userId = newUser.Id });
-    }
-
+    // P0-5 (2026-09-20 audit), the AccessRequest slice: this class-level [Authorize(Roles=
+    // "Admin,SystemAdmin")] let ANY tenant's Admin see every pending access request platform-wide
+    // (names/emails/organizations for people trying to join ANY tenant, not just their own) and
+    // approve one — creating the new account under the APPROVING admin's own tenant (see
+    // ApproveAccessRequest below), regardless of which organization the requester actually named.
+    // AccessRequest genuinely has no TenantId (there's no tenant relationship yet at request time —
+    // this is the platform's pre-tenant signup queue), so unlike a real cross-tenant *data* leak this
+    // is a role-scoping gap: reviewing it is a platform-wide action and belongs to SystemAdmin only,
+    // same method-level-narrows-the-class-level-grant technique already used elsewhere in this file
+    // (see the User-CRUD doc comment above) — [Authorize] attributes AND together, so this alone
+    // narrows these 3 actions without touching the rest of the controller's Admin access.
+    [Authorize(Roles = "SystemAdmin")]
     [HttpGet("access-requests")]
     public async Task<IActionResult> GetAccessRequests([FromQuery] string? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
@@ -157,6 +82,7 @@ public class AdminController(
         return Ok(new { items, total, page, pageSize });
     }
 
+    [Authorize(Roles = "SystemAdmin")]
     [HttpPost("access-requests/{id:guid}/approve")]
     public async Task<IActionResult> ApproveAccessRequest(Guid id, CancellationToken ct = default)
     {
@@ -196,6 +122,7 @@ public class AdminController(
         return Ok(new { message = "Access request approved and account created.", userId = newUser.Id });
     }
 
+    [Authorize(Roles = "SystemAdmin")]
     [HttpPost("access-requests/{id:guid}/reject")]
     public async Task<IActionResult> RejectAccessRequest(Guid id, CancellationToken ct = default)
     {
@@ -210,6 +137,55 @@ public class AdminController(
 
         logger.LogInformation("Access request {Id} rejected", id);
         return Ok(new { message = "Access request rejected." });
+    }
+
+    // docs/api/MISSING-BACKEND-ENDPOINTS.md §3.4 #67 — platform tenant management. SystemAdmin only,
+    // same method-level-narrows-the-class-level-grant technique as access-requests above. Building
+    // this surfaced a real, separate gap fixed alongside it: TenantStatus existed on the entity but
+    // was checked nowhere in the whole codebase (confirmed by grep), so "suspending" a tenant would
+    // have had zero actual effect — now enforced in AuthController's Login/Refresh/Entra ID paths.
+    [Authorize(Roles = "SystemAdmin")]
+    [HttpGet("tenants")]
+    public async Task<IActionResult> GetTenants([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, CancellationToken ct = default)
+    {
+        (page, pageSize) = ClampPagination(page, pageSize);
+        var result = await mediator.Send(new Application.Features.Tenants.Queries.GetTenantsQuery { Page = page, PageSize = pageSize, Search = search }, ct);
+        return Ok(result);
+    }
+
+    [Authorize(Roles = "SystemAdmin")]
+    [HttpGet("tenants/{id:guid}")]
+    public async Task<IActionResult> GetTenantById(Guid id, CancellationToken ct = default)
+    {
+        var result = await mediator.Send(new Application.Features.Tenants.Queries.GetTenantByIdQuery { Id = id }, ct);
+        return Ok(result);
+    }
+
+    [Authorize(Roles = "SystemAdmin")]
+    [HttpPost("tenants")]
+    public async Task<IActionResult> CreateTenant([FromBody] Application.Features.Tenants.Commands.CreateTenantCommand command, CancellationToken ct = default)
+    {
+        logger.LogInformation("Creating tenant: {Name}", command.Name);
+        var result = await mediator.Send(command, ct);
+        return CreatedAtAction(nameof(GetTenantById), new { id = result.Id }, result);
+    }
+
+    [Authorize(Roles = "SystemAdmin")]
+    [HttpPut("tenants/{id:guid}")]
+    public async Task<IActionResult> UpdateTenant(Guid id, [FromBody] Application.Features.Tenants.Commands.UpdateTenantCommand command, CancellationToken ct = default)
+    {
+        command = command with { Id = id };
+        var result = await mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    [Authorize(Roles = "SystemAdmin")]
+    [HttpDelete("tenants/{id:guid}")]
+    public async Task<IActionResult> DeleteTenant(Guid id, CancellationToken ct = default)
+    {
+        await mediator.Send(new Application.Features.Tenants.Commands.DeleteTenantCommand { Id = id }, ct);
+        logger.LogWarning("Tenant {Id} suspended and soft-deleted", id);
+        return NoContent();
     }
 
     [HttpGet("roles")]
@@ -253,6 +229,7 @@ public class AdminController(
         [FromQuery] Guid? applicationId = null,
         [FromQuery] string? action = null,
         [FromQuery] string? entityType = null,
+        [FromQuery] string? entityId = null,
         CancellationToken ct = default)
     {
         (page, pageSize) = ClampPagination(page, pageSize);
@@ -267,7 +244,8 @@ public class AdminController(
             UserId = userId,
             ApplicationId = applicationId,
             Action = parsedAction,
-            EntityType = entityType
+            EntityType = entityType,
+            EntityId = entityId
         };
         var result = await mediator.Send(query, ct);
         return Ok(result);
@@ -288,6 +266,13 @@ public class AdminController(
         return Ok(result);
     }
 
+    // AI Models is a Super Admin-only surface per roleNav.ts (hidden from the plain-Admin nav
+    // entirely) — the class-level [Authorize(Roles="Admin,SystemAdmin")] above was letting any
+    // Admin reach it by direct API call regardless of what the UI showed. ASP.NET Core combines a
+    // method-level [Authorize] with the class-level one as separate requirements (AND, not
+    // override), so this narrows every /models route to SystemAdmin only without touching the
+    // class-level attribute the /users, /roles, /access-requests routes below still rely on.
+    [Authorize(Roles = "SystemAdmin")]
     [HttpGet("models")]
     public async Task<IActionResult> GetModels([FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] string? search = null, CancellationToken ct = default)
     {
@@ -297,6 +282,7 @@ public class AdminController(
         return Ok(result);
     }
 
+    [Authorize(Roles = "SystemAdmin")]
     [HttpPost("models")]
     public async Task<IActionResult> CreateModel([FromBody] CreateModelCommand command, CancellationToken ct = default)
     {
@@ -305,6 +291,7 @@ public class AdminController(
         return CreatedAtAction("GetModels", new { id = result.Id }, result);
     }
 
+    [Authorize(Roles = "SystemAdmin")]
     [HttpPut("models/{id:guid}")]
     public async Task<IActionResult> UpdateModel(Guid id, [FromBody] UpdateModelCommand command, CancellationToken ct = default)
     {
@@ -313,6 +300,7 @@ public class AdminController(
         return Ok(result);
     }
 
+    [Authorize(Roles = "SystemAdmin")]
     [HttpDelete("models/{id:guid}")]
     public async Task<IActionResult> DeleteModel(Guid id, CancellationToken ct = default)
     {
@@ -321,6 +309,9 @@ public class AdminController(
         return NoContent();
     }
 
+    public record BulkDeleteRequest(Guid[] Ids);
+
+    [Authorize(Roles = "SystemAdmin")]
     [HttpPost("models/bulk-delete")]
     public async Task<IActionResult> BulkDeleteModels([FromBody] BulkDeleteRequest request, CancellationToken ct = default)
     {
@@ -330,6 +321,7 @@ public class AdminController(
 
     public record SetApiKeyRequest(string ApiKey);
 
+    [Authorize(Roles = "SystemAdmin")]
     [HttpPut("models/{id:guid}/api-key")]
     public async Task<IActionResult> SetModelApiKey(Guid id, [FromBody] SetApiKeyRequest request, CancellationToken ct = default)
     {
@@ -348,6 +340,7 @@ public class AdminController(
         return Ok(new { success = true, message = "API key updated" });
     }
 
+    [Authorize(Roles = "SystemAdmin")]
     [HttpDelete("models/{id:guid}/api-key")]
     public async Task<IActionResult> RemoveModelApiKey(Guid id, CancellationToken ct = default)
     {
@@ -363,6 +356,7 @@ public class AdminController(
         return Ok(new { success = true, message = "API key removed" });
     }
 
+    [Authorize(Roles = "SystemAdmin")]
     [HttpPost("models/{id:guid}/test")]
     public async Task<IActionResult> TestModelConnection(Guid id, CancellationToken ct = default)
     {
@@ -389,7 +383,11 @@ public class AdminController(
                     return UnprocessableEntity(new { success = false, message = "Ollama endpoint not configured for this model." });
                 var endpoint = model.Endpoint;
                 var ollamaUri = new Uri($"{endpoint.TrimEnd('/')}/v1");
-                var ollamaClient = new OpenAIClient(new ApiKeyCredential("ollama"), new OpenAIClientOptions { Endpoint = ollamaUri });
+                // Same timeout/retry tuning as the real chat path (OllamaModelProvider) —
+                // without it, the SDK's default retry policy can compound past nginx's
+                // 300s proxy_read_timeout on a slow local model, turning a legitimately
+                // slow-but-working reply into a network-level failure for this endpoint.
+                var ollamaClient = new OpenAIClient(new ApiKeyCredential("ollama"), new OpenAIClientOptions { Endpoint = ollamaUri, RetryPolicy = new ClientRetryPolicy(1), NetworkTimeout = ModelGatewayDefaults.OllamaNetworkTimeout });
                 builder.AddOpenAIChatCompletion(model.ModelId, ollamaClient);
             }
             else if (provider is "openai" or "azureopenai" or "deepseek" or "togetherai" or "fireworksai" or "groq" or "perplexity" or "xai" or "openrouter" or "sambanova" or "cerebras" or "githubmodels" or "ai21labs" or "mistral" or "novitaai" or "replicate" or "nvidianim")
@@ -399,7 +397,7 @@ public class AdminController(
 
                 if (!string.IsNullOrEmpty(model.Endpoint))
                 {
-                    var client = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = new Uri(model.Endpoint) });
+                    var client = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = new Uri(model.Endpoint), RetryPolicy = new ClientRetryPolicy(1), NetworkTimeout = ModelGatewayDefaults.CloudNetworkTimeout });
                     builder.AddOpenAIChatCompletion(model.ModelId, client);
                 }
                 else
@@ -425,11 +423,14 @@ public class AdminController(
 
                     if (defaultEndpoints.TryGetValue(provider, out var ep))
                     {
-                        var client = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = new Uri(ep) });
+                        var client = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = new Uri(ep), RetryPolicy = new ClientRetryPolicy(1), NetworkTimeout = ModelGatewayDefaults.CloudNetworkTimeout });
                         builder.AddOpenAIChatCompletion(model.ModelId, client);
                     }
                     else
-                        builder.AddOpenAIChatCompletion(model.ModelId, apiKey);
+                    {
+                        var client = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions { RetryPolicy = new ClientRetryPolicy(1), NetworkTimeout = ModelGatewayDefaults.CloudNetworkTimeout });
+                        builder.AddOpenAIChatCompletion(model.ModelId, client);
+                    }
                 }
             }
             else
@@ -571,7 +572,7 @@ public class AdminController(
         var approvedApprovals = await dbContext.ApprovalRequests.CountAsync(
             a => a.Status == Domain.Enums.ApprovalStatus.Approved && a.CreatedAt >= since, ct);
         var pendingApprovals = await dbContext.ApprovalRequests.CountAsync(
-            a => a.Status == Domain.Enums.ApprovalStatus.Pending, ct);
+            a => a.Status == Domain.Enums.ApprovalStatus.Pending || a.Status == Domain.Enums.ApprovalStatus.Escalated, ct);
         var totalDocuments = await dbContext.Documents.CountAsync(d => d.CreatedAt >= since, ct);
 
         return Ok(new
@@ -704,12 +705,7 @@ public class AdminController(
                     mobile, "Test", $"Member{i + 1:D5}");
                 member.SetPasswordHash(testPasswordHash);
 
-                var referralCode = ReferralCodeGenerator.Generate() + i.ToString("D5");
-                var wallet = new MemberWallet(Guid.NewGuid(), tenantId, member.Id, referralCode);
-                wallet.AddPoints(Random.Shared.Next(0, 500));
-
                 await dbContext.Users.AddAsync(member, ct);
-                await dbContext.MemberWallets.AddAsync(wallet, ct);
                 created++;
             }
 

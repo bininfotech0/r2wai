@@ -1,14 +1,12 @@
 services:
-  r2wai-web:
-    container_name: r2wai-web
+  # Single public ingress — see docker/nginx/studio.conf.
+  r2wai-studio:
+    container_name: r2wai-studio
     build:
       context: ..
-      dockerfile: docker/Dockerfile.web
+      dockerfile: docker/Dockerfile.client
     ports:
       - "8080:8080"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ApiBaseUrl=http://r2wai-api:8080
     depends_on:
       r2wai-api:
         condition: service_healthy
@@ -29,11 +27,34 @@ services:
       - "5000:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      # First-run administrator. On an EMPTY database the API creates the default tenant, roles and
+      # built-in tools plus this one admin (email + password of >= 12 characters). No demo accounts are
+      # ever created here. Remove BOOTSTRAP_ADMIN_PASSWORD from the environment after the first start.
+      - Bootstrap__AdminEmail=${BOOTSTRAP_ADMIN_EMAIL:-}
+      - Bootstrap__AdminPassword=${BOOTSTRAP_ADMIN_PASSWORD:-}
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=r2wai;Username=r2wai;Password=${DB_PASSWORD}
+      - ConnectionStrings__Redis=redis:6379
+      - Cache__Redis__ConnectionString=redis:6379
+      # Traces/metrics/logs export to console when unset (default). Bring up
+      # docker-compose.monitoring.yml and set OTLP_ENDPOINT=http://jaeger:4317
+      # to route real distributed traces to Jaeger instead.
+      - OpenTelemetry__OtlpEndpoint=${OTLP_ENDPOINT:-}
       - Authentication__Jwt__SecretKey=${JWT_SECRET}
       - Authentication__Jwt__ExpirationMinutes=15
       - Authentication__Jwt__RefreshTokenExpirationDays=7
+      # Online path (default): OpenAI. Offline path: set AI_PROVIDER=ollama and point OLLAMA_ENDPOINT
+      # at a real, properly-resourced Ollama host — this compose file deliberately does not bundle an
+      # Ollama container (unlike docker-compose.yml's dev convenience default): CPU-only inference is
+      # not viable for tool-enabled chat under real load, so a production Ollama deployment needs its
+      # own GPU-backed host, not a container sharing this box's resources. Both paths are genuinely
+      # usable side by side per-assistant via each ModelConfiguration's own provider (AI Models page) —
+      # this env var only sets the platform-wide fallback used when a ModelConfiguration doesn't
+      # override it.
+      - AI__Provider=${AI_PROVIDER:-openai}
       - AI__OpenAI__ApiKey=${OPENAI_API_KEY}
+      - AI__Ollama__Endpoint=${OLLAMA_ENDPOINT:-}
+      - AI__Ollama__ModelId=${OLLAMA_MODEL:-}
+      - AI__Ollama__EmbeddingModel=${OLLAMA_EMBEDDING_MODEL:-}
       - Storage__Provider=local
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - Email__SmtpHost=${SMTP_HOST:-}
@@ -54,6 +75,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - r2wai-network
@@ -64,6 +87,27 @@ services:
       resources:
         limits:
           memory: 1G
+
+  # Shares rate-limiting, login-lockout, and AiUsage-cap state across API replicas — see
+  # docker-compose.yml's identical service for the full rationale.
+  redis:
+    container_name: r2wai-redis
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - r2wai-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   postgres:
     container_name: r2wai-postgres
@@ -92,6 +136,7 @@ services:
 
 volumes:
   postgres-data:
+  redis-data:
   api-storage:
   api-logs:
 

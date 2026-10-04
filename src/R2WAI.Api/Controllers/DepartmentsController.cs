@@ -29,6 +29,8 @@ public class DepartmentsController(IMediator mediator) : ControllerBase
         [FromQuery] string? search = null,
         CancellationToken ct = default)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var query = new GetDepartmentsQuery { Page = page, PageSize = pageSize, Search = search };
         var result = await mediator.Send(query, ct);
         return Ok(result);

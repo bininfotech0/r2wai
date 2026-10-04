@@ -22,6 +22,7 @@ public class CompareDocumentsCommandValidator : AbstractValidator<CompareDocumen
 public class CompareDocumentsCommandHandler(
     IRepository<Document> documentRepo,
     IAIService aiService,
+    IModelConfigurationResolver modelConfigResolver,
     IStorageService storageService) : IRequestHandler<CompareDocumentsCommand, ComparisonResultDto>
 {
     public async Task<ComparisonResultDto> Handle(CompareDocumentsCommand command, CancellationToken cancellationToken)
@@ -34,7 +35,8 @@ public class CompareDocumentsCommandHandler(
         var sourceContent = await ReadFileContentAsync(source.FilePath, cancellationToken);
         var targetContent = await ReadFileContentAsync(target.FilePath, cancellationToken);
 
-        var comparison = await aiService.CompareDocumentsAsync(sourceContent, targetContent, cancellationToken);
+        var modelConfig = await modelConfigResolver.ResolveAsync(null, source.TenantId, cancellationToken);
+        var comparison = await aiService.CompareDocumentsAsync(sourceContent, targetContent, modelConfig, cancellationToken);
 
         return new ComparisonResultDto
         {

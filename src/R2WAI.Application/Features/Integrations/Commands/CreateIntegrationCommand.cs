@@ -10,6 +10,8 @@ public record CreateIntegrationCommand : IRequest<Guid>
     public string? Description { get; init; }
     public string? EndpointUrl { get; init; }
     public string? Configuration { get; init; }
+    public string? HttpMethod { get; init; }
+    public string? EndpointPath { get; init; }
 }
 
 public class CreateIntegrationCommandValidator : AbstractValidator<CreateIntegrationCommand>

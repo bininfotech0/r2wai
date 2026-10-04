@@ -27,6 +27,12 @@ public class ApplicationApiConfiguration : IEntityTypeConfiguration<ApplicationA
         builder.Property(a => a.CredentialRef)
             .HasMaxLength(200);
 
+        builder.Property(a => a.CredentialSecretEncrypted)
+            .HasMaxLength(2000);
+
+        builder.Property(a => a.CredentialHeaderName)
+            .HasMaxLength(200);
+
         builder.Property(a => a.OpenApiSource)
             .HasMaxLength(1000);
 

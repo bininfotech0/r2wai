@@ -1,0 +1,65 @@
+# Service is deliberately named "r2wai-api" to match — nginx.conf's proxy_pass hardcodes that
+# hostname (see docker/nginx/studio.conf), so within-namespace short-name DNS resolution makes this
+# image work in-cluster with zero changes. Keep the api Service's name in sync with this comment if
+# either ever changes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: r2wai-studio
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: studio
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      component: studio
+  template:
+    metadata:
+      labels:
+        app: r2wai
+        component: studio
+    spec:
+      containers:
+        - name: studio
+          image: ghcr.io/OWNER/REPO-studio:latest # kustomize edit set image before applying — see cd.yml
+          # allowPrivilegeEscalation only blocks a process gaining NEW privileges (e.g. via a
+          # setuid binary) — it doesn't touch nginx's own master-to-worker privilege DROP
+          # (setuid()/setgid() down to the "nginx" user, per the base image's nginx.conf `user
+          # nginx;` directive), so it's safe to force here. Not adding capabilities.drop or
+          # runAsNonRoot: this image's master process starts as root by design (verified —
+          # `docker run --rm nginx:1.27-alpine id` returns uid=0, no USER set in
+          # docker/Dockerfile.client's runtime stage) specifically so it CAN setuid/setgid its
+          # workers down; dropping CAP_SETUID/CAP_SETGID or forcing runAsNonRoot would very likely
+          # break that startup sequence, and there is no live cluster here to verify it wouldn't.
+          securityContext:
+            allowPrivilegeEscalation: false
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits: { cpu: "250m", memory: "128Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: r2wai-studio
+  namespace: r2wai
+  labels:
+    app: r2wai
+    component: studio
+spec:
+  selector:
+    component: studio
+  ports:
+    - port: 8080
+      targetPort: 8080

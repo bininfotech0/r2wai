@@ -9,7 +9,7 @@ public record UpdateUserCommand : IRequest<UserDto>, IAuthorizedRequest
     public string LastName { get; init; } = string.Empty;
     public string? AvatarUrl { get; init; }
     public string? MobileNumber { get; init; }
-    public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
 }
 
 public class UpdateUserCommandValidator : AbstractValidator<UpdateUserCommand>

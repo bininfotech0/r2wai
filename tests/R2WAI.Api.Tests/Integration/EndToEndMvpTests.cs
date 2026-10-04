@@ -177,15 +177,9 @@ public class EndToEndMvpTests : IClassFixture<R2WAIWebApplicationFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    [Fact]
-    public async Task Scenario7_WorkflowSchedule_RequiresAuth()
-    {
-        var response = await _client.PostAsJsonAsync($"/api/v1/workflows/{Guid.NewGuid()}/schedule", new
-        {
-            CronExpression = "0 * * * *"
-        });
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
+    // Scenario7_WorkflowSchedule_RequiresAuth removed 2026-09-28: POST /workflows/{id}/schedule was a
+    // dead stub (never created a real schedule, just overwrote Workflow.Trigger) and was deleted along
+    // with the rest of the cron-schedule feature — see RegressionTests.cs's D13 removal note.
 
     // ================================================================
     // Scenario 8: Receive approval notification

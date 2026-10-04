@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using MediatR;
@@ -21,19 +20,37 @@ public class AuthController(
     TotpService totpService,
     ApplicationDbContext dbContext,
     IPasswordHasher passwordHasher,
+    IStorageService storageService,
     IMediator mediator,
+    ICacheService cacheService,
+    IAuthPolicyService authPolicyService,
     ILogger<AuthController> logger) : ControllerBase
 {
-    private static readonly ConcurrentDictionary<string, LoginAttemptTracker> _loginAttempts = new();
+    private static readonly Dictionary<string, string> AvatarContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".png"] = "image/png",
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".webp"] = "image/webp",
+        [".gif"] = "image/gif",
+    };
+    private static readonly HashSet<string> AllowedAvatarContentTypes =
+        new(AvatarContentTypes.Values, StringComparer.OrdinalIgnoreCase);
+    private const long MaxAvatarSize = 2 * 1024 * 1024;
+
     private const int MaxFailedAttempts = 5;
     private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(15);
+    // Long relative to LockoutDuration: this is an outer bound on the cache entry itself (so it
+    // doesn't live in Redis forever), not the lockout window — FailedAttempts is meant to persist
+    // until a real successful login resets it, same as the tracker it replaces intended.
+    private static readonly TimeSpan LoginAttemptStateTtl = TimeSpan.FromHours(24);
 
-    private sealed class LoginAttemptTracker
-    {
-        public int FailedAttempts;
-        public DateTime? LockedUntil;
-        public DateTime LastAttempt = DateTime.UtcNow;
-    }
+    // Was a static ConcurrentDictionary — per-process only, so a multi-instance deployment let an
+    // attacker bypass the lockout by hitting a different instance, and any restart/redeploy
+    // silently reset every account's failed-attempt count. Same distribution problem
+    // RateLimitingMiddleware already solves via ICacheService; this now uses the same fix.
+    // LoginAttemptState/LoginLockoutCache.Key live in Services/LoginLockoutCache.cs so
+    // AdminController's unlock action can clear exactly this same cache entry.
 
     public record LoginRequest(string Email, string Password, string? MfaCode = null);
 
@@ -58,7 +75,10 @@ public class AuthController(
 
     public record RefreshRequest(string AccessToken, string RefreshToken);
 
-    public record EntraIdRequest(string IdToken);
+    // MfaCode is optional on the wire (an SSO client with no local MFA enrolled never sends it) —
+    // ExchangeEntraIdToken enforces the same per-account MfaEnabled requirement the password Login
+    // path already does, using this field, not a bypass of it.
+    public record EntraIdRequest(string IdToken, string? MfaCode = null);
 
     public record UpdateProfileRequest(string FirstName, string LastName, string? MobileNumber = null, string? Email = null);
 
@@ -66,21 +86,30 @@ public class AuthController(
 
     public record ResetPasswordRequest(string Email, string Token, string NewPassword);
 
-    public record RequestAccessRequest(string FullName, string Email, string Organization, string Department, string? Reason);
+    public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
-    public record RegisterMemberRequest(string FullName, string AadhaarNumber, string MobileNumber, string Password, string? Email, string? ReferralCode = null);
+    public record RequestAccessRequest(
+        string FullName,
+        string Email,
+        string Organization,
+        string? Department = null,
+        string? Reason = null);
+
+    public record RegisterMemberRequest(string FullName, string AadhaarNumber, string MobileNumber, string Password, string? Email);
 
     [HttpPost("login")]
+    [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
         logger.LogInformation("Login attempt for: {Email}", request.Email);
 
         var normalizedEmail = request.Email.ToLowerInvariant();
-        var tracker = _loginAttempts.GetOrAdd(normalizedEmail, _ => new LoginAttemptTracker());
+        var lockoutKey = Services.LoginLockoutCache.Key(normalizedEmail);
+        var state = await cacheService.GetAsync<Services.LoginAttemptState>(lockoutKey, ct) ?? new Services.LoginAttemptState();
 
-        if (tracker.LockedUntil.HasValue && tracker.LockedUntil.Value > DateTime.UtcNow)
+        if (state.LockedUntil.HasValue && state.LockedUntil.Value > DateTime.UtcNow)
         {
-            var remaining = (int)(tracker.LockedUntil.Value - DateTime.UtcNow).TotalSeconds;
+            var remaining = (int)(state.LockedUntil.Value - DateTime.UtcNow).TotalSeconds;
             logger.LogWarning("Login blocked for locked account: {Email}", request.Email);
             return StatusCode(429, new { error = $"Account temporarily locked. Try again in {remaining} seconds.", retryAfter = remaining });
         }
@@ -93,6 +122,7 @@ public class AuthController(
             .IgnoreQueryFilters()
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
+            .Include(u => u.Tenant)
             .Where(u => !u.IsDeleted);
 
         User? user;
@@ -109,15 +139,26 @@ public class AuthController(
         if (user is null || string.IsNullOrEmpty(user.PasswordHash) ||
             !passwordHasher.Verify(request.Password, user.PasswordHash))
         {
-            var attempts = Interlocked.Increment(ref tracker.FailedAttempts);
-            tracker.LastAttempt = DateTime.UtcNow;
-            if (attempts >= MaxFailedAttempts)
+            state.FailedAttempts++;
+            if (state.FailedAttempts >= MaxFailedAttempts)
             {
-                tracker.LockedUntil = DateTime.UtcNow.Add(LockoutDuration);
-                logger.LogWarning("Account locked after {Attempts} failed attempts: {Email}", attempts, request.Email);
+                state.LockedUntil = DateTime.UtcNow.Add(LockoutDuration);
+                logger.LogWarning("Account locked after {Attempts} failed attempts: {Email}", state.FailedAttempts, request.Email);
             }
-            logger.LogWarning("Failed login attempt for: {Email} (attempt {Attempt})", request.Email, attempts);
+            await cacheService.SetAsync(lockoutKey, state, LoginAttemptStateTtl, ct);
+            logger.LogWarning("Failed login attempt for: {Email} (attempt {Attempt})", request.Email, state.FailedAttempts);
             return Unauthorized(new { error = isAadhaarLogin ? "Invalid Aadhaar number or password" : "Invalid email or password" });
+        }
+
+        // docs/api/MISSING-BACKEND-ENDPOINTS.md §3.4 #67 — TenantStatus existed on the entity but was
+        // never checked anywhere in the codebase (confirmed by grep before adding this): a platform
+        // admin "suspending" a tenant had zero actual effect on whether its users could still log in.
+        // Checked here, before MFA/password-expiry, and deliberately does NOT touch the lockout
+        // counter above — credentials were already verified correct, this isn't a guessing attempt.
+        if (user.Tenant is not null && user.Tenant.Status != Domain.Enums.TenantStatus.Active)
+        {
+            logger.LogWarning("Login blocked for non-active tenant ({Status}): {Email}", user.Tenant.Status, request.Email);
+            return StatusCode(403, new { error = "This organisation's account is not active. Contact your administrator or R2WAI support." });
         }
 
         if (user.MfaEnabled)
@@ -128,9 +169,40 @@ public class AuthController(
             if (!totpService.ValidateCode(user.MfaSecret!, request.MfaCode))
                 return Unauthorized(new { error = "Invalid MFA code", mfaRequired = true });
         }
+        else if (await authPolicyService.IsMfaRequiredAsync(user.TenantId, ct))
+        {
+            // "Auth" GlobalPolicy opt-in ({"requireMfa":true}) — additive tightening only, same
+            // convention as the other GlobalPolicy types: a tenant with no policy set is unaffected,
+            // credentials were already verified above, but the user can't finish signing in until
+            // they enroll MFA. Distinct from mfaRequired (which asks for a code the user already has).
+            // Issues a restricted token (claim-gated by MfaSetupScopeMiddleware to mfa/* + logout
+            // only) rather than a normal session, so the user can call mfa/setup + mfa/enable
+            // without getting a full session ahead of actually enrolling.
+            logger.LogWarning("Login blocked pending MFA enrollment (tenant policy): {Email}", request.Email);
+            var (setupToken, _) = await jwtService.GenerateTokenAsync(
+                user.Id, user.TenantId, user.Email ?? string.Empty, [],
+                new Dictionary<string, string> { ["mfa_setup_pending"] = "true" }, ct);
+            return StatusCode(403, new { error = "Your organization requires multi-factor authentication. Set up MFA to continue.", mfaSetupRequired = true, setupToken });
+        }
 
-        Interlocked.Exchange(ref tracker.FailedAttempts, 0);
-        tracker.LockedUntil = null;
+        // Same additive-tightening "Auth" GlobalPolicy, independent optional field
+        // ({"maxPasswordAgeDays":N}) — checked only once MFA (if required) is already satisfied,
+        // so a user needing both is prompted for one thing at a time rather than simultaneously.
+        // PasswordChangedAt is null only for rows this migration's backfill couldn't reach (no
+        // PasswordHash at all, e.g. a not-yet-activated account) — treated as "not overdue" rather
+        // than blocking someone who was never given a password to begin with.
+        var maxPasswordAgeDays = await authPolicyService.GetMaxPasswordAgeDaysAsync(user.TenantId, ct);
+        if (maxPasswordAgeDays.HasValue && user.PasswordChangedAt.HasValue
+            && (DateTime.UtcNow - user.PasswordChangedAt.Value).TotalDays > maxPasswordAgeDays.Value)
+        {
+            logger.LogWarning("Login blocked pending password change (tenant policy, age > {MaxDays}d): {Email}", maxPasswordAgeDays.Value, request.Email);
+            var (setupToken, _) = await jwtService.GenerateTokenAsync(
+                user.Id, user.TenantId, user.Email ?? string.Empty, [],
+                new Dictionary<string, string> { ["password_change_pending"] = "true" }, ct);
+            return StatusCode(403, new { error = "Your password has expired. Set a new password to continue.", passwordChangeRequired = true, setupToken });
+        }
+
+        await cacheService.RemoveAsync(lockoutKey, ct);
 
         var roles = user.UserRoles?
             .Where(ur => ur.Role is not null)
@@ -162,6 +234,7 @@ public class AuthController(
     }
 
     [HttpPost("refresh")]
+    [AllowAnonymous]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken ct)
     {
         var principal = jwtService.GetPrincipalFromExpiredToken(request.AccessToken);
@@ -172,13 +245,29 @@ public class AuthController(
         if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
             return Unauthorized(new { error = "Invalid token claims" });
 
-        var user = await dbContext.Users
+        // IgnoreQueryFilters: [AllowAnonymous] by design — the caller's access token is expired, so
+        // there is no ambient authenticated tenant to filter by (P0-5's fail-closed tenant filter
+        // would otherwise find nothing here regardless of who's asking). The real security boundary
+        // is the fixed-time refresh-token-hash comparison below, not the ambient tenant filter.
+        var user = await dbContext.Users.IgnoreQueryFilters()
+            .Where(u => !u.IsDeleted)
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
+            .Include(u => u.Tenant)
             .FirstOrDefaultAsync(u => u.Id == userId, ct);
 
         if (user is null)
             return Unauthorized(new { error = "User not found" });
+
+        // Same tenant-status enforcement as Login — a tenant suspended after a user's last login
+        // must not let them silently keep renewing a session via refresh.
+        if (user.Tenant is not null && user.Tenant.Status != Domain.Enums.TenantStatus.Active)
+        {
+            user.RevokeRefreshToken();
+            await dbContext.SaveChangesAsync(ct);
+            logger.LogWarning("Refresh denied for non-active tenant ({Status}): user {UserId}", user.Tenant.Status, userId);
+            return Unauthorized(new { error = "This organisation's account is not active." });
+        }
 
         var incomingHash = jwtService.HashRefreshToken(request.RefreshToken);
         if (!CryptographicOperations.FixedTimeEquals(
@@ -313,6 +402,7 @@ public class AuthController(
     }
 
     [HttpPost("forgot-password")]
+    [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken ct)
     {
         var user = await dbContext.Users.IgnoreQueryFilters().Where(u => !u.IsDeleted).FirstOrDefaultAsync(u => u.Email == request.Email, ct);
@@ -339,6 +429,7 @@ public class AuthController(
     }
 
     [HttpPost("reset-password")]
+    [AllowAnonymous]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken ct)
     {
         var user = await dbContext.Users.IgnoreQueryFilters().Where(u => !u.IsDeleted).FirstOrDefaultAsync(u => u.Email == request.Email, ct);
@@ -363,19 +454,112 @@ public class AuthController(
         return Ok(new { message = "Password has been reset successfully." });
     }
 
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken ct)
+    {
+        var userIdClaim = HttpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var user = await dbContext.Users.FindAsync([userId], ct);
+        if (user is null)
+            return NotFound(new { error = "User not found" });
+
+        if (string.IsNullOrEmpty(user.PasswordHash) || !passwordHasher.Verify(request.CurrentPassword, user.PasswordHash))
+            return BadRequest(new { error = "Current password is incorrect." });
+
+        if (!PasswordPolicy.IsValid(request.NewPassword, out var passwordError))
+            return BadRequest(new { error = passwordError });
+
+        user.SetPasswordHash(passwordHasher.Hash(request.NewPassword));
+        user.RevokeRefreshToken();
+        await dbContext.SaveChangesAsync(ct);
+
+        logger.LogInformation("Password changed for user {UserId}", userId);
+        return Ok(new { message = "Password changed successfully." });
+    }
+
+    [HttpPost("profile/avatar")]
+    [Authorize]
+    [RequestSizeLimit(MaxAvatarSize)]
+    public async Task<IActionResult> UploadAvatar(IFormFile file, CancellationToken ct)
+    {
+        var userIdClaim = HttpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "File is required." });
+
+        if (file.Length > MaxAvatarSize)
+            return BadRequest(new { error = $"File size exceeds the {MaxAvatarSize / (1024 * 1024)} MB limit." });
+
+        if (!AllowedAvatarContentTypes.Contains(file.ContentType))
+            return BadRequest(new { error = $"File type '{file.ContentType}' is not supported. Use PNG, JPEG, WebP, or GIF." });
+
+        var user = await dbContext.Users.FindAsync([userId], ct);
+        if (user is null)
+            return NotFound(new { error = "User not found" });
+
+        var extension = AvatarContentTypes.First(kv => kv.Value.Equals(file.ContentType, StringComparison.OrdinalIgnoreCase)).Key;
+        await using var stream = file.OpenReadStream();
+        var storagePath = await storageService.UploadFileAsync(
+            stream, $"avatar{extension}", file.ContentType, $"avatars/{userId}", ct);
+
+        var previousPath = user.AvatarStoragePath;
+        user.SetAvatar($"/api/v1/auth/profile/avatar/{userId}", storagePath);
+        await dbContext.SaveChangesAsync(ct);
+
+        if (!string.IsNullOrEmpty(previousPath) && previousPath != storagePath)
+        {
+            try { await storageService.DeleteFileAsync(previousPath, ct); }
+            catch (Exception ex) { logger.LogWarning(ex, "Failed to delete previous avatar {Path}", previousPath); }
+        }
+
+        logger.LogInformation("Avatar updated for user {UserId}", userId);
+        return Ok(new { avatarUrl = user.AvatarUrl });
+    }
+
+    // [Authorize]-only (not [AllowAnonymous]): avatars are only ever rendered inside the
+    // authenticated app UI (profile page, member/user lists), so this stays behind auth like
+    // every other tenant-scoped resource rather than becoming a public image host.
+    [HttpGet("profile/avatar/{userId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> GetAvatar(Guid userId, CancellationToken ct)
+    {
+        var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null || string.IsNullOrEmpty(user.AvatarStoragePath))
+            return NotFound();
+
+        var extension = Path.GetExtension(user.AvatarStoragePath);
+        var contentType = AvatarContentTypes.GetValueOrDefault(extension, "application/octet-stream");
+
+        try
+        {
+            var stream = await storageService.DownloadFileAsync(user.AvatarStoragePath, ct);
+            return File(stream, contentType);
+        }
+        catch (FileNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
     [HttpPost("request-access")]
+    [AllowAnonymous]
     public async Task<IActionResult> RequestAccess([FromBody] RequestAccessRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.Email)
-            || string.IsNullOrWhiteSpace(request.Organization) || string.IsNullOrWhiteSpace(request.Department))
-            return BadRequest(new { error = "Full name, email, organization, and department are required." });
+            || string.IsNullOrWhiteSpace(request.Organization))
+            return BadRequest(new { error = "Full name, email, and organization are required." });
 
         if (!new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(request.Email))
             return BadRequest(new { error = "Please provide a valid email address." });
 
         var accessRequest = new AccessRequest(
             Guid.NewGuid(), request.FullName.Trim(), request.Email.Trim(),
-            request.Organization.Trim(), request.Department.Trim(), request.Reason?.Trim());
+            request.Organization.Trim(), request.Department?.Trim(), request.Reason?.Trim());
 
         await dbContext.AccessRequests.AddAsync(accessRequest, ct);
         await dbContext.SaveChangesAsync(ct);
@@ -384,7 +568,11 @@ public class AuthController(
         return StatusCode(201, new { message = "Your request has been submitted for review." });
     }
 
+    // Was anonymous: anyone on the network could create a login-capable account in the default tenant
+    // (collecting an Aadhaar number) — see docs/audit/R2WAI-IQ200-AUDIT-2026-09-20.md, finding 7.
+    // Member creation is now an administrator action.
     [HttpPost("register-member")]
+    [Authorize(Roles = "Admin,SystemAdmin")]
     public async Task<IActionResult> RegisterMember([FromBody] RegisterMemberRequest request, CancellationToken ct)
     {
         var member = await mediator.Send(new R2WAI.Application.Features.Auth.Commands.RegisterMemberCommand
@@ -394,7 +582,6 @@ public class AuthController(
             MobileNumber = request.MobileNumber,
             Password = request.Password,
             Email = request.Email,
-            ReferralCode = request.ReferralCode,
         }, ct);
 
         var refreshToken = jwtService.GenerateRefreshToken();
@@ -499,6 +686,7 @@ public class AuthController(
     }
 
     [HttpPost("entra-id")]
+    [AllowAnonymous]
     public async Task<IActionResult> ExchangeEntraIdToken([FromBody] EntraIdRequest request, CancellationToken ct)
     {
         logger.LogInformation("Entra ID token exchange requested");
@@ -511,9 +699,15 @@ public class AuthController(
         if (entraUser is null)
             return Unauthorized(new { error = "Could not extract user from Entra ID token" });
 
-        var user = await dbContext.Users
+        // IgnoreQueryFilters: [AllowAnonymous] by design — the caller has just proven their identity to
+        // Entra ID, not to R2WAI, so there is no ambient authenticated tenant to filter by yet (same
+        // reasoning as Refresh above). The real security boundary is the validated Entra ID token
+        // above, not the ambient tenant filter.
+        var user = await dbContext.Users.IgnoreQueryFilters()
+            .Where(u => !u.IsDeleted)
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
+            .Include(u => u.Tenant)
             .FirstOrDefaultAsync(u => u.Email == entraUser.Email, ct);
 
         Guid tenantId;
@@ -527,6 +721,39 @@ public class AuthController(
                 .Where(ur => ur.Role is not null)
                 .Select(ur => ur.Role!.Name)
                 .ToArray() ?? [];
+
+            // Same tenant-status enforcement as the password Login path — SSO doesn't bypass tenant
+            // suspension either, same reasoning as the MFA floor just below.
+            if (user.Tenant is not null && user.Tenant.Status != Domain.Enums.TenantStatus.Active)
+            {
+                logger.LogWarning("Entra ID login blocked for non-active tenant ({Status}): {Email}", user.Tenant.Status, user.Email);
+                return StatusCode(403, new { error = "This organisation's account is not active. Contact your administrator or R2WAI support." });
+            }
+
+            // Same per-account MFA enforcement as the password Login path — SSO used to skip this
+            // branch entirely (only the tenant-wide enrollment floor below existed here), so a user
+            // who had personally enabled TOTP MFA got that control silently bypassed the moment they
+            // authenticated via Entra instead of a password. A valid Entra id_token is proof of
+            // identity to Entra, not to R2WAI's own second factor — enforced here for the same
+            // reason it's enforced on the password path.
+            if (user.MfaEnabled)
+            {
+                if (string.IsNullOrWhiteSpace(request.MfaCode))
+                    return Unauthorized(new { error = "MFA code required", mfaRequired = true });
+
+                if (!totpService.ValidateCode(user.MfaSecret!, request.MfaCode))
+                    return Unauthorized(new { error = "Invalid MFA code", mfaRequired = true });
+            }
+            else if (await authPolicyService.IsMfaRequiredAsync(tenantId, ct))
+            {
+                // Same tenant-wide MFA floor as the password login path — SSO doesn't bypass it,
+                // since Entra ID's own conditional-access posture isn't visible to R2WAI.
+                logger.LogWarning("Entra ID login blocked pending MFA enrollment (tenant policy): {Email}", user.Email);
+                var (entraSetupToken, _) = await jwtService.GenerateTokenAsync(
+                    user.Id, tenantId, user.Email ?? string.Empty, [],
+                    new Dictionary<string, string> { ["mfa_setup_pending"] = "true" }, ct);
+                return StatusCode(403, new { error = "Your organization requires multi-factor authentication. Set up MFA to continue.", mfaSetupRequired = true, setupToken = entraSetupToken });
+            }
 
             var refreshToken = jwtService.GenerateRefreshToken();
             var refreshTokenHash = jwtService.HashRefreshToken(refreshToken);

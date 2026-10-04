@@ -22,6 +22,7 @@ public class GetCapabilitiesQueryHandler(
             t => t.TenantId == tenantId && !t.IsDeleted
               && (string.IsNullOrEmpty(searchTerm) || t.Name.ToLower().Contains(searchTerm))
               && (!query.ApplicationId.HasValue || t.ApplicationId == query.ApplicationId),
+            "ApplicationApi",
             cancellationToken);
 
         var ordered = filtered.OrderByDescending(t => t.CreatedAt);

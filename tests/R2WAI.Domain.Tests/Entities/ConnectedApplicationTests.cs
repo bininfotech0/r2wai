@@ -25,6 +25,19 @@ public class ConnectedApplicationTests
     }
 
     [Fact]
+    public void Create_WithoutDepartment_LeavesDepartmentIdNull()
+    {
+        var application = new ConnectedApplication(
+            Guid.NewGuid(), Guid.NewGuid(), null, "Supplier Portal", "SUP-PORTAL",
+            "Supplier-facing services.");
+
+        Assert.Null(application.DepartmentId);
+        Assert.Null(application.Department);
+        Assert.Equal("Supplier Portal", application.Name);
+        Assert.Equal(ApplicationStatus.Draft, application.Status);
+    }
+
+    [Fact]
     public void UpdateDetails_ChangesFields()
     {
         var application = new ConnectedApplication(

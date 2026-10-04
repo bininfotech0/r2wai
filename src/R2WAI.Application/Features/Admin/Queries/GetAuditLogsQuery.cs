@@ -8,6 +8,10 @@ public record GetAuditLogsQuery : IRequest<PagedResult<AuditLogDto>>, IAuthorize
     public Guid? ApplicationId { get; init; }
     public AuditAction? Action { get; init; }
     public string? EntityType { get; init; }
+    // Per-entity views (e.g. a Tool's Usage tab, a Run's audit trail) need to
+    // narrow to one row's history — EntityType alone can't do that, and every
+    // caller of this query was filtering the full EntityType page client-side.
+    public string? EntityId { get; init; }
     public DateTime? From { get; init; }
     public DateTime? To { get; init; }
     public string[] RequiredRoles => ["Admin", "SystemAdmin"];
@@ -28,6 +32,7 @@ public class GetAuditLogsQueryHandler(
               && (!query.ApplicationId.HasValue || l.ApplicationId == query.ApplicationId)
               && (!query.Action.HasValue || l.Action == query.Action)
               && (string.IsNullOrWhiteSpace(query.EntityType) || l.EntityType == query.EntityType)
+              && (string.IsNullOrWhiteSpace(query.EntityId) || l.EntityId == query.EntityId)
               && (!query.From.HasValue || l.Timestamp >= query.From.Value)
               && (!query.To.HasValue || l.Timestamp <= query.To.Value),
             cancellationToken);

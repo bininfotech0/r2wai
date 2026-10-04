@@ -139,12 +139,31 @@ public class ChatController(IMediator mediator, IAIService aiService, ILogger<Ch
         var writer = Response.Body;
         var encoding = Encoding.UTF8;
 
-        await foreach (var chunk in aiService.StreamChatAsync(
-            request.Message, request.ConversationHistory, request.SystemPrompt, enableTools: true, ct: streamCt))
+        try
         {
-            var sseData = $"data: {System.Text.Json.JsonSerializer.Serialize(new { content = chunk })}\n\n";
-            await writer.WriteAsync(encoding.GetBytes(sseData), streamCt);
-            await writer.FlushAsync(streamCt);
+            await foreach (var chunk in aiService.StreamChatAsync(
+                request.Message, request.ConversationHistory, request.SystemPrompt, enableTools: true, ct: streamCt))
+            {
+                var sseData = $"data: {System.Text.Json.JsonSerializer.Serialize(new { content = chunk })}\n\n";
+                await writer.WriteAsync(encoding.GetBytes(sseData), streamCt);
+                await writer.FlushAsync(streamCt);
+            }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // Same gap/fix as AssistantsController.StreamChat and ChatbotsController.StreamChat —
+            // a provider failure mid-stream used to just drop the connection with no signal at all.
+            // This endpoint has no client caller in this codebase (confirmed by grep — the SPA's
+            // own streaming chat always goes through /assistants/{id}/chat/stream instead) and no
+            // named-event convention of its own, so the error frame matches its own plain `data:`
+            // framing rather than introducing an `event: error` line nothing here would expect.
+            logger.LogWarning(ex, "AI provider failed mid-stream for StreamMessage");
+            var errorData = $"data: {System.Text.Json.JsonSerializer.Serialize(new { error = "The AI service failed while generating a response. Please try again." })}\n\n";
+            await writer.WriteAsync(encoding.GetBytes(errorData), ct);
+            await writer.FlushAsync(ct);
+            await writer.WriteAsync(encoding.GetBytes("data: [DONE]\n\n"), ct);
+            await writer.FlushAsync(ct);
+            return;
         }
 
         await writer.WriteAsync(encoding.GetBytes("data: [DONE]\n\n"), streamCt);

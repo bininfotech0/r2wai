@@ -51,7 +51,16 @@ Navigate to `http://localhost:8080` in a browser.
 
 ## Step 4: Initial Setup
 
-1. Login with the default admin account (created by database seed)
+1. Login with the administrator you configured for the first start. On an **empty** database the API
+   creates the default tenant, roles and built-in tools plus one administrator from
+   `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` (`Bootstrap__AdminEmail` /
+   `Bootstrap__AdminPassword`; password of at least 12 characters, and not one of the demo passwords
+   published in the repository). Then **remove `BOOTSTRAP_ADMIN_PASSWORD` from the environment**. If no
+   administrator is configured, no user is created — the startup log says so.
+   *No demo accounts are created in production.* The demo seed (`admin@r2wai.io`, `user@r2wai.io`, …
+   with public passwords) exists only for local development and CI and is opt-in:
+   `Database__SeedDemoData=true` (on by default only when `ASPNETCORE_ENVIRONMENT=Development`; set
+   explicitly in `docker/docker-compose.yml`). Never enable it on a real deployment.
 2. Navigate to Settings → Users to create additional users
 3. Navigate to Settings → AI Models to configure your LLM provider
 4. Navigate to AI Assistant Studio to create your first assistant
@@ -86,8 +95,8 @@ chmod +x backup.sh restore.sh
 # API logs
 docker compose -f docker-compose.production.yml logs -f r2wai-api
 
-# Web logs
-docker compose -f docker-compose.production.yml logs -f r2wai-web
+# Studio (React SPA) logs
+docker compose -f docker-compose.production.yml logs -f r2wai-studio
 
 # Database logs
 docker compose -f docker-compose.production.yml logs -f postgres
@@ -101,7 +110,7 @@ Application logs are also stored in the `api-logs` volume at `/app/Logs/`.
 
 ```bash
 docker compose -f docker-compose.production.yml restart r2wai-api
-docker compose -f docker-compose.production.yml restart r2wai-web
+docker compose -f docker-compose.production.yml restart r2wai-studio
 ```
 
 ### Apply Database Migrations

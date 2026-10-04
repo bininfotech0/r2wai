@@ -1,0 +1,29 @@
+# Everything routes to the studio Service — its own nginx.conf (baked into the image, see
+# docker/nginx/studio.conf) internally proxies /api/ and /hubs/ to r2wai-api, exactly mirroring the
+# single-gateway architecture docker-compose uses locally. Assumes an nginx-ingress-controller
+# class; adjust ingressClassName and the cert-manager annotation to match your cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: r2wai
+  namespace: r2wai
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod # remove if not using cert-manager
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300" # matches studio.conf's SSE/chat-stream budget
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["CHANGE-ME.example.com"]
+      secretName: r2wai-tls
+  rules:
+    - host: CHANGE-ME.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: r2wai-studio
+                port:
+                  number: 8080

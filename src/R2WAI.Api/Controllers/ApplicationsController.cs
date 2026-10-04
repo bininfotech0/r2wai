@@ -27,6 +27,8 @@ public class ApplicationsController(IMediator mediator) : ControllerBase
         [FromQuery] Guid? departmentId = null,
         CancellationToken ct = default)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var query = new GetApplicationsQuery { Page = page, PageSize = pageSize, Search = search, DepartmentId = departmentId };
         var result = await mediator.Send(query, ct);
         return Ok(result);
@@ -60,6 +62,21 @@ public class ApplicationsController(IMediator mediator) : ControllerBase
     public async Task<IActionResult> ChangeStatus(Guid id, [FromBody] ChangeApplicationStatusRequest request, CancellationToken ct = default)
     {
         var command = new ChangeApplicationStatusCommand { Id = id, Action = request.Action };
+        var result = await mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    public record DiscoverApplicationRequest(string? OpenApiUrl, string? OpenApiFileContent);
+
+    [HttpPost("{id:guid}/discover")]
+    public async Task<IActionResult> Discover(Guid id, [FromBody] DiscoverApplicationRequest request, CancellationToken ct = default)
+    {
+        var command = new DiscoverApplicationCommand
+        {
+            ApplicationId = id,
+            OpenApiUrl = request.OpenApiUrl,
+            OpenApiFileContent = request.OpenApiFileContent
+        };
         var result = await mediator.Send(command, ct);
         return Ok(result);
     }

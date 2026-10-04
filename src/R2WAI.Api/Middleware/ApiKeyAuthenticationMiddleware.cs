@@ -35,7 +35,21 @@ public class ApiKeyAuthenticationMiddleware(RequestDelegate next, IConfiguration
         var matched = MatchConfiguredKey(incomingKey);
         if (matched is not null)
         {
+            // Fail closed: a key with no tenant used to authenticate with no tenant_id claim, and the
+            // tenant query filter treats "no tenant" as "every tenant" — so it could read across all of
+            // them. A static key is a misconfiguration unless it names the tenant it belongs to.
+            if (!Guid.TryParse(matched.TenantId, out _))
+            {
+                logger.LogError(
+                    "Static API key '{Name}' is rejected: it has no valid TenantId. Set Authentication:ApiKeys:N:TenantId to a tenant GUID.",
+                    matched.Name);
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await context.Response.WriteAsJsonAsync(new { error = "Invalid API key" });
+                return;
+            }
+
             Authenticate(context, matched);
+            if (!await EnforceScopeAsync(context)) return;
             await next(context);
             return;
         }
@@ -74,7 +88,32 @@ public class ApiKeyAuthenticationMiddleware(RequestDelegate next, IConfiguration
         await dbContext.SaveChangesAsync(context.RequestAborted);
 
         logger.LogInformation("API key authenticated: {Name} from {IP}", matchedDbKey.Name, context.Connection.RemoteIpAddress);
+        if (!await EnforceScopeAsync(context)) return;
         await next(context);
+    }
+
+    // The "scope" claim (added in Authenticate/AuthenticateFromDbKey below) was previously never
+    // read anywhere — an API key created with Scopes: "read" got full read/write access identical
+    // to an unscoped key, since nothing enforced the restriction the admin UI implies. Additive
+    // tightening only: a key with no scope claims at all (the common case, and every pre-existing
+    // key) is completely unaffected. Only once an admin has explicitly set scopes does this start
+    // gating mutating methods behind a "write" scope.
+    private static async Task<bool> EnforceScopeAsync(HttpContext context)
+    {
+        var scopeClaims = context.User.FindAll("scope").Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (scopeClaims.Count == 0)
+            return true;
+
+        var isMutating = HttpMethods.IsPost(context.Request.Method) || HttpMethods.IsPut(context.Request.Method)
+            || HttpMethods.IsPatch(context.Request.Method) || HttpMethods.IsDelete(context.Request.Method);
+        var allowed = isMutating ? scopeClaims.Contains("write") : scopeClaims.Contains("read") || scopeClaims.Contains("write");
+
+        if (!allowed)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { error = $"This API key's scope does not permit {(isMutating ? "write" : "read")} access." });
+        }
+        return allowed;
     }
 
     private ApiKeyEntry? MatchConfiguredKey(string incomingKey)

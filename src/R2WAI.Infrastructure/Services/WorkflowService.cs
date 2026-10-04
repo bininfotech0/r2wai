@@ -7,15 +7,18 @@ public class WorkflowService : IWorkflowService
 {
     private readonly ApplicationDbContext _context;
     private readonly IAIService _aiService;
+    private readonly IModelConfigurationResolver _modelConfigResolver;
     private readonly ILogger<WorkflowService> _logger;
 
     public WorkflowService(
         ApplicationDbContext context,
         IAIService aiService,
+        IModelConfigurationResolver modelConfigResolver,
         ILogger<WorkflowService> logger)
     {
         _context = context;
         _aiService = aiService;
+        _modelConfigResolver = modelConfigResolver;
         _logger = logger;
     }
 
@@ -64,7 +67,7 @@ public class WorkflowService : IWorkflowService
             throw new NotFoundException(nameof(Workflow), workflowId);
 
         var instance = new WorkflowInstance(
-            Guid.NewGuid(), workflowId, workflow.TenantId, initiatedBy, data);
+            Guid.NewGuid(), workflowId, workflow.TenantId, initiatedBy, data, workflow.Version);
 
         _context.WorkflowInstances.Add(instance);
         await _context.SaveChangesAsync(ct);
@@ -74,7 +77,8 @@ public class WorkflowService : IWorkflowService
         {
             var currentStepInfo = steps[0];
             var prompt = $"Execute workflow step '{currentStepInfo.Name}' for workflow '{workflow.Name}'. Data: {data}";
-            await _aiService.GenerateResponseAsync(prompt, "You are a workflow execution engine.", null, ct);
+            var modelConfig = await _modelConfigResolver.ResolveAsync(null, workflow.TenantId, ct);
+            await _aiService.GenerateResponseAsync(prompt, "You are a workflow execution engine.", null, modelConfig, ct: ct);
         }
 
         return MapToInstanceDto(instance, workflow.Name, steps);

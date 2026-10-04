@@ -19,6 +19,9 @@ public class GetSettingsQueryHandler(
         return new SettingsDto
         {
             TenantId = tenant.Id,
+            TenantName = tenant.Name,
+            TenantSlug = tenant.Slug,
+            TenantDomain = tenant.Domain,
             TenantSettings = tenant.Settings,
             Features = tenant.Features,
         };

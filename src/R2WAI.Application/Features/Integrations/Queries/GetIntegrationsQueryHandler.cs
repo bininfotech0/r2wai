@@ -12,7 +12,13 @@ public class GetIntegrationsQueryHandler(
         var all = await repo.FindAsync(
             t => t.TenantId == tenantId, cancellationToken);
 
-        IEnumerable<ToolDefinition> filtered = all;
+        // Integrations = standalone external connections (created via this feature's own
+        // Create/Edit dialog, which always sets EndpointUrl directly and never links an
+        // ApplicationApiId — see CreateIntegrationCommandHandler). A row linked to an
+        // ApplicationApi is an operation on an already-connected system, not a connection
+        // itself — that's the Tools & APIs page's job, not this one's. Without this filter,
+        // both pages showed the exact same overlapping ToolDefinition rows.
+        IEnumerable<ToolDefinition> filtered = all.Where(t => t.ApplicationApiId == null);
 
         if (!string.IsNullOrEmpty(query.Search))
             filtered = filtered.Where(t => t.Name.Contains(query.Search, StringComparison.OrdinalIgnoreCase));

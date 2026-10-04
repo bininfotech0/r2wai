@@ -35,7 +35,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("Department")
-                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
@@ -161,9 +160,17 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("CredentialHeaderName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("CredentialRef")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("CredentialSecretEncrypted")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -299,6 +306,43 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("ApplicationVersions", (string)null);
                 });
 
+            modelBuilder.Entity("R2WAI.Domain.Entities.ApprovalNotificationDispatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApprovalRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApproverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EscalationLevel")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("ApprovalRequestId", "EscalationLevel", "ApproverId")
+                        .IsUnique();
+
+                    b.ToTable("ApprovalNotificationDispatches", (string)null);
+                });
+
             modelBuilder.Entity("R2WAI.Domain.Entities.ApprovalPolicy", b =>
                 {
                     b.Property<Guid>("Id")
@@ -390,9 +434,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DueAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("ElsaBookmarkId")
-                        .HasColumnType("text");
-
                     b.Property<int>("EscalationLevel")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -421,13 +462,17 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("Subject")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("WorkflowId")
+                    b.Property<Guid?>("WorkflowId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("WorkflowInstanceId")
+                    b.Property<Guid?>("WorkflowInstanceId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
@@ -530,6 +575,12 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ApplicationId");
@@ -545,6 +596,100 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "PublishStatus");
 
                     b.ToTable("AssistantDefinitions", (string)null);
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.AssistantPromptHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssistantDefinitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssistantDefinitionId", "IsActive");
+
+                    b.HasIndex("AssistantDefinitionId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("AssistantPromptHistories", (string)null);
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.AssistantVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssistantDefinitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConfigSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPublished")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PublishedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssistantDefinitionId", "VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("AssistantVersions", (string)null);
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.AuditLog", b =>
@@ -623,11 +768,134 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("AuditLogs", (string)null);
                 });
 
+            modelBuilder.Entity("R2WAI.Domain.Entities.BackgroundJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("JobType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "LeaseExpiresAt");
+
+                    b.HasIndex("Status", "NextAttemptAt");
+
+                    b.ToTable("BackgroundJobs", (string)null);
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.BusinessCapability", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApplicationApiIds")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("AssistantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Icon")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("KnowledgeBaseIds")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToolIds")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("WorkflowIds")
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssistantId");
+
+                    b.HasIndex("TenantId", "AssistantId");
+
+                    b.ToTable("BusinessCapabilities", (string)null);
+                });
+
             modelBuilder.Entity("R2WAI.Domain.Entities.Chatbot", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("AllowedOrigins")
+                        .HasColumnType("jsonb");
 
                     b.Property<Guid?>("AssistantId")
                         .HasColumnType("uuid");
@@ -659,8 +927,23 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<long>("NegativeFeedbackCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("PositiveFeedbackCount")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("PromptTemplate")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("PublishedAssistantVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("PublishedAssistantVersionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Settings")
                         .HasColumnType("jsonb");
@@ -675,6 +958,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
+
+                    b.Property<long>("TotalMessagesServed")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
@@ -694,6 +980,13 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<DateTime?>("WidgetLastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WidgetLastSeenOrigin")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("WidgetSettings")
                         .HasColumnType("text");
 
@@ -704,6 +997,8 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("KnowledgeBaseId");
 
                     b.HasIndex("ModelConfigurationId");
+
+                    b.HasIndex("PublishedAssistantVersionId");
 
                     b.HasIndex("UserId");
 
@@ -775,7 +1070,7 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("DepartmentId")
+                    b.Property<Guid?>("DepartmentId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Description")
@@ -816,9 +1111,20 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DepartmentId");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Applications_TenantId_Code_NoDepartment")
+                        .HasFilter("\"DepartmentId\" IS NULL");
 
                     b.HasIndex("TenantId", "Status");
 
@@ -1005,49 +1311,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("Documents", (string)null);
                 });
 
-            modelBuilder.Entity("R2WAI.Domain.Entities.EventAttendance", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("AwardedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("AwardedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("EventId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("ModifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("PointsAwarded")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("EventId", "UserId")
-                        .IsUnique();
-
-                    b.ToTable("EventAttendances", (string)null);
-                });
-
             modelBuilder.Entity("R2WAI.Domain.Entities.GlobalPolicy", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1109,6 +1372,13 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DataClassification")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Internal");
 
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
@@ -1216,21 +1486,78 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("KnowledgeBaseSources", (string)null);
                 });
 
-            modelBuilder.Entity("R2WAI.Domain.Entities.MemberEvent", b =>
+            modelBuilder.Entity("R2WAI.Domain.Entities.KnowledgeBaseVersion", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ConfigSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Description")
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPublished")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("KnowledgeBaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PublishedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KnowledgeBaseId", "VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("KnowledgeBaseVersions", (string)null);
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.McpServerConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthHeaderName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CredentialEncrypted")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
-                    b.Property<DateTime>("EventDate")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<string>("EndpointUrl")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -1240,6 +1567,13 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("LastTestStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("LastTestedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1248,70 +1582,14 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<int>("PointsValue")
-                        .HasColumnType("integer");
-
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "IsActive");
+                    b.HasIndex("TenantId", "Name");
 
-                    b.ToTable("MemberEvents", (string)null);
-                });
-
-            modelBuilder.Entity("R2WAI.Domain.Entities.MemberWallet", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("ModifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PlanTier")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<int>("PointsBalance")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ReferralCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid?>("ReferredByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("WalletBalanceInRupees")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReferralCode")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("UserId")
-                        .IsUnique();
-
-                    b.ToTable("MemberWallets", (string)null);
+                    b.ToTable("McpServerConnections", (string)null);
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.Message", b =>
@@ -1572,7 +1850,7 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("NavigationDefinitions", (string)null);
                 });
 
-            modelBuilder.Entity("R2WAI.Domain.Entities.PlanUpgradeRequest", b =>
+            modelBuilder.Entity("R2WAI.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1584,89 +1862,44 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<DateTime?>("ModifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PaymentReference")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("RequestedTier")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ReviewedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("TenantId", "Status");
-
-                    b.ToTable("PlanUpgradeRequests", (string)null);
-                });
-
-            modelBuilder.Entity("R2WAI.Domain.Entities.PointsTransaction", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<bool>("IsDeleted")
+                    b.Property<bool>("IsRead")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Link")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Points")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<Guid?>("RelatedEventId")
-                        .HasColumnType("uuid");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RelatedEventId");
+                    b.HasIndex("TenantId", "UserId", "CreatedAt");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "IsRead", "CreatedAt");
 
-                    b.HasIndex("TenantId", "UserId");
-
-                    b.ToTable("PointsTransactions", (string)null);
+                    b.ToTable("Notifications", (string)null);
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.PromptTemplate", b =>
@@ -2039,6 +2272,20 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("LastTestStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("LastTestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("McpServerConnectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("McpToolName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2072,11 +2319,64 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ApplicationId");
 
+                    b.HasIndex("McpServerConnectionId");
+
                     b.HasIndex("TenantId", "IsActive");
 
                     b.HasIndex("TenantId", "Name");
 
                     b.ToTable("ToolDefinitions", (string)null);
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.ToolDefinitionVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConfigSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPublished")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PublishedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ToolDefinitionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ToolDefinitionId", "VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("ToolDefinitionVersions", (string)null);
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.User", b =>
@@ -2092,6 +2392,10 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<string>("AadhaarNumberHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AvatarStoragePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(500)
@@ -2136,6 +2440,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(15)");
 
                     b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PasswordChangedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PasswordHash")
@@ -2247,62 +2554,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("WebhookEndpoints");
                 });
 
-            modelBuilder.Entity("R2WAI.Domain.Entities.WithdrawalRequest", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AdminNotes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<decimal>("AmountRequested")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("ModifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PayoutMethod")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ReviewedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("TenantId", "Status");
-
-                    b.ToTable("WithdrawalRequests", (string)null);
-                });
-
             modelBuilder.Entity("R2WAI.Domain.Entities.Workflow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2359,6 +2610,12 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ApplicationId");
@@ -2406,6 +2663,15 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("PendingResumeAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PendingResumeLeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("PendingResumeStepIndex")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2420,6 +2686,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("WorkflowId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("WorkflowVersionNumber")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("InitiatedBy");
@@ -2431,62 +2700,14 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("WorkflowInstances", (string)null);
                 });
 
-            modelBuilder.Entity("R2WAI.Domain.Entities.WorkflowSchedule", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CronDescription")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CronExpression")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastRunAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LastRunStatus")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ModifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("NextRunAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("WorkflowId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("WorkflowId");
-
-                    b.ToTable("WorkflowSchedules");
-                });
-
             modelBuilder.Entity("R2WAI.Domain.Entities.WorkflowStepExecution", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2539,6 +2760,102 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("WorkflowStepExecutions", (string)null);
                 });
 
+            modelBuilder.Entity("R2WAI.Domain.Entities.WorkflowTemplateOverride", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("StepsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TemplateId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "TemplateId")
+                        .IsUnique();
+
+                    b.ToTable("WorkflowTemplateOverrides", (string)null);
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.WorkflowVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConfigSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPublished")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PublishedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkflowId", "VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("WorkflowVersions", (string)null);
+                });
+
             modelBuilder.Entity("R2WAI.Domain.Entities.ApplicationApi", b =>
                 {
                     b.HasOne("R2WAI.Domain.Entities.ConnectedApplication", "Application")
@@ -2572,6 +2889,15 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Application");
                 });
 
+            modelBuilder.Entity("R2WAI.Domain.Entities.ApprovalNotificationDispatch", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("R2WAI.Domain.Entities.ApprovalPolicy", b =>
                 {
                     b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
@@ -2600,14 +2926,12 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.HasOne("R2WAI.Domain.Entities.Workflow", "Workflow")
                         .WithMany()
                         .HasForeignKey("WorkflowId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("R2WAI.Domain.Entities.WorkflowInstance", "WorkflowInstance")
                         .WithMany()
                         .HasForeignKey("WorkflowInstanceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Requester");
 
@@ -2650,6 +2974,28 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("R2WAI.Domain.Entities.AssistantPromptHistory", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.AssistantDefinition", "AssistantDefinition")
+                        .WithMany()
+                        .HasForeignKey("AssistantDefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AssistantDefinition");
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.AssistantVersion", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.AssistantDefinition", "AssistantDefinition")
+                        .WithMany()
+                        .HasForeignKey("AssistantDefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AssistantDefinition");
+                });
+
             modelBuilder.Entity("R2WAI.Domain.Entities.AuditLog", b =>
                 {
                     b.HasOne("R2WAI.Domain.Entities.ConnectedApplication", "Application")
@@ -2675,6 +3021,25 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("R2WAI.Domain.Entities.BusinessCapability", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.AssistantDefinition", "Assistant")
+                        .WithMany()
+                        .HasForeignKey("AssistantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Assistant");
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("R2WAI.Domain.Entities.Chatbot", b =>
                 {
                     b.HasOne("R2WAI.Domain.Entities.AssistantDefinition", "Assistant")
@@ -2690,6 +3055,11 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.HasOne("R2WAI.Domain.Entities.ModelConfiguration", "ModelConfiguration")
                         .WithMany()
                         .HasForeignKey("ModelConfigurationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("R2WAI.Domain.Entities.AssistantVersion", "PublishedAssistantVersion")
+                        .WithMany()
+                        .HasForeignKey("PublishedAssistantVersionId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
@@ -2709,6 +3079,8 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("KnowledgeBase");
 
                     b.Navigation("ModelConfiguration");
+
+                    b.Navigation("PublishedAssistantVersion");
 
                     b.Navigation("Tenant");
 
@@ -2731,8 +3103,7 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.HasOne("R2WAI.Domain.Entities.Department", "Department")
                         .WithMany("Applications")
                         .HasForeignKey("DepartmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
@@ -2801,25 +3172,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("R2WAI.Domain.Entities.EventAttendance", b =>
-                {
-                    b.HasOne("R2WAI.Domain.Entities.MemberEvent", "Event")
-                        .WithMany("Attendances")
-                        .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("R2WAI.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Event");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("R2WAI.Domain.Entities.GlobalPolicy", b =>
                 {
                     b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
@@ -2868,15 +3220,26 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("KnowledgeBase");
                 });
 
-            modelBuilder.Entity("R2WAI.Domain.Entities.MemberWallet", b =>
+            modelBuilder.Entity("R2WAI.Domain.Entities.KnowledgeBaseVersion", b =>
                 {
-                    b.HasOne("R2WAI.Domain.Entities.User", "User")
-                        .WithOne("MemberWallet")
-                        .HasForeignKey("R2WAI.Domain.Entities.MemberWallet", "UserId")
+                    b.HasOne("R2WAI.Domain.Entities.KnowledgeBase", "KnowledgeBase")
+                        .WithMany()
+                        .HasForeignKey("KnowledgeBaseId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("User");
+                    b.Navigation("KnowledgeBase");
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.McpServerConnection", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.Message", b =>
@@ -2953,31 +3316,20 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("R2WAI.Domain.Entities.PlanUpgradeRequest", b =>
+            modelBuilder.Entity("R2WAI.Domain.Entities.Notification", b =>
                 {
+                    b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("R2WAI.Domain.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("R2WAI.Domain.Entities.PointsTransaction", b =>
-                {
-                    b.HasOne("R2WAI.Domain.Entities.MemberEvent", "RelatedEvent")
-                        .WithMany()
-                        .HasForeignKey("RelatedEventId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("R2WAI.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("RelatedEvent");
+                    b.Navigation("Tenant");
 
                     b.Navigation("User");
                 });
@@ -3085,6 +3437,11 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ApplicationId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("R2WAI.Domain.Entities.McpServerConnection", "McpServerConnection")
+                        .WithMany()
+                        .HasForeignKey("McpServerConnectionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
@@ -3095,7 +3452,20 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.Navigation("ApplicationApi");
 
+                    b.Navigation("McpServerConnection");
+
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.ToolDefinitionVersion", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.ToolDefinition", "ToolDefinition")
+                        .WithMany()
+                        .HasForeignKey("ToolDefinitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ToolDefinition");
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.User", b =>
@@ -3135,17 +3505,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasForeignKey("WorkflowId");
 
                     b.Navigation("Workflow");
-                });
-
-            modelBuilder.Entity("R2WAI.Domain.Entities.WithdrawalRequest", b =>
-                {
-                    b.HasOne("R2WAI.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.Workflow", b =>
@@ -3201,17 +3560,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Workflow");
                 });
 
-            modelBuilder.Entity("R2WAI.Domain.Entities.WorkflowSchedule", b =>
-                {
-                    b.HasOne("R2WAI.Domain.Entities.Workflow", "Workflow")
-                        .WithMany()
-                        .HasForeignKey("WorkflowId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Workflow");
-                });
-
             modelBuilder.Entity("R2WAI.Domain.Entities.WorkflowStepExecution", b =>
                 {
                     b.HasOne("R2WAI.Domain.Entities.WorkflowInstance", "WorkflowInstance")
@@ -3221,6 +3569,28 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("WorkflowInstance");
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.WorkflowTemplateOverride", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.WorkflowVersion", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.Workflow", "Workflow")
+                        .WithMany()
+                        .HasForeignKey("WorkflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Workflow");
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.Conversation", b =>
@@ -3238,11 +3608,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Documents");
 
                     b.Navigation("Sources");
-                });
-
-            modelBuilder.Entity("R2WAI.Domain.Entities.MemberEvent", b =>
-                {
-                    b.Navigation("Attendances");
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.Message", b =>
@@ -3270,8 +3635,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("R2WAI.Domain.Entities.User", b =>
                 {
                     b.Navigation("Conversations");
-
-                    b.Navigation("MemberWallet");
 
                     b.Navigation("UserRoles");
                 });

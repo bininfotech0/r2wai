@@ -8,7 +8,8 @@ namespace R2WAI.Infrastructure.Services;
 
 public class EncryptionService : IEncryptionService
 {
-    private readonly byte[] _key;
+    private readonly byte[] _currentKey;
+    private readonly IReadOnlyList<byte[]> _previousKeys;
 
     public EncryptionService(IConfiguration configuration, IHostEnvironment environment)
     {
@@ -27,9 +28,47 @@ public class EncryptionService : IEncryptionService
             throw new ConfigurationException(
                 "In non-development environments, the encryption key must be supplied via the ENCRYPTION_KEY environment variable, not appsettings.json.");
 
-        _key = Convert.FromBase64String(keyString);
-        if (_key.Length != 32)
-            throw new ConfigurationException("Encryption key must be exactly 32 bytes (256 bits).");
+        _currentKey = ParseKey(keyString, "ENCRYPTION_KEY");
+
+        // Key rotation: retired keys, decrypt-only, never used for new Encrypt calls. Rotating
+        // means setting ENCRYPTION_KEY to a freshly generated key and moving the old one here --
+        // every existing ciphertext still decrypts (this list is tried after the current key),
+        // and every write path that touches a secret field already re-encrypts it under the
+        // current key on save, so rows migrate off a retired key naturally over time without a
+        // forced bulk rewrite. Intentionally NOT auto-migrated: dropping a retired key from this
+        // list is a deliberate operator action, taken once nothing depends on it decrypting
+        // anymore (verified out of band -- this class has no way to know that on its own).
+        var previousKeysFromEnv = Environment.GetEnvironmentVariable("ENCRYPTION_KEY_PREVIOUS");
+        var previousKeysFromConfig = configuration["Security:PreviousEncryptionKeys"];
+
+        if (!environment.IsDevelopment() && previousKeysFromEnv is null && previousKeysFromConfig is not null)
+            throw new ConfigurationException(
+                "In non-development environments, previous encryption keys must be supplied via the ENCRYPTION_KEY_PREVIOUS environment variable, not appsettings.json.");
+
+        var previousKeysString = previousKeysFromEnv ?? previousKeysFromConfig;
+        _previousKeys = string.IsNullOrWhiteSpace(previousKeysString)
+            ? []
+            : previousKeysString
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select((k, i) => ParseKey(k, $"ENCRYPTION_KEY_PREVIOUS[{i}]"))
+                .ToList();
+    }
+
+    private static byte[] ParseKey(string keyString, string sourceName)
+    {
+        byte[] key;
+        try
+        {
+            key = Convert.FromBase64String(keyString);
+        }
+        catch (FormatException)
+        {
+            throw new ConfigurationException($"{sourceName} must be a valid base64 string.");
+        }
+
+        if (key.Length != 32)
+            throw new ConfigurationException($"{sourceName} must decode to exactly 32 bytes (256 bits).");
+        return key;
     }
 
     public string Encrypt(string plainText)
@@ -44,7 +83,7 @@ public class EncryptionService : IEncryptionService
         var cipherBytes = new byte[plainBytes.Length];
         var tag = new byte[16];
 
-        using var aes = new AesGcm(_key, 16);
+        using var aes = new AesGcm(_currentKey, 16);
         aes.Encrypt(nonce, plainBytes, cipherBytes, tag);
 
         var result = new byte[nonce.Length + cipherBytes.Length + tag.Length];
@@ -67,11 +106,35 @@ public class EncryptionService : IEncryptionService
         var nonce = fullBytes[..12];
         var tag = fullBytes[^16..];
         var cipherBytes = fullBytes[12..^16];
-        var plainBytes = new byte[cipherBytes.Length];
 
-        using var aes = new AesGcm(_key, 16);
-        aes.Decrypt(nonce, cipherBytes, tag, plainBytes);
+        // Tries the current key first (the common case, and the only attempt when no rotation is
+        // in progress), then each retired key in registration order. AES-GCM's authentication tag
+        // makes trying the wrong key a safe, cheap no-op -- it throws CryptographicException
+        // rather than returning garbage -- so no key-id needs to be embedded in the ciphertext and
+        // every value ever encrypted stays byte-for-byte decryptable.
+        CryptographicException lastFailure = new("Invalid cipher text.");
+        foreach (var key in AllKeys())
+        {
+            try
+            {
+                var plainBytes = new byte[cipherBytes.Length];
+                using var aes = new AesGcm(key, 16);
+                aes.Decrypt(nonce, cipherBytes, tag, plainBytes);
+                return Encoding.UTF8.GetString(plainBytes);
+            }
+            catch (CryptographicException ex)
+            {
+                lastFailure = ex;
+            }
+        }
 
-        return Encoding.UTF8.GetString(plainBytes);
+        throw lastFailure;
+    }
+
+    private IEnumerable<byte[]> AllKeys()
+    {
+        yield return _currentKey;
+        foreach (var key in _previousKeys)
+            yield return key;
     }
 }

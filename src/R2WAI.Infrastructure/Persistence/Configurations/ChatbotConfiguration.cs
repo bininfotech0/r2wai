@@ -23,6 +23,9 @@ public class ChatbotConfiguration : IEntityTypeConfiguration<Chatbot>
         builder.Property(c => c.SuggestedQuestions)
             .HasColumnType("jsonb");
 
+        builder.Property(c => c.AllowedOrigins)
+            .HasColumnType("jsonb");
+
         builder.Property(c => c.PromptTemplate)
             .HasColumnType("text");
 
@@ -39,6 +42,9 @@ public class ChatbotConfiguration : IEntityTypeConfiguration<Chatbot>
 
         builder.Property(c => c.WebhookApiKeyPrefix)
             .HasMaxLength(20);
+
+        builder.Property(c => c.WidgetLastSeenOrigin)
+            .HasMaxLength(500);
 
         builder.Property(c => c.CreatedAt).IsRequired();
         builder.Property(c => c.ModifiedAt);
@@ -66,6 +72,11 @@ public class ChatbotConfiguration : IEntityTypeConfiguration<Chatbot>
         builder.HasOne(c => c.Assistant)
             .WithMany()
             .HasForeignKey(c => c.AssistantId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(c => c.PublishedAssistantVersion)
+            .WithMany()
+            .HasForeignKey(c => c.PublishedAssistantVersionId)
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(c => new { c.TenantId, c.Name });

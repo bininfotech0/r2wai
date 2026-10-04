@@ -48,13 +48,13 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}-api
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Build & push Blazor web
+      - name: Build & push Studio (React)
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/Dockerfile.web
+          file: docker/Dockerfile.client
           push: true
-          tags: ${{ steps.meta.outputs.tags }}-web
+          tags: ${{ steps.meta.outputs.tags }}-studio
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Deploy to Kubernetes
@@ -79,10 +79,10 @@ jobs:
             exit 1
           fi
 
-          if ! kubectl --kubeconfig kubeconfig rollout status deployment/r2wai-web -n r2wai --timeout=300s; then
-            echo "::error::Web deployment rollout failed — initiating rollback"
-            kubectl --kubeconfig kubeconfig rollout undo deployment/r2wai-web -n r2wai
-            kubectl --kubeconfig kubeconfig rollout status deployment/r2wai-web -n r2wai --timeout=120s
+          if ! kubectl --kubeconfig kubeconfig rollout status deployment/r2wai-studio -n r2wai --timeout=300s; then
+            echo "::error::Studio deployment rollout failed — initiating rollback"
+            kubectl --kubeconfig kubeconfig rollout undo deployment/r2wai-studio -n r2wai
+            kubectl --kubeconfig kubeconfig rollout status deployment/r2wai-studio -n r2wai --timeout=120s
             exit 1
           fi
 

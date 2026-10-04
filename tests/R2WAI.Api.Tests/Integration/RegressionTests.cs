@@ -59,6 +59,56 @@ public class RegressionTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.Unauthorized, afterToggle.StatusCode);
     }
 
+    // D19 — An API key's Scopes field (e.g. "read") was persisted, shown in the admin UI, and even
+    // added as a "scope" claim on the authenticated principal — but nothing ever read that claim.
+    // A key explicitly scoped to "read" had full write access anyway, identical to an unscoped key.
+    [Fact]
+    public async Task D19_ApiKey_ReadScope_CannotWrite()
+    {
+        await Factory.EnsureSeededAsync();
+        var client = await GetAuthenticatedClientAsync();
+
+        var create = await client.PostAsJsonAsync("/api/v1/admin/api-keys", new
+        {
+            Name = "Read-Only Regression Test Key " + Guid.NewGuid(),
+            Scopes = new[] { "read" },
+            Roles = new[] { "Admin" },
+            ExpiresAt = (DateTime?)null,
+        });
+        Assert.Equal(HttpStatusCode.OK, create.StatusCode);
+        var created = await create.Content.ReadFromJsonAsync<JsonElement>();
+        var rawKey = created.GetProperty("key").GetString();
+
+        var apiKeyClient = Factory.CreateClient();
+        apiKeyClient.DefaultRequestHeaders.Add("X-API-Key", rawKey);
+
+        // Read access must still work.
+        var readCall = await apiKeyClient.GetAsync("/api/v1/applications");
+        Assert.Equal(HttpStatusCode.OK, readCall.StatusCode);
+
+        // Write access must be denied by scope, before the request ever reaches the controller
+        // (the body is deliberately empty — this must fail on scope, not on validation).
+        var writeCall = await apiKeyClient.PostAsJsonAsync("/api/v1/applications", new { });
+        Assert.Equal(HttpStatusCode.Forbidden, writeCall.StatusCode);
+
+        // A key with no Scopes configured at all must be completely unrestricted (unchanged
+        // pre-existing behavior) — additive tightening only applies once scopes are explicit.
+        var createUnscoped = await client.PostAsJsonAsync("/api/v1/admin/api-keys", new
+        {
+            Name = "Unscoped Regression Test Key " + Guid.NewGuid(),
+            Roles = new[] { "Admin" },
+            ExpiresAt = (DateTime?)null,
+        });
+        Assert.Equal(HttpStatusCode.OK, createUnscoped.StatusCode);
+        var createdUnscoped = await createUnscoped.Content.ReadFromJsonAsync<JsonElement>();
+        var unscopedKey = createdUnscoped.GetProperty("key").GetString();
+
+        var unscopedClient = Factory.CreateClient();
+        unscopedClient.DefaultRequestHeaders.Add("X-API-Key", unscopedKey);
+        var unscopedWriteCall = await unscopedClient.PostAsJsonAsync("/api/v1/applications", new { });
+        Assert.NotEqual(HttpStatusCode.Forbidden, unscopedWriteCall.StatusCode);
+    }
+
     // D12 — Webhooks created via the admin panel never fired: the trigger endpoint validated
     // against a single global config secret and looked up the workflow via an unrelated field,
     // ignoring the WebhookEndpoint row's own Secret/WorkflowId entirely.
@@ -105,43 +155,11 @@ public class RegressionTests : IntegrationTestBase
         Assert.Equal(HttpStatusCode.Accepted, withSecret.StatusCode);
     }
 
-    // D13 — Scheduled workflows never ran: WorkflowSchedule.NextRunAt was never populated by
-    // anything, so the escalation-style sweep this depends on could never find a due schedule.
-    // The background sweep itself is an IHostedService and is stripped from this test host by
-    // design (see R2WAIWebApplicationFactory), so this asserts the piece this test host *can*
-    // observe: a freshly created schedule starts with NextRunAt unset, exactly the precondition
-    // the fix's background sweep is responsible for seeding on its first pass.
-    [Fact]
-    public async Task D13_Schedule_CreatedViaApi_StartsWithNoNextRunAt()
-    {
-        await Factory.EnsureSeededAsync();
-        var client = await GetAuthenticatedClientAsync();
-
-        var wfCreate = await client.PostAsJsonAsync("/api/v1/workflows", new
-        {
-            Name = "Regression Schedule Target " + Guid.NewGuid(),
-            Type = "Manual",
-            Steps = "[]",
-        });
-        Assert.Equal(HttpStatusCode.Created, wfCreate.StatusCode);
-        var wf = await wfCreate.Content.ReadFromJsonAsync<JsonElement>();
-        var wfId = wf.GetProperty("id").GetGuid();
-
-        var schCreate = await client.PostAsJsonAsync("/api/v1/workflows/schedules", new
-        {
-            WorkflowId = wfId,
-            Name = "Regression Schedule " + Guid.NewGuid(),
-            CronExpression = "* * * * *",
-            CronDescription = "every minute",
-        });
-        Assert.Equal(HttpStatusCode.Created, schCreate.StatusCode);
-        var created = await schCreate.Content.ReadFromJsonAsync<JsonElement>();
-        var schId = created.GetProperty("id").GetGuid();
-
-        var fetched = await client.GetAsync($"/api/v1/workflows/schedules/{schId}");
-        var schedule = await fetched.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.False(schedule.TryGetProperty("nextRunAt", out var nextRunAt) && nextRunAt.ValueKind != JsonValueKind.Null);
-    }
+    // D13 regression test removed 2026-09-28: it covered WorkflowSchedule.NextRunAt seeding, and the
+    // whole cron-schedule feature (SchedulesController, WorkflowSchedule, WorkflowScheduleBackgroundService)
+    // was deleted as part of the R2WAI Studio transformation — scheduled/webhook-triggered automations
+    // are dropped with Elsa per the approved brief ("no workflow product/designer"). See
+    // docs/audit/R2WAI-IQ200-AUDIT-2026-09-20.md remediation log.
 
     // D15 — NotificationService sent every real-time notification via IHubContext<NotificationHub>,
     // which resolved to an unmapped duplicate class in a different namespace than the one Program.cs
@@ -214,11 +232,11 @@ public class RegressionTests : IntegrationTestBase
         });
         Assert.Equal(HttpStatusCode.Created, policyCreate.StatusCode);
 
-        using var scope = Factory.Services.CreateScope();
-        var approvalService = scope.ServiceProvider.GetRequiredService<IApprovalService>();
-        var dbContext = scope.ServiceProvider.GetRequiredService<R2WAI.Infrastructure.Persistence.ApplicationDbContext>();
         var tenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
         var adminUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        using var scope = SignedInScope(tenantId, adminUserId);
+        var approvalService = scope.ServiceProvider.GetRequiredService<IApprovalService>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<R2WAI.Infrastructure.Persistence.ApplicationDbContext>();
 
         var beforeCall = DateTime.UtcNow;
         var requestId = await approvalService.CreateApprovalRequestAsync(

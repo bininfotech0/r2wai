@@ -5,7 +5,9 @@ using Microsoft.EntityFrameworkCore;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Assistants.Commands;
 using R2WAI.Application.Features.Assistants.Queries;
+using R2WAI.Domain.Entities;
 using R2WAI.Domain.Enums;
+using R2WAI.Domain.Interfaces;
 using R2WAI.Infrastructure.AI.Prompts;
 using R2WAI.Infrastructure.Persistence;
 
@@ -20,7 +22,13 @@ public class AssistantsController(
     IAIService aiService,
     IKnowledgeBaseService knowledgeBaseService,
     IPromptTemplateService promptTemplateService,
+    IModelConfigurationResolver modelConfigResolver,
+    IAiUsagePolicyService aiUsagePolicyService,
+    IPiiPolicyService piiPolicyService,
+    IRepository<AuditLog> auditLogRepo,
+    IUnitOfWork unitOfWork,
     ICurrentUserService currentUser,
+    IChatStreamContext chatStreamContext,
     ILogger<AssistantsController> logger) : ControllerBase
 {
     [HttpPost]
@@ -32,9 +40,11 @@ public class AssistantsController(
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetList([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, [FromQuery] Guid? applicationId = null, CancellationToken ct = default)
+    public async Task<IActionResult> GetList([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, [FromQuery] Guid? applicationId = null, [FromQuery] PublishStatus? publishStatus = null, [FromQuery] string? sortBy = null, CancellationToken ct = default)
     {
-        var query = new GetAssistantsQuery { Page = page, PageSize = pageSize, Search = search, ApplicationId = applicationId };
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = new GetAssistantsQuery { Page = page, PageSize = pageSize, Search = search, ApplicationId = applicationId, PublishStatus = publishStatus, SortBy = sortBy };
         var result = await mediator.Send(query, ct);
         return Ok(result);
     }
@@ -73,6 +83,46 @@ public class AssistantsController(
         return NoContent();
     }
 
+    [HttpGet("{id:guid}/prompt-history")]
+    public async Task<IActionResult> GetPromptHistory(Guid id, CancellationToken ct = default)
+    {
+        var result = await mediator.Send(new GetAssistantPromptHistoryQuery { AssistantDefinitionId = id }, ct);
+        return Ok(result);
+    }
+
+    // docs/api/MISSING-BACKEND-ENDPOINTS.md §3.3 #63/#64 — mirrors KnowledgeBasesController's
+    // versions/rollback endpoints exactly (same pattern already proven on Workflows/KnowledgeBases/
+    // Capabilities).
+    [HttpGet("{id:guid}/versions")]
+    public async Task<IActionResult> GetVersions(Guid id, CancellationToken ct = default)
+    {
+        var result = await mediator.Send(new GetAssistantVersionsQuery { AssistantDefinitionId = id }, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/versions")]
+    public async Task<IActionResult> CreateVersion(Guid id, [FromBody] CreateAssistantVersionCommand command, CancellationToken ct = default)
+    {
+        command = command with { AssistantDefinitionId = id };
+        var result = await mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/versions/{versionId:guid}/rollback")]
+    public async Task<IActionResult> RollbackVersion(Guid id, Guid versionId, CancellationToken ct = default)
+    {
+        var result = await mediator.Send(new RollbackAssistantVersionCommand { VersionId = versionId }, ct);
+        return Ok(result);
+    }
+
+    // docs/api/MISSING-BACKEND-ENDPOINTS.md §3.3 #65 — the brief's "Duplicate" card action.
+    [HttpPost("{id:guid}/clone")]
+    public async Task<IActionResult> Clone(Guid id, CancellationToken ct = default)
+    {
+        var result = await mediator.Send(new CloneAssistantCommand { AssistantDefinitionId = id }, ct);
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+    }
+
     [HttpGet("prompt-templates")]
     public async Task<IActionResult> GetPromptTemplates(CancellationToken ct = default)
     {
@@ -85,16 +135,83 @@ public class AssistantsController(
         return Ok(new { items = templates.Select(t => new { type = t.Key, prompt = t.Value }) });
     }
 
+    public record SetPromptTemplateRequest(string Content);
+
+    [HttpPut("prompt-templates/{type}")]
+    public async Task<IActionResult> SetPromptTemplate(string type, [FromBody] SetPromptTemplateRequest request, CancellationToken ct = default)
+    {
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+
+        if (!Enum.TryParse<AssistantType>(type, ignoreCase: true, out var assistantType))
+            return BadRequest(new { error = $"'{type}' is not a known assistant type." });
+
+        if (string.IsNullOrWhiteSpace(request.Content))
+            return BadRequest(new { error = "Content is required." });
+
+        var content = await promptTemplateService.SetTemplateAsync(assistantType, tenantId, request.Content, ct);
+        return Ok(new { type = assistantType.ToString(), prompt = content });
+    }
+
+    [HttpDelete("prompt-templates/{type}")]
+    public async Task<IActionResult> ResetPromptTemplate(string type, CancellationToken ct = default)
+    {
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+
+        if (!Enum.TryParse<AssistantType>(type, ignoreCase: true, out var assistantType))
+            return BadRequest(new { error = $"'{type}' is not a known assistant type." });
+
+        await promptTemplateService.ResetTemplateAsync(assistantType, tenantId, ct);
+        return NoContent();
+    }
+
     [HttpPost("{id:guid}/publish")]
     public async Task<IActionResult> Publish(Guid id, CancellationToken ct = default)
     {
         var assistant = await dbContext.AssistantDefinitions.FirstOrDefaultAsync(a => a.Id == id, ct);
         if (assistant is null) return NotFound();
+        var checks = await GetPublishReadinessAsync(assistant, ct);
+        var blockers = checks.Where(check => !check.Ready).ToArray();
+        if (blockers.Length > 0)
+            return Conflict(new { message = "Resolve the readiness items before publishing.", checks = blockers });
         assistant.Publish();
         await dbContext.SaveChangesAsync(ct);
         logger.LogInformation("Assistant {Id} published", id);
         return Ok(new { id, isActive = true, status = "Published", publishedVersion = assistant.PublishedVersion });
     }
+
+    [HttpGet("{id:guid}/readiness")]
+    public async Task<IActionResult> GetPublishReadiness(Guid id, CancellationToken ct = default)
+    {
+        var assistant = await dbContext.AssistantDefinitions.FirstOrDefaultAsync(a => a.Id == id, ct);
+        if (assistant is null) return NotFound();
+        return Ok(new { checks = await GetPublishReadinessAsync(assistant, ct) });
+    }
+
+    private async Task<IReadOnlyList<AssistantPublishCheck>> GetPublishReadinessAsync(
+        AssistantDefinition assistant, CancellationToken ct)
+    {
+        var hasModel = assistant.ModelConfigurationId is Guid modelId
+            ? await dbContext.ModelConfigurations.AnyAsync(m => m.Id == modelId && m.TenantId == assistant.TenantId && m.IsActive, ct)
+            : await dbContext.ModelConfigurations.AnyAsync(m => m.TenantId == assistant.TenantId && m.IsDefault && m.IsActive, ct);
+        var knowledgeReady = assistant.KnowledgeBaseId is not Guid knowledgeBaseId ||
+            await dbContext.KnowledgeBases.AnyAsync(k => k.Id == knowledgeBaseId && k.TenantId == assistant.TenantId && k.Status == KnowledgeBaseStatus.Active, ct);
+
+        return new[]
+        {
+            new AssistantPublishCheck("Name configured", !string.IsNullOrWhiteSpace(assistant.Name),
+                string.IsNullOrWhiteSpace(assistant.Name) ? "Add a name to the assistant." : null),
+            new AssistantPublishCheck("Instructions configured", !string.IsNullOrWhiteSpace(assistant.SystemPrompt),
+                string.IsNullOrWhiteSpace(assistant.SystemPrompt) ? "Add instructions so the assistant knows how to respond." : null),
+            new AssistantPublishCheck("AI model available", hasModel,
+                hasModel ? null : "Choose an active model or set an active tenant default in AI Models."),
+            new AssistantPublishCheck("Selected knowledge source available", knowledgeReady,
+                assistant.KnowledgeBaseId is null
+                    ? "Optional; no knowledge base selected."
+                    : knowledgeReady ? null : "The selected knowledge base is unavailable. Choose an active knowledge base or remove it.")
+        };
+    }
+
+    private sealed record AssistantPublishCheck(string Label, bool Ready, string? Detail);
 
     [HttpPost("{id:guid}/unpublish")]
     public async Task<IActionResult> Unpublish(Guid id, CancellationToken ct = default)
@@ -153,6 +270,59 @@ public class AssistantsController(
             return;
         }
 
+        // Same Draft/Archived gate as the non-streaming ChatWithAssistantCommand — this SSE path
+        // bypasses MediatR entirely and previously bypassed the check along with it.
+        if (assistant.PublishStatus != PublishStatus.Published
+            && !currentUser.Roles.Contains("Admin") && !currentUser.Roles.Contains("SystemAdmin"))
+        {
+            logger.LogWarning("Denied StreamChat for assistant {AssistantId} — not published and requester lacks Admin/SystemAdmin", id);
+            await WriteSseEventAsync("error", new { message = "This assistant is not published." }, streamCt);
+            return;
+        }
+
+        // Policy Engine: same tenant-configured daily request cap ChatWithAssistantCommand
+        // enforces on the non-streaming chat endpoint — this SSE path bypassed it entirely.
+        if (!await aiUsagePolicyService.IsUnderCapAsync(assistant.TenantId, streamCt))
+        {
+            logger.LogWarning("Denied StreamChat for tenant {TenantId} — exceeds this tenant's configured AiUsage policy cap", assistant.TenantId);
+            await auditLogRepo.AddAsync(new AuditLog(Guid.NewGuid(), assistant.TenantId, AuditAction.Execute, "GlobalPolicy",
+                "AiUsage", currentUser.UserId, metadata: System.Text.Json.JsonSerializer.Serialize(new { status = "denied", reason = "exceeds daily AiUsage cap", source = "AssistantsController.StreamChat" })),
+                streamCt);
+            await unitOfWork.SaveChangesAsync(streamCt);
+            await WriteSseEventAsync("error", new
+            {
+                message = "This tenant has reached its configured daily AI usage limit. Please try again tomorrow, or ask an administrator to raise the limit."
+            }, streamCt);
+            return;
+        }
+        await aiUsagePolicyService.RecordRequestAsync(assistant.TenantId, streamCt);
+
+        // Policy Engine: same tenant-configured PII rule ChatWithAssistantCommand enforces on the
+        // non-streaming chat endpoint — this SSE path bypassed it entirely, same as AiUsage above.
+        var piiResult = await piiPolicyService.CheckAsync(command.Message, assistant.TenantId, streamCt);
+        if (piiResult.Blocked)
+        {
+            logger.LogWarning("Denied StreamChat for tenant {TenantId} — message contains PII ({Types}) and this tenant's policy blocks it",
+                assistant.TenantId, string.Join(", ", piiResult.DetectedTypes));
+            await auditLogRepo.AddAsync(new AuditLog(Guid.NewGuid(), assistant.TenantId, AuditAction.Execute, "GlobalPolicy",
+                "Pii", currentUser.UserId, metadata: System.Text.Json.JsonSerializer.Serialize(new { status = "denied", reason = "message contains PII", types = piiResult.DetectedTypes, source = "AssistantsController.StreamChat" })),
+                streamCt);
+            await unitOfWork.SaveChangesAsync(streamCt);
+            await WriteSseEventAsync("error", new
+            {
+                message = "This message appears to contain personal information this tenant's policy doesn't allow sending to the assistant. Please remove it and try again."
+            }, streamCt);
+            return;
+        }
+        if (piiResult.DetectedTypes.Count > 0)
+        {
+            await auditLogRepo.AddAsync(new AuditLog(Guid.NewGuid(), assistant.TenantId, AuditAction.Execute, "GlobalPolicy",
+                "Pii", currentUser.UserId, metadata: System.Text.Json.JsonSerializer.Serialize(new { status = "redacted", types = piiResult.DetectedTypes, source = "AssistantsController.StreamChat" })),
+                streamCt);
+            await unitOfWork.SaveChangesAsync(streamCt);
+        }
+        var effectiveMessage = piiResult.ProcessedText;
+
         string? context = null;
         List<CitationDto>? citations = null;
 
@@ -161,7 +331,7 @@ public class AssistantsController(
             try
             {
                 var searchResult = await knowledgeBaseService.SearchKnowledgeBaseAsync(
-                    assistant.KnowledgeBaseId.Value, command.Message, 1, 5, streamCt);
+                    assistant.KnowledgeBaseId.Value, effectiveMessage, 1, 5, streamCt);
 
                 if (searchResult.Items.Count > 0)
                 {
@@ -192,14 +362,57 @@ public class AssistantsController(
               "to answer questions about what you do or who you are. If you need an assistant ID for some other tool, " +
               "use the ID above directly, never guess or leave it blank.]";
 
-        await foreach (var chunk in aiService.StreamChatAsync(command.Message, context, systemPrompt, enableTools: true, ct: streamCt))
+        var behaviorSettings = assistant.GetBehaviorSettings();
+        var behaviorAddendum = behaviorSettings?.BuildPromptAddendum();
+        if (!string.IsNullOrEmpty(behaviorAddendum))
+            systemPrompt += $"\n\n[Response style: {behaviorAddendum}]";
+        if (behaviorSettings?.CitationsEnabled == false)
+            citations = null;
+
+        var modelConfig = await modelConfigResolver.ResolveAsync(assistant.ModelConfigurationId, assistant.TenantId, streamCt);
+        if (modelConfig is not null && behaviorSettings is not null && (behaviorSettings.Temperature.HasValue || behaviorSettings.MaxOutputTokens.HasValue))
+            modelConfig = modelConfig with
+            {
+                Temperature = behaviorSettings.Temperature ?? modelConfig.Temperature,
+                MaxTokens = behaviorSettings.MaxOutputTokens ?? modelConfig.MaxTokens
+            };
+
+        chatStreamContext.OnProgress = evt => evt.Kind == ToolCallProgressKind.Started
+            ? WriteSseEventAsync("toolCallStarted", new { toolName = evt.ToolName }, streamCt)
+            : WriteSseEventAsync("toolCallCompleted", new { toolName = evt.ToolName, success = evt.Success ?? true }, streamCt);
+
+        try
         {
-            await WriteSseEventAsync("chunk", new { content = chunk }, streamCt);
+            await foreach (var chunk in aiService.StreamChatAsync(effectiveMessage, context, systemPrompt, enableTools: true, modelConfig: modelConfig, enabledToolIds: assistant.GetEnabledToolIds(), ct: streamCt))
+            {
+                await WriteSseEventAsync("chunk", new { content = chunk }, streamCt);
+            }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            // A repository research pass found this codebase's own established pattern — every
+            // other failure mode above (not found, not published, over cap, PII blocked) emits a
+            // clean "error" SSE event — was missing here specifically: a provider failure mid-stream
+            // (timeout, bad key, unreachable host) used to just drop the connection silently, with no
+            // error/done event at all. `!ct.IsCancellationRequested` (the caller's own token, not
+            // streamCt, which also trips on our own 5-minute ceiling) distinguishes "the client is
+            // still there, tell them" from "the client already disconnected, there's no one to tell" —
+            // in the latter case this filter doesn't match and the exception propagates normally.
+            logger.LogWarning(ex, "AI provider failed mid-stream for assistant {AssistantId}", id);
+            await WriteSseEventAsync("error", new { message = "The AI service failed while generating a response. Please try again." }, ct);
+            return;
         }
 
         if (citations is { Count: > 0 })
         {
             await WriteSseEventAsync("citations", new { citations }, streamCt);
+        }
+
+        // Response cards (Phase 3) — this SSE path is ephemeral (no Message row to persist to), so the
+        // card travels as its own event instead of a MessageDto.contentBlocks round-trip.
+        if (chatStreamContext.CapturedContentBlock is { } capturedBlock)
+        {
+            await WriteSseEventAsync("contentBlocks", new { contentBlocks = capturedBlock }, streamCt);
         }
 
         await WriteSseEventAsync("done", new { message = "Stream complete" }, streamCt);
@@ -234,7 +447,10 @@ public class AssistantsController(
                 "  \"systemPrompt\": \"<Detailed behavioral system prompt, 150-350 words, professional tone>\"\n" +
                 "}";
 
-            var raw = await aiService.GenerateResponseAsync(prompt, ct: ct);
+            var modelConfig = currentUser.TenantId.HasValue
+                ? await modelConfigResolver.ResolveAsync(null, currentUser.TenantId.Value, ct)
+                : null;
+            var raw = await aiService.GenerateResponseAsync(prompt, modelConfig: modelConfig, ct: ct);
 
             var json = raw.Trim();
             if (json.StartsWith("```json", StringComparison.OrdinalIgnoreCase)) json = json[7..];

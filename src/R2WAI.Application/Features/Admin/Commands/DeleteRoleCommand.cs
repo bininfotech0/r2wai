@@ -36,11 +36,12 @@ public class DeleteRoleCommandHandler(
         var tenantId = currentUser.TenantId;
         if (tenantId.HasValue)
         {
-            for (var page = 1; page <= 10; page++)
-            {
-                foreach (var size in new[] { 20, 50, 100 })
-                    await cacheService.RemoveAsync($"roles:{tenantId}:p{page}:s{size}", cancellationToken);
-            }
+            // Concurrent, not sequential -- 30 independent keys awaited one at a time each pays a
+            // full cache-timeout penalty when the backend is slow/unreachable (measured live as a
+            // multi-minute hang elsewhere; see AssistantCacheKeys.InvalidateAsync).
+            var removals = Enumerable.Range(1, 10).SelectMany(page => new[] { 20, 50, 100 }
+                .Select(size => cacheService.RemoveAsync($"roles:{tenantId}:p{page}:s{size}", cancellationToken)));
+            await Task.WhenAll(removals);
         }
 
         return Unit.Value;

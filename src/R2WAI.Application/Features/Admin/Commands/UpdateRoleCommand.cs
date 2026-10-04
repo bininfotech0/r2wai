@@ -41,11 +41,10 @@ public class UpdateRoleCommandHandler(
         var tenantId = currentUser.TenantId;
         if (tenantId.HasValue)
         {
-            for (var page = 1; page <= 10; page++)
-            {
-                foreach (var size in new[] { 20, 50, 100 })
-                    await cacheService.RemoveAsync($"roles:{tenantId}:p{page}:s{size}", cancellationToken);
-            }
+            // Concurrent, not sequential -- see DeleteRoleCommand's matching fix for why.
+            var removals = Enumerable.Range(1, 10).SelectMany(page => new[] { 20, 50, 100 }
+                .Select(size => cacheService.RemoveAsync($"roles:{tenantId}:p{page}:s{size}", cancellationToken)));
+            await Task.WhenAll(removals);
         }
 
         return mapper.Map<RoleDto>(role);

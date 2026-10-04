@@ -6,7 +6,7 @@ public record AssignUserRolesCommand : IRequest<UserDto>, IAuthorizedRequest
 {
     public Guid UserId { get; init; }
     public List<Guid> RoleIds { get; init; } = [];
-    public string[] RequiredRoles => ["Admin", "SystemAdmin", "UserManager"];
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
 }
 
 public class AssignUserRolesCommandValidator : AbstractValidator<AssignUserRolesCommand>

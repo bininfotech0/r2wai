@@ -24,6 +24,9 @@ public class ApprovalRequestConfiguration : IEntityTypeConfiguration<ApprovalReq
         builder.Property(ar => ar.ApproverRole)
             .HasMaxLength(100);
 
+        builder.Property(ar => ar.Subject)
+            .HasMaxLength(ApprovalRequest.MaxSubjectLength);
+
         builder.Property(ar => ar.RequestedAt).IsRequired();
         builder.Property(ar => ar.RespondedAt);
         builder.Property(ar => ar.DueAt);

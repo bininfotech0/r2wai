@@ -14,7 +14,17 @@ public class RedisHealthCheck(IConfiguration configuration, ILogger<RedisHealthC
 
         try
         {
-            var redis = await StackExchange.Redis.ConnectionMultiplexer.ConnectAsync(connStr);
+            // Bounded ConnectTimeout: an unbounded Connect/ConnectAsync against an unreachable Redis
+            // can hang for well over a minute on StackExchange.Redis's default retry/backoff (see
+            // RedisCacheService's matching fix) — this endpoint backs /health and /health/ready, so
+            // that hang would make the whole app look unresponsive to a readiness probe, not just
+            // report Redis as down.
+            var options = StackExchange.Redis.ConfigurationOptions.Parse(connStr);
+            options.AbortOnConnectFail = false;
+            options.ConnectTimeout = 3000;
+            options.ConnectRetry = 1;
+            options.SyncTimeout = 1000;
+            var redis = await StackExchange.Redis.ConnectionMultiplexer.ConnectAsync(options);
             await redis.GetDatabase().PingAsync();
             await redis.CloseAsync();
             return HealthCheckResult.Healthy("Redis is reachable");

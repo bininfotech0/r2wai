@@ -21,6 +21,8 @@ public class SecurityHeadersMiddleware
         context.Response.Headers["Content-Security-Policy"] = _csp;
         context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
         context.Response.Headers["X-Frame-Options"] = "DENY";
+        context.Response.Headers["Cross-Origin-Opener-Policy"] = "same-origin";
+        context.Response.Headers["Cross-Origin-Resource-Policy"] = "same-origin";
 
         if (context.Request.Path.StartsWithSegments("/api"))
             context.Response.Headers["Cache-Control"] = "no-store";

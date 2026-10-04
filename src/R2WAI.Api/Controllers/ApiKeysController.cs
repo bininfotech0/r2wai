@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using R2WAI.Api.Services;
 using R2WAI.Domain.Entities;
 using R2WAI.Infrastructure.Persistence;
 
@@ -23,6 +24,11 @@ public class ApiKeysController(ApplicationDbContext dbContext, ILogger<ApiKeysCo
         var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
         return claim != null && Guid.TryParse(claim.Value, out var uid) ? uid : Guid.Empty;
     }
+
+    private IActionResult RoleCheckFailure(ApiKeyRolePolicy.Result check) =>
+        check.IsForbidden
+            ? StatusCode(StatusCodes.Status403Forbidden, new { error = check.Error })
+            : BadRequest(new { error = check.Error });
 
     [HttpGet]
     public async Task<IActionResult> GetAll(
@@ -104,12 +110,16 @@ public class ApiKeysController(ApplicationDbContext dbContext, ILogger<ApiKeysCo
         var tenantId = GetTenantId();
         var userId = GetUserId();
 
+        var roleCheck = ApiKeyRolePolicy.Check(request.Roles, role => User.IsInRole(role));
+        if (!roleCheck.IsValid)
+            return RoleCheckFailure(roleCheck);
+
         var rawKey = $"r2w_{GenerateRandomKey(32)}";
         var keyHash = HashKey(rawKey);
         var keyPrefix = rawKey[..8];
 
         var scopes = request.Scopes is { Length: > 0 } ? string.Join(",", request.Scopes) : null;
-        var roles = request.Roles is { Length: > 0 } ? string.Join(",", request.Roles) : null;
+        var roles = roleCheck.Roles.Length > 0 ? string.Join(",", roleCheck.Roles) : null;
 
         var apiKey = new ApiKey(
             Guid.NewGuid(), tenantId, request.Name, keyHash, keyPrefix,
@@ -143,8 +153,12 @@ public class ApiKeysController(ApplicationDbContext dbContext, ILogger<ApiKeysCo
             .FirstOrDefaultAsync(k => k.Id == id && !k.IsDeleted && k.TenantId == tenantId, ct);
         if (apiKey is null) return NotFound();
 
+        var roleCheck = ApiKeyRolePolicy.Check(request.Roles, role => User.IsInRole(role));
+        if (!roleCheck.IsValid)
+            return RoleCheckFailure(roleCheck);
+
         var scopes = request.Scopes is { Length: > 0 } ? string.Join(",", request.Scopes) : null;
-        var roles = request.Roles is { Length: > 0 } ? string.Join(",", request.Roles) : null;
+        var roles = roleCheck.Roles.Length > 0 ? string.Join(",", roleCheck.Roles) : null;
 
         apiKey.Update(request.Name, scopes, roles, request.ExpiresAt);
         await dbContext.SaveChangesAsync(ct);

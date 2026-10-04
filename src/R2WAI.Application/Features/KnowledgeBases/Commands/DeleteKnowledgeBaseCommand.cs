@@ -16,16 +16,15 @@ public class DeleteKnowledgeBaseCommandValidator : AbstractValidator<DeleteKnowl
 }
 
 public class DeleteKnowledgeBaseCommandHandler(
-    IRepository<KnowledgeBase> kbRepo,
-    IUnitOfWork unitOfWork) : IRequestHandler<DeleteKnowledgeBaseCommand, Unit>
+    IKnowledgeBaseService knowledgeBaseService) : IRequestHandler<DeleteKnowledgeBaseCommand, Unit>
 {
     public async Task<Unit> Handle(DeleteKnowledgeBaseCommand command, CancellationToken cancellationToken)
     {
-        var kb = await kbRepo.GetByIdAsync(command.Id, cancellationToken)
-            ?? throw new NotFoundException(nameof(KnowledgeBase), command.Id);
-
-        kb.SoftDelete();
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        // Routed through IKnowledgeBaseService rather than repo.SoftDelete() directly: the service
+        // purges the vector collection before soft-deleting the row. The previous handler only
+        // soft-deleted, so every chunk of the knowledge base stayed in vector_embeddings — still
+        // matching searches, still being handed to models, and never garbage-collected.
+        await knowledgeBaseService.DeleteKnowledgeBaseAsync(command.Id, cancellationToken);
 
         return Unit.Value;
     }

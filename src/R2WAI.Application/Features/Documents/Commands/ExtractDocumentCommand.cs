@@ -20,6 +20,7 @@ public class ExtractDocumentCommandValidator : AbstractValidator<ExtractDocument
 public class ExtractDocumentCommandHandler(
     IRepository<Document> documentRepo,
     IAIService aiService,
+    IModelConfigurationResolver modelConfigResolver,
     IStorageService storageService) : IRequestHandler<ExtractDocumentCommand, ExtractionResultDto>
 {
     public async Task<ExtractionResultDto> Handle(ExtractDocumentCommand command, CancellationToken cancellationToken)
@@ -31,7 +32,8 @@ public class ExtractDocumentCommandHandler(
         using var reader = new StreamReader(stream);
         var content = await reader.ReadToEndAsync(cancellationToken);
 
-        var extracted = await aiService.ExtractDataAsync(content, command.Schema, cancellationToken);
+        var modelConfig = await modelConfigResolver.ResolveAsync(null, document.TenantId, cancellationToken);
+        var extracted = await aiService.ExtractDataAsync(content, command.Schema, modelConfig, cancellationToken);
 
         return new ExtractionResultDto
         {

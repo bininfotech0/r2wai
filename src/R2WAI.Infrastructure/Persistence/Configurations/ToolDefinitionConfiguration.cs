@@ -34,6 +34,9 @@ public class ToolDefinitionConfiguration : IEntityTypeConfiguration<ToolDefiniti
         builder.Property(t => t.Configuration)
             .HasColumnType("jsonb");
 
+        builder.Property(t => t.McpToolName)
+            .HasMaxLength(200);
+
         builder.Property(t => t.IsActive)
             .IsRequired()
             .HasDefaultValue(true);
@@ -58,6 +61,11 @@ public class ToolDefinitionConfiguration : IEntityTypeConfiguration<ToolDefiniti
             .IsRequired()
             .HasDefaultValue(true);
 
+        builder.Property(t => t.LastTestStatus)
+            .HasMaxLength(20);
+
+        builder.Property(t => t.LastTestedAt);
+
         builder.Property(t => t.CreatedAt).IsRequired();
         builder.Property(t => t.ModifiedAt);
 
@@ -74,6 +82,11 @@ public class ToolDefinitionConfiguration : IEntityTypeConfiguration<ToolDefiniti
         builder.HasOne(t => t.ApplicationApi)
             .WithMany()
             .HasForeignKey(t => t.ApplicationApiId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(t => t.McpServerConnection)
+            .WithMany()
+            .HasForeignKey(t => t.McpServerConnectionId)
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(t => new { t.TenantId, t.Name });

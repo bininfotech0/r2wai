@@ -5,10 +5,10 @@ import { chromium } from 'playwright';
 import https from 'https';
 import http from 'http';
 
-const API = 'http://localhost:5000/api/v1';
-const WEB = 'http://localhost:8080';
-const EMAIL = 'admin@r2wai.io';
-const PASSWORD = 'R2wai_Admin!2026';
+import { API_URL, EMAIL, PASSWORD } from './helpers/test-env.mjs';
+
+const API = `${API_URL}/api/v1`;
+const WEB = process.env.R2WAI_WEB_URL ?? 'http://localhost:8080';
 
 let TOKEN = '';
 const results = [];

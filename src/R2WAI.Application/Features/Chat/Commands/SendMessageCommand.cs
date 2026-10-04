@@ -29,6 +29,8 @@ public class SendMessageCommandHandler(
     ICurrentUserService currentUser,
     IAIService aiService,
     IStreamingNotificationService streamingService,
+    IChatStreamContext chatStreamContext,
+    IConversationMemoryService conversationMemory,
     IStorageService storageService,
     IMapper mapper,
     IIdempotencyStore idempotencyStore,
@@ -91,14 +93,20 @@ public class SendMessageCommandHandler(
 
         try
         {
-            // Build conversation history for context
-            var history = string.Join("\n", conversation.Messages
-                .OrderBy(m => m.CreatedAt)
-                .TakeLast(10)
-                .Select(m => $"{(m.Role == MessageRole.User ? "User" : "Assistant")}: {m.Content}"));
+            // Build conversation history for context — was previously an inline TakeLast(10) join
+            // that bypassed IConversationMemoryService entirely, meaning Phase 6's summarization
+            // feature (AI:ContextMemory:SummarizationEnabled) could never actually fire from this,
+            // the real live chat entry point behind useChatSession. Fixed to route through the same
+            // seam ChatService.SendMessageAsync already used (that class is being retired as dead
+            // code — this is now the one real caller).
+            var history = await conversationMemory.BuildConversationContextAsync(command.ConversationId, cancellationToken);
 
             var responseBuffer = new System.Text.StringBuilder();
-            
+
+            chatStreamContext.OnProgress = evt => evt.Kind == ToolCallProgressKind.Started
+                ? streamingService.SendToolCallStartedAsync(command.ConversationId, evt.ToolName, cancellationToken)
+                : streamingService.SendToolCallCompletedAsync(command.ConversationId, evt.ToolName, evt.Success ?? true, cancellationToken);
+
             await foreach (var chunk in aiService.StreamChatAsync(command.Content, history, null, enableTools: true, ct: cancellationToken))
             {
                 responseBuffer.Append(chunk);
@@ -107,7 +115,8 @@ public class SendMessageCommandHandler(
 
             var aiResponse = responseBuffer.ToString();
             var assistantMessage = conversation.AddMessage(
-                Guid.NewGuid(), userMessage.Id, MessageRole.Assistant, aiResponse);
+                Guid.NewGuid(), userMessage.Id, MessageRole.Assistant, aiResponse,
+                contentBlocks: chatStreamContext.CapturedContentBlock);
             await messageRepo.AddAsync(assistantMessage, cancellationToken);
             assistantMessage.UpdateStatus(MessageStatus.Completed);
 
@@ -127,6 +136,20 @@ public class SendMessageCommandHandler(
             logger.LogError(ex, "AI processing failed for message {MessageId}", userMessage.Id);
             userMessage.UpdateStatus(MessageStatus.Failed);
             await unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Persisting Failed status above is durable but silent — the client actively watching
+            // this conversation's SignalR group was mid-stream and would otherwise just stop
+            // receiving chunks with no explanation at all. Best-effort: a failure to notify must
+            // never mask or replace the real exception below.
+            try
+            {
+                await streamingService.SendStreamErrorAsync(command.ConversationId, "The AI service failed while generating a response. Please try again.", cancellationToken);
+            }
+            catch (Exception notifyEx)
+            {
+                logger.LogWarning(notifyEx, "Failed to notify conversation {ConversationId} of the stream error", command.ConversationId);
+            }
+
             throw;
         }
     }

@@ -11,6 +11,7 @@ public class DocumentService : IDocumentService
     private readonly IStorageService _storageService;
     private readonly IAIService _aiService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IModelConfigurationResolver _modelConfigResolver;
     private readonly FileProcessingService _fileProcessingService;
     private readonly IVectorStoreService _vectorStore;
     private readonly ILogger<DocumentService> _logger;
@@ -20,6 +21,7 @@ public class DocumentService : IDocumentService
         IStorageService storageService,
         IAIService aiService,
         ICurrentUserService currentUserService,
+        IModelConfigurationResolver modelConfigResolver,
         FileProcessingService fileProcessingService,
         IVectorStoreService vectorStore,
         ILogger<DocumentService> logger)
@@ -28,6 +30,7 @@ public class DocumentService : IDocumentService
         _storageService = storageService;
         _aiService = aiService;
         _currentUserService = currentUserService;
+        _modelConfigResolver = modelConfigResolver;
         _fileProcessingService = fileProcessingService;
         _vectorStore = vectorStore;
         _logger = logger;
@@ -60,10 +63,20 @@ public class DocumentService : IDocumentService
         return MapToDto(document);
     }
 
-    public async Task ProcessDocumentAsync(Guid documentId, CancellationToken ct = default)
+    public async Task ProcessDocumentAsync(Guid documentId, CancellationToken ct = default, Guid? expectedTenantId = null)
     {
-        var document = await _context.Documents
-            .FirstOrDefaultAsync(d => d.Id == documentId, ct);
+        // IgnoreQueryFilters only when the caller supplied expectedTenantId — IndexDocumentJobHandler
+        // (queued for every document upload, no HttpContext/ambient tenant) would otherwise always get
+        // NotFound here under the fail-closed tenant filter, and BackgroundJobProcessor's retry/dead-letter
+        // path would silently swallow every document's indexing forever. The explicit equality check is
+        // what keeps this safe: a caller-verified tenant match substituting for the ambient claim, not a
+        // bypass. ProcessDocumentCommand (the authenticated manual reprocess/reindex trigger) passes null
+        // and keeps relying on the ambient filter as its real cross-tenant guard — see
+        // KnowledgeBaseService.SearchKnowledgeBaseAsync for the identical pattern and full reasoning.
+        var documentQuery = expectedTenantId.HasValue
+            ? _context.Documents.IgnoreQueryFilters().Where(d => d.TenantId == expectedTenantId.Value)
+            : _context.Documents;
+        var document = await documentQuery.FirstOrDefaultAsync(d => d.Id == documentId, ct);
 
         if (document is null)
             throw new NotFoundException(nameof(Document), documentId);
@@ -95,8 +108,18 @@ public class DocumentService : IDocumentService
             {
                 try
                 {
-                    var kb = await _context.KnowledgeBases
-                        .FirstOrDefaultAsync(k => k.Id == document.KnowledgeBaseId.Value, ct);
+                    // Same expectedTenantId-or-ambient pattern as the document fetch above, and for
+                    // the identical reason: IndexDocumentJobHandler's background call (expectedTenantId
+                    // set, no ambient tenant) would otherwise always get null here under the fail-closed
+                    // filter — silently skipping embedding/indexing for every background-processed
+                    // document, even though the document row itself resolved correctly two steps ago.
+                    // document.TenantId is already verified-correct at this point (resolved under
+                    // whichever of the two safe paths above matched), so reusing it as the explicit
+                    // equality check is a caller-verified tenant match, not a bypass.
+                    var kbQuery = expectedTenantId.HasValue
+                        ? _context.KnowledgeBases.IgnoreQueryFilters().Where(k => k.TenantId == document.TenantId)
+                        : _context.KnowledgeBases;
+                    var kb = await kbQuery.FirstOrDefaultAsync(k => k.Id == document.KnowledgeBaseId.Value, ct);
 
                     if (kb is not null && !string.IsNullOrEmpty(kb.VectorCollectionName))
                     {
@@ -109,6 +132,11 @@ public class DocumentService : IDocumentService
                         using var indexingCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                         indexingCts.CancelAfter(IndexingTimeout);
 
+                        // Re-indexing replaces rather than appends — see DeterministicChunkId. The
+                        // prior copy still has to go first, because a document that shrank leaves
+                        // stale high-index chunks the upsert can no longer overwrite.
+                        await DeleteSourceVectorsQuietlyAsync(kb.VectorCollectionName, document.Id, indexingCts.Token);
+
                         var embeddings = await _aiService.GenerateEmbeddingsAsync(chunks, indexingCts.Token);
                         var vectors = new List<(Guid Id, float[] Vector, Dictionary<string, object> Payload)>();
 
@@ -118,7 +146,7 @@ public class DocumentService : IDocumentService
                             if (embedding is null || embedding.Count == 0) continue;
 
                             vectors.Add((
-                                Guid.NewGuid(),
+                                DeterministicChunkId.ForSourceChunk(document.Id, i),
                                 [.. embedding],
                                 new Dictionary<string, object>
                                 {
@@ -146,13 +174,13 @@ public class DocumentService : IDocumentService
 
             document.UpdateStatus(DocumentStatus.Ready);
 
-            document.AddDomainEvent(new DocumentProcessedEvent(document.Id, document.TenantId, true, null, chunks.Count));
+            document.AddDomainEvent(new DocumentProcessedEvent(document.Id, document.TenantId, document.UserId, document.Name, true, null, chunks.Count));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing document {DocumentId}", documentId);
             document.UpdateStatus(DocumentStatus.Failed, ex.Message);
-            document.AddDomainEvent(new DocumentProcessedEvent(document.Id, document.TenantId, false, ex.Message));
+            document.AddDomainEvent(new DocumentProcessedEvent(document.Id, document.TenantId, document.UserId, document.Name, false, ex.Message));
         }
 
         await _context.SaveChangesAsync(ct);
@@ -172,8 +200,36 @@ public class DocumentService : IDocumentService
             catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete file {FilePath}", document.FilePath); }
         }
 
+        // Purge the document's chunks. Soft-deleting the row alone left every one of its embeddings
+        // in the collection, still matching searches and still being fed to models — the content was
+        // supposed to be gone. Only ever called from the authenticated delete handler, so the
+        // ambient tenant filter is the right boundary here (no expectedTenantId escape hatch needed,
+        // unlike the background indexing path).
+        if (document.KnowledgeBaseId is { } kbId)
+        {
+            var collectionName = await _context.KnowledgeBases
+                .Where(k => k.Id == kbId)
+                .Select(k => k.VectorCollectionName)
+                .FirstOrDefaultAsync(ct);
+
+            if (!string.IsNullOrEmpty(collectionName))
+                await DeleteSourceVectorsQuietlyAsync(collectionName, document.Id, ct);
+        }
+
         document.SoftDelete();
         await _context.SaveChangesAsync(ct);
+    }
+
+    private async Task DeleteSourceVectorsQuietlyAsync(string collectionName, Guid sourceId, CancellationToken ct)
+    {
+        try
+        {
+            await _vectorStore.DeleteVectorsBySourceAsync(collectionName, sourceId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to remove vectors for source {SourceId} from {Collection}", sourceId, collectionName);
+        }
     }
 
     public async Task<PagedResult<DocumentDto>> GetDocumentsAsync(Guid tenantId, int page, int pageSize, Guid? knowledgeBaseId, CancellationToken ct = default)
@@ -220,7 +276,8 @@ public class DocumentService : IDocumentService
             throw new NotFoundException(nameof(Document), documentId);
 
         var text = await ReadDocumentTextAsync(document, ct);
-        var summary = await _aiService.SummarizeTextAsync(text, 500, ct);
+        var modelConfig = await _modelConfigResolver.ResolveAsync(null, document.TenantId, ct);
+        var summary = await _aiService.SummarizeTextAsync(text, 500, modelConfig, ct);
 
         return new DocumentSummaryDto
         {
@@ -239,7 +296,8 @@ public class DocumentService : IDocumentService
             throw new NotFoundException(nameof(Document), documentId);
 
         var text = await ReadDocumentTextAsync(document, ct);
-        var extracted = await _aiService.ExtractDataAsync(text, schema, ct);
+        var modelConfig = await _modelConfigResolver.ResolveAsync(null, document.TenantId, ct);
+        var extracted = await _aiService.ExtractDataAsync(text, schema, modelConfig, ct);
 
         return new ExtractionResultDto
         {
@@ -260,7 +318,8 @@ public class DocumentService : IDocumentService
 
         var sourceText = await ReadDocumentTextAsync(sourceDoc, ct);
         var targetText = await ReadDocumentTextAsync(targetDoc, ct);
-        var comparison = await _aiService.CompareDocumentsAsync(sourceText, targetText, ct);
+        var modelConfig = await _modelConfigResolver.ResolveAsync(null, sourceDoc.TenantId, ct);
+        var comparison = await _aiService.CompareDocumentsAsync(sourceText, targetText, modelConfig, ct);
 
         return new ComparisonResultDto
         {
@@ -279,7 +338,8 @@ public class DocumentService : IDocumentService
             throw new NotFoundException(nameof(Document), documentId);
 
         var text = await ReadDocumentTextAsync(document, ct);
-        return await _aiService.AnswerQuestionAsync(question, text, ct);
+        var modelConfig = await _modelConfigResolver.ResolveAsync(null, document.TenantId, ct);
+        return await _aiService.AnswerQuestionAsync(question, text, modelConfig, ct);
     }
 
     private async Task<string> ExtractTextAsync(Document document, CancellationToken ct)

@@ -11,13 +11,21 @@ namespace R2WAI.Api.Logging;
 /// </summary>
 public class SensitiveDataDestructuringPolicy : IDestructuringPolicy
 {
-    private static readonly HashSet<string> SensitiveFields = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "password", "passwordHash", "secret", "secretKey", "apiKey",
-        "token", "accessToken", "refreshToken", "refreshTokenHash",
-        "smtpPassword", "clientSecret", "encryptionKey",
-        "creditCard", "ssn", "socialSecurity"
-    };
+    // Matched as a case-insensitive SUBSTRING of the property name, not an exact match --
+    // exact-match missed real secret-bearing properties whose name embeds one of these terms as
+    // part of a longer, more specific name (e.g. CreateApplicationApiCommand.CredentialSecret,
+    // RegenerateWebhookKeyResultDto.RawKey), which fell through to Serilog's default destructuring
+    // and got logged in plaintext despite this policy existing specifically to prevent that. A
+    // safety net for secrets should fail toward over-masking an incidental non-secret field (e.g.
+    // KeyPrefix) rather than under-masking a real one.
+    private static readonly string[] SensitiveNameFragments =
+    [
+        "password", "secret", "apikey", "token", "credential", "rawkey",
+        "encryptionkey", "creditcard", "ssn", "socialsecurity"
+    ];
+
+    internal static bool IsSensitiveName(string name) =>
+        SensitiveNameFragments.Any(f => name.Contains(f, StringComparison.OrdinalIgnoreCase));
 
     public bool TryDestructure(object value, ILogEventPropertyValueFactory propertyValueFactory, out LogEventPropertyValue? result)
     {
@@ -28,7 +36,7 @@ public class SensitiveDataDestructuringPolicy : IDestructuringPolicy
             return false;
 
         var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        if (properties.Length == 0 || !properties.Any(p => SensitiveFields.Contains(p.Name)))
+        if (properties.Length == 0 || !properties.Any(p => IsSensitiveName(p.Name)))
             return false; // nothing sensitive here — let Serilog's default policies handle it
 
         var logProperties = new List<LogEventProperty>(properties.Length);
@@ -36,7 +44,7 @@ public class SensitiveDataDestructuringPolicy : IDestructuringPolicy
         {
             if (prop.GetIndexParameters().Length > 0) continue;
 
-            if (SensitiveFields.Contains(prop.Name))
+            if (IsSensitiveName(prop.Name))
             {
                 logProperties.Add(new LogEventProperty(prop.Name, new ScalarValue("***MASKED***")));
                 continue;
@@ -56,17 +64,10 @@ public class SensitiveDataDestructuringPolicy : IDestructuringPolicy
 
 public class SensitiveDataEnricher : ILogEventEnricher
 {
-    private static readonly HashSet<string> SensitivePropertyNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Password", "PasswordHash", "SecretKey", "ApiKey", "Token",
-        "AccessToken", "RefreshToken", "RefreshTokenHash",
-        "SmtpPassword", "ClientSecret", "EncryptionKey"
-    };
-
     public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
     {
         var propertiesToMask = logEvent.Properties
-            .Where(p => SensitivePropertyNames.Contains(p.Key))
+            .Where(p => SensitiveDataDestructuringPolicy.IsSensitiveName(p.Key))
             .Select(p => p.Key)
             .ToList();
 

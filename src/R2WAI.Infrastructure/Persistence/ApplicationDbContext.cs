@@ -27,18 +27,24 @@ public interface ITenantDbContext
     DbSet<KnowledgeBaseSource> KnowledgeBaseSources { get; }
     DbSet<Chatbot> Chatbots { get; }
     DbSet<Workflow> Workflows { get; }
+    DbSet<WorkflowVersion> WorkflowVersions { get; }
     DbSet<WorkflowInstance> WorkflowInstances { get; }
     DbSet<WorkflowStepExecution> WorkflowStepExecutions { get; }
     DbSet<AssistantDefinition> AssistantDefinitions { get; }
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<Notification> Notifications { get; }
     DbSet<ModelConfiguration> ModelConfigurations { get; }
     DbSet<UserRole> UserRoles { get; }
     DbSet<Role> Roles { get; }
     DbSet<ApprovalRequest> ApprovalRequests { get; }
     DbSet<ApprovalPolicy> ApprovalPolicies { get; }
+    DbSet<ApprovalNotificationDispatch> ApprovalNotificationDispatches { get; }
     DbSet<ToolDefinition> ToolDefinitions { get; }
+    DbSet<ToolDefinitionVersion> ToolDefinitionVersions { get; }
+    DbSet<BusinessCapability> BusinessCapabilities { get; }
+    DbSet<KnowledgeBaseVersion> KnowledgeBaseVersions { get; }
     DbSet<PromptTemplate> PromptTemplates { get; }
-    DbSet<WorkflowSchedule> WorkflowSchedules { get; }
+    DbSet<AssistantPromptHistory> AssistantPromptHistories { get; }
     DbSet<WebhookEndpoint> WebhookEndpoints { get; }
     DbSet<ApiKey> ApiKeys { get; }
     DbSet<ChatbotChannel> ChatbotChannels { get; }
@@ -46,15 +52,11 @@ public interface ITenantDbContext
     DbSet<TestRun> TestRuns { get; }
     DbSet<TestCaseResult> TestCaseResults { get; }
     DbSet<AccessRequest> AccessRequests { get; }
-    DbSet<MemberWallet> MemberWallets { get; }
-    DbSet<PointsTransaction> PointsTransactions { get; }
-    DbSet<MemberEvent> MemberEvents { get; }
-    DbSet<EventAttendance> EventAttendances { get; }
-    DbSet<WithdrawalRequest> WithdrawalRequests { get; }
-    DbSet<PlanUpgradeRequest> PlanUpgradeRequests { get; }
+    DbSet<WorkflowTemplateOverride> WorkflowTemplateOverrides { get; }
+    DbSet<McpServerConnection> McpServerConnections { get; }
 }
 
-public class ApplicationDbContext : DbContext, ITenantDbContext
+public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Application.Common.Interfaces.IApplicationDbContext
 {
     private static bool HasTenantIdProperty(Type type) =>
         type.GetProperty("TenantId", typeof(Guid)) != null;
@@ -65,6 +67,8 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     private readonly ILogger<ApplicationDbContext> _logger;
 
     public Guid? TenantId => _currentUserService.TenantId;
+
+    public IQueryable<T> Query<T>() where T : class => Set<T>();
 
     public ApplicationDbContext(
         DbContextOptions<ApplicationDbContext> options,
@@ -97,18 +101,24 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     public DbSet<KnowledgeBaseSource> KnowledgeBaseSources => Set<KnowledgeBaseSource>();
     public DbSet<Chatbot> Chatbots => Set<Chatbot>();
     public DbSet<Workflow> Workflows => Set<Workflow>();
+    public DbSet<WorkflowVersion> WorkflowVersions => Set<WorkflowVersion>();
     public DbSet<WorkflowInstance> WorkflowInstances => Set<WorkflowInstance>();
     public DbSet<WorkflowStepExecution> WorkflowStepExecutions => Set<WorkflowStepExecution>();
     public DbSet<AssistantDefinition> AssistantDefinitions => Set<AssistantDefinition>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<ModelConfiguration> ModelConfigurations => Set<ModelConfiguration>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
     public DbSet<ApprovalPolicy> ApprovalPolicies => Set<ApprovalPolicy>();
+    public DbSet<ApprovalNotificationDispatch> ApprovalNotificationDispatches => Set<ApprovalNotificationDispatch>();
     public DbSet<ToolDefinition> ToolDefinitions => Set<ToolDefinition>();
+    public DbSet<ToolDefinitionVersion> ToolDefinitionVersions => Set<ToolDefinitionVersion>();
+    public DbSet<BusinessCapability> BusinessCapabilities => Set<BusinessCapability>();
+    public DbSet<KnowledgeBaseVersion> KnowledgeBaseVersions => Set<KnowledgeBaseVersion>();
     public DbSet<PromptTemplate> PromptTemplates => Set<PromptTemplate>();
-    public DbSet<WorkflowSchedule> WorkflowSchedules => Set<WorkflowSchedule>();
+    public DbSet<AssistantPromptHistory> AssistantPromptHistories => Set<AssistantPromptHistory>();
     public DbSet<WebhookEndpoint> WebhookEndpoints => Set<WebhookEndpoint>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<ChatbotChannel> ChatbotChannels => Set<ChatbotChannel>();
@@ -116,12 +126,9 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     public DbSet<TestRun> TestRuns => Set<TestRun>();
     public DbSet<TestCaseResult> TestCaseResults => Set<TestCaseResult>();
     public DbSet<AccessRequest> AccessRequests => Set<AccessRequest>();
-    public DbSet<MemberWallet> MemberWallets => Set<MemberWallet>();
-    public DbSet<PointsTransaction> PointsTransactions => Set<PointsTransaction>();
-    public DbSet<MemberEvent> MemberEvents => Set<MemberEvent>();
-    public DbSet<EventAttendance> EventAttendances => Set<EventAttendance>();
-    public DbSet<WithdrawalRequest> WithdrawalRequests => Set<WithdrawalRequest>();
-    public DbSet<PlanUpgradeRequest> PlanUpgradeRequests => Set<PlanUpgradeRequest>();
+    public DbSet<BackgroundJob> BackgroundJobs => Set<BackgroundJob>();
+    public DbSet<WorkflowTemplateOverride> WorkflowTemplateOverrides => Set<WorkflowTemplateOverride>();
+    public DbSet<McpServerConnection> McpServerConnections => Set<McpServerConnection>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -132,8 +139,14 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
-            if (entityType.ClrType == typeof(Tenant)) continue;
-
+            // Tenant used to be hard-skipped here entirely (avoiding a circular self-filter), but
+            // that also silently skipped the one filter it DOES legitimately need: soft-delete.
+            // HasTenantIdProperty already returns false for Tenant (it has Id, not TenantId — it IS
+            // the tenant), so the branches below naturally never apply a tenant filter to it; no
+            // special case is actually needed for that part. Found live: DeleteTenantCommand
+            // (2026-09-29) was the first thing in the whole codebase to ever call Tenant.SoftDelete(),
+            // and a "deleted" tenant kept appearing in GetTenantsQuery's results because nothing was
+            // filtering IsDeleted on Tenant queries at all.
             var hasTenant = HasTenantIdProperty(entityType.ClrType);
             var hasSoftDelete = typeof(BaseEntity<Guid>).IsAssignableFrom(entityType.ClrType);
 
@@ -292,10 +305,19 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
         public string? NewValues { get; set; }
     }
 
+    // P0-5 (2026-09-20 audit): this used to be `TenantId == null || EF.Property<Guid>(e, "TenantId")
+    // == TenantId` — fail-*open*. When the ambient tenant (ICurrentUserService.TenantId, from the
+    // JWT's tenant_id claim) is null, that matched EVERY tenant's rows instead of none. Every currently-
+    // known caller that legitimately needs a null ambient tenant already bypasses this filter
+    // explicitly via .IgnoreQueryFilters() (every background sweeper, P0-3 same session) — nothing
+    // relies on the fail-open branch actually firing — so failing closed here removes a live risk for
+    // any *future* authenticated-but-tenant-missing path (a bug, a new SSO flow, a service account)
+    // without changing behavior for any real, verified-safe caller today. See
+    // TenantIsolationFailClosedTests.cs for the regression coverage.
     private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder) where TEntity : class
     {
         modelBuilder.Entity<TEntity>().HasQueryFilter(
-            e => TenantId == null || EF.Property<Guid>(e, "TenantId") == TenantId);
+            e => TenantId != null && EF.Property<Guid>(e, "TenantId") == TenantId);
     }
 
     private void ApplySoftDeleteFilter<TEntity>(ModelBuilder modelBuilder) where TEntity : BaseEntity<Guid>
@@ -306,6 +328,6 @@ public class ApplicationDbContext : DbContext, ITenantDbContext
     private void ApplyTenantAndSoftDeleteFilter<TEntity>(ModelBuilder modelBuilder) where TEntity : BaseEntity<Guid>
     {
         modelBuilder.Entity<TEntity>().HasQueryFilter(
-            e => (TenantId == null || EF.Property<Guid>(e, "TenantId") == TenantId) && !e.IsDeleted);
+            e => TenantId != null && EF.Property<Guid>(e, "TenantId") == TenantId && !e.IsDeleted);
     }
 }

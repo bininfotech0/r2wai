@@ -54,7 +54,7 @@ public class ApprovalStepActivity : Activity<string>
 
         var approvalRequestId = await approvalService.CreateApprovalRequestAsync(
             tenantId, workflowInstanceId, workflowDefinitionId, requesterId, data,
-            context.CancellationToken);
+            ct: context.CancellationToken);
 
         var stimulus = new ApprovalStimulus(approvalRequestId.ToString());
         context.CreateBookmark(stimulus, ResumeAsync, includeActivityInstanceId: false);

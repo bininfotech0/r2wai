@@ -18,6 +18,8 @@ public class TestRunsController(IMediator mediator) : ControllerBase
         [FromQuery] Guid? applicationId = null,
         CancellationToken ct = default)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var query = new GetTestRunsQuery { Page = page, PageSize = pageSize, AssistantId = assistantId, ApplicationId = applicationId };
         var result = await mediator.Send(query, ct);
         return Ok(result);

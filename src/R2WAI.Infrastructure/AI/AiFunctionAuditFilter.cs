@@ -1,11 +1,7 @@
-using System.Diagnostics;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using System.Text.RegularExpressions;
 using Microsoft.SemanticKernel;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Domain.Entities;
-using R2WAI.Domain.Enums;
-using R2WAI.Domain.Interfaces;
 
 namespace R2WAI.Infrastructure.AI;
 
@@ -14,130 +10,87 @@ public enum GovernanceDecision
     Allow,
     DenyMissingRole,
     DenyApprovalRequired,
-    DenyPolicyRiskCeiling
+    DenyPolicyRiskCeiling,
+    DenyNotEnabledForAssistant,
+
+    /// <summary>The function has no governance record at all (not registered, not a known built-in): fail closed.</summary>
+    DenyUnknownTool
 }
 
 /// <summary>
-/// The gateway every autonomous Semantic Kernel tool call passes through. Looks up the governing
-/// ToolDefinition ("Capability" — see ApplicationDbContextSeed's built-in tool rows) by function name
-/// and enforces RequiredRole and ApprovalRequired by short-circuiting before the real call runs;
-/// writes a real AuditLog row when AuditRequired (default true), closing the previous gap where tool
-/// calls only ever reached application logs and the ephemeral chat trace collector, never the
-/// queryable audit trail. Also still logs + records to IChatTraceCollector for Test Studio, as before.
+/// The Semantic Kernel adapter for <see cref="IToolGateway"/> (implementation plan Phase 2) — every
+/// autonomous SK tool call passes through here, but the actual governance/audit orchestration now
+/// lives in <see cref="ToolGateway"/>, runtime-agnostic, so a future MCP or Agent Framework adapter
+/// can reuse it instead of re-implementing (or diverging from) the same checks. This class's only
+/// remaining job is translating between Semantic Kernel's <see cref="FunctionInvocationContext"/>
+/// and <see cref="ToolInvocationRequest"/>/<see cref="ToolInvocationOutcome"/>.
 ///
-/// ConfirmationRequired is intentionally NOT enforced here: autonomous function-calling has no
-/// human-in-the-loop UI turn to pause on today. The field stays editable via the Capabilities UI for
-/// when that hook exists; treat it as a documented gap, not an oversight.
+/// The pure decision helpers below (<see cref="EvaluateGovernance"/>,
+/// <see cref="IsEnabledForCallingAssistant"/>, <see cref="HumanizeFunctionName"/>) and
+/// <see cref="ToolDefinitionIdMetadataKey"/> stay here rather than moving to <see cref="ToolGateway"/>:
+/// <c>IntegrationsController</c>'s "Test" button and <c>DynamicToolFunctionFactory</c>'s SK function
+/// metadata stamping already reference them at this exact location, and this extraction is meant to
+/// be behavior-preserving, not a second, unrelated rename.
 /// </summary>
 public class AiFunctionAuditFilter : IFunctionInvocationFilter
 {
-    private readonly ILogger<AiFunctionAuditFilter> _logger;
-    private readonly ICurrentUserService _currentUser;
-    private readonly IChatTraceCollector _traceCollector;
-    private readonly IRepository<ToolDefinition> _toolDefinitions;
-    private readonly IToolExecutionPolicyService _policyService;
-    private readonly IServiceScopeFactory _scopeFactory;
+    /// <summary>
+    /// Key under which a dynamic (tenant-registered) tool's function carries its ToolDefinition id, so the
+    /// filter can look the governing record up exactly instead of guessing from the function name.
+    /// </summary>
+    public const string ToolDefinitionIdMetadataKey = "r2wai.toolDefinitionId";
 
-    public AiFunctionAuditFilter(
-        ILogger<AiFunctionAuditFilter> logger,
-        ICurrentUserService currentUser,
-        IChatTraceCollector traceCollector,
-        IRepository<ToolDefinition> toolDefinitions,
-        IToolExecutionPolicyService policyService,
-        IServiceScopeFactory scopeFactory)
+    private readonly IToolGateway _toolGateway;
+
+    public AiFunctionAuditFilter(IToolGateway toolGateway)
     {
-        _logger = logger;
-        _currentUser = currentUser;
-        _traceCollector = traceCollector;
-        _toolDefinitions = toolDefinitions;
-        _policyService = policyService;
-        _scopeFactory = scopeFactory;
+        _toolGateway = toolGateway;
     }
 
     public async Task OnFunctionInvocationAsync(FunctionInvocationContext context, Func<FunctionInvocationContext, Task> next)
     {
         var plugin = context.Function.PluginName ?? "unknown";
         var function = context.Function.Name;
-        var arguments = context.Arguments.Count > 0 ? string.Join(", ", context.Arguments.Select(a => $"{a.Key}={a.Value}")) : null;
+        var argumentsForAudit = context.Arguments.Count > 0
+            ? string.Join(", ", context.Arguments.Select(a => $"{a.Key}={a.Value}"))
+            : null;
+        var inputArgument = context.Arguments.TryGetValue("input", out var rawInput) ? rawInput as string : null;
 
-        _logger.LogInformation(
-            "AI invoked function {Plugin}.{Function} with args {Arguments} (User {UserId}, Tenant {TenantId})",
-            plugin, function, context.Arguments, _currentUser.UserId, _currentUser.TenantId);
-
-        // Matches by Name + TenantId only (not further scoped by ApplicationId): this used to also
-        // require ApplicationId == null, which silently excluded every application-scoped
-        // ToolDefinition from governance. That was harmless while those rows were never actually
-        // callable, but the dynamic Tool/Integration Registry bridge (DynamicToolFunctionFactory)
-        // now makes them real SK functions — so they must be governed the same as built-in ones.
-        var toolDef = _currentUser.TenantId.HasValue
-            ? await _toolDefinitions.FirstOrDefaultAsync(
-                t => t.Name == function && t.TenantId == _currentUser.TenantId.Value)
+        Guid? toolDefinitionId = context.Function.Metadata.AdditionalProperties.TryGetValue(ToolDefinitionIdMetadataKey, out var raw)
+            && raw is Guid id
+            ? id
             : null;
 
-        var decision = EvaluateGovernance(toolDef, _currentUser.Roles);
+        var request = new ToolInvocationRequest(
+            plugin, function, toolDefinitionId, argumentsForAudit, inputArgument,
+            ExecuteAsync: _ => next(context));
 
-        // Policy Engine: an optional, tenant-configured tightening layer on top of the baseline
-        // decision above — it can only turn an Allow into a Deny, never the reverse, so a tenant
-        // with no policy configured (the default/current-day case) sees byte-identical behavior.
-        if (decision == GovernanceDecision.Allow && toolDef is not null && _currentUser.TenantId is { } policyTenantId)
-        {
-            var maxRiskLevel = await _policyService.GetMaxRiskLevelAsync(policyTenantId);
-            if (ToolExecutionPolicyEvaluator.ExceedsCeiling(toolDef.RiskLevel, maxRiskLevel))
-                decision = GovernanceDecision.DenyPolicyRiskCeiling;
-        }
+        var outcome = await _toolGateway.InvokeAsync(request);
 
-        if (decision == GovernanceDecision.DenyMissingRole)
-        {
-            _logger.LogWarning("Denied {Function} — user lacks required role {Role}", function, toolDef!.RequiredRole);
-            await WriteDenialAuditAsync(toolDef!, function, "missing required role");
-            context.Result = new FunctionResult(context.Function,
-                $"Access denied: this action requires the '{toolDef!.RequiredRole}' role, which you do not have.");
-            return;
-        }
+        if (!outcome.Allowed)
+            context.Result = new FunctionResult(context.Function, outcome.DenialMessage);
+    }
 
-        if (decision == GovernanceDecision.DenyApprovalRequired)
-        {
-            _logger.LogWarning("Denied {Function} — approval required, not yet supported for direct AI invocation", function);
-            await WriteDenialAuditAsync(toolDef!, function, "approval required");
-            context.Result = new FunctionResult(context.Function,
-                "This action requires administrator approval and cannot be performed automatically yet.");
-            return;
-        }
+    /// <summary>
+    /// Defense-in-depth check (see call site) — pure so it's directly unit-testable without a live
+    /// Semantic Kernel context. Null enabledToolIds means "not configured", matching
+    /// SemanticKernelService.GetOrCreateKernelAsync's own semantics exactly: unfiltered/allow, not
+    /// deny-all — an assistant with no explicit tool selection keeps working exactly as before.
+    /// </summary>
+    public static bool IsEnabledForCallingAssistant(Guid toolDefId, IReadOnlyCollection<Guid>? enabledToolIds)
+        => enabledToolIds is null || enabledToolIds.Contains(toolDefId);
 
-        if (decision == GovernanceDecision.DenyPolicyRiskCeiling)
-        {
-            _logger.LogWarning("Denied {Function} — tool risk level {RiskLevel} exceeds this tenant's configured ToolExecution policy ceiling", function, toolDef!.RiskLevel);
-            await WriteDenialAuditAsync(toolDef!, function, "exceeds policy risk ceiling");
-            context.Result = new FunctionResult(context.Function,
-                "This action's risk level exceeds what this tenant's policy allows the AI to perform automatically.");
-            return;
-        }
-
-        var sw = Stopwatch.StartNew();
-        var success = true;
-        string? error = null;
-        try
-        {
-            await next(context);
-            sw.Stop();
-        }
-        catch (Exception ex)
-        {
-            sw.Stop();
-            success = false;
-            error = ex.Message;
-            _traceCollector.RecordFunctionCall(plugin, function, arguments, sw.ElapsedMilliseconds, success: false, error: ex.Message);
-            if (toolDef?.AuditRequired ?? true)
-                await WriteExecutionAuditAsync(toolDef, function, success: false, error: ex.Message);
-            throw;
-        }
-
-        _traceCollector.RecordFunctionCall(plugin, function, arguments, sw.ElapsedMilliseconds, success: true, error: null);
-        if (toolDef?.AuditRequired ?? true)
-            await WriteExecutionAuditAsync(toolDef, function, success: true, error: null);
-
-        _logger.LogInformation(
-            "AI function {Plugin}.{Function} completed", plugin, function);
+    /// <summary>
+    /// Turns a technical function/tool name (snake_case, PascalCase, or a mix — e.g.
+    /// "get_leave_balance" or "SubmitInvoice") into a human-readable display name ("Get Leave Balance",
+    /// "Submit Invoice") for the in-chat progress UX. Never shows the raw technical name to the user.
+    /// </summary>
+    public static string HumanizeFunctionName(string name)
+    {
+        var spaced = Regex.Replace(name, "(?<!^)([A-Z])", " $1").Replace('_', ' ').Replace('-', ' ');
+        var words = spaced.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(w => char.ToUpperInvariant(w[0]) + (w.Length > 1 ? w[1..].ToLowerInvariant() : string.Empty));
+        return string.Join(' ', words);
     }
 
     /// <summary>
@@ -146,7 +99,7 @@ public class AiFunctionAuditFilter : IFunctionInvocationFilter
     /// </summary>
     public static GovernanceDecision EvaluateGovernance(ToolDefinition? toolDef, string[] userRoles)
     {
-        if (toolDef is null) return GovernanceDecision.Allow;
+        if (toolDef is null) return GovernanceDecision.DenyUnknownTool;
 
         if (!string.IsNullOrEmpty(toolDef.RequiredRole)
             && !userRoles.Any(r => string.Equals(r, toolDef.RequiredRole, StringComparison.OrdinalIgnoreCase)))
@@ -155,38 +108,5 @@ public class AiFunctionAuditFilter : IFunctionInvocationFilter
         if (toolDef.ApprovalRequired) return GovernanceDecision.DenyApprovalRequired;
 
         return GovernanceDecision.Allow;
-    }
-
-    private async Task WriteDenialAuditAsync(ToolDefinition toolDef, string function, string reason)
-    {
-        if (!toolDef.AuditRequired || _currentUser.TenantId is not { } tenantId) return;
-        var metadata = System.Text.Json.JsonSerializer.Serialize(new { status = "denied", reason, function });
-        await WriteAuditAsync(new AuditLog(Guid.NewGuid(), tenantId, AuditAction.Execute, "ToolDefinition",
-            toolDef.Id.ToString(), _currentUser.UserId, metadata: metadata));
-    }
-
-    private async Task WriteExecutionAuditAsync(ToolDefinition? toolDef, string function, bool success, string? error)
-    {
-        if (_currentUser.TenantId is not { } tenantId) return;
-        var metadata = success
-            ? System.Text.Json.JsonSerializer.Serialize(new { status = "executed", function })
-            : System.Text.Json.JsonSerializer.Serialize(new { status = "failed", function, error });
-        await WriteAuditAsync(new AuditLog(Guid.NewGuid(), tenantId, AuditAction.Execute, "ToolDefinition",
-            toolDef?.Id.ToString() ?? function, _currentUser.UserId, metadata: metadata));
-    }
-
-    // Written via a fresh scope/DbContext rather than the ambient one: the chat request that triggered
-    // this tool call can hold its own DbContext tracking a growing set of entities (conversation,
-    // messages, usage counters) across a multi-minute AI call. Sharing that DbContext for an audit write
-    // entangles this fire-and-forget side effect with the caller's own unit of work, and an incidental
-    // concurrency hiccup on either side then corrupts both. An isolated scope keeps the audit write a
-    // clean, independent transaction no matter what state the caller's DbContext is in.
-    private async Task WriteAuditAsync(AuditLog auditLog)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var auditLogs = scope.ServiceProvider.GetRequiredService<IRepository<AuditLog>>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        await auditLogs.AddAsync(auditLog);
-        await unitOfWork.SaveChangesAsync();
     }
 }

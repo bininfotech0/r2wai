@@ -36,6 +36,8 @@ public sealed class HttpTool : ITool
             context.Parameters.TryGetValue("body", out var bodyObj);
             context.Parameters.TryGetValue("baseUrl", out var baseUrlObj);
             context.Parameters.TryGetValue("authorizationHeader", out var authHeaderObj);
+            context.Parameters.TryGetValue("extraHeaderName", out var extraHeaderNameObj);
+            context.Parameters.TryGetValue("extraHeaderValue", out var extraHeaderValueObj);
 
             var method = methodObj?.ToString() ?? "GET";
             var path = pathObj?.ToString() ?? "";
@@ -59,6 +61,9 @@ public sealed class HttpTool : ITool
                 request.Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json");
             if (authHeaderObj is string authHeader && !string.IsNullOrWhiteSpace(authHeader))
                 request.Headers.TryAddWithoutValidation("Authorization", authHeader);
+            if (extraHeaderNameObj is string extraHeaderName && !string.IsNullOrWhiteSpace(extraHeaderName)
+                && extraHeaderValueObj is string extraHeaderValue && !string.IsNullOrWhiteSpace(extraHeaderValue))
+                request.Headers.TryAddWithoutValidation(extraHeaderName, extraHeaderValue);
 
             var response = await _httpClient.SendAsync(request, context.CancellationToken);
 

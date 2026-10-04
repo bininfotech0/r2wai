@@ -9,6 +9,9 @@ public class KnowledgeBaseProfile : Profile
     {
         CreateMap<KnowledgeBase, KnowledgeBaseDto>();
 
-        CreateMap<KnowledgeBaseSource, KnowledgeBaseSourceDto>();
+        CreateMap<KnowledgeBaseSource, KnowledgeBaseSourceDto>()
+            .ForMember(d => d.KnowledgeBaseName, opt => opt.MapFrom(s => s.KnowledgeBase != null ? s.KnowledgeBase.Name : null));
+
+        CreateMap<KnowledgeBaseVersion, KnowledgeBaseVersionDto>();
     }
 }

@@ -1,0 +1,33 @@
+# Build stage — main SPA
+FROM node:20-alpine AS build
+WORKDIR /build
+COPY ["src/R2WAI.Client/package.json", "src/R2WAI.Client/package-lock.json", "src/R2WAI.Client/"]
+WORKDIR /build/src/R2WAI.Client
+RUN npm ci --legacy-peer-deps
+WORKDIR /build
+COPY ["src/R2WAI.Client/", "src/R2WAI.Client/"]
+WORKDIR /build/src/R2WAI.Client
+RUN npm run build
+
+# Build stage — embeddable widget (src/R2WAI.Widget). Fully separate package,
+# no shared deps with the SPA build above — see the migration plan's "widget
+# stays intentionally decoupled" non-goal.
+FROM node:20-alpine AS build-widget
+WORKDIR /build
+COPY ["src/R2WAI.Widget/package.json", "src/R2WAI.Widget/package-lock.json", "src/R2WAI.Widget/"]
+WORKDIR /build/src/R2WAI.Widget
+RUN npm ci
+WORKDIR /build
+COPY ["src/R2WAI.Widget/", "src/R2WAI.Widget/"]
+WORKDIR /build/src/R2WAI.Widget
+RUN npm run build
+
+# Runtime stage
+FROM nginx:1.27-alpine AS final
+RUN apk add --no-cache curl
+COPY docker/nginx/studio.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /build/src/R2WAI.Client/dist /usr/share/nginx/html
+COPY --from=build-widget /build/src/R2WAI.Widget/dist /usr/share/nginx/html/widget
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1

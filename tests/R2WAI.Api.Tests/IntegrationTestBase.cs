@@ -1,6 +1,8 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,6 +53,22 @@ public class IntegrationTestBase : IClassFixture<R2WAIWebApplicationFactory>
         if (!string.IsNullOrEmpty(token))
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
+    }
+
+    // A raw DI scope resolving a service/DbContext directly (not through an authenticated HTTP call)
+    // has no ambient HttpContext at all, so ICurrentUserService.TenantId — what ApplicationDbContext's
+    // tenant query filter reads — is null there by default. P0-5's fail-closed change means that used
+    // to (harmlessly, since it also happened to fail-open) leave such scopes seeing every tenant's
+    // rows; now it correctly sees none, so any test resolving a tenant-scoped service/query this way
+    // needs to simulate a real authenticated caller. Matches the seeded tenant/admin ids used
+    // throughout this test project's fixtures unless a test passes its own.
+    protected IServiceScope SignedInScope(Guid tenantId, Guid userId)
+    {
+        var scope = Factory.Services.CreateScope();
+        var claims = new List<Claim> { new("tenant_id", tenantId.ToString()), new(ClaimTypes.NameIdentifier, userId.ToString()) };
+        scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>().HttpContext =
+            new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test")) };
+        return scope;
     }
 
     private class LoginResult

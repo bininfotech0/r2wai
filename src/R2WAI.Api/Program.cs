@@ -37,12 +37,16 @@ builder.Host.UseDefaultServiceProvider(options =>
     options.ValidateOnBuild = builder.Environment.IsDevelopment();
 });
 
+// Note on sinks: appsettings.json declares a "Console" sink under Serilog:WriteTo, and
+// ReadFrom.Configuration loads it. The explicit WriteTo.Console below adds a *second* one, so
+// every event was printed twice — which made a count of "[ERR] lines" in the container logs
+// roughly double the real number of failures, and was the reason routine client aborts looked
+// like a flood of distinct errors. The file sink from configuration is still applied.
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Destructure.With<R2WAI.Api.Logging.SensitiveDataDestructuringPolicy>()
     .Enrich.FromLogContext()
     .Enrich.With<R2WAI.Api.Logging.SensitiveDataEnricher>()
-    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{CorrelationId}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -95,10 +99,12 @@ if (!string.IsNullOrEmpty(elsaConnectionString) && !builder.Environment.IsEnviro
     });
 
     builder.Services.AddNotificationHandler<R2WAI.Api.Workflows.StepStatusNotificationHandler>();
+    builder.Services.AddNotificationHandler<R2WAI.Api.Workflows.WorkflowInstanceCompletionNotificationHandler>();
 }
 builder.Services.AddSingleton<R2WAI.Api.Hubs.IWorkflowStatusService, R2WAI.Api.Hubs.WorkflowStatusService>();
 builder.Services.AddHostedService<R2WAI.Infrastructure.Services.EscalationBackgroundService>();
-builder.Services.AddHostedService<R2WAI.Api.Services.WorkflowScheduleBackgroundService>();
+builder.Services.AddHostedService<R2WAI.Api.Services.WorkflowDelayResumeBackgroundService>();
+builder.Services.AddHostedService<R2WAI.Api.Services.DataRetentionBackgroundService>();
 
 builder.Services.AddAuthentication(options =>
 {
@@ -146,14 +152,17 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAssertion(context =>
             context.User.HasClaim(c => c.Type == "tenant_id")));
 
+    // Editor/Contributor/WorkflowManager/UserManager retired 2026-08-29 (CollapseRbacToThreeRoles
+    // migration) — the RBAC model is now genuinely 3 roles (Admin/User/SystemAdmin), so these
+    // policies collapse to what they always effectively granted in practice via the nav mapping.
     options.AddPolicy("CanManageUsers", policy =>
-        policy.RequireRole("Admin", "SystemAdmin", "UserManager"));
+        policy.RequireRole("Admin", "SystemAdmin"));
 
     options.AddPolicy("CanManageDocuments", policy =>
-        policy.RequireRole("Admin", "Editor", "Contributor"));
+        policy.RequireRole("Admin", "SystemAdmin"));
 
     options.AddPolicy("CanManageWorkflows", policy =>
-        policy.RequireRole("Admin", "WorkflowManager"));
+        policy.RequireRole("Admin", "SystemAdmin"));
 });
 
 var allowedOrigins = builder.Configuration.GetSection("CORS:AllowedOrigins").Get<string[]>();
@@ -197,6 +206,24 @@ else
     Log.Error("CORS:AllowedOrigins not configured in non-development environment. No origins will be allowed.");
 }
 
+// Separate, deliberately open CORS policy for the [AllowAnonymous] public chatbot endpoints
+// (public-info/chat/chat/stream) — those exist specifically to be embedded on arbitrary
+// third-party websites via the widget script tag, so they can't reuse ApiCorsPolicy above (that
+// one is for the tenant SPA/internal API and correctly fails closed on an unlisted origin; making
+// every customer's embed domain go through that same allowlist would mean editing this server's
+// config for every tenant that wants to embed a chatbot). The actual access decision — is this
+// specific chatbot allowed to be embedded from this specific origin — is enforced per-request
+// inside ChatbotsController against the chatbot's own optional AllowedOrigins list, not by CORS
+// (CORS only gates browser JS from reading the response; it doesn't stop a direct, non-browser
+// HTTP call with a forged Origin header, so the real check has to live server-side regardless).
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("PublicChatbotCors", policy =>
+    {
+        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+    });
+});
+
 builder.Services.AddAntiforgery();
 builder.Services.AddSingleton<HttpContextPropagationHubFilter>();
 builder.Services.AddSignalR();
@@ -214,6 +241,16 @@ builder.Services.AddControllers(options =>
     options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
 });
 builder.Services.AddScoped<IStreamingNotificationService, SignalRStreamingService>();
+builder.Services.AddSingleton<R2WAI.Api.Workflows.NodeProviders.INodeProvider, R2WAI.Api.Workflows.NodeProviders.ApprovalNodeProvider>();
+builder.Services.AddSingleton<R2WAI.Api.Workflows.NodeProviders.INodeProvider, R2WAI.Api.Workflows.NodeProviders.AiGenerateNodeProvider>();
+builder.Services.AddSingleton<R2WAI.Api.Workflows.NodeProviders.INodeProvider, R2WAI.Api.Workflows.NodeProviders.EmailNodeProvider>();
+builder.Services.AddSingleton<R2WAI.Api.Workflows.NodeProviders.INodeProvider, R2WAI.Api.Workflows.NodeProviders.ApiCallNodeProvider>();
+builder.Services.AddSingleton<R2WAI.Api.Workflows.NodeProviders.INodeProvider, R2WAI.Api.Workflows.NodeProviders.DelayNodeProvider>();
+builder.Services.AddSingleton<R2WAI.Api.Workflows.NodeProviders.INodeProvider, R2WAI.Api.Workflows.NodeProviders.ConditionNodeProvider>();
+builder.Services.AddSingleton<R2WAI.Api.Workflows.NodeProviders.INodeProvider, R2WAI.Api.Workflows.NodeProviders.TransformNodeProvider>();
+builder.Services.AddSingleton<R2WAI.Api.Workflows.NodeProviders.INodeProvider, R2WAI.Api.Workflows.NodeProviders.ActionNodeProvider>();
+builder.Services.AddSingleton<R2WAI.Api.Workflows.NodeProviders.INodeProvider, R2WAI.Api.Workflows.NodeProviders.LogNodeProvider>();
+builder.Services.AddSingleton<R2WAI.Api.Workflows.StepActivityFactory>();
 if (!builder.Environment.IsEnvironment("Testing"))
     builder.Services.AddScoped<IWorkflowBridge, WorkflowBridge>();
 else
@@ -228,7 +265,7 @@ builder.Services.AddResponseCompression(o =>
 builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<ApplicationDbContext>("database", tags: ["services"])
+    .AddCheck<DatabaseHealthCheck>("database", tags: ["services"])
     .AddCheck<RedisHealthCheck>("redis", tags: ["services"])
     .AddCheck<AiProviderHealthCheck>("ai-providers", tags: ["services"])
     .AddCheck<MemoryHealthCheck>("memory", tags: ["resources"]);
@@ -252,7 +289,16 @@ builder.Services.AddOpenTelemetry()
     {
         metrics.AddAspNetCoreInstrumentation();
         metrics.AddHttpClientInstrumentation();
-        metrics.AddMeter("Microsoft.AspNetCore.Hosting", "Microsoft.AspNetCore.Server.Kestrel");
+        metrics.AddMeter("Microsoft.AspNetCore.Hosting", "Microsoft.AspNetCore.Server.Kestrel", DiagnosticsConfig.ServiceName);
+
+        // Always on, independent of OTLP: docker/monitoring/prometheus.yml scrapes this
+        // in-process (real, standard /metrics endpoint — see the MapPrometheusScrapingEndpoint
+        // call below) instead of the OTLP endpoint, which Jaeger's receiver doesn't accept
+        // metrics on anyway. Previously OperationsController.GetPrometheusMetrics was a
+        // hand-written stub (two hardcoded gauges) that Prometheus couldn't even reach --
+        // [Authorize(Roles = "Admin,SystemAdmin")] against an unauthenticated scrape config,
+        // 401 on every attempt since the monitoring stack was added.
+        metrics.AddPrometheusExporter();
 
         if (!string.IsNullOrEmpty(otelEndpoint))
             metrics.AddOtlpExporter(o => o.Endpoint = new Uri(otelEndpoint));
@@ -296,6 +342,10 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "ApiKey"
     });
 
+    // Two separate requirement objects, not one with both schemes — a single OpenApiSecurityRequirement
+    // ANDs its entries together (both would be required), but Bearer and ApiKey are alternatives: either
+    // one authenticates a call on its own. Multiple objects in the document's `security` array are ORed
+    // per the OpenAPI 3 spec, which is what docs/api/MISSING-BACKEND-ENDPOINTS.md §4 #4 actually wanted.
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -308,7 +358,11 @@ builder.Services.AddSwaggerGen(options =>
                 }
             },
             Array.Empty<string>()
-        },
+        }
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
         {
             new OpenApiSecurityScheme
             {
@@ -325,8 +379,12 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-app.UseSerilogRequestLogging();
-
+// No app.UseSerilogRequestLogging() here -- it would log the exact same "HTTP {Method} {Path}
+// responded {StatusCode} in {Elapsed}ms" event a second time for every request, the same
+// double-logging failure class as the duplicate Console sink noted above (skews error-rate counts
+// and makes routine client aborts look like a flood). RequestLoggingMiddleware below is the one
+// real request logger — it already does everything UseSerilogRequestLogging would, plus metrics
+// recording and client-abort-aware status handling that the built-in middleware doesn't have.
 app.UseResponseCompression();
 app.UseHttpsRedirection();
 app.UseMiddleware<CorrelationIdMiddleware>();
@@ -349,12 +407,19 @@ app.UseCors("ApiCorsPolicy");
 app.UseAuthentication();
 app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseMiddleware<MfaSetupScopeMiddleware>();
 app.UseAuthorization();
 
 app.UseStaticFiles();
 app.UseAntiforgery();
 
-app.MapControllers();
+// Secure by default for controllers: an action with no [Authorize] used to be silently public (that is
+// how POST /api/v1/auth/register-member ended up open to anyone). Every controller endpoint now requires
+// an authenticated user unless it opts out with [AllowAnonymous]. This is deliberately NOT a global
+// FallbackPolicy: that would also challenge unmatched routes (404 -> 401) and static files. The full set
+// of endpoints that may be anonymous — and that every endpoint declares its authorization — is pinned by
+// AnonymousSurfaceTests.
+app.MapControllers().RequireAuthorization();
 app.MapHub<ChatHub>("/hubs/chat");
 app.MapHub<StatusHub>("/hubs/status");
 app.MapHub<NotificationHub>("/hubs/notification");
@@ -371,7 +436,7 @@ app.MapHealthChecks("/health/startup", new Microsoft.AspNetCore.Diagnostics.Heal
         });
         await ctx.Response.WriteAsync(json);
     }
-});
+}).AllowAnonymous();
 
 app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
@@ -392,7 +457,7 @@ app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.Health
         });
         await ctx.Response.WriteAsync(json);
     }
-});
+}).AllowAnonymous();
 
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
@@ -403,6 +468,7 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
         {
             status = report.Status.ToString(),
             duration = report.TotalDuration.TotalMilliseconds,
+            environment = app.Environment.EnvironmentName,
             checks = report.Entries.Select(e => new
             {
                 name = e.Key,
@@ -414,7 +480,12 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
         }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
         await ctx.Response.WriteAsync(json);
     }
-});
+}).AllowAnonymous();
+
+// Unauthenticated by design, same as /health -- this is the real scrape endpoint
+// docker/monitoring/prometheus.yml's r2wai-api job targets, container-internal only (never
+// proxied through nginx/studio.conf's public /api/ routes).
+app.MapPrometheusScrapingEndpoint("/metrics/prometheus").AllowAnonymous();
 
 try
 {

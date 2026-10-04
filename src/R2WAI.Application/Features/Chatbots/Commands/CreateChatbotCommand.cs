@@ -44,8 +44,9 @@ public class CreateChatbotCommandHandler(
         await chatbotRepo.AddAsync(chatbot, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        for (var p = 1; p <= 5; p++)
-            await cacheService.RemoveAsync($"chatbots:{tenantId}:p{p}:s20", cancellationToken);
+        // Concurrent, not sequential -- see AssistantCacheKeys.InvalidateAsync for why.
+        await Task.WhenAll(Enumerable.Range(1, 5)
+            .Select(p => cacheService.RemoveAsync($"chatbots:{tenantId}:p{p}:s20", cancellationToken)));
 
         return mapper.Map<ChatbotDto>(chatbot);
     }

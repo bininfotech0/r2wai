@@ -55,6 +55,9 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.AvatarUrl)
             .HasMaxLength(500);
 
+        builder.Property(u => u.AvatarStoragePath)
+            .HasMaxLength(500);
+
         builder.Property(u => u.Status)
             .HasMaxLength(50);
 

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -5,7 +6,9 @@ using Microsoft.EntityFrameworkCore;
 using R2WAI.Api.Services;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Workflows.Commands;
+using R2WAI.Application.Features.Workflows.DTOs;
 using R2WAI.Application.Features.Workflows.Queries;
+using R2WAI.Domain.Entities;
 using R2WAI.Infrastructure.Persistence;
 
 namespace R2WAI.Api.Controllers;
@@ -19,6 +22,9 @@ public class WorkflowsController(
     ApplicationDbContext dbContext,
     IConfiguration configuration,
     IAIService aiService,
+    IModelConfigurationResolver modelConfigResolver,
+    IWorkflowTemplateService workflowTemplateService,
+    ICurrentUserService currentUser,
     ILogger<WorkflowsController> logger) : ControllerBase
 {
     private Guid CurrentUserId
@@ -88,20 +94,27 @@ public class WorkflowsController(
                 "  \"conditions\": [{\"field\": \"<field name>\", \"operator\": \"<Is equal to|Is not equal to|Contains|Greater than|Less than>\", \"value\": \"<value>\"}]\n" +
                 "}";
 
-            var raw = await aiService.GenerateResponseAsync(prompt, ct: ct);
+            var modelConfig = await modelConfigResolver.ResolveAsync(null, CurrentTenantId, ct);
+            var raw = await aiService.GenerateResponseAsync(prompt, modelConfig: modelConfig, ct: ct);
             var draft = WorkflowDraftParser.Parse(raw, KnownTriggers, KnownActions);
             return Ok(draft);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Automation draft generation failed for description: {Description}", request.Description);
-            return Ok(new WorkflowDraft(null, null, [], []));
+            // Was `Ok(new WorkflowDraft(null, null, [], []))` — the client didn't treat an empty
+            // draft as a failure, so it silently created a near-blank real workflow (empty steps,
+            // a truncated-description fallback name) and told the user "Automation drafted". A
+            // real error status lets the client's existing catch block do its actual job.
+            return StatusCode(502, new { error = "Automation drafting failed. Try a template or build manually." });
         }
     }
 
     [HttpGet]
     public async Task<IActionResult> GetList([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, [FromQuery] Guid? applicationId = null, CancellationToken ct = default)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var query = new GetWorkflowsQuery { Page = page, PageSize = pageSize, Search = search, ApplicationId = applicationId };
         var result = await mediator.Send(query, ct);
         return Ok(result);
@@ -177,6 +190,8 @@ public class WorkflowsController(
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var query = new GetWorkflowInstancesQuery { WorkflowId = workflowId, Page = page, PageSize = pageSize };
         var result = await mediator.Send(query, ct);
         return Ok(result);
@@ -196,10 +211,43 @@ public class WorkflowsController(
         var workflow = await dbContext.Workflows.FirstOrDefaultAsync(w => w.Id == id, ct);
         if (workflow is null) return NotFound();
         workflow.Publish();
+
+        var versionRow = await GetOrCreateVersionSnapshotAsync(workflow, ct);
+        foreach (var published in await dbContext.WorkflowVersions
+            .Where(v => v.WorkflowId == id && v.IsPublished && v.Id != versionRow.Id).ToListAsync(ct))
+            published.Unpublish();
+        versionRow.Publish(CurrentUserId);
+
         await dbContext.SaveChangesAsync(ct);
         logger.LogInformation("Workflow {Id} published (v{Version})", id, workflow.Version);
         return Ok(new { id, version = workflow.Version, versionStatus = workflow.VersionStatus });
     }
+
+    // Snapshots the workflow's current content under its current Version number if one doesn't
+    // already exist — Publish/NewVersion are the only two places a version transition happens, so
+    // both funnel through here to guarantee every version number that's ever been "current" ends up
+    // with a real, fetchable WorkflowVersion row (not just the ones that happened to get published).
+    private async Task<WorkflowVersion> GetOrCreateVersionSnapshotAsync(Workflow workflow, CancellationToken ct)
+    {
+        var existing = await dbContext.WorkflowVersions
+            .FirstOrDefaultAsync(v => v.WorkflowId == workflow.Id && v.VersionNumber == workflow.Version, ct);
+        if (existing is not null)
+            return existing;
+
+        var snapshot = WorkflowVersion.CreateSnapshot(
+            Guid.NewGuid(), workflow.TenantId, workflow.Id, workflow.Version, BuildWorkflowSnapshotJson(workflow));
+        dbContext.WorkflowVersions.Add(snapshot);
+        return snapshot;
+    }
+
+    private static string BuildWorkflowSnapshotJson(Workflow workflow) => JsonSerializer.Serialize(new
+    {
+        workflow.Name,
+        workflow.Description,
+        workflow.Type,
+        workflow.Trigger,
+        workflow.Steps
+    });
 
     [HttpPost("{id:guid}/unpublish")]
     public async Task<IActionResult> Unpublish(Guid id, CancellationToken ct = default)
@@ -239,27 +287,38 @@ public class WorkflowsController(
     {
         var workflow = await dbContext.Workflows.FirstOrDefaultAsync(w => w.Id == id, ct);
         if (workflow is null) return NotFound();
+
+        // Snapshot what the current version actually contains before the counter moves on and
+        // subsequent edits start overwriting Steps in place under the new version number.
+        await GetOrCreateVersionSnapshotAsync(workflow, ct);
+
         workflow.NewVersion();
         await dbContext.SaveChangesAsync(ct);
         logger.LogInformation("Workflow {Id} new version created (v{Version})", id, workflow.Version);
         return Ok(new { id, version = workflow.Version, versionStatus = workflow.VersionStatus });
     }
 
-    [HttpPost("{id:guid}/schedule")]
-    public async Task<IActionResult> Schedule(Guid id, [FromBody] ScheduleWorkflowRequest request, CancellationToken ct = default)
+    [HttpGet("{id:guid}/versions")]
+    public async Task<IActionResult> GetVersions(Guid id, CancellationToken ct = default)
     {
-        var workflow = await dbContext.Workflows.FirstOrDefaultAsync(w => w.Id == id, ct);
-        if (workflow is null) return NotFound();
+        var versions = await dbContext.WorkflowVersions
+            .Where(v => v.WorkflowId == id)
+            .OrderByDescending(v => v.VersionNumber)
+            .Select(v => new
+            {
+                v.Id,
+                v.WorkflowId,
+                v.VersionNumber,
+                v.ConfigSnapshot,
+                v.IsPublished,
+                v.PublishedByUserId,
+                v.PublishedAt,
+                v.CreatedAt
+            })
+            .ToListAsync(ct);
 
-        workflow.UpdateDetails(workflow.Name, workflow.Description, workflow.Type,
-            request.CronExpression, workflow.Steps);
-        await dbContext.SaveChangesAsync(ct);
-
-        logger.LogInformation("Workflow {Id} scheduled with cron: {Cron}", id, request.CronExpression);
-        return Ok(new { id, cronExpression = request.CronExpression, message = "Workflow scheduled" });
+        return Ok(versions);
     }
-
-    public record ScheduleWorkflowRequest(string CronExpression);
 
     [HttpPost("webhook/{slug}")]
     [AllowAnonymous]
@@ -276,7 +335,16 @@ public class WorkflowsController(
         // exists for this slug, since it's the only thing the admin panel actually lets anyone
         // configure. Workflow.Trigger is a separate, older field with no admin UI at all; kept only
         // as a fallback against the single global config secret for anything still relying on it.
+        //
+        // IgnoreQueryFilters: this action is [AllowAnonymous], so there is no ambient tenant_id claim
+        // and the fail-closed tenant filter (P0-5) matches zero rows for every webhook caller — which
+        // silently downgraded the whole endpoint to the 503 "not configured" path below. The real
+        // boundary here is the unguessable Slug plus the endpoint's own secret/HMAC check further
+        // down, not the ambient filter; the linked Workflow is then loaded with the same bypass
+        // because the ambient tenant is still null. Same reasoning as ChatbotsController.GetPublicInfo
+        // and AuthController.Refresh. Guarded by RegressionTests.D12.
         var webhookEndpoint = await dbContext.WebhookEndpoints
+            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(w => w.Slug == slug && !w.IsDeleted, ct);
 
         R2WAI.Domain.Entities.Workflow? workflow;
@@ -294,7 +362,8 @@ public class WorkflowsController(
                 return StatusCode(503, new { error = "Webhook endpoint not configured. Contact administrator." });
             }
 
-            workflow = await dbContext.Workflows.FirstOrDefaultAsync(w => w.Id == webhookEndpoint.WorkflowId && w.IsActive, ct);
+            workflow = await dbContext.Workflows.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(w => w.Id == webhookEndpoint.WorkflowId && w.IsActive, ct);
             if (workflow is null)
                 return NotFound(new { error = "Linked workflow not found or inactive" });
         }
@@ -307,7 +376,8 @@ public class WorkflowsController(
                 return StatusCode(503, new { error = "Webhook endpoint not configured. Contact administrator." });
             }
 
-            workflow = await dbContext.Workflows.FirstOrDefaultAsync(w => w.Trigger == slug && w.IsActive, ct);
+            workflow = await dbContext.Workflows.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(w => w.Trigger == slug && w.IsActive, ct);
             if (workflow is null)
                 return NotFound(new { error = $"No active workflow with trigger '{slug}'" });
         }
@@ -365,87 +435,26 @@ public class WorkflowsController(
     }
 
     [HttpGet("templates")]
-    public IActionResult GetTemplates()
+    public async Task<IActionResult> GetTemplates(CancellationToken ct = default)
     {
-        var templates = new[]
-        {
-            new
-            {
-                Id = "invoice-approval",
-                Name = "Invoice Approval",
-                Description = "Three-level invoice approval workflow with amount-based routing",
-                Type = "Approval",
-                Steps = new[]
-                {
-                    new { Name = "Submit Invoice", Action = "Action", AssignedRole = "Submitter", Order = 0 },
-                    new { Name = "Manager Approval", Action = "Approval", AssignedRole = "Manager", Order = 1 },
-                    new { Name = "Finance Review", Action = "Approval", AssignedRole = "Finance", Order = 2 },
-                    new { Name = "Process Payment", Action = "API Call", AssignedRole = "System", Order = 3 },
-                    new { Name = "Send Confirmation", Action = "Email", AssignedRole = "System", Order = 4 }
-                }
-            },
-            new
-            {
-                Id = "purchase-request",
-                Name = "Purchase Request",
-                Description = "Purchase order request with budget check and approval",
-                Type = "Approval",
-                Steps = new[]
-                {
-                    new { Name = "Submit Request", Action = "Action", AssignedRole = "Requester", Order = 0 },
-                    new { Name = "Budget Check", Action = "AI Generate", AssignedRole = "System", Order = 1 },
-                    new { Name = "Manager Approval", Action = "Approval", AssignedRole = "Manager", Order = 2 },
-                    new { Name = "Procurement Review", Action = "Approval", AssignedRole = "Procurement", Order = 3 },
-                    new { Name = "Create PO", Action = "API Call", AssignedRole = "System", Order = 4 }
-                }
-            },
-            new
-            {
-                Id = "employee-onboarding",
-                Name = "Employee Onboarding",
-                Description = "New employee onboarding workflow with IT and HR tasks",
-                Type = "Process",
-                Steps = new[]
-                {
-                    new { Name = "HR Intake", Action = "Action", AssignedRole = "HR", Order = 0 },
-                    new { Name = "Generate Welcome Pack", Action = "AI Generate", AssignedRole = "System", Order = 1 },
-                    new { Name = "IT Setup Request", Action = "API Call", AssignedRole = "IT", Order = 2 },
-                    new { Name = "Manager Introduction", Action = "Email", AssignedRole = "System", Order = 3 },
-                    new { Name = "HR Approval", Action = "Approval", AssignedRole = "HR", Order = 4 }
-                }
-            },
-            new
-            {
-                Id = "travel-request",
-                Name = "Travel Request",
-                Description = "Travel approval with policy check and booking",
-                Type = "Approval",
-                Steps = new[]
-                {
-                    new { Name = "Submit Travel Request", Action = "Action", AssignedRole = "Employee", Order = 0 },
-                    new { Name = "Policy Check", Action = "AI Generate", AssignedRole = "System", Order = 1 },
-                    new { Name = "Manager Approval", Action = "Approval", AssignedRole = "Manager", Order = 2 },
-                    new { Name = "Book Travel", Action = "API Call", AssignedRole = "System", Order = 3 }
-                }
-            },
-            new
-            {
-                Id = "vendor-approval",
-                Name = "Vendor Approval",
-                Description = "New vendor onboarding with compliance and legal review",
-                Type = "Approval",
-                Steps = new[]
-                {
-                    new { Name = "Submit Vendor Info", Action = "Action", AssignedRole = "Procurement", Order = 0 },
-                    new { Name = "Compliance Check", Action = "AI Generate", AssignedRole = "System", Order = 1 },
-                    new { Name = "Legal Review", Action = "Approval", AssignedRole = "Legal", Order = 2 },
-                    new { Name = "Finance Approval", Action = "Approval", AssignedRole = "Finance", Order = 3 },
-                    new { Name = "Register Vendor", Action = "API Call", AssignedRole = "System", Order = 4 }
-                }
-            }
-        };
-
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+        var templates = await workflowTemplateService.GetAllAsync(tenantId, ct);
         return Ok(new { items = templates });
+    }
+
+    public record SetWorkflowTemplateRequest(string Name, string? Description, string Type, List<WorkflowTemplateStepDto> Steps);
+
+    [HttpPut("templates/{id}")]
+    public async Task<IActionResult> SetTemplate(string id, [FromBody] SetWorkflowTemplateRequest request, CancellationToken ct = default)
+    {
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return BadRequest(new { error = "Name is required." });
+
+        var result = await workflowTemplateService.SetTemplateAsync(
+            id, tenantId, request.Name, request.Description, request.Type, request.Steps, ct);
+        return Ok(result);
     }
 
     [HttpPost("instances/{instanceId:guid}/retry")]

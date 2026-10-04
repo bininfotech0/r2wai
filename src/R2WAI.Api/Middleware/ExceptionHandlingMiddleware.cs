@@ -26,6 +26,17 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
+            // The client hung up (navigated away, closed the tab, or the SPA aborted an
+            // in-flight query on unmount). There is nobody left to send a response to, and this
+            // is not a server fault — so don't let it fall through to the 500 branch below and
+            // get logged as "Unhandled exception occurred". Doing so flooded the error log with
+            // routine navigation and would trip any error-rate alert on a perfectly healthy API.
+            if (ex is OperationCanceledException && context.RequestAborted.IsCancellationRequested)
+            {
+                _logger.LogDebug("Request {Method} {Path} aborted by the client.", context.Request.Method, context.Request.Path);
+                return;
+            }
+
             await HandleExceptionAsync(context, ex);
         }
     }
@@ -131,6 +142,18 @@ public class ExceptionHandlingMiddleware
 
         var correlationId = context.Items.TryGetValue("CorrelationId", out var cid) ? cid?.ToString() : null;
         correlationId ??= context.TraceIdentifier;
+
+        // A streaming (SSE) response already flushed at least one chunk before this exception was
+        // thrown — headers are sent, and setting StatusCode/ContentType now would itself throw
+        // (response already started), masking the real exception with a confusing new one. The
+        // three SSE controller actions each now catch a provider failure at the source and write
+        // their own graceful "error" event instead of letting it reach here at all; this guard is
+        // the remaining defense-in-depth for any other exception that manages to occur mid-stream.
+        if (context.Response.HasStarted)
+        {
+            _logger.LogWarning(exception, "Exception occurred after the response had already started ({Path}) — cannot write a problem-details body.", context.Request.Path);
+            return;
+        }
 
         context.Response.ContentType = "application/problem+json";
         context.Response.StatusCode = (int)statusCode;

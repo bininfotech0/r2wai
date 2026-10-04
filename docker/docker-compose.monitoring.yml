@@ -1,4 +1,21 @@
 services:
+  # OTLP trace receiver + UI. r2wai-api's OpenTelemetry pipeline (Program.cs) exports
+  # traces via OTLP only when OpenTelemetry__OtlpEndpoint is set (falls back to a
+  # console-only exporter otherwise) -- set OTLP_ENDPOINT=http://jaeger:4317 in
+  # docker/.env and restart r2wai-api to point real traces here. UI at :16686.
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: r2wai-jaeger
+    ports:
+      - "16686:16686" # UI
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    restart: unless-stopped
+    networks:
+      - r2wai-network
+
   prometheus:
     image: prom/prometheus:v2.54.1
     ports:

@@ -11,7 +11,7 @@ public class GetCapabilityByIdQueryHandler(
 {
     public async Task<CapabilityDto> Handle(GetCapabilityByIdQuery query, CancellationToken cancellationToken)
     {
-        var capability = await capabilityRepo.GetByIdAsync(query.Id, cancellationToken)
+        var capability = await capabilityRepo.GetByIdAsync(query.Id, "ApplicationApi", cancellationToken)
             ?? throw new NotFoundException(nameof(ToolDefinition), query.Id);
 
         return mapper.Map<CapabilityDto>(capability);

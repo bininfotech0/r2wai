@@ -1,5 +1,19 @@
 # R2WAI Deployment Guide
 
+> **2026-08-27 accuracy note:** the Kubernetes/Monitoring/Scaling sections below describe a
+> target architecture (Qdrant, MinIO, Velero, Prometheus/Grafana, a staging cluster) that was
+> never actually built — this repo uses pgvector (not Qdrant) for vectors, and `k8s/secret.yaml`,
+> `k8s/hpa-api.yaml`, `postgres-deployment.yaml`, and a `minio` deployment referenced below do not
+> exist. **The real, working, live-tested production path is the "Docker Deployment" section**
+> below plus `docker-compose.production.yml`, `docker/backup.sh`/`restore.sh`, and
+> `docs/deployment/RUNBOOK.md` — all confirmed accurate this session, including a real pg_dump/
+> restore round-trip with row-count verification. A baseline `k8s/` manifest set was added this
+> session (namespace, ConfigMap, Redis/API/Studio Deployments, HPA, Ingress) but deliberately
+> takes a different, simpler shape than this doc describes (managed Postgres instead of an
+> in-cluster `postgres-deployment.yaml`, no Qdrant/MinIO/Velero) and has never been applied to a
+> real cluster. Treat the Kubernetes section past this point as a future-architecture proposal,
+> not a runbook, until someone actually builds it.
+
 ## Prerequisites
 
 - Kubernetes cluster v1.28+ (AKS, EKS, GKE, or on-prem)
@@ -25,7 +39,7 @@ User ──► Cloudflare/Azure Front Door ──► AKS Cluster
                          ┌────────────────────┼────────────────────┐
                          │                    │                    │
                    ┌─────┴─────┐       ┌──────┴──────┐      ┌────┴────┐
-                   │  r2wai-api│       │ r2wai-web   │      │ r2wai-  │
+                   │  r2wai-api│       │ r2wai-studio│      │ r2wai-  │
                    │  (scaled) │       │  (scaled)   │      │  config │
                    └─────┬─────┘       │  (scaled)   │      └─────────┘
                          │             └─────────────┘
@@ -67,8 +81,8 @@ or match the new password against the existing database instead.
 # API
 docker build -f docker/Dockerfile.api -t r2wai-api:latest .
 
-# Blazor web app
-docker build -f docker/Dockerfile.web -t r2wai-web:latest .
+# React Studio (SPA behind nginx)
+docker build -f docker/Dockerfile.client -t r2wai-studio:latest .
 ```
 
 ### Run with docker-compose
@@ -129,7 +143,7 @@ kubectl get pods -n r2wai -w
 
 # Check deployments
 kubectl rollout status deployment/r2wai-api -n r2wai
-kubectl rollout status deployment/r2wai-web -n r2wai
+kubectl rollout status deployment/r2wai-studio -n r2wai
 
 # Verify services
 kubectl get svc -n r2wai
@@ -195,6 +209,16 @@ Sensitive configuration is stored in `k8s/secret.yaml` and Kubernetes Secrets:
 | `AI__OpenAI__ApiKey` | OpenAI API key |
 
 ## Monitoring
+
+> **2026-08-27 accuracy note:** the sections below (log shipping to Elasticsearch, Helm-managed
+> Grafana dashboards, Prometheus+Alertmanager) are the same target architecture flagged at the
+> top of this doc — not built. What's real today: `docker/docker-compose.monitoring.yml` runs
+> **Prometheus** (scrapes `r2wai-api`'s real `/api/v1/operations/metrics/prometheus` endpoint,
+> see `docker/monitoring/prometheus.yml`) and **Grafana** (`:3002`, no pre-built dashboards yet —
+> add your own against the Prometheus datasource), plus **Jaeger** (`:16686`) as an OTLP trace
+> receiver — `r2wai-api`'s OpenTelemetry pipeline exports real distributed traces there once
+> `OTLP_ENDPOINT` is set (see `docker/.env.example`), console-only otherwise. No log
+> shipping/Alertmanager exists.
 
 ### Health Endpoints
 

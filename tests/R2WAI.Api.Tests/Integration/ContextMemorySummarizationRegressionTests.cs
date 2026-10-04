@@ -1,3 +1,6 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -16,19 +19,19 @@ namespace R2WAI.Api.Tests.Integration;
 /// Live-DB regression coverage for Phase 6's Context &amp; Memory summarization path
 /// (ConversationMemoryService), which shipped off by default with only pure-logic unit tests
 /// (ConversationContextBuilderTests) — this was the documented prerequisite before ever flipping
-/// "AI:ContextMemory:SummarizationEnabled" on (see ARCHITECTURE.md's Adoption Status). Drives
-/// IChatService directly in-process rather than over HTTP: R2WAI.Api has no controller/hub route for
-/// it today (only the Blazor Web project's ChatSessionService/CopilotPanel call it), so this is a
-/// service-level integration test against the real DI graph — real EF/Postgres, only IAIService faked
-/// to avoid needing a live LLM.
+/// "AI:ContextMemory:SummarizationEnabled" on (see ARCHITECTURE.md's Adoption Status). Drives the
+/// real HTTP routes (POST /api/v1/chat/conversations, POST .../messages → SendMessageCommand) the
+/// same way ChatConcurrencyRegressionTests does, rather than a service directly — this previously
+/// drove the now-deleted IChatService in-process, which was dead code with no live HTTP route.
+/// SendMessageCommandHandler is the one real caller of IConversationMemoryService today.
 /// </summary>
 [Trait("Category", "Integration")]
 public class ContextMemorySummarizationRegressionTests : IAsyncLifetime
 {
-    private static readonly Guid SeededTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-    private static readonly Guid SeededAdminId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-
     private PostgreSqlContainer? _postgres;
+    private WebApplicationFactory<Program>? _factory;
+    private HttpClient? _client;
+    private FakeSummarizingAiService? _fakeAi;
     private bool _dockerAvailable;
 
     public async Task InitializeAsync()
@@ -52,14 +55,16 @@ public class ContextMemorySummarizationRegressionTests : IAsyncLifetime
 
     public async Task DisposeAsync()
     {
+        _client?.Dispose();
+        if (_factory is not null) await _factory.DisposeAsync();
         if (_postgres is not null) await _postgres.DisposeAsync();
     }
 
-    private (WebApplicationFactory<Program> Factory, FakeSummarizingAiService FakeAi) CreateFactory(bool summarizationEnabled)
+    private async Task<HttpClient> CreateAuthenticatedClientAsync(bool summarizationEnabled)
     {
-        var fakeAi = new FakeSummarizingAiService();
+        _fakeAi = new FakeSummarizingAiService();
 
-        var factory = new WebApplicationFactory<Program>()
+        _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Testing");
@@ -101,79 +106,100 @@ public class ContextMemorySummarizationRegressionTests : IAsyncLifetime
                     // Singleton, not scoped: the test asserts against this exact instance's call count
                     // after the action runs, so it must be the same object the app resolved.
                     services.RemoveAll<IAIService>();
-                    services.AddSingleton<IAIService>(fakeAi);
+                    services.AddSingleton<IAIService>(_fakeAi);
                 });
             });
 
-        return (factory, fakeAi);
-    }
+        _client = _factory.CreateClient();
 
-    private async Task EnsureSeededAsync(WebApplicationFactory<Program> factory)
-    {
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        await db.Database.MigrateAsync();
-        await ApplicationDbContextSeed.SeedAsync(db);
-    }
-
-    private async Task<Guid> CreateConversationWithPriorMessagesAsync(WebApplicationFactory<Program> factory, int priorMessageCount)
-    {
-        Guid conversationId;
-        using (var scope = factory.Services.CreateScope())
-        {
-            var chatService = scope.ServiceProvider.GetRequiredService<IChatService>();
-            var conversationDto = await chatService.CreateConversationAsync(
-                SeededTenantId, SeededAdminId, "Context Memory Regression", "chat", null);
-            conversationId = conversationDto.Id;
-        }
-
-        // Fresh scope/DbContext, matching how a real request would load the conversation,
-        // instead of reusing the tracked instance from the scope that just created it.
-        using (var scope = factory.Services.CreateScope())
+        using (var scope = _factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var conversation = await db.Conversations.FirstAsync(c => c.Id == conversationId);
-            for (var i = 0; i < priorMessageCount; i++)
-            {
-                var role = i % 2 == 0 ? MessageRole.User : MessageRole.Assistant;
-                var message = conversation.AddMessage(Guid.NewGuid(), null, role, $"Prior turn #{i}");
-                // conversation was loaded (tracked Unchanged), not Add()-ed: EF Core can't tell a
-                // client-generated-Guid child discovered only via navigation fixup is new, so it
-                // defaults to Modified. See the matching fix in ChatService/ChatWithAssistantCommand.
-                db.Messages.Add(message);
-            }
-            await db.SaveChangesAsync();
+            await db.Database.MigrateAsync();
+            await ApplicationDbContextSeed.SeedAsync(db);
         }
 
+        var loginResponse = await _client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            Email = "admin@r2wai.io",
+            Password = "R2wai_Admin!2026"
+        });
+        var loginBody = JsonDocument.Parse(await loginResponse.Content.ReadAsStringAsync());
+        var token = loginBody.RootElement.GetProperty("token").GetString()!;
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client;
+    }
+
+    private async Task<Guid> CreateConversationWithPriorMessagesAsync(HttpClient client, int priorMessageCount)
+    {
+        var createResponse = await client.PostAsJsonAsync("/api/v1/chat/conversations", new
+        {
+            Title = "Context Memory Regression",
+            Module = "chat"
+        });
+        Assert.True(createResponse.IsSuccessStatusCode, $"Create conversation failed: {createResponse.StatusCode}");
+        var createdBody = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var conversationId = createdBody.RootElement.GetProperty("id").GetGuid();
+
+        // IgnoreQueryFilters: this raw scope has no ambient authenticated HttpContext (the conversation
+        // was created via the real authenticated `client` above, but that context doesn't carry over
+        // to a separately-created scope) — P0-5's fail-closed tenant filter would otherwise find
+        // nothing here. conversationId itself is already trustworthy (came from the authenticated
+        // create call), so this is a safe read-back, not a security-relevant lookup.
+        using var scope = _factory!.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var conversation = await db.Conversations.IgnoreQueryFilters().FirstAsync(c => c.Id == conversationId);
+        for (var i = 0; i < priorMessageCount; i++)
+        {
+            var role = i % 2 == 0 ? MessageRole.User : MessageRole.Assistant;
+            var message = conversation.AddMessage(Guid.NewGuid(), null, role, $"Prior turn #{i}");
+            // conversation was loaded (tracked Unchanged), not Add()-ed: EF Core can't tell a
+            // client-generated-Guid child discovered only via navigation fixup is new, so it
+            // defaults to Modified. See the matching fix in SendMessageCommandHandler.
+            db.Messages.Add(message);
+        }
+        await db.SaveChangesAsync();
+
         return conversationId;
+    }
+
+    private static async Task<string> SendMessageAsync(HttpClient client, Guid conversationId, string content)
+    {
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent(content), "content" }
+        };
+        var response = await client.PostAsync($"/api/v1/chat/conversations/{conversationId}/messages", form);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, $"Send message failed: {response.StatusCode} — {body}");
+        return JsonDocument.Parse(body).RootElement.GetProperty("content").GetString()!;
     }
 
     [Fact]
     public async Task SendMessage_SummarizationEnabled_WithMoreThanRecentWindow_CallsSummarizer()
     {
         if (!_dockerAvailable) return;
-        var (factory, fakeAi) = CreateFactory(summarizationEnabled: true);
-        await using var _ = factory;
-        await EnsureSeededAsync(factory);
+        var client = await CreateAuthenticatedClientAsync(summarizationEnabled: true);
 
-        // 12 prior messages + the one SendMessageAsync is about to add = 13 total, well past the
-        // 10-turn recent window, so BuildConversationContextAsync must split and summarize.
-        var conversationId = await CreateConversationWithPriorMessagesAsync(factory, priorMessageCount: 12);
+        // 12 prior messages + the one being sent = 13 total, well past the 10-turn recent window,
+        // so BuildConversationContextAsync must split and summarize.
+        var conversationId = await CreateConversationWithPriorMessagesAsync(client, priorMessageCount: 12);
 
-        using var scope = factory.Services.CreateScope();
-        var chatService = scope.ServiceProvider.GetRequiredService<IChatService>();
-        var reply = await chatService.SendMessageAsync(
-            conversationId, SeededTenantId, SeededAdminId, "What's the latest status?", attachments: null);
+        var replyContent = await SendMessageAsync(client, conversationId, "What's the latest status?");
 
-        Assert.Equal(FakeSummarizingAiService.CannedReply, reply.Content);
-        Assert.True(fakeAi.SummarizeCallCount > 0,
+        Assert.Equal(FakeSummarizingAiService.CannedReply, replyContent);
+        Assert.True(_fakeAi!.SummarizeCallCount > 0,
             "Expected ConversationMemoryService to call SummarizeTextAsync once the conversation exceeded the recent-turn window.");
 
         // The bug class this guards against (see ChatConcurrencyRegressionTests): a 200-looking reply
         // that silently failed to persist. Verify both messages actually reached the database.
-        using var verifyScope = factory.Services.CreateScope();
+        // IgnoreQueryFilters: no ambient authenticated HttpContext in this raw scope — see the earlier
+        // CreateConversationWithPriorMessagesAsync note.
+        using var verifyScope = _factory!.Services.CreateScope();
         var db = verifyScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var conversation = await db.Conversations.Include(c => c.Messages).FirstAsync(c => c.Id == conversationId);
+        var conversation = await db.Conversations.IgnoreQueryFilters().Include(c => c.Messages).FirstAsync(c => c.Id == conversationId);
         Assert.Equal(14, conversation.Messages.Count); // 12 seeded + 1 new user + 1 new assistant
         Assert.Contains(conversation.Messages, m => m.Role == MessageRole.Assistant && m.Content == FakeSummarizingAiService.CannedReply);
     }
@@ -182,19 +208,14 @@ public class ContextMemorySummarizationRegressionTests : IAsyncLifetime
     public async Task SendMessage_SummarizationDisabled_WithMoreThanRecentWindow_NeverCallsSummarizer()
     {
         if (!_dockerAvailable) return;
-        var (factory, fakeAi) = CreateFactory(summarizationEnabled: false);
-        await using var _ = factory;
-        await EnsureSeededAsync(factory);
+        var client = await CreateAuthenticatedClientAsync(summarizationEnabled: false);
 
-        var conversationId = await CreateConversationWithPriorMessagesAsync(factory, priorMessageCount: 12);
+        var conversationId = await CreateConversationWithPriorMessagesAsync(client, priorMessageCount: 12);
 
-        using var scope = factory.Services.CreateScope();
-        var chatService = scope.ServiceProvider.GetRequiredService<IChatService>();
-        var reply = await chatService.SendMessageAsync(
-            conversationId, SeededTenantId, SeededAdminId, "What's the latest status?", attachments: null);
+        var replyContent = await SendMessageAsync(client, conversationId, "What's the latest status?");
 
-        Assert.Equal(FakeSummarizingAiService.CannedReply, reply.Content);
-        Assert.Equal(0, fakeAi.SummarizeCallCount);
+        Assert.Equal(FakeSummarizingAiService.CannedReply, replyContent);
+        Assert.Equal(0, _fakeAi!.SummarizeCallCount);
     }
 }
 
@@ -211,31 +232,31 @@ public class FakeSummarizingAiService : IAIService
     public int SummarizeCallCount => _summarizeCallCount;
 
     public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null,
-        bool enableTools = false, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
         await Task.Yield();
         yield return CannedReply;
     }
 
-    public Task<string> SummarizeTextAsync(string text, int maxLength = 500, CancellationToken ct = default)
+    public Task<string> SummarizeTextAsync(string text, int maxLength = 500, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default)
     {
         Interlocked.Increment(ref _summarizeCallCount);
         return Task.FromResult(CannedSummary);
     }
 
     public Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null,
-        bool enableTools = false, CancellationToken ct = default) => Task.FromResult(CannedReply);
-    public Task<string> GenerateResponseAsync(string prompt, string? systemPrompt = null, string? context = null, CancellationToken ct = default)
+        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default) => Task.FromResult(CannedReply);
+    public Task<string> GenerateResponseAsync(string prompt, string? systemPrompt = null, string? context = null, ResolvedModelConfig? modelConfig = null, int? maxTokens = null, double? temperature = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
-    public Task<string> ExtractDataAsync(string text, string schema, CancellationToken ct = default)
+    public Task<string> ExtractDataAsync(string text, string schema, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
-    public Task<string> CompareDocumentsAsync(string sourceText, string targetText, CancellationToken ct = default)
+    public Task<string> CompareDocumentsAsync(string sourceText, string targetText, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
     public Task<IReadOnlyList<float>> GenerateEmbeddingAsync(string text, CancellationToken ct = default)
         => throw new NotImplementedException();
     public Task<IReadOnlyList<IReadOnlyList<float>>> GenerateEmbeddingsAsync(IEnumerable<string> texts, CancellationToken ct = default)
         => throw new NotImplementedException();
-    public Task<string> AnswerQuestionAsync(string question, string context, CancellationToken ct = default)
+    public Task<string> AnswerQuestionAsync(string question, string context, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
 }
 

@@ -19,10 +19,12 @@ public class AiFunctionAuditFilterTests
     }
 
     [Fact]
-    public void EvaluateGovernance_NoToolDefinition_Allows()
+    public void EvaluateGovernance_NoToolDefinition_DeniesUnknownTool()
     {
-        var decision = AiFunctionAuditFilter.EvaluateGovernance(null, []);
-        Assert.Equal(GovernanceDecision.Allow, decision);
+        // Fail closed: this used to be Allow, which silently ungoverned any function with no record
+        // (audit finding P0-4). Built-in functions get a code-defined default record before this point.
+        var decision = AiFunctionAuditFilter.EvaluateGovernance(null, ["Admin", "SystemAdmin"]);
+        Assert.Equal(GovernanceDecision.DenyUnknownTool, decision);
     }
 
     [Fact]
@@ -72,5 +74,44 @@ public class AiFunctionAuditFilterTests
         var toolDef = CreateToolDef(requiredRole: "Admin", approvalRequired: true);
         var decision = AiFunctionAuditFilter.EvaluateGovernance(toolDef, ["User"]);
         Assert.Equal(GovernanceDecision.DenyMissingRole, decision);
+    }
+
+    [Theory]
+    [InlineData("get_leave_balance", "Get Leave Balance")]
+    [InlineData("SubmitInvoice", "Submit Invoice")]
+    [InlineData("start_workflow", "Start Workflow")]
+    [InlineData("HTTPRequest", "H T T P Request")]
+    [InlineData("ping", "Ping")]
+    public void HumanizeFunctionName_ProducesReadableDisplayName(string technicalName, string expected)
+    {
+        Assert.Equal(expected, AiFunctionAuditFilter.HumanizeFunctionName(technicalName));
+    }
+
+    [Fact]
+    public void IsEnabledForCallingAssistant_NullList_MeansUnfiltered_Allows()
+    {
+        // Matches every assistant with no explicit tool selection — must stay allowed, not deny-all.
+        Assert.True(AiFunctionAuditFilter.IsEnabledForCallingAssistant(Guid.NewGuid(), null));
+    }
+
+    [Fact]
+    public void IsEnabledForCallingAssistant_ToolInList_Allows()
+    {
+        var toolId = Guid.NewGuid();
+        Assert.True(AiFunctionAuditFilter.IsEnabledForCallingAssistant(toolId, [toolId, Guid.NewGuid()]));
+    }
+
+    [Fact]
+    public void IsEnabledForCallingAssistant_ToolNotInList_Denies()
+    {
+        var toolId = Guid.NewGuid();
+        Assert.False(AiFunctionAuditFilter.IsEnabledForCallingAssistant(toolId, [Guid.NewGuid(), Guid.NewGuid()]));
+    }
+
+    [Fact]
+    public void IsEnabledForCallingAssistant_EmptyList_DeniesEverything()
+    {
+        // An assistant explicitly configured with zero enabled tools — distinct from null (unfiltered).
+        Assert.False(AiFunctionAuditFilter.IsEnabledForCallingAssistant(Guid.NewGuid(), []));
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using OpenAI;
+using R2WAI.Application.Common.Interfaces;
 using System.ClientModel;
 using System.ClientModel.Primitives;
 
@@ -21,11 +22,11 @@ public class OpenAiModelProvider : IModelProvider
         _logger = logger;
     }
 
-    public void Configure(IKernelBuilder builder)
+    public void Configure(IKernelBuilder builder, ResolvedModelConfig? config = null)
     {
-        var apiKey = _configuration["AI:OpenAI:ApiKey"] ?? _configuration["OpenAI:ApiKey"] ?? string.Empty;
-        var modelId = _configuration["AI:OpenAI:ModelId"] ?? "gpt-4o";
-        var endpoint = _configuration["AI:OpenAI:Endpoint"];
+        var apiKey = config?.ApiKey ?? _configuration["AI:OpenAI:ApiKey"] ?? _configuration["OpenAI:ApiKey"] ?? string.Empty;
+        var modelId = config?.ModelId ?? _configuration["AI:OpenAI:ModelId"] ?? "gpt-4o";
+        var endpoint = config?.Endpoint ?? _configuration["AI:OpenAI:Endpoint"];
 
         if (string.IsNullOrEmpty(apiKey))
         {

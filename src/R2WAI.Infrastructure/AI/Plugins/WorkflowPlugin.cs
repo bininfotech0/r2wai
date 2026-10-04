@@ -2,6 +2,7 @@ using Microsoft.SemanticKernel;
 using System.ComponentModel;
 using System.Text.Json;
 using R2WAI.Application.Common.Interfaces;
+using R2WAI.Application.Common.Models;
 using R2WAI.Infrastructure.Services;
 
 namespace R2WAI.Infrastructure.AI.Plugins;
@@ -13,6 +14,7 @@ public class WorkflowPlugin
     private readonly IWorkflowBridge _workflowBridge;
     private readonly ICurrentUserService _currentUser;
     private readonly INotificationService _notificationService;
+    private readonly IChatStreamContext _streamContext;
     private readonly ILogger<WorkflowPlugin> _logger;
 
     public WorkflowPlugin(
@@ -21,6 +23,7 @@ public class WorkflowPlugin
         IWorkflowBridge workflowBridge,
         ICurrentUserService currentUser,
         INotificationService notificationService,
+        IChatStreamContext streamContext,
         ILogger<WorkflowPlugin> logger)
     {
         _approvalService = approvalService;
@@ -28,6 +31,7 @@ public class WorkflowPlugin
         _workflowBridge = workflowBridge;
         _currentUser = currentUser;
         _notificationService = notificationService;
+        _streamContext = streamContext;
         _logger = logger;
     }
 
@@ -106,7 +110,7 @@ public class WorkflowPlugin
                 instance.WorkflowId,
                 userId,
                 data,
-                ct);
+                ct: ct);
 
             return $"Approval request submitted successfully. Approval request ID: {requestId}";
         }
@@ -127,6 +131,22 @@ public class WorkflowPlugin
         try
         {
             var instance = await _workflowService.GetWorkflowInstanceByIdAsync(instanceId, ct);
+
+            // Response card (Phase 3): the LLM still gets the full JSON below to narrate as it
+            // normally would — this is an additive capture, not a behavior change to the model's
+            // own answer.
+            var card = new ResponseCardDto(
+                Type: "status",
+                Title: instance.WorkflowName ?? "Workflow",
+                Fields:
+                [
+                    new ResponseCardField("Status", instance.Status.ToString()),
+                    new ResponseCardField("Current Step", (instance.CurrentStep + 1).ToString()),
+                    new ResponseCardField("Started", instance.StartedAt?.ToString("u") ?? "Not started"),
+                    new ResponseCardField("Completed", instance.CompletedAt?.ToString("u") ?? "—"),
+                ]);
+            _streamContext.CapturedContentBlock = System.Text.Json.JsonSerializer.Serialize(new[] { card });
+
             return System.Text.Json.JsonSerializer.Serialize(instance);
         }
         catch (Exception ex)
@@ -176,7 +196,24 @@ public class WorkflowPlugin
             var userId = _currentUser.UserId ?? throw new InvalidOperationException("User ID not found");
 
             var pending = await _approvalService.GetPendingForApproverAsync(tenantId, userId, ct);
-            return JsonSerializer.Serialize(pending.Select(p => new
+            var pendingList = pending.ToList();
+
+            // Response card (Phase 3) — see GetWorkflowStatusAsync's comment; purely additive.
+            var card = new ResponseCardDto(
+                Type: "table",
+                Title: "Pending Approvals",
+                Columns: ["Workflow", "Requester", "Requested", "Due", "Escalation"],
+                Rows: pendingList.Select(p => (IReadOnlyList<string>)
+                [
+                    p.WorkflowName ?? "—",
+                    $"{p.RequesterFirstName} {p.RequesterLastName}",
+                    p.RequestedAt.ToString("u"),
+                    p.DueAt?.ToString("u") ?? "—",
+                    p.EscalationLevel.ToString(),
+                ]).ToList());
+            _streamContext.CapturedContentBlock = JsonSerializer.Serialize(new[] { card });
+
+            return JsonSerializer.Serialize(pendingList.Select(p => new
             {
                 p.Id,
                 p.WorkflowName,

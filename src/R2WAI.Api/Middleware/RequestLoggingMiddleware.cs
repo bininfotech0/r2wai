@@ -52,11 +52,26 @@ public class RequestLoggingMiddleware
                     method, path, statusCode, elapsed);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             stopwatch.Stop();
+
+            // The client hung up (navigated away, closed the tab, or React Query aborted an
+            // in-flight request when a component unmounted). This middleware runs INSIDE
+            // ExceptionHandlingMiddleware, so it sees the exception first — if it recorded a
+            // 500 here, every routine navigation would (a) log a spurious error and (b) land
+            // in the metrics store as a server fault, dragging the dashboard's Success Rate KPI
+            // down on a perfectly healthy API. The request was never served, so it must not
+            // count as a failure at all.
+            if (ex is OperationCanceledException && context.RequestAborted.IsCancellationRequested)
+            {
+                _logger.LogDebug("Request {Method} {Path} aborted by the client after {Elapsed}ms",
+                    method, path, stopwatch.ElapsedMilliseconds);
+                return;
+            }
+
             RecordMetric(context, path.Value ?? string.Empty, 500, stopwatch.ElapsedMilliseconds);
-            _logger.LogError("HTTP {Method} {Path} failed after {Elapsed}ms",
+            _logger.LogError(ex, "HTTP {Method} {Path} failed after {Elapsed}ms",
                 method, path, stopwatch.ElapsedMilliseconds);
             throw;
         }

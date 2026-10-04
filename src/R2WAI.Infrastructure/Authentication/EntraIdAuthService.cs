@@ -1,13 +1,30 @@
 using Microsoft.Identity.Web;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
 namespace R2WAI.Infrastructure.Authentication;
 
+// Registered as a Singleton (DependencyInjection.cs) specifically so _configManager below is a
+// real, process-lifetime cache — this class's only other dependencies (IConfiguration, ILogger)
+// are already singleton-safe.
 public class EntraIdAuthService
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<EntraIdAuthService> _logger;
+
+    // Lazily built on first real validation call, then reused for the process lifetime — this
+    // endpoint is [AllowAnonymous], and the raw discovery-document fetch it replaces
+    // (OpenIdConnectConfigurationRetriever.GetAsync(...).GetAwaiter().GetResult(), blocking, no
+    // caching) meant every anonymous SSO attempt made a fresh, thread-pool-blocking outbound HTTPS
+    // call to login.microsoftonline.com — a cheap thread-pool-exhaustion vector on the login path
+    // specifically, and needless latency even when Microsoft's endpoint is healthy.
+    // ConfigurationManager<T>'s own default refresh (~24h) matches what the standard ASP.NET Core
+    // JWT-bearer/Microsoft.Identity.Web pipeline already does elsewhere in this app; this endpoint
+    // hand-validates instead of going through that pipeline (see this file's own history) but there
+    // is no reason its caching behavior should be worse.
+    private ConfigurationManager<OpenIdConnectConfiguration>? _configManager;
 
     public EntraIdAuthService(IConfiguration configuration, ILogger<EntraIdAuthService> logger)
     {
@@ -28,6 +45,15 @@ public class EntraIdAuthService
                 return false;
             }
 
+            _configManager ??= new ConfigurationManager<OpenIdConnectConfiguration>(
+                $"https://login.microsoftonline.com/{tenantId}/v2.0/.well-known/openid-configuration",
+                new OpenIdConnectConfigurationRetriever());
+
+            // GetConfigurationAsync itself serves the cached document (only a real cache miss/
+            // refresh actually hits the network), so this is no longer unconditionally blocking —
+            // an actual await, not .GetAwaiter().GetResult() inside a synchronous delegate.
+            var openIdConfig = await _configManager.GetConfigurationAsync(ct);
+
             var handler = new JwtSecurityTokenHandler();
             var result = await handler.ValidateTokenAsync(token, new Microsoft.IdentityModel.Tokens.TokenValidationParameters
             {
@@ -35,15 +61,7 @@ public class EntraIdAuthService
                 ValidAudience = clientId,
                 ValidateIssuerSigningKey = true,
                 ValidateLifetime = true,
-                IssuerSigningKeyResolver = (tokenStr, securityToken, kid, validationParameters) =>
-                {
-                    var config = Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfigurationRetriever
-                        .GetAsync(
-                            $"https://login.microsoftonline.com/{tenantId}/v2.0/.well-known/openid-configuration",
-                            CancellationToken.None)
-                        .GetAwaiter().GetResult();
-                    return config.SigningKeys;
-                }
+                IssuerSigningKeys = openIdConfig.SigningKeys,
             });
 
             return result.IsValid;

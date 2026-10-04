@@ -11,6 +11,7 @@ public record UpdateChatbotCommand : IRequest<ChatbotDto>
     public string? SuggestedQuestions { get; init; }
     public string? PromptTemplate { get; init; }
     public bool VoiceEnabled { get; init; }
+    public string? AllowedOrigins { get; init; }
 }
 
 public class UpdateChatbotCommandValidator : AbstractValidator<UpdateChatbotCommand>
@@ -37,14 +38,16 @@ public class UpdateChatbotCommandHandler(
         chatbot.UpdateDetails(command.Name, command.Description, command.WelcomeMessage,
             command.SuggestedQuestions, command.PromptTemplate);
         chatbot.SetVoiceEnabled(command.VoiceEnabled);
+        chatbot.SetAllowedOrigins(command.AllowedOrigins);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var tenantId = currentUser.TenantId;
         if (tenantId.HasValue)
         {
-            for (var p = 1; p <= 5; p++)
-                await cacheService.RemoveAsync($"chatbots:{tenantId}:p{p}:s20", cancellationToken);
+            // Concurrent, not sequential -- see AssistantCacheKeys.InvalidateAsync for why.
+            await Task.WhenAll(Enumerable.Range(1, 5)
+                .Select(p => cacheService.RemoveAsync($"chatbots:{tenantId}:p{p}:s20", cancellationToken)));
         }
 
         return mapper.Map<ChatbotDto>(chatbot);

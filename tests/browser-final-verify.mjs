@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-const BASE = 'http://localhost:3001';
+import { BASE_URL as BASE, EMAIL, PASSWORD } from './helpers/test-env.mjs';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function main() {
@@ -16,8 +16,8 @@ async function main() {
   // Login
   await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 15000 });
   await sleep(3000);
-  await page.locator("input[type='email']").first().fill('admin@r2wai.io');
-  await page.locator("input[type='password']").first().fill('R2wai_Admin!2026');
+  await page.locator("input[type='email']").first().fill(EMAIL);
+  await page.locator("input[type='password']").first().fill(PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await sleep(5000);
   check('Login', !page.url().includes('/login'));

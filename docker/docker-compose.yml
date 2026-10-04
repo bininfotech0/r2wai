@@ -1,14 +1,13 @@
 services:
-  r2wai-web:
-    container_name: r2wai-web
+  # Single public ingress — see docker/nginx/studio.conf. Owns port 8080
+  # (previously r2wai-web's, before Phase 14's Blazor decommission).
+  r2wai-studio:
+    container_name: r2wai-studio
     build:
       context: ..
-      dockerfile: docker/Dockerfile.web
+      dockerfile: docker/Dockerfile.client
     ports:
       - "8080:8080"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ApiBaseUrl=http://r2wai-api:8080
     depends_on:
       r2wai-api:
         condition: service_started
@@ -25,6 +24,11 @@ services:
       - "5000:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      # LOCAL DEV / CI ONLY. Seeds the demo tenant and accounts with publicly known passwords
+      # (admin@r2wai.io, user@r2wai.io, ...) — the Playwright suite logs in as them. Demo seeding is
+      # opt-in everywhere else (docker-compose.production.yml and k8s deliberately don't set this; they
+      # bootstrap a single admin from Bootstrap__AdminEmail / Bootstrap__AdminPassword instead).
+      - Database__SeedDemoData=true
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=r2wai;Username=r2wai;Password=${DB_PASSWORD};Include Error Detail=true
       - Authentication__Jwt__SecretKey=${JWT_SECRET}
       - Authentication__Jwt__ExpirationMinutes=15
@@ -34,20 +38,31 @@ services:
       - AI__Provider=${AI_PROVIDER:-ollama}
       - AI__OpenAI__ApiKey=${OPENAI_API_KEY}
       - AI__Ollama__Endpoint=${OLLAMA_ENDPOINT:-http://host.docker.internal:11434}
-      - AI__Ollama__ModelId=${OLLAMA_MODEL:-qwen2.5-coder:7b}
-      - AI__Ollama__EmbeddingModel=${OLLAMA_EMBEDDING_MODEL:-qwen2.5-coder:7b}
+      - AI__Ollama__ModelId=${OLLAMA_MODEL:-qwen3:4b}
+      - AI__Ollama__EmbeddingModel=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      - VectorStore__VectorSize=${VECTOR_SIZE:-768}
       - Storage__Provider=${STORAGE_PROVIDER:-Local}
-      - ConnectionStrings__Redis=
-      - Cache__Redis__ConnectionString=
+      - ConnectionStrings__Redis=redis:6379
+      - Cache__Redis__ConnectionString=redis:6379
+      # Traces/metrics/logs export to console when unset (default). Bring up
+      # docker-compose.monitoring.yml and set OTLP_ENDPOINT=http://jaeger:4317
+      # to route real distributed traces to Jaeger instead.
+      - OpenTelemetry__OtlpEndpoint=${OTLP_ENDPOINT:-}
       - Authentication__ApiKeys__0__Key=${API_KEY_0}
       - Authentication__ApiKeys__0__Name=Docker Dev Key
       - Authentication__ApiKeys__0__UserId=00000000-0000-0000-0000-000000000001
       - Authentication__ApiKeys__0__TenantId=00000000-0000-0000-0000-000000000001
       - Authentication__ApiKeys__0__Roles__0=Admin
-      - Authentication__ApiKeys__0__Roles__1=WorkflowManager
       - Authentication__ApiKeys__0__Scopes__0=read
       - Authentication__ApiKeys__0__Scopes__1=write
       - Authentication__ApiKeys__0__Enabled=true
+      - CORS__AllowedOrigins__0=${STUDIO_ORIGIN:-http://localhost:8080}
+      # Optional second allowed origin — a real embeddable-widget deployment
+      # requires each third-party embedding domain added here explicitly (the
+      # widget itself has no embed-token/CORS-bypass mechanism, see
+      # ChatbotEmbedDialog). Defaults to a no-op duplicate of origin 0; set
+      # WIDGET_TEST_ORIGIN to verify cross-origin embedding locally.
+      - CORS__AllowedOrigins__1=${WIDGET_TEST_ORIGIN:-http://localhost:8080}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -59,6 +74,27 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - r2wai-network
+
+  # Shares rate-limiting, login-lockout, and AiUsage-cap state across API replicas — without this,
+  # each instance tracks those counters independently in memory and the protections silently stop
+  # being enforced correctly the moment more than one replica is running (RedisCacheService/
+  # RedisHealthCheck already support this; only the connection was ever left unconfigured here).
+  redis:
+    container_name: r2wai-redis
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
     networks:
       - r2wai-network
@@ -85,6 +121,7 @@ services:
 
 volumes:
   postgres-data:
+  redis-data:
 
 networks:
   r2wai-network:

@@ -9,5 +9,9 @@ public class AssistantProfile : Profile
     {
         CreateMap<AssistantDefinition, AssistantDto>()
             .ForMember(d => d.PublishStatus, opt => opt.MapFrom(s => s.PublishStatus.ToString()));
+
+        CreateMap<AssistantPromptHistory, AssistantPromptHistoryDto>();
+
+        CreateMap<AssistantVersion, AssistantVersionDto>();
     }
 }

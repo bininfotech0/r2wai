@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>R2WAI AI Assistant</title>
+
+    <meta
+        name="description"
+        content="R2WAI Enterprise AI Employee Assistant"
+    >
+
+    <style>
+        /* =========================================================
+           HOST PAGE ONLY
+           ========================================================= */
+
+        .r2wai-demo-page,
+        .r2wai-demo-page * {
+            box-sizing: border-box;
+        }
+
+        .r2wai-demo-page {
+            width: 100%;
+            min-height: 100vh;
+
+            margin: 0;
+            padding: 40px 20px;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-family:
+                Inter,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                Roboto,
+                Arial,
+                sans-serif;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #f8fafc 0%,
+                    #ffffff 100%
+                );
+
+            color: #172033;
+        }
+
+        .r2wai-demo-content {
+            width: 100%;
+            max-width: 900px;
+
+            text-align: center;
+        }
+
+        /* =========================================================
+           BADGE
+           ========================================================= */
+
+        .r2wai-demo-badge {
+            display: inline-flex;
+
+            align-items: center;
+            justify-content: center;
+
+            gap: 8px;
+
+            padding: 8px 14px;
+
+            border: 1px solid #dbeafe;
+            border-radius: 999px;
+
+            background: #eff6ff;
+
+            color: #1565c0;
+
+            font-size: 14px;
+            font-weight: 600;
+
+            line-height: 1;
+        }
+
+        .r2wai-demo-status-dot {
+            width: 8px;
+            height: 8px;
+
+            flex: 0 0 8px;
+
+            border-radius: 50%;
+
+            background: #22c55e;
+        }
+
+        /* =========================================================
+           TITLE
+           ========================================================= */
+
+        .r2wai-demo-title {
+            margin: 24px 0 16px;
+
+            font-size:
+                clamp(
+                    38px,
+                    7vw,
+                    64px
+                );
+
+            line-height: 1.05;
+
+            letter-spacing: -2px;
+
+            font-weight: 700;
+
+            color: #172033;
+        }
+
+        /* =========================================================
+           DESCRIPTION
+           ========================================================= */
+
+        .r2wai-demo-description {
+            width: 100%;
+            max-width: 680px;
+
+            margin: 0 auto;
+
+            color: #64748b;
+
+            font-size: 18px;
+
+            line-height: 1.7;
+        }
+
+        /* =========================================================
+           HINT
+           ========================================================= */
+
+        .r2wai-demo-hint {
+            margin: 32px 0 0;
+
+            color: #94a3b8;
+
+            font-size: 14px;
+
+            line-height: 1.5;
+        }
+
+        /* =========================================================
+           IMPORTANT
+
+           Do NOT add global rules such as:
+
+           input {}
+           textarea {}
+           button {}
+           img {}
+           form {}
+
+           The widget owns those elements.
+           ========================================================= */
+
+        @media (max-width: 600px) {
+
+            .r2wai-demo-page {
+                padding: 30px 18px;
+            }
+
+            .r2wai-demo-title {
+                letter-spacing: -1px;
+            }
+
+            .r2wai-demo-description {
+                font-size: 16px;
+            }
+
+            .r2wai-demo-hint {
+                margin-top: 24px;
+                font-size: 13px;
+            }
+        }
+    </style>
+</head>
+
+
+<body>
+
+    <!-- =========================================================
+         R2WAI DEMO / HOST PAGE
+         ========================================================= -->
+
+    <main class="r2wai-demo-page">
+
+        <section class="r2wai-demo-content">
+
+            <!-- Status -->
+
+            <div class="r2wai-demo-badge">
+
+                <span
+                    class="r2wai-demo-status-dot"
+                    aria-hidden="true">
+                </span>
+
+                <span>
+                    R2WAI AI Assistant
+                </span>
+
+            </div>
+
+
+            <!-- Title -->
+
+            <h1 class="r2wai-demo-title">
+                Enterprise AI Assistant
+            </h1>
+
+
+            <!-- Description -->
+
+            <p class="r2wai-demo-description">
+                Connect with the R2WAI AI Assistant for
+                intelligent, enterprise-ready assistance.
+            </p>
+
+
+            <!-- Hint -->
+
+            <p class="r2wai-demo-hint">
+                Open the assistant using the chat button
+                in the bottom-right corner.
+            </p>
+
+        </section>
+
+    </main>
+
+
+    <!-- =========================================================
+         R2WAI WIDGET
+         =========================================================
+
+         IMPORTANT:
+         - No API key in browser
+         - Chatbot ID identifies the published assistant
+         - Backend resolves model, knowledge, tools and policies
+
+         ========================================================= -->
+
+
+    <!-- Widget CSS -->
+
+    <link
+        rel="stylesheet"
+        href="http://localhost:8080/widget/widget.css?v=20261003-1"
+    >
+
+
+    <!-- Widget JavaScript -->
+
+    <script
+        src="http://localhost:8080/widget/widget.js?v=20261003-1"
+        data-chatbot-id="5bae3ab2-3f7c-4c6d-a45f-871eac9b15f4"
+        data-base-url="http://localhost:8080"
+        data-api-url="http://localhost:8080/api/v1/chatbots/5bae3ab2-3f7c-4c6d-a45f-871eac9b15f4/webhook"
+        async>
+    </script>
+
+
+</body>
+</html>

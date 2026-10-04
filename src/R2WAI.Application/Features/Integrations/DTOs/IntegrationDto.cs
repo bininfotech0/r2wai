@@ -9,5 +9,7 @@ public class IntegrationDto
     public string? EndpointUrl { get; init; }
     public string? Configuration { get; init; }
     public bool IsActive { get; init; }
+    public string? LastTestStatus { get; init; }
+    public DateTime? LastTestedAt { get; init; }
     public DateTime CreatedAt { get; init; }
 }

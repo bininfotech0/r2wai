@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Reflection;
 
@@ -84,8 +86,23 @@ public static class DatabaseInitializer
                 }
             }
 
-            logger.LogInformation("Seeding database...");
-            await ApplicationDbContextSeed.SeedAsync(context, cancellationToken);
+            var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+            var environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
+
+            if (DatabaseBootstrap.ShouldSeedDemoData(environment, configuration))
+            {
+                if (!environment.IsDevelopment())
+                    logger.LogWarning(
+                        "Database:SeedDemoData is enabled outside Development. On an empty database this creates demo accounts whose passwords are public (admin@r2wai.io, user@r2wai.io, ...). Never enable it on a real deployment.");
+
+                logger.LogInformation("Seeding database with demo data...");
+                await ApplicationDbContextSeed.SeedAsync(context, cancellationToken);
+            }
+            else
+            {
+                logger.LogInformation("Bootstrapping database (no demo data)...");
+                await DatabaseBootstrap.SeedAsync(context, BootstrapAdmin.From(configuration), logger, cancellationToken);
+            }
 
             logger.LogInformation("Database initialization completed successfully.");
         }

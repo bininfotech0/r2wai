@@ -3,8 +3,20 @@
 > **Author:** Product / Architecture Lead
 > **Status:** Approved direction — freezes the target architecture. Feature development must not start until Phase 0 (Architecture Freeze) is complete.
 > **Date:** 2026-08-10
-> **Stack:** .NET 10, Blazor Server + MudBlazor, Clean Architecture, CQRS/MediatR, Semantic Kernel, Elsa (behind R2WAI abstraction), PostgreSQL 16 + pgvector, JWT + Entra ID + MFA, Docker Compose, Ollama / OpenAI / Azure OpenAI
-> **Related docs:** [ARCHITECTURE.md](../../ARCHITECTURE.md) (target architecture), [ROADMAP.md](../../ROADMAP.md) (product roadmap), [ENTERPRISE_AUDIT_REPORT.md](../../ENTERPRISE_AUDIT_REPORT.md) (hardening audit snapshot), [MVP-IMPLEMENTATION-PLAN.md](MVP-IMPLEMENTATION-PLAN.md) (legacy plan)
+> **Stack (as of 2026-08-10, now stale — see note below):** .NET 10, Blazor Server + MudBlazor, Clean Architecture, CQRS/MediatR, Semantic Kernel, Elsa (behind R2WAI abstraction), PostgreSQL 16 + pgvector, JWT + Entra ID + MFA, Docker Compose, Ollama / OpenAI / Azure OpenAI
+> **Related docs:** [ROADMAP.md](../../ROADMAP.md) (current product roadmap and target architecture), [ADR-0001](../adr/0001-application-centric-architecture-freeze.md) (entity architecture freeze + 2026-09-29 amendment), [MVP-IMPLEMENTATION-PLAN.md](MVP-IMPLEMENTATION-PLAN.md) (legacy plan), [../architecture/ARCHITECTURE.md](../architecture/ARCHITECTURE.md) (recreated 2026-09-30, new path, not a restoration) — `ENTERPRISE_AUDIT_REPORT.md` still doesn't exist in this tree.
+>
+> **Note (2026-09-29):** This plan's product thesis and onboarding flow (§1's
+> `CONNECT → DISCOVER → AUTO CONFIGURE → REVIEW → TEST → PUBLISH → MONITOR`) still hold — R2WAI
+> 2.0's own onboarding journey (ROADMAP.md §2) is the same sequence. What's actually stale: the
+> **Stack line above never matched the real build** (the client was built in React + TypeScript +
+> MUI, not Blazor/MudBlazor — this predates R2WAI 2.0 and isn't a 2.0-driven change), and the
+> **nav/studio model in §2 below is superseded** the same way ADR-0001 item 9 is (four studios →
+> the current Home/Applications/Agents/Connections/Deployments/Activity/Settings nav; no
+> user-facing Workflow Studio — see the ADR's amendment for what that actually changes versus just
+> renames). The 996-line body below was not rewritten wholesale for 2.0 — treat it as a historical
+> planning snapshot for anything not called out here, the same way `docs/audit/` is treated
+> elsewhere in this project.
 
 ---
 

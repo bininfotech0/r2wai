@@ -10,6 +10,8 @@ public record GetWorkflowInstancesQuery : IRequest<PagedResult<WorkflowInstanceD
 public class GetWorkflowInstancesQueryHandler(
     IRepository<WorkflowInstance> instanceRepo,
     IRepository<Workflow> workflowRepo,
+    IRepository<ConnectedApplication> applicationRepo,
+    IRepository<User> userRepo,
     ICurrentUserService currentUser,
     IMapper mapper) : IRequestHandler<GetWorkflowInstancesQuery, PagedResult<WorkflowInstanceDto>>
 {
@@ -30,13 +32,32 @@ public class GetWorkflowInstancesQueryHandler(
 
         var workflowIds = items.Select(i => i.WorkflowId).Distinct().ToList();
         var workflows = await workflowRepo.FindAsync(w => workflowIds.Contains(w.Id), cancellationToken);
-        var workflowNames = workflows.ToDictionary(w => w.Id, w => w.Name);
+        var workflowById = workflows.ToDictionary(w => w.Id);
+
+        var applicationIds = workflows.Where(w => w.ApplicationId.HasValue).Select(w => w.ApplicationId!.Value).Distinct().ToList();
+        var applicationNames = applicationIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await applicationRepo.FindAsync(a => applicationIds.Contains(a.Id), cancellationToken)).ToDictionary(a => a.Id, a => a.Name);
+
+        var initiatorIds = items.Select(i => i.InitiatedBy).Distinct().ToList();
+        var initiatorNames = initiatorIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await userRepo.FindAsync(u => initiatorIds.Contains(u.Id), cancellationToken)).ToDictionary(u => u.Id, u => $"{u.FirstName} {u.LastName}".Trim());
+
+        var initiatedByLookup = items.ToDictionary(i => i.Id, i => i.InitiatedBy);
 
         foreach (var dto in dtos)
         {
-            if (workflowNames.TryGetValue(dto.WorkflowId, out var name))
+            if (workflowById.TryGetValue(dto.WorkflowId, out var workflow))
             {
-                dto.WorkflowName = name;
+                dto.WorkflowName = workflow.Name;
+                dto.ApplicationId = workflow.ApplicationId;
+                if (workflow.ApplicationId.HasValue && applicationNames.TryGetValue(workflow.ApplicationId.Value, out var appName))
+                    dto.ApplicationName = appName;
+            }
+            if (initiatedByLookup.TryGetValue(dto.Id, out var initiatorId) && initiatorNames.TryGetValue(initiatorId, out var initiatorName))
+            {
+                dto.InitiatedByUserName = initiatorName;
             }
         }
 

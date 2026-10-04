@@ -32,8 +32,7 @@ public class DeleteAssistantCommandHandler(
         var tenantId = currentUser.TenantId;
         if (tenantId.HasValue)
         {
-            for (var p = 1; p <= 5; p++)
-                await cacheService.RemoveAsync($"assistants:{tenantId}:p{p}:s20", cancellationToken);
+            await AssistantCacheKeys.InvalidateAsync(cacheService, tenantId.Value, cancellationToken);
         }
 
         return Unit.Value;

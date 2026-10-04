@@ -11,6 +11,7 @@ public class KnowledgeBaseDto
     public int? ChunkSize { get; init; }
     public int? ChunkOverlap { get; init; }
     public int DocumentCount { get; init; }
+    public string DataClassification { get; init; } = "Internal";
     public DateTime CreatedAt { get; init; }
     public List<KnowledgeBaseSourceDto> Sources { get; init; } = [];
 }

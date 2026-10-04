@@ -46,12 +46,11 @@ public class CreateRoleCommandHandler(
         return mapper.Map<RoleDto>(role);
     }
 
-    private async Task InvalidateRoleCacheAsync(Guid tenantId, CancellationToken ct)
+    private Task InvalidateRoleCacheAsync(Guid tenantId, CancellationToken ct)
     {
-        for (var page = 1; page <= 10; page++)
-        {
-            foreach (var size in new[] { 20, 50, 100 })
-                await cacheService.RemoveAsync($"roles:{tenantId}:p{page}:s{size}", ct);
-        }
+        // Concurrent, not sequential -- see DeleteRoleCommand's matching fix for why.
+        var removals = Enumerable.Range(1, 10).SelectMany(page => new[] { 20, 50, 100 }
+            .Select(size => cacheService.RemoveAsync($"roles:{tenantId}:p{page}:s{size}", ct)));
+        return Task.WhenAll(removals);
     }
 }

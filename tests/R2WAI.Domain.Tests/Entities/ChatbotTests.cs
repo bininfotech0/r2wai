@@ -54,6 +54,20 @@ public class ChatbotTests
     }
 
     [Fact]
+    public void RecordWidgetSeen_SetsLastSeenAtAndOrigin_ButNotModifiedAt()
+    {
+        var chatbot = CreateDefaultChatbot();
+        var seenAt = new DateTime(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
+
+        chatbot.RecordWidgetSeen("https://www.example.com", seenAt);
+
+        Assert.Equal(seenAt, chatbot.WidgetLastSeenAt);
+        Assert.Equal("https://www.example.com", chatbot.WidgetLastSeenOrigin);
+        // Passive traffic, not an admin edit — must not disturb ModifiedAt/audit-adjacent fields.
+        Assert.Null(chatbot.ModifiedAt);
+    }
+
+    [Fact]
     public void LinkKnowledgeBase_SetsKnowledgeBaseId()
     {
         var chatbot = CreateDefaultChatbot();

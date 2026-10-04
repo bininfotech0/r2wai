@@ -14,4 +14,5 @@ public class AuditLogDto
     public string? NewValues { get; init; }
     public string? IpAddress { get; init; }
     public DateTime Timestamp { get; init; }
+    public string? Metadata { get; init; }
 }

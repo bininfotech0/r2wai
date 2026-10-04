@@ -1,7 +1,8 @@
 // Quick data seeding with proper API calls
 import http from 'http';
+import { API_URL, EMAIL, PASSWORD } from './helpers/test-env.mjs';
 
-const API = 'http://localhost:5000/api/v1';
+const API = `${API_URL}/api/v1`;
 let TOKEN = '';
 let pass = 0, fail = 0;
 
@@ -45,7 +46,7 @@ async function main() {
   console.log('=== R2WAI DATA SEEDING ===\n');
 
   // Login
-  const r = await api('POST', '/auth/login', {email:'admin@r2wai.io',password:'R2wai_Admin!2026'});
+  const r = await api('POST', '/auth/login', { email: EMAIL, password: PASSWORD });
   try { TOKEN = JSON.parse(r.b).token; } catch(e) {}
   if (!TOKEN) { console.log('Login failed'); process.exit(1); }
   console.log(`Login OK (token: ${TOKEN.substring(0,20)}...)\n`);

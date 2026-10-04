@@ -19,4 +19,9 @@ public class NoOpWorkflowBridge : IWorkflowBridge
     {
         return Task.FromResult(false);
     }
+
+    public Task<bool> ContinueDelayedWorkflowAsync(Guid workflowInstanceId, CancellationToken ct)
+    {
+        return Task.FromResult(false);
+    }
 }

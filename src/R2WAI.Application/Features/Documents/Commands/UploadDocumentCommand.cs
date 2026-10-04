@@ -62,6 +62,9 @@ public class UploadDocumentCommandHandler(
             command.FileType, storagePath, command.FileSize,
             command.KnowledgeBaseId, command.Description);
 
+        document.AddDomainEvent(new DocumentUploadedEvent(
+            document.Id, tenantId, userId, command.Name, command.FileType, command.FileSize, command.KnowledgeBaseId));
+
         await documentRepo.AddAsync(document, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 

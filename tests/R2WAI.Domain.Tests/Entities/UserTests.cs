@@ -38,6 +38,20 @@ public class UserTests
     }
 
     [Fact]
+    public void SetPasswordHash_StampsPasswordChangedAt()
+    {
+        var user = CreateDefault();
+        Assert.Null(user.PasswordChangedAt);
+
+        var before = DateTime.UtcNow;
+        user.SetPasswordHash("hashed_password_123");
+        var after = DateTime.UtcNow;
+
+        Assert.NotNull(user.PasswordChangedAt);
+        Assert.InRange(user.PasswordChangedAt!.Value, before, after);
+    }
+
+    [Fact]
     public void SetLastLogin_UpdatesTimestamp()
     {
         var user = CreateDefault();

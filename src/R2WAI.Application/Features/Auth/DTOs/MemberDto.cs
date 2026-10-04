@@ -8,5 +8,4 @@ public class MemberDto
     public string FirstName { get; init; } = string.Empty;
     public string LastName { get; init; } = string.Empty;
     public string MobileNumber { get; init; } = string.Empty;
-    public string ReferralCode { get; init; } = string.Empty;
 }

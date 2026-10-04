@@ -1,0 +1,41 @@
+# Non-secret configuration only — mirrors docker-compose.yml's r2wai-api environment block.
+# Secret values (DB password, JWT signing key, encryption key, API key) live in a Secret named
+# "r2wai-secrets" that this repo does NOT define — create it per-environment via your cluster's
+# real secret manager (e.g. `kubectl create secret generic r2wai-secrets --from-literal=...`,
+# External Secrets Operator, Sealed Secrets, etc.). See api-deployment.yaml for the exact keys it
+# must contain.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: r2wai-config
+  namespace: r2wai
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  # UNDECIDED FOR PRODUCTION — this session found local Ollama tool-calling can exceed 90s under
+  # load, which isn't viable for a user-facing SLA. Either point AI__Ollama__Endpoint at a properly
+  # GPU-resourced Ollama deployment (no manifest for one is included here — it isn't defined by
+  # this ConfigMap's "ollama:11434" placeholder), or switch AI__Provider to "openai"/another hosted
+  # provider with real API keys (in the Secret, not here) and cost/rate-limit controls.
+  AI__Provider: "ollama"
+  AI__Ollama__Endpoint: "http://ollama:11434"
+  AI__Ollama__ModelId: "qwen3:4b"
+  AI__Ollama__EmbeddingModel: "nomic-embed-text"
+  VectorStore__VectorSize: "768"
+  # "Local" writes to the pod's own filesystem — fine for the single-container docker-compose setup,
+  # but with more than one API replica (api-deployment.yaml is pinned to 1 for now) each pod would have its own separate, non-shared
+  # storage, so a document uploaded via one replica could 404 when a later request lands on the
+  # other. Switch Storage__Provider to "Minio" (S3-compatible — see MinioStorageService, points at
+  # any real S3-compatible endpoint including AWS S3 itself) before running more than one replica.
+  Storage__Provider: "Local"
+  Cache__Redis__ConnectionString: "redis:6379"
+  Authentication__Jwt__ExpirationMinutes: "15"
+  Authentication__Jwt__RefreshTokenExpirationDays: "7"
+  Authentication__ApiKeys__0__Name: "Default Key"
+  Authentication__ApiKeys__0__UserId: "00000000-0000-0000-0000-000000000001"
+  Authentication__ApiKeys__0__TenantId: "00000000-0000-0000-0000-000000000001"
+  Authentication__ApiKeys__0__Roles__0: "Admin"
+  Authentication__ApiKeys__0__Scopes__0: "read"
+  Authentication__ApiKeys__0__Scopes__1: "write"
+  Authentication__ApiKeys__0__Enabled: "true"
+  # Replace with the real public hostname(s) this API is served behind — see ingress.yaml.
+  CORS__AllowedOrigins__0: "https://CHANGE-ME.example.com"

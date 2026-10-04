@@ -15,6 +15,15 @@ public sealed class ApplicationApi : BaseEntity<Guid>
     public string BaseUrl { get; private set; }
     public ApiAuthScheme AuthScheme { get; private set; } = ApiAuthScheme.None;
     public string? CredentialRef { get; private set; }
+
+    // The actual secret, encrypted at rest (IEncryptionService — AES-256-GCM, same mechanism as
+    // ModelConfiguration.ApiKeyEncrypted). CredentialRef above stays a human-readable label; this is
+    // what DynamicToolExecutor actually resolves and decrypts to make an authenticated call.
+    public string? CredentialSecretEncrypted { get; private set; }
+
+    // Only meaningful for AuthScheme.ApiKey — the header the secret gets sent in (e.g. "X-Api-Key").
+    // Other schemes use a fixed "Authorization" header, so this stays null for them.
+    public string? CredentialHeaderName { get; private set; }
     public string? OpenApiSource { get; private set; }
     public bool IsActive { get; private set; } = true;
 
@@ -46,6 +55,13 @@ public sealed class ApplicationApi : BaseEntity<Guid>
         AuthScheme = authScheme;
         CredentialRef = credentialRef;
         OpenApiSource = openApiSource;
+        MarkAsModified();
+    }
+
+    public void SetCredential(string? credentialSecretEncrypted, string? credentialHeaderName)
+    {
+        CredentialSecretEncrypted = credentialSecretEncrypted;
+        CredentialHeaderName = credentialHeaderName;
         MarkAsModified();
     }
 

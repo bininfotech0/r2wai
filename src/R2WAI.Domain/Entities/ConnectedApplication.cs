@@ -12,7 +12,12 @@ namespace R2WAI.Domain.Entities;
 public sealed class ConnectedApplication : BaseEntity<Guid>
 {
     public Guid TenantId { get; private set; }
-    public Guid DepartmentId { get; private set; }
+    /// <summary>
+    /// Optional organisational classification. A connected system is a first-class integration
+    /// target and must be creatable without any organisational container existing first, so this
+    /// is nullable rather than required (R2WAI 2.0 product decision).
+    /// </summary>
+    public Guid? DepartmentId { get; private set; }
     public string Name { get; private set; }
     public string Code { get; private set; }
     public string? Description { get; private set; }
@@ -23,11 +28,11 @@ public sealed class ConnectedApplication : BaseEntity<Guid>
     public DateTime? PublishedAt { get; private set; }
 
     public Tenant Tenant { get; private set; } = null!;
-    public Department Department { get; private set; } = null!;
+    public Department? Department { get; private set; }
 
     private ConnectedApplication() { }
 
-    public ConnectedApplication(Guid id, Guid tenantId, Guid departmentId, string name, string code,
+    public ConnectedApplication(Guid id, Guid tenantId, Guid? departmentId, string name, string code,
                                 string? description = null, string? baseUrl = null)
     {
         Id = id;

@@ -22,7 +22,19 @@ public class KnowledgeBasesController(IMediator mediator, ILogger<KnowledgeBases
     [HttpGet]
     public async Task<IActionResult> GetList([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, [FromQuery] Guid? applicationId = null, CancellationToken ct = default)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
         var query = new GetKnowledgeBasesQuery { Page = page, PageSize = pageSize, Search = search, ApplicationId = applicationId };
+        var result = await mediator.Send(query, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("sources")]
+    public async Task<IActionResult> GetSources([FromQuery] string? status = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = new GetKnowledgeBaseSourcesQuery { Status = status, Page = page, PageSize = pageSize };
         var result = await mediator.Send(query, ct);
         return Ok(result);
     }
@@ -126,5 +138,27 @@ public class KnowledgeBasesController(IMediator mediator, ILogger<KnowledgeBases
         }
 
         return Ok(new { knowledgeBaseId = id, totalDocuments = documents.Items.Count, reindexed, status = "complete" });
+    }
+
+    [HttpGet("{id:guid}/versions")]
+    public async Task<IActionResult> GetVersions(Guid id, CancellationToken ct = default)
+    {
+        var result = await mediator.Send(new GetKnowledgeBaseVersionsQuery { KnowledgeBaseId = id }, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/versions")]
+    public async Task<IActionResult> CreateVersion(Guid id, [FromBody] CreateKnowledgeBaseVersionCommand command, CancellationToken ct = default)
+    {
+        command = command with { KnowledgeBaseId = id };
+        var result = await mediator.Send(command, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/versions/{versionId:guid}/rollback")]
+    public async Task<IActionResult> RollbackVersion(Guid id, Guid versionId, CancellationToken ct = default)
+    {
+        var result = await mediator.Send(new RollbackKnowledgeBaseVersionCommand { VersionId = versionId }, ct);
+        return Ok(result);
     }
 }

@@ -31,6 +31,12 @@ public class KnowledgeBaseConfiguration : IEntityTypeConfiguration<KnowledgeBase
         builder.Property(kb => kb.Metadata)
             .HasColumnType("jsonb");
 
+        builder.Property(kb => kb.DataClassification)
+            .IsRequired()
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(Domain.Enums.DataClassification.Internal);
+
         builder.Property(kb => kb.CreatedAt).IsRequired();
         builder.Property(kb => kb.ModifiedAt);
 

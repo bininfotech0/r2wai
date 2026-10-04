@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
+using R2WAI.Application.Common.Interfaces;
 using R2WAI.Domain.Entities;
 using R2WAI.Domain.Enums;
 using R2WAI.Infrastructure.AI.DynamicTools;
@@ -37,6 +38,23 @@ public class DynamicToolExecutorTests
         public IEnumerable<ITool> GetAll() => _tools.Values;
     }
 
+    // Reversible stand-in for the real AES-256-GCM EncryptionService — these are unit tests for
+    // DynamicToolExecutor's routing logic, not for encryption itself. Throws FormatException (not some
+    // arbitrary exception type) for a value this fake didn't encrypt, matching the real
+    // EncryptionService.Decrypt's actual failure mode (bad base64) — IntegrationCredentialCodec's
+    // legacy-plaintext fallback specifically catches that, so this fake needs to fail the same way to
+    // be a faithful stand-in.
+    private sealed class FakeEncryptionService : IEncryptionService
+    {
+        public string Encrypt(string plainText) => "enc:" + plainText;
+        public string Decrypt(string cipherText) => cipherText.StartsWith("enc:", StringComparison.Ordinal)
+            ? cipherText["enc:".Length..]
+            : throw new FormatException("Not a value this fake encrypted.");
+    }
+
+    private static DynamicToolExecutor CreateExecutor(IToolRegistry registry) =>
+        new(registry, new FakeEncryptionService(), NullLogger<DynamicToolExecutor>.Instance);
+
     // ApplicationApi is an EF navigation property with a private setter — populated by EF when the
     // owning query includes it, not settable through ToolDefinition's public API. Reflection here
     // stands in for what EF does at runtime.
@@ -60,13 +78,20 @@ public class DynamicToolExecutorTests
     private static ApplicationApi CreateApi(ApiAuthScheme scheme = ApiAuthScheme.None) =>
         new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Test API", "https://api.example.com", scheme);
 
+    private static ApplicationApi CreateApiWithCredential(ApiAuthScheme scheme, string secret, string? headerName = null)
+    {
+        var api = CreateApi(scheme);
+        api.SetCredential("enc:" + secret, headerName);
+        return api;
+    }
+
     [Fact]
     public async Task ExecuteAsync_NoLinkedApi_ReturnsGuardMessage_WithoutCallingHttpTool()
     {
         var registry = new FakeRegistry();
         var fakeTool = new FakeTool();
         registry.Register(fakeTool);
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
         var toolDef = CreateToolDef(api: null);
         var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
@@ -80,17 +105,85 @@ public class DynamicToolExecutorTests
     [InlineData(ApiAuthScheme.OAuth2)]
     [InlineData(ApiAuthScheme.Jwt)]
     [InlineData(ApiAuthScheme.EntraId)]
-    public async Task ExecuteAsync_UnsupportedAuthScheme_ReturnsGuardMessage_WithoutCallingHttpTool(ApiAuthScheme scheme)
+    public async Task ExecuteAsync_NonNoneAuthSchemeWithoutCredential_ReturnsGuardMessage_WithoutCallingHttpTool(ApiAuthScheme scheme)
     {
         var registry = new FakeRegistry();
         var fakeTool = new FakeTool();
         registry.Register(fakeTool);
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
-        var toolDef = CreateToolDef(CreateApi(scheme));
+        var toolDef = CreateToolDef(CreateApi(scheme)); // no credential configured
         var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
 
         Assert.Contains("authentication", result);
+        Assert.Null(fakeTool.LastContext);
+    }
+
+    [Theory]
+    [InlineData(ApiAuthScheme.OAuth2)]
+    [InlineData(ApiAuthScheme.Jwt)]
+    [InlineData(ApiAuthScheme.EntraId)]
+    public async Task ExecuteAsync_StaticTokenAuthScheme_WithCredential_AppliesBearerHeader(ApiAuthScheme scheme)
+    {
+        var registry = new FakeRegistry();
+        var fakeTool = new FakeTool();
+        registry.Register(fakeTool);
+        var executor = CreateExecutor(registry);
+
+        var toolDef = CreateToolDef(CreateApiWithCredential(scheme, "secret-token"));
+        var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
+
+        Assert.NotNull(fakeTool.LastContext);
+        Assert.Equal("Bearer secret-token", fakeTool.LastContext!.Parameters["authorizationHeader"]);
+        Assert.DoesNotContain("secret-token", result); // never echoed back to the caller
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ApplicationApi_ApiKeyWithCredentialAndHeaderName_AppliesExtraHeader()
+    {
+        var registry = new FakeRegistry();
+        var fakeTool = new FakeTool();
+        registry.Register(fakeTool);
+        var executor = CreateExecutor(registry);
+
+        var toolDef = CreateToolDef(CreateApiWithCredential(ApiAuthScheme.ApiKey, "key-value", "X-Api-Key"));
+        await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
+
+        Assert.NotNull(fakeTool.LastContext);
+        Assert.Equal("X-Api-Key", fakeTool.LastContext!.Parameters["extraHeaderName"]);
+        Assert.Equal("key-value", fakeTool.LastContext.Parameters["extraHeaderValue"]);
+        Assert.Null(fakeTool.LastContext.Parameters["authorizationHeader"]);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ApplicationApi_ApiKeyCredentialWithoutHeaderName_ReturnsGuardMessage()
+    {
+        var registry = new FakeRegistry();
+        var fakeTool = new FakeTool();
+        registry.Register(fakeTool);
+        var executor = CreateExecutor(registry);
+
+        var toolDef = CreateToolDef(CreateApiWithCredential(ApiAuthScheme.ApiKey, "key-value", headerName: null));
+        var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
+
+        Assert.Contains("header name", result);
+        Assert.Null(fakeTool.LastContext);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ApplicationApi_UndecryptableCredential_ReturnsGuardMessage_WithoutCallingHttpTool()
+    {
+        var registry = new FakeRegistry();
+        var fakeTool = new FakeTool();
+        registry.Register(fakeTool);
+        var executor = CreateExecutor(registry);
+
+        var api = CreateApi(ApiAuthScheme.OAuth2);
+        api.SetCredential("not-a-value-this-fake-encrypted", null);
+        var toolDef = CreateToolDef(api);
+        var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
+
+        Assert.Contains("could not be decrypted", result);
         Assert.Null(fakeTool.LastContext);
     }
 
@@ -98,7 +191,7 @@ public class DynamicToolExecutorTests
     public async Task ExecuteAsync_HttpToolNotRegistered_ReturnsUnavailableMessage()
     {
         var registry = new FakeRegistry(); // no "HttpTool" registered
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
         var toolDef = CreateToolDef(CreateApi());
         var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
@@ -112,7 +205,7 @@ public class DynamicToolExecutorTests
         var registry = new FakeRegistry();
         var fakeTool = new FakeTool { Result = new ToolResult { Success = true, Data = "{\"status\":\"ok\"}" } };
         registry.Register(fakeTool);
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
         var api = CreateApi();
         var toolDef = CreateToolDef(api, httpMethod: "POST", path: "orders");
@@ -132,7 +225,7 @@ public class DynamicToolExecutorTests
         var registry = new FakeRegistry();
         var fakeTool = new FakeTool { Result = new ToolResult { Success = false, Error = "timeout" } };
         registry.Register(fakeTool);
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
         var toolDef = CreateToolDef(CreateApi());
         var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
@@ -152,7 +245,7 @@ public class DynamicToolExecutorTests
         var registry = new FakeRegistry();
         var fakeTool = new FakeTool { Result = new ToolResult { Success = true, Data = "ok" } };
         registry.Register(fakeTool);
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
         var toolDef = CreateDirectToolDef("https://api.example.com", """{"AuthType":"None"}""");
         var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
@@ -162,18 +255,39 @@ public class DynamicToolExecutorTests
         Assert.Null(fakeTool.LastContext.Parameters["authorizationHeader"]);
     }
 
+    // Plaintext here, not "enc:"-prefixed — a row saved before Configuration encryption shipped.
+    // IntegrationCredentialCodec.DecryptSecrets falls back to the original value on a decrypt failure
+    // rather than throwing (see its own doc comment), so an old integration keeps working unchanged.
     [Fact]
     public async Task ExecuteAsync_DirectEndpointUrl_BearerAuth_AppliesAuthorizationHeader()
     {
         var registry = new FakeRegistry();
         var fakeTool = new FakeTool();
         registry.Register(fakeTool);
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
         var toolDef = CreateDirectToolDef("https://api.example.com", """{"AuthType":"Bearer","Token":"secret-token"}""");
         await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
 
         Assert.Equal("Bearer secret-token", fakeTool.LastContext!.Parameters["authorizationHeader"]);
+    }
+
+    // The real, post-encryption shape: Configuration.Token is ciphertext (as IntegrationCredentialCodec
+    // .EncryptSecrets would have stored it), and the outbound call must carry the DECRYPTED value, not
+    // the ciphertext itself.
+    [Fact]
+    public async Task ExecuteAsync_DirectEndpointUrl_EncryptedBearerToken_DecryptsBeforeApplyingTheHeader()
+    {
+        var registry = new FakeRegistry();
+        var fakeTool = new FakeTool();
+        registry.Register(fakeTool);
+        var executor = CreateExecutor(registry); // FakeEncryptionService: Decrypt("enc:x") -> "x"
+
+        var toolDef = CreateDirectToolDef("https://api.example.com", """{"AuthType":"Bearer","Token":"enc:secret-token"}""");
+        var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
+
+        Assert.Equal("Bearer secret-token", fakeTool.LastContext!.Parameters["authorizationHeader"]);
+        Assert.DoesNotContain("enc:", result); // ciphertext form never leaks into the result either
     }
 
     [Fact]
@@ -182,7 +296,7 @@ public class DynamicToolExecutorTests
         var registry = new FakeRegistry();
         var fakeTool = new FakeTool();
         registry.Register(fakeTool);
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
         var toolDef = CreateDirectToolDef("https://api.example.com", """{"AuthType":"Basic","Username":"alice","Password":"hunter2"}""");
         await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
@@ -192,14 +306,15 @@ public class DynamicToolExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_DirectEndpointUrl_ApiKeyAuth_ReturnsGuardMessage_WithoutCallingHttpTool()
+    public async Task ExecuteAsync_DirectEndpointUrl_ApiKeyAuthWithoutHeaderName_ReturnsGuardMessage_WithoutCallingHttpTool()
     {
-        // ApiKey's header name/placement is API-specific and unknowable generically — guessing wrong
-        // would produce a misleading "it connected" false positive, so this must stay unsupported.
+        // ApiKey's header name/placement is API-specific and unknowable generically — without an
+        // explicit ApiKeyHeaderName, guessing wrong would produce a misleading "it connected" false
+        // positive, so this stays guarded (see the header-name-provided case below for the supported path).
         var registry = new FakeRegistry();
         var fakeTool = new FakeTool();
         registry.Register(fakeTool);
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
         var toolDef = CreateDirectToolDef("https://api.example.com", """{"AuthType":"ApiKey","ApiKey":"key123"}""");
         var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
@@ -209,12 +324,31 @@ public class DynamicToolExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_DirectEndpointUrl_ApiKeyAuthWithHeaderName_AppliesExtraHeader()
+    {
+        var registry = new FakeRegistry();
+        var fakeTool = new FakeTool();
+        registry.Register(fakeTool);
+        var executor = CreateExecutor(registry);
+
+        var toolDef = CreateDirectToolDef(
+            "https://api.example.com",
+            """{"AuthType":"ApiKey","ApiKey":"key123","ApiKeyHeaderName":"X-Api-Key"}""");
+        await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
+
+        Assert.NotNull(fakeTool.LastContext);
+        Assert.Equal("X-Api-Key", fakeTool.LastContext!.Parameters["extraHeaderName"]);
+        Assert.Equal("key123", fakeTool.LastContext.Parameters["extraHeaderValue"]);
+        Assert.Null(fakeTool.LastContext.Parameters["authorizationHeader"]);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_DirectEndpointUrl_MalformedConfiguration_TreatedAsUnauthenticated()
     {
         var registry = new FakeRegistry();
         var fakeTool = new FakeTool();
         registry.Register(fakeTool);
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
         var toolDef = CreateDirectToolDef("https://api.example.com", "{not valid json");
         var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
@@ -223,13 +357,33 @@ public class DynamicToolExecutorTests
         Assert.Null(fakeTool.LastContext!.Parameters["authorizationHeader"]);
     }
 
+    // P0-8: the same EgressGuard rule that already gated IntegrationsController's "Test Connection"
+    // button now also gates the real dispatch path — see DynamicToolExecutor.ExecuteAsync.
+    [Theory]
+    [InlineData("http://169.254.169.254")] // cloud metadata endpoint
+    [InlineData("http://10.0.0.5")]
+    [InlineData("http://localhost")]
+    public async Task ExecuteAsync_TargetIsAPrivateOrInternalAddress_ReturnsGuardMessage_WithoutCallingHttpTool(string blockedUrl)
+    {
+        var registry = new FakeRegistry();
+        var fakeTool = new FakeTool();
+        registry.Register(fakeTool);
+        var executor = CreateExecutor(registry);
+
+        var toolDef = CreateDirectToolDef(blockedUrl, """{"AuthType":"None"}""");
+        var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);
+
+        Assert.Contains("not allowed", result);
+        Assert.Null(fakeTool.LastContext);
+    }
+
     [Fact]
     public async Task ExecuteAsync_NeitherApplicationApiNorEndpointUrl_ReturnsGuardMessage()
     {
         var registry = new FakeRegistry();
         var fakeTool = new FakeTool();
         registry.Register(fakeTool);
-        var executor = new DynamicToolExecutor(registry, NullLogger<DynamicToolExecutor>.Instance);
+        var executor = CreateExecutor(registry);
 
         var toolDef = new ToolDefinition(Guid.NewGuid(), Guid.NewGuid(), "Orphan Tool", ToolType.Http, "desc");
         var result = await executor.ExecuteAsync(toolDef, input: null, CancellationToken.None);

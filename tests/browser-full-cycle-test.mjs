@@ -1,8 +1,5 @@
 import { chromium } from 'playwright';
-
-const BASE_URL = 'http://localhost:3001';
-const EMAIL = 'admin@r2wai.io';
-const PASSWORD = 'R2wai_Admin!2026';
+import { BASE_URL, EMAIL, PASSWORD } from './helpers/test-env.mjs';
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 

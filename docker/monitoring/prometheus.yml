@@ -3,15 +3,18 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
+  # /metrics/prometheus is the real OpenTelemetry Prometheus exporter (Program.cs), covering
+  # ASP.NET Core/Kestrel built-ins plus r2wai.ai.*/tool.*/workflow.* business metrics.
+  # Unauthenticated by design, container-internal only. Previously pointed at
+  # /api/v1/operations/metrics/prometheus, a hand-written two-gauge stub that also 401'd on
+  # every scrape attempt (Admin/SystemAdmin-authorized, scraped here with no auth) -- this
+  # target was never successfully collecting anything.
+  #
+  # The former second job here scraped /health expecting Prometheus text format; /health
+  # returns JSON, so every scrape failed to parse. Dropped -- Prometheus's own per-target `up`
+  # metric (emitted automatically for the job above) already covers r2wai-api liveness.
   - job_name: 'r2wai-api'
-    metrics_path: '/api/v1/operations/metrics/prometheus'
-    static_configs:
-      - targets: ['r2wai-api:8080']
-        labels:
-          service: 'r2wai-api'
-
-  - job_name: 'r2wai-api-health'
-    metrics_path: '/health'
+    metrics_path: '/metrics/prometheus'
     static_configs:
       - targets: ['r2wai-api:8080']
         labels:

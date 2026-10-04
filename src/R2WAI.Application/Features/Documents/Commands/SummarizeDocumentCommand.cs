@@ -18,6 +18,7 @@ public class SummarizeDocumentCommandValidator : AbstractValidator<SummarizeDocu
 public class SummarizeDocumentCommandHandler(
     IRepository<Document> documentRepo,
     IAIService aiService,
+    IModelConfigurationResolver modelConfigResolver,
     IStorageService storageService) : IRequestHandler<SummarizeDocumentCommand, DocumentSummaryDto>
 {
     public async Task<DocumentSummaryDto> Handle(SummarizeDocumentCommand command, CancellationToken cancellationToken)
@@ -29,7 +30,8 @@ public class SummarizeDocumentCommandHandler(
         using var reader = new StreamReader(stream);
         var content = await reader.ReadToEndAsync(cancellationToken);
 
-        var summary = await aiService.SummarizeTextAsync(content, ct: cancellationToken);
+        var modelConfig = await modelConfigResolver.ResolveAsync(null, document.TenantId, cancellationToken);
+        var summary = await aiService.SummarizeTextAsync(content, modelConfig: modelConfig, ct: cancellationToken);
 
         return new DocumentSummaryDto
         {

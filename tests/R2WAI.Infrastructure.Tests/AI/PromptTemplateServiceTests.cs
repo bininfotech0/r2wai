@@ -107,6 +107,51 @@ public class PromptTemplateServiceTests
     }
 
     [Fact]
+    public async Task ResetTemplateAsync_WithAnActiveOverride_SupersedesIt_FallsBackToStaticDefault()
+    {
+        var repo = new FakeRepository<PromptTemplate>();
+        var service = new PromptTemplateService(repo, new FakeUnitOfWork());
+        var tenantId = Guid.NewGuid();
+
+        await service.SetTemplateAsync(AssistantType.HR, tenantId, "Custom HR wording", CancellationToken.None);
+        var wasReset = await service.ResetTemplateAsync(AssistantType.HR, tenantId, CancellationToken.None);
+
+        Assert.True(wasReset);
+        var result = await service.GetActiveTemplateAsync(AssistantType.HR, tenantId);
+        Assert.Equal(SystemPromptTemplates.GetTemplate(AssistantType.HR), result);
+        // The superseded row stays for history, same as an edit — it's just no longer active.
+        Assert.Single(repo.Items, t => t.TenantId == tenantId && !t.IsActive && t.Content == "Custom HR wording");
+    }
+
+    [Fact]
+    public async Task ResetTemplateAsync_WithNoActiveOverride_IsANoOp_ReturnsFalse()
+    {
+        var repo = new FakeRepository<PromptTemplate>();
+        var service = new PromptTemplateService(repo, new FakeUnitOfWork());
+
+        var wasReset = await service.ResetTemplateAsync(AssistantType.HR, Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(wasReset);
+    }
+
+    [Fact]
+    public async Task ResetTemplateAsync_DoesNotAffectOtherTenants()
+    {
+        var repo = new FakeRepository<PromptTemplate>();
+        var service = new PromptTemplateService(repo, new FakeUnitOfWork());
+        var tenantA = Guid.NewGuid();
+        var tenantB = Guid.NewGuid();
+
+        await service.SetTemplateAsync(AssistantType.HR, tenantA, "Tenant A override", CancellationToken.None);
+        await service.SetTemplateAsync(AssistantType.HR, tenantB, "Tenant B override", CancellationToken.None);
+
+        await service.ResetTemplateAsync(AssistantType.HR, tenantA, CancellationToken.None);
+        var resultB = await service.GetActiveTemplateAsync(AssistantType.HR, tenantB);
+
+        Assert.Equal("Tenant B override", resultB);
+    }
+
+    [Fact]
     public async Task GetAllActiveTemplatesAsync_MergesOverrideOverStaticDefaults()
     {
         var repo = new FakeRepository<PromptTemplate>();

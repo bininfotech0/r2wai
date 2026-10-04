@@ -32,12 +32,16 @@ public class CreateAssistantCommandHandler(
         var assistant = new AssistantDefinition(
             Guid.NewGuid(), tenantId, command.Name, command.Type,
             command.ModelConfigurationId, command.KnowledgeBaseId);
+        // P0-4 (2026-09-20 audit): an assistant whose Tools tab was never touched used to silently get
+        // every tool in the tenant. Existing assistants keep that behavior (GetEnabledToolIds' null
+        // fallback is unchanged), but a brand-new one now starts deny-by-default — an admin opts it
+        // into tools explicitly, via the same Tools tab UpdateDetails already uses.
+        assistant.DenyAllToolsByDefault();
 
         await assistantRepo.AddAsync(assistant, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        for (var p = 1; p <= 5; p++)
-            await cacheService.RemoveAsync($"assistants:{tenantId}:p{p}:s20", cancellationToken);
+        await AssistantCacheKeys.InvalidateAsync(cacheService, tenantId, cancellationToken);
 
         return mapper.Map<AssistantDto>(assistant);
     }

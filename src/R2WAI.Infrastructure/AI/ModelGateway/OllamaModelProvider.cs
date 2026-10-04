@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using OpenAI;
 using R2WAI.Application.Common.Exceptions;
+using R2WAI.Application.Common.Interfaces;
 using System.ClientModel;
 using System.ClientModel.Primitives;
 
@@ -22,11 +23,11 @@ public class OllamaModelProvider : IModelProvider
         _logger = logger;
     }
 
-    public void Configure(IKernelBuilder builder)
+    public void Configure(IKernelBuilder builder, ResolvedModelConfig? config = null)
     {
-        var ollamaEndpoint = _configuration["AI:Ollama:Endpoint"]
+        var ollamaEndpoint = config?.Endpoint ?? _configuration["AI:Ollama:Endpoint"]
             ?? throw new ConfigurationException("AI:Ollama:Endpoint must be configured when using Ollama provider.");
-        var ollamaModel = _configuration["AI:Ollama:ModelId"] ?? "qwen2.5-coder:7b";
+        var ollamaModel = config?.ModelId ?? _configuration["AI:Ollama:ModelId"] ?? "qwen3:4b";
         var embeddingModel = _configuration["AI:Ollama:EmbeddingModel"] ?? ollamaModel;
         var ollamaV1 = new Uri($"{ollamaEndpoint.TrimEnd('/')}/v1");
 

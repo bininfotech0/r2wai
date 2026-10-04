@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using R2WAI.Application.Common.Interfaces;
-using R2WAI.Application.Features.Assistants.Commands;
 using R2WAI.Infrastructure.Persistence;
 
 namespace R2WAI.Api.Hubs;
@@ -12,22 +10,13 @@ public class ChatHub : Hub
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<ChatHub> _logger;
-    private readonly IAIService _aiService;
-    private readonly IKnowledgeBaseService _knowledgeBaseService;
-    private readonly IPromptTemplateService _promptTemplateService;
 
     public ChatHub(
         ApplicationDbContext dbContext,
-        ILogger<ChatHub> logger,
-        IAIService aiService,
-        IKnowledgeBaseService knowledgeBaseService,
-        IPromptTemplateService promptTemplateService)
+        ILogger<ChatHub> logger)
     {
         _dbContext = dbContext;
         _logger = logger;
-        _aiService = aiService;
-        _knowledgeBaseService = knowledgeBaseService;
-        _promptTemplateService = promptTemplateService;
     }
 
     public override async Task OnConnectedAsync()
@@ -130,115 +119,6 @@ public class ChatHub : Hub
         });
     }
 
-    public async Task StreamChat(Guid assistantId, string message, Guid? conversationId = null)
-    {
-        var userId = Context.UserIdentifier;
-        if (string.IsNullOrEmpty(userId))
-        {
-            await Clients.Caller.SendAsync("StreamError", new { message = "Unauthorized" });
-            return;
-        }
-
-        try
-        {
-            var assistant = await _dbContext.AssistantDefinitions
-                .Include(a => a.KnowledgeBase)
-                .FirstOrDefaultAsync(a => a.Id == assistantId);
-
-            if (assistant is null)
-            {
-                await Clients.Caller.SendAsync("StreamError", new { message = "Assistant not found" });
-                return;
-            }
-
-            _logger.LogInformation(
-                "StreamChat started: User {UserId}, Assistant {AssistantId}, Conversation {ConversationId}",
-                userId, assistantId, conversationId);
-
-            string? context = null;
-            List<CitationDto>? citations = null;
-
-            if (assistant.KnowledgeBaseId.HasValue)
-            {
-                try
-                {
-                    var searchResult = await _knowledgeBaseService.SearchKnowledgeBaseAsync(
-                        assistant.KnowledgeBaseId.Value, message, 1, 5, Context.ConnectionAborted);
-
-                    if (searchResult.Items.Count > 0)
-                    {
-                        context = string.Join("\n\n", searchResult.Items.Select(i => i.Content));
-                        citations = searchResult.Items
-                            .Select((item, index) => new CitationDto(
-                                item.SourceName ?? "Unknown",
-                                item.Content,
-                                (float)item.Score,
-                                index + 1))
-                            .ToList();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to search knowledge base {KBId} for assistant {AssistantId}",
-                        assistant.KnowledgeBaseId.Value, assistant.Id);
-                }
-            }
-
-            var basePrompt = assistant.SystemPrompt
-                ?? await _promptTemplateService.GetActiveTemplateAsync(assistant.Type, assistant.TenantId, Context.ConnectionAborted);
-            var systemPrompt = basePrompt
-                + $"\n\n[Assistant context: your assistant ID is {assistant.Id}, your name is \"{assistant.Name}\"" +
-                  (!string.IsNullOrWhiteSpace(assistant.Description)
-                      ? $", and your purpose is: {assistant.Description}"
-                      : $", and you are a {assistant.Type} assistant") +
-                  ". This is everything you need to know about yourself — you do not need to call get_assistant_context " +
-                  "to answer questions about what you do or who you are. If you need an assistant ID for some other tool, " +
-                  "use the ID above directly, never guess or leave it blank.]";
-
-            await foreach (var chunk in _aiService.StreamChatAsync(message, context, systemPrompt, enableTools: true, ct: Context.ConnectionAborted))
-            {
-                await Clients.Caller.SendAsync("ReceiveStreamChunk", new
-                {
-                    assistantId,
-                    conversationId,
-                    content = chunk,
-                    timestamp = DateTime.UtcNow
-                });
-            }
-
-            if (citations is { Count: > 0 })
-            {
-                await Clients.Caller.SendAsync("ReceiveCitations", new
-                {
-                    assistantId,
-                    conversationId,
-                    citations
-                });
-            }
-
-            await Clients.Caller.SendAsync("StreamComplete", new
-            {
-                assistantId,
-                conversationId,
-                timestamp = DateTime.UtcNow
-            });
-
-            _logger.LogInformation(
-                "StreamChat completed: User {UserId}, Assistant {AssistantId}, Citations {CitationCount}",
-                userId, assistantId, citations?.Count ?? 0);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("StreamChat cancelled for user {UserId}", userId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "StreamChat failed for user {UserId}, assistant {AssistantId}",
-                userId, assistantId);
-            await Clients.Caller.SendAsync("StreamError", new { message = "An error occurred during streaming" });
-        }
-    }
-
     private async Task<bool> ValidateConversationAccess(string conversationId, string userId)
     {
         if (!Guid.TryParse(conversationId, out var convId))
@@ -251,7 +131,14 @@ public class ChatHub : Hub
         if (tenantClaim is null || !Guid.TryParse(tenantClaim, out var tenantId))
             return false;
 
-        return await _dbContext.Conversations
-            .AnyAsync(c => c.Id == convId && c.TenantId == tenantId);
+        // Tenant AND owner: this used to check only the tenant, so any user in a tenant could join (and
+        // post into) any other user's conversation.
+        //
+        // IgnoreQueryFilters: same reasoning as StatusHub.SubscribeToWorkflow — a SignalR Hub method
+        // invocation doesn't reliably populate IHttpContextAccessor.HttpContext (what the ambient
+        // tenant filter reads), even on an authenticated connection. The explicit `c.TenantId ==
+        // tenantId` clause here, driven by Context.User, is the real check.
+        return await _dbContext.Conversations.IgnoreQueryFilters()
+            .AnyAsync(c => c.Id == convId && c.TenantId == tenantId && c.UserId == uid);
     }
 }

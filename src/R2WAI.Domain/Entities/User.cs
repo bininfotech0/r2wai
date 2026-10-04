@@ -11,6 +11,7 @@ public sealed class User : BaseEntity<Guid>
     public string FirstName { get; private set; }
     public string LastName { get; private set; }
     public string? AvatarUrl { get; private set; }
+    public string? AvatarStoragePath { get; private set; }
     public string? PasswordHash { get; private set; }
     public string? RefreshTokenHash { get; private set; }
     public DateTime? RefreshTokenExpiresAt { get; private set; }
@@ -27,7 +28,6 @@ public sealed class User : BaseEntity<Guid>
     public Tenant Tenant { get; private set; } = null!;
     public ICollection<UserRole> UserRoles { get; private set; } = [];
     public ICollection<Conversation> Conversations { get; private set; } = [];
-    public MemberWallet? MemberWallet { get; private set; }
 
     private User() { }
 
@@ -71,6 +71,13 @@ public sealed class User : BaseEntity<Guid>
         MarkAsModified();
     }
 
+    public void SetAvatar(string avatarUrl, string storagePath)
+    {
+        AvatarUrl = avatarUrl;
+        AvatarStoragePath = storagePath;
+        MarkAsModified();
+    }
+
     public void SetMobileNumber(string? mobileNumber)
     {
         MobileNumber = mobileNumber;
@@ -86,9 +93,12 @@ public sealed class User : BaseEntity<Guid>
         MarkAsModified();
     }
 
+    public DateTime? PasswordChangedAt { get; private set; }
+
     public void SetPasswordHash(string passwordHash)
     {
         PasswordHash = passwordHash;
+        PasswordChangedAt = DateTime.UtcNow;
         MarkAsModified();
     }
 

@@ -1,11 +1,7 @@
 using System.Text.Json;
-using Elsa.Email.Activities;
-using Elsa.Extensions;
-using Elsa.Http;
-using Elsa.Scheduling.Activities;
 using Elsa.Workflows;
 using Elsa.Workflows.Activities;
-using Elsa.Workflows.Models;
+using R2WAI.Api.Workflows.NodeProviders;
 using R2WAI.Application.Features.Workflows.DTOs;
 
 namespace R2WAI.Api.Workflows;
@@ -15,10 +11,22 @@ namespace R2WAI.Api.Workflows;
 /// <see cref="StepTrackingActivity.ConfigureActivities"/>), not at workflow-definition build time --
 /// Elsa persists Flowchart definitions as JSON before running them, and a Composite's dynamically
 /// assigned Root does not round-trip its Input values through that serialization.
+///
+/// CreateActivityForStep is a registry lookup over DI-registered <see cref="INodeProvider"/>
+/// implementations (see NodeProviders/), one per step type, keyed by the same strings
+/// ClassifyStepType produces — not a hardcoded switch. Adding a new step type means adding a new
+/// INodeProvider class + DI registration, no edit to this class (Track B Phase 5).
 /// </summary>
-public static class StepActivityFactory
+public class StepActivityFactory
 {
     private static readonly JsonSerializerOptions StepConfigJsonOptions = new(JsonSerializerDefaults.Web);
+
+    private readonly IReadOnlyDictionary<string, INodeProvider> _providers;
+
+    public StepActivityFactory(IEnumerable<INodeProvider> providers)
+    {
+        _providers = providers.ToDictionary(p => p.StepType, StringComparer.Ordinal);
+    }
 
     public static string ClassifyStepType(WorkflowStepDto step, ILogger? logger = null)
     {
@@ -33,6 +41,12 @@ public static class StepActivityFactory
             "delay" => "Delay",
             "transform" => "Transform",
             "action" => "Action",
+            // Proves the Phase 5 registry actually decouples node construction from this switch:
+            // LogNodeProvider was added purely as a new INodeProvider class + DI registration, with
+            // zero edits to CreateActivityForStep itself. This one-line classification case is the
+            // only touch this file needed — ClassifyStepType (turning free text into a canonical key)
+            // is a separate concern from the registry (turning a key into an activity).
+            "log" => "Log",
             _ => ClassifyStepTypeLegacy(step, logger)
         };
     }
@@ -47,7 +61,7 @@ public static class StepActivityFactory
         return stepType;
     }
 
-    public static IActivity CreateActivityForStep(
+    public IActivity CreateActivityForStep(
         WorkflowStepDto step,
         Guid workflowId,
         Guid tenantId,
@@ -58,210 +72,17 @@ public static class StepActivityFactory
     {
         var config = step.Config?.Deserialize<StepConfigDto>(StepConfigJsonOptions);
         var typeKey = ClassifyStepType(step, logger);
+        var context = new NodeCreationContext(step, workflowId, tenantId, userId, instanceId, data, config);
 
-        switch (typeKey)
+        if (_providers.TryGetValue(typeKey, out var provider))
+            return provider.CreateActivity(context);
+
+        // No provider registered for this key — same generic fallback the old hardcoded switch's
+        // `default:` case used. In practice every key ClassifyStepType can produce today has a
+        // matching provider (including "Action"), so this only guards a genuinely unmapped future key.
+        return new WriteLine($"Step: {step.Name} | Action: {step.Action ?? "none"} | Role: {step.AssignedRole ?? "System"}")
         {
-            case "Approval":
-                return new ApprovalStepActivity
-                {
-                    Name = step.Name,
-                    TenantId = new Input<string>(tenantId.ToString()),
-                    WorkflowInstanceId = new Input<string>(instanceId.ToString()),
-                    WorkflowDefinitionId = new Input<string>(workflowId.ToString()),
-                    RequesterId = new Input<string>(userId.ToString()),
-                    Data = new Input<string?>(data)
-                };
-
-            case "AI Generate":
-            {
-                var prompt = !string.IsNullOrEmpty(config?.AiPrompt)
-                    ? config.AiPrompt
-                    : !string.IsNullOrEmpty(step.Action) ? step.Action : $"Execute step: {step.Name}";
-
-                return new InvokeSemanticKernelActivity
-                {
-                    Name = step.Name,
-                    Prompt = new Input<string>(prompt),
-                    SystemPrompt = new Input<string?>(
-                        $"You are executing workflow step '{step.Name}'. Assigned role: {step.AssignedRole ?? "System"}."),
-                    MaxTokens = new Input<int>(config?.AiMaxTokens ?? 1024),
-                    Temperature = new Input<double>(config?.AiTemperature ?? 0.7)
-                };
-            }
-
-            case "Email":
-                return new SendEmail
-                {
-                    Name = step.Name,
-                    To = new Input<ICollection<string>>(SplitAddresses(config?.EmailTo)),
-                    Cc = new Input<ICollection<string>>(SplitAddresses(config?.EmailCc)),
-                    Subject = new Input<string?>(config?.EmailSubject ?? step.Name),
-                    Body = new Input<string>(config?.EmailBody ?? string.Empty)
-                };
-
-            case "API Call":
-                return new SendHttpRequest
-                {
-                    Name = step.Name,
-                    Url = new Input<Uri?>(new Uri(config?.ApiUrl ?? "about:blank", UriKind.RelativeOrAbsolute)),
-                    Method = new Input<string>((config?.ApiMethod ?? "GET").ToUpperInvariant()),
-                    Content = string.IsNullOrEmpty(config?.ApiBody) ? null! : new Input<object?>(config.ApiBody),
-                    RequestHeaders = new Input<HttpHeaders?>(ParseHeaders(config?.ApiHeaders))
-                };
-
-            case "Delay":
-                return new Delay(new Input<TimeSpan>(ComputeDelay(config)))
-                {
-                    Name = step.Name
-                };
-
-            case "Condition":
-            {
-                var expression = config?.ConditionExpression;
-                return new If(() => EvaluateSimpleCondition(expression, data))
-                {
-                    Name = step.Name,
-                    Then = new WriteLine($"Condition '{expression}' was true") { Name = $"{step.Name} (True)" },
-                    Else = new WriteLine($"Condition '{expression}' was false") { Name = $"{step.Name} (False)" }
-                };
-            }
-
-            case "Transform":
-                return new TransformStepActivity
-                {
-                    Name = step.Name,
-                    Value = new Input<string?>(config?.TransformInput ?? data),
-                    Operation = new Input<string?>(config?.TransformOperation ?? "extract"),
-                    Expression = new Input<string?>(config?.TransformExpression),
-                    OutputVariableName = new Input<string?>(config?.TransformOutput)
-                };
-
-            default:
-                return new WriteLine($"Step: {step.Name} | Action: {step.Action ?? "none"} | Role: {step.AssignedRole ?? "System"}")
-                {
-                    Name = step.Name
-                };
-        }
-    }
-
-    private static ICollection<string> SplitAddresses(string? raw) =>
-        string.IsNullOrWhiteSpace(raw)
-            ? Array.Empty<string>()
-            : raw.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-    private static HttpHeaders ParseHeaders(string? rawHeadersJson)
-    {
-        if (string.IsNullOrWhiteSpace(rawHeadersJson))
-            return new HttpHeaders();
-
-        try
-        {
-            var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(rawHeadersJson) ?? [];
-            var dict = parsed.ToDictionary(kv => kv.Key, kv => new[] { kv.Value });
-            return new HttpHeaders(dict);
-        }
-        catch (JsonException)
-        {
-            return new HttpHeaders();
-        }
-    }
-
-    private static TimeSpan ComputeDelay(StepConfigDto? config)
-    {
-        var duration = Math.Max(config?.DelayDuration ?? 1, 0);
-        return (config?.DelayUnit ?? "hours").ToLowerInvariant() switch
-        {
-            "minutes" => TimeSpan.FromMinutes(duration),
-            "hours" => TimeSpan.FromHours(duration),
-            "days" => TimeSpan.FromDays(duration),
-            _ => TimeSpan.FromHours(duration)
+            Name = step.Name
         };
-    }
-
-    private static bool EvaluateSimpleCondition(string? expression, string? data)
-    {
-        if (string.IsNullOrWhiteSpace(expression))
-            return true;
-
-        string[] operators = [">=", "<=", "==", "!=", ">", "<"];
-        foreach (var op in operators)
-        {
-            var idx = expression.IndexOf(op, StringComparison.Ordinal);
-            if (idx <= 0)
-                continue;
-
-            var path = expression[..idx].Trim();
-            var rightRaw = expression[(idx + op.Length)..].Trim().Trim('\'', '"');
-            var leftRaw = ExtractJsonPath(data, path);
-
-            if (leftRaw is null)
-                return true;
-
-            if (op is "==" or "!=")
-            {
-                var equal = string.Equals(leftRaw, rightRaw, StringComparison.OrdinalIgnoreCase);
-                return op == "==" ? equal : !equal;
-            }
-
-            if (!double.TryParse(leftRaw, out var leftNum) || !double.TryParse(rightRaw, out var rightNum))
-                return true;
-
-            return op switch
-            {
-                ">" => leftNum > rightNum,
-                "<" => leftNum < rightNum,
-                ">=" => leftNum >= rightNum,
-                "<=" => leftNum <= rightNum,
-                _ => true
-            };
-        }
-
-        return true;
-    }
-
-    private static string? ExtractJsonPath(string? json, string path)
-    {
-        if (string.IsNullOrWhiteSpace(json) || string.IsNullOrWhiteSpace(path))
-            return null;
-
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            var current = document.RootElement;
-            foreach (var segment in path.Split('.', StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (!current.TryGetProperty(segment, out current))
-                    return null;
-            }
-
-            return current.ValueKind == JsonValueKind.String ? current.GetString() : current.GetRawText();
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private sealed class StepConfigDto
-    {
-        public string? EmailTo { get; set; }
-        public string? EmailCc { get; set; }
-        public string? EmailSubject { get; set; }
-        public string? EmailBody { get; set; }
-        public string? AiPrompt { get; set; }
-        public int AiMaxTokens { get; set; } = 1024;
-        public double AiTemperature { get; set; } = 0.7;
-        public string? ApiMethod { get; set; } = "GET";
-        public string? ApiUrl { get; set; }
-        public string? ApiHeaders { get; set; }
-        public string? ApiBody { get; set; }
-        public string? ConditionExpression { get; set; }
-        public int DelayDuration { get; set; } = 1;
-        public string? DelayUnit { get; set; } = "hours";
-        public string? TransformInput { get; set; }
-        public string? TransformOperation { get; set; } = "extract";
-        public string? TransformExpression { get; set; }
-        public string? TransformOutput { get; set; }
-        public List<string>? NextSteps { get; set; }
     }
 }

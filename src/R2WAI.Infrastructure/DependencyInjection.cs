@@ -39,12 +39,13 @@ public static class DependencyInjection
         services.AddScoped(typeof(IRepository<>), typeof(GenericRepository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<ITenantDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
+        services.AddScoped<R2WAI.Application.Common.Interfaces.IApplicationDbContext>(sp => sp.GetRequiredService<ApplicationDbContext>());
 
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IDateTimeService, DateTimeService>();
         services.AddSingleton<IEncryptionService, EncryptionService>();
+        services.AddSingleton<IAadhaarHasher, AadhaarHasher>();
         services.AddScoped<IEmailService, EmailService>();
-        services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
         services.AddScoped<IChatbotService, ChatbotService>();
@@ -52,14 +53,7 @@ public static class DependencyInjection
         services.AddScoped<IApprovalService, ApprovalService>();
 
         services.AddSingleton<IToolRegistry, ToolRegistry>();
-        services.AddHttpClient("HttpTool", client =>
-        {
-            client.DefaultRequestHeaders.Add("User-Agent", "R2WAI-ToolFramework/1.0");
-            client.Timeout = TimeSpan.FromSeconds(30);
-        })
-        .AddTransientHttpErrorPolicy(p => p.WaitAndRetryAsync(3,
-            attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt))))
-        .AddTransientHttpErrorPolicy(p => p.CircuitBreakerAsync(5, TimeSpan.FromSeconds(30)));
+        services.AddHttpToolClient();
         services.AddTransient<ITool, HttpTool>(sp =>
         {
             var options = new HttpToolOptions
@@ -68,7 +62,7 @@ public static class DependencyInjection
                 ApiKey = configuration["Tools:Http:ApiKey"]
             };
             var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-            return new HttpTool(httpClientFactory.CreateClient("HttpTool"), options, sp.GetRequiredService<ILogger<HttpTool>>());
+            return new HttpTool(httpClientFactory.CreateClient(HttpToolClient.Name), options, sp.GetRequiredService<ILogger<HttpTool>>());
         });
         services.AddTransient<ITool, EmailTool>(sp =>
         {
@@ -87,29 +81,51 @@ public static class DependencyInjection
         services.AddScoped<FileProcessingService>();
         services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 
-        services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
+        services.AddScoped<IBackgroundJobQueue, Services.BackgroundJobs.BackgroundJobQueue>();
+        services.AddScoped<IBackgroundJobHandler, Services.BackgroundJobs.NotifyApproversJobHandler>();
+        services.AddScoped<IBackgroundJobHandler, Services.BackgroundJobs.IndexDocumentJobHandler>();
         services.AddSingleton<IRequestMetricsStore, RequestMetricsStore>();
-        services.AddHostedService<BackgroundTaskProcessor>();
+        services.AddHostedService<Services.BackgroundJobs.BackgroundJobProcessor>();
 
         services.AddSingleton<AI.ModelGateway.IModelProvider, AI.ModelGateway.OpenAiModelProvider>();
         services.AddSingleton<AI.ModelGateway.IModelProvider, AI.ModelGateway.OllamaModelProvider>();
         services.AddSingleton<AI.ModelGateway.IModelProvider, AI.ModelGateway.ZaiModelProvider>();
         services.AddSingleton<AI.ModelGateway.IModelGateway, AI.ModelGateway.ModelGateway>();
+        services.AddScoped<IModelConfigurationResolver, AI.ModelGateway.ModelConfigurationResolver>();
         services.AddScoped<IAIService, SemanticKernelService>();
         services.AddScoped<DocumentPlugin>();
         services.AddScoped<RAGPlugin>();
         services.AddScoped<WorkflowPlugin>();
         services.AddScoped<AssistantPlugin>();
         services.AddScoped<IChatTraceCollector, ChatTraceCollector>();
+        services.AddScoped<IChatStreamContext, AI.ChatStreamContext>();
+        services.AddScoped<IEnabledToolScope, AI.EnabledToolScope>();
+        services.AddScoped<IToolGateway, AI.ToolGateway>();
         services.AddScoped<AiFunctionAuditFilter>();
         services.AddScoped<IToolExecutionPolicyService, ToolExecutionPolicyService>();
+        services.AddScoped<IAiUsagePolicyService, AI.Policies.AiUsagePolicyService>();
+        services.AddScoped<IPiiPolicyService, AI.Policies.PiiPolicyService>();
+        services.AddScoped<IKnowledgePolicyService, AI.Policies.KnowledgePolicyService>();
+        services.AddScoped<IApprovalPolicyService, AI.Policies.ApprovalPolicyService>();
+        services.AddScoped<IAuthPolicyService, Authentication.AuthPolicyService>();
+        services.AddScoped<IDataRetentionService, AI.Policies.DataRetentionService>();
         services.AddScoped<IPromptTemplateService, AI.Prompts.PromptTemplateService>();
+        services.AddScoped<IWorkflowTemplateService, Workflows.WorkflowTemplateService>();
         services.AddScoped<IConversationMemoryService, AI.ConversationMemoryService>();
-        services.AddScoped<IAgentRuntime, AI.AgentRuntime>();
+        services.AddScoped<AI.AgentRuntime>();
+        services.AddScoped<AI.AgentFrameworkRuntime>();
+        services.AddScoped<AI.DynamicTools.MafToolFunctionFactory>();
+        services.AddScoped<IAgentRuntimePolicyService, AI.AgentRuntimePolicyService>();
+        services.AddScoped<IAgentRuntime, AI.AgentRuntimeSelector>();
+        services.AddScoped<IAgenticRetrievalOrchestrator, AI.AgenticRetrievalOrchestrator>();
         services.AddScoped<AI.DynamicTools.DynamicToolExecutor>();
+        services.AddScoped<AI.DynamicTools.McpClientAdapter>();
+        services.AddScoped<AI.DynamicTools.McpDynamicToolExecutor>();
         services.AddScoped<AI.DynamicTools.DynamicToolFunctionFactory>();
+        services.AddScoped<IDeferredToolCallExecutor, AI.DynamicTools.DeferredToolCallExecutor>();
 
         services.AddScoped<IVectorStoreService, PgVectorService>();
+        services.AddScoped<IOpenApiImportService, Integrations.OpenApiImportService>();
 
         var storageMode = configuration["Storage:Mode"]
             ?? configuration["Storage:Provider"]
@@ -137,7 +153,9 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<JwtService>();
         services.AddSingleton<TotpService>();
-        services.AddScoped<EntraIdAuthService>();
+        // Singleton so its cached OpenIdConnectConfiguration survives across requests — see the
+        // class's own doc comment for why (an [AllowAnonymous] endpoint's discovery-fetch cache).
+        services.AddSingleton<EntraIdAuthService>();
 
         services.AddSignalR();
         services.AddScoped<INotificationService, NotificationService>();

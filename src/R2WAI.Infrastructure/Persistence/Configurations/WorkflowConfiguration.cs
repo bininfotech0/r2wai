@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace R2WAI.Infrastructure.Persistence.Configurations;
@@ -9,6 +10,11 @@ public class WorkflowConfiguration : IEntityTypeConfiguration<Workflow>
         builder.ToTable("Workflows");
 
         builder.HasKey(w => w.Id);
+
+        // Optimistic concurrency via Postgres's built-in xmin system column — a shadow property, not
+        // a real new column, so no migration needed. Guards the publish/status-transition race the
+        // Workspace Boundary Audit flagged.
+        builder.Property<uint>("xmin").IsRowVersion().HasColumnName("xmin");
 
         builder.Property(w => w.Name)
             .IsRequired()

@@ -47,6 +47,45 @@ public class WorkflowStepExecutionTests
     }
 
     [Fact]
+    public void Create_AttemptCountStartsAtZero()
+    {
+        var step = CreateDefault();
+
+        Assert.Equal(0, step.AttemptCount);
+    }
+
+    [Fact]
+    public void Start_IncrementsAttemptCount()
+    {
+        var step = CreateDefault();
+
+        step.Start();
+        Assert.Equal(1, step.AttemptCount);
+    }
+
+    [Fact]
+    public void Start_CalledAgainAfterFailure_IncrementsAttemptCountAgain()
+    {
+        // WorkflowBridge.RetryFailedStepAsync re-runs a failed step through the exact same
+        // WorkflowStepExecution row (StepStatusNotificationHandler.ResolveStepExecutionAsync finds
+        // it by WorkflowInstanceId+StepIndex, not a fresh row per attempt) — this is what a real
+        // retry looks like at the entity level.
+        var step = CreateDefault();
+
+        step.Start();
+        step.Fail("first attempt failed");
+        Assert.Equal(1, step.AttemptCount);
+
+        step.Start();
+        Assert.Equal(2, step.AttemptCount);
+        Assert.Equal(WorkflowStepStatus.Running, step.Status);
+
+        step.Complete("second attempt succeeded");
+        Assert.Equal(2, step.AttemptCount);
+        Assert.Equal(WorkflowStepStatus.Completed, step.Status);
+    }
+
+    [Fact]
     public void Complete_SetsCompletedStatusAndTime()
     {
         var step = CreateDefault();

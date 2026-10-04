@@ -38,7 +38,7 @@ public class ExecuteWorkflowCommandHandler(
         }
 
         var instance = new WorkflowInstance(
-            Guid.NewGuid(), command.WorkflowId, tenantId, userId, command.Data);
+            Guid.NewGuid(), command.WorkflowId, tenantId, userId, command.Data, workflow.Version);
 
         await instanceRepo.AddAsync(instance, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

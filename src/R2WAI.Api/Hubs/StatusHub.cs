@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using R2WAI.Infrastructure.Persistence;
 
 namespace R2WAI.Api.Hubs;
 
@@ -7,10 +9,12 @@ namespace R2WAI.Api.Hubs;
 public class StatusHub : Hub
 {
     private readonly ILogger<StatusHub> _logger;
+    private readonly ApplicationDbContext _dbContext;
 
-    public StatusHub(ILogger<StatusHub> logger)
+    public StatusHub(ILogger<StatusHub> logger, ApplicationDbContext dbContext)
     {
         _logger = logger;
+        _dbContext = dbContext;
     }
 
     public override async Task OnConnectedAsync()
@@ -31,7 +35,35 @@ public class StatusHub : Hub
 
     public async Task SubscribeToWorkflow(string workflowInstanceId)
     {
-        await Groups.AddToGroupAsync(Context.ConnectionId, $"workflow_{workflowInstanceId}");
+        // A run's step names, outputs and errors are tenant data. This used to add ANY authenticated
+        // caller to the run's group, so a user from another tenant who knew (or was handed) an instance
+        // id could listen to it. Only a caller from the run's own tenant may subscribe; a refusal is
+        // silent (like ChatHub.JoinConversation) so it doesn't confirm whether an id exists.
+        if (!Guid.TryParse(workflowInstanceId, out var instanceId))
+            return;
+
+        if (!Guid.TryParse(Context.User?.FindFirst("tenant_id")?.Value, out var tenantId))
+            return;
+
+        // IgnoreQueryFilters: a SignalR Hub method invocation is not a normal per-request HTTP
+        // pipeline consumer — IHttpContextAccessor.HttpContext (what the DbContext's own ambient
+        // tenant filter reads) is not reliably populated here even on an authenticated connection
+        // (a known ASP.NET Core SignalR/WebSocket gap, not specific to this codebase). The explicit
+        // `i.TenantId == tenantId` clause above/below, driven by Context.User (SignalR's own reliable
+        // claims source), is the real and only tenant check this method needs — same pattern every
+        // background sweeper already uses for the same underlying reason (no reliable ambient
+        // HttpContext). Confirmed by this fix: before it, P0-5's tenant-filter fail-closed change
+        // broke same-tenant subscriptions too, not just cross-tenant ones.
+        var ownsRun = await _dbContext.WorkflowInstances.IgnoreQueryFilters().AsNoTracking()
+            .AnyAsync(i => i.Id == instanceId && i.TenantId == tenantId);
+        if (!ownsRun)
+        {
+            _logger.LogWarning("StatusHub: user {UserId} tried to subscribe to workflow run {InstanceId} outside their tenant",
+                Context.UserIdentifier, instanceId);
+            return;
+        }
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"workflow_{instanceId}");
     }
 
     public async Task UnsubscribeFromWorkflow(string workflowInstanceId)

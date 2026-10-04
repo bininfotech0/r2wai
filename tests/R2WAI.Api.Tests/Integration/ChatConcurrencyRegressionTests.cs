@@ -179,9 +179,15 @@ public class ChatConcurrencyRegressionTests : IAsyncLifetime
 
         // The bug: the HTTP response above can look perfectly fine (200, correct reply text) while the
         // assistant's message silently failed to reach the database. Only a direct DB read catches that.
+        //
+        // IgnoreQueryFilters: this raw scope has no ambient authenticated HttpContext — the chat call
+        // above went through the real authenticated `client`, but that context doesn't carry over to a
+        // separately-created scope. conversationId is already trustworthy (came from that authenticated
+        // response), so this is a safe read-back, not a security-relevant lookup.
         using var scope = _factory!.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var conversation = await db.Conversations
+            .IgnoreQueryFilters()
             .Include(c => c.Messages)
             .FirstOrDefaultAsync(c => c.Id == conversationId);
 
@@ -213,7 +219,7 @@ public class FakeToolDenialAiService : IAIService
     }
 
     public async Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null,
-        bool enableTools = false, CancellationToken ct = default)
+        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default)
     {
         // FunctionInvocationContext has no accessible public constructor, so the only way to exercise
         // the real filter is through the real SK pipeline: register it on a Kernel and invoke a trivial
@@ -230,22 +236,22 @@ public class FakeToolDenialAiService : IAIService
         return CannedReply;
     }
 
-    public Task<string> GenerateResponseAsync(string prompt, string? systemPrompt = null, string? context = null, CancellationToken ct = default)
+    public Task<string> GenerateResponseAsync(string prompt, string? systemPrompt = null, string? context = null, ResolvedModelConfig? modelConfig = null, int? maxTokens = null, double? temperature = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
-    public Task<string> SummarizeTextAsync(string text, int maxLength = 500, CancellationToken ct = default)
+    public Task<string> SummarizeTextAsync(string text, int maxLength = 500, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
-    public Task<string> ExtractDataAsync(string text, string schema, CancellationToken ct = default)
+    public Task<string> ExtractDataAsync(string text, string schema, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
-    public Task<string> CompareDocumentsAsync(string sourceText, string targetText, CancellationToken ct = default)
+    public Task<string> CompareDocumentsAsync(string sourceText, string targetText, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
     public IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null,
-        bool enableTools = false, CancellationToken ct = default)
+        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default)
         => throw new NotImplementedException();
     public Task<IReadOnlyList<float>> GenerateEmbeddingAsync(string text, CancellationToken ct = default)
         => throw new NotImplementedException();
     public Task<IReadOnlyList<IReadOnlyList<float>>> GenerateEmbeddingsAsync(IEnumerable<string> texts, CancellationToken ct = default)
         => throw new NotImplementedException();
-    public Task<string> AnswerQuestionAsync(string question, string context, CancellationToken ct = default)
+    public Task<string> AnswerQuestionAsync(string question, string context, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
 }
 

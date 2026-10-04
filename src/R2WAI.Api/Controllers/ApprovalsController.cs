@@ -14,6 +14,7 @@ namespace R2WAI.Api.Controllers;
 public class ApprovalsController(
     IApprovalService approvalService,
     IWorkflowBridge workflowBridge,
+    IDeferredToolCallExecutor deferredToolCallExecutor,
     ApplicationDbContext dbContext,
     ILogger<ApprovalsController> logger) : ControllerBase
 {
@@ -170,6 +171,24 @@ public class ApprovalsController(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to resume Elsa workflow for approval {RequestId}", id);
+            }
+        }
+        else if (approvalRequest is not null)
+        {
+            // Not workflow-bound — may be a paused AI tool call (see DeferredToolCallPayload). No-ops
+            // (returns null) for every other kind of standalone approval, so this is safe to always try.
+            try
+            {
+                var executionResult = await deferredToolCallExecutor.TryExecuteAsync(approvalRequest, ct);
+                if (executionResult is not null)
+                {
+                    approvalRequest.RecordDeferredExecutionResult(executionResult);
+                    await dbContext.SaveChangesAsync(ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to execute deferred tool call for approval {RequestId}", id);
             }
         }
 

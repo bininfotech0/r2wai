@@ -6,4 +6,5 @@ public interface IWorkflowBridge
         Guid workflowId, Guid tenantId, Guid userId, string? data, CancellationToken ct, Guid? existingInstanceId = null);
     Task ResumeWorkflowAsync(string elsaInstanceId, string approvalRequestId, string approvalStatus, CancellationToken ct);
     Task<bool> RetryFailedStepAsync(Guid workflowInstanceId, CancellationToken ct);
+    Task<bool> ContinueDelayedWorkflowAsync(Guid workflowInstanceId, CancellationToken ct);
 }
