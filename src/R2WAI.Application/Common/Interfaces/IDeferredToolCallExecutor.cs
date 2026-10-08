@@ -17,4 +17,10 @@ public interface IDeferredToolCallExecutor
     /// wrapped in a payload, or garbage in Data) — the caller no-ops rather than guessing.
     /// </summary>
     Task<string?> TryExecuteAsync(ApprovalRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// The confirmation was rejected: closes the paused call's ToolExecution ledger row as Denied.
+    /// No-op when the request was never a paused tool call.
+    /// </summary>
+    Task RecordRejectionAsync(ApprovalRequest request, CancellationToken ct = default);
 }

@@ -208,7 +208,7 @@ describe('getNavSections', () => {
     }
   })
 
-  it('keeps Departments out of primary navigation while preserving its direct route elsewhere', () => {
+  it('never lists the removed Departments page', () => {
     for (const persona of ['User', 'Admin', 'SuperAdmin'] as const) {
       const paths = getNavSections(persona).flatMap((s) => s.items.map((i) => i.path))
       expect(paths).not.toContain('/departments')

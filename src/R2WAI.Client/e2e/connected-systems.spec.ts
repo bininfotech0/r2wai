@@ -51,7 +51,7 @@ test.describe('Connected Systems', () => {
     // Discovery — StartDiscovery is no longer a manual status flip (see
     // ApplicationAction/APPLICATION_ACTIONS in types.ts); it's driven by parsing a real OpenAPI
     // spec, which also carries the connected system straight through to Configuring.
-    await page.getByRole('button', { name: 'Discover from OpenAPI Spec' }).click()
+    await page.getByRole('button', { name: 'Discover from OpenAPI' }).click()
     const discoverDialog = page.getByRole('dialog')
     await discoverDialog.getByRole('tab', { name: 'Upload file' }).click()
     await discoverDialog.locator('input[type="file"]').setInputFiles({

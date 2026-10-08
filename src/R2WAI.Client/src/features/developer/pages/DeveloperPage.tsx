@@ -53,10 +53,13 @@ curl -X POST ${baseUrl}/chat/conversations/$CONVERSATION_ID/messages \\
   const fetchPublicChat = `// No API key: the public embed endpoint is [AllowAnonymous].
 // It still requires an Origin in the chatbot's allowlist, and the
 // chatbot to be Active, and the tenant to be under its daily AiUsage cap.
+// Reuse one sessionId per conversation so the bot remembers earlier turns;
+// omit it and every message is answered on its own.
+const sessionId = crypto.randomUUID()
 const res = await fetch(\`${baseUrl}/chatbots/\${CHATBOT_ID}/chat\`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ message: 'Hello' }),
+  body: JSON.stringify({ message: 'Hello', sessionId }),
 })
 const { reply } = await res.json()`
 
@@ -133,7 +136,8 @@ const { reply } = await res.json()`
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                 <code>POST /chatbots/&#123;id&#125;/chat</code> — the endpoint the website
-                widget calls. Takes <code>{'{ "message": "..." }'}</code> and no credentials.
+                widget calls. Takes <code>{'{ "message": "...", "sessionId": "..." }'}</code> and no
+                credentials. The optional session id gives the bot memory of that conversation.
               </Typography>
               <CodeSnippet code={fetchPublicChat} language="javascript" />
             </Paper>

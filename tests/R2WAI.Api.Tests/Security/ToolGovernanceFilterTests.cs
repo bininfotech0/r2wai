@@ -273,4 +273,97 @@ public class ToolGovernanceFilterTests : IClassFixture<R2WAIWebApplicationFactor
         Assert.True(harness.BodyRan);
         Assert.Equal("tool-ran", result);
     }
+
+    // ToolExecution ledger: every governed call leaves exactly one queryable row with its outcome.
+    private static Task<List<ToolExecution>> LedgerAsync(Harness harness) =>
+        harness.Context.ToolExecutions.Where(e => e.TenantId == harness.TenantId).ToListAsync();
+
+    [Fact]
+    public async Task Ledger_records_a_denied_call_with_its_reason()
+    {
+        using var harness = SignIn();
+
+        await InvokeAsync(harness, "Rogue", "delete_everything");
+
+        var execution = Assert.Single(await LedgerAsync(harness));
+        Assert.Equal(ToolExecutionStatus.Denied, execution.Status);
+        Assert.Equal("delete_everything", execution.Function);
+        Assert.Equal("not a registered, governed tool", execution.DenialReason);
+        Assert.Null(execution.ToolDefinitionId);
+    }
+
+    [Fact]
+    public async Task Ledger_records_a_paused_call_as_awaiting_approval_linked_to_its_confirmation()
+    {
+        using var harness = SignIn();
+        var tool = RegisteredTool(harness.TenantId, "Get Supplier", risk: "High", approvalRequired: true);
+        harness.Context.ToolDefinitions.Add(tool);
+        await harness.Context.SaveChangesAsync();
+
+        await InvokeAsync(harness, "DynamicTools", "Get_Supplier", tool.Id);
+
+        var approval = await harness.Context.ApprovalRequests.SingleAsync(ar => ar.TenantId == harness.TenantId);
+        var execution = Assert.Single(await LedgerAsync(harness));
+        Assert.Equal(ToolExecutionStatus.AwaitingApproval, execution.Status);
+        Assert.Equal(approval.Id, execution.ApprovalRequestId);
+        Assert.Equal(tool.Id, execution.ToolDefinitionId);
+    }
+
+    [Fact]
+    public async Task Ledger_records_a_successful_call_with_its_tool_and_duration()
+    {
+        using var harness = SignIn();
+        var tool = RegisteredTool(harness.TenantId, "Get Supplier");
+        harness.Context.ToolDefinitions.Add(tool);
+        await harness.Context.SaveChangesAsync();
+
+        await InvokeAsync(harness, "DynamicTools", "Get_Supplier", tool.Id);
+
+        var execution = Assert.Single(await LedgerAsync(harness));
+        Assert.Equal(ToolExecutionStatus.Succeeded, execution.Status);
+        Assert.Equal(tool.Id, execution.ToolDefinitionId);
+        Assert.NotNull(execution.DurationMs);
+        Assert.NotNull(execution.CompletedAt);
+    }
+
+    [Fact]
+    public async Task Ledger_never_links_a_built_in_default_that_has_no_database_row()
+    {
+        using var harness = SignIn(); // no ToolDefinition rows: start_workflow is governed by code defaults
+
+        await InvokeAsync(harness, "WorkflowPlugin", "start_workflow");
+
+        var execution = Assert.Single(await LedgerAsync(harness));
+        Assert.Equal(ToolExecutionStatus.Succeeded, execution.Status);
+        Assert.Null(execution.ToolDefinitionId); // a real FK in Postgres — the default's id is not a row
+    }
+
+    [Fact]
+    public async Task Ledger_records_a_call_that_threw_as_failed_and_skips_utility_plugins()
+    {
+        using var harness = SignIn();
+        var tool = RegisteredTool(harness.TenantId, "Get Supplier");
+        harness.Context.ToolDefinitions.Add(tool);
+        await harness.Context.SaveChangesAsync();
+        Func<string> throwing = () => throw new InvalidOperationException("boom");
+        var throwingFunction = KernelFunctionFactory.CreateFromMethod(
+            throwing,
+            new KernelFunctionFromMethodOptions
+            {
+                FunctionName = "Get_Supplier",
+                AdditionalMetadata = new System.Collections.ObjectModel.ReadOnlyDictionary<string, object?>(
+                    new Dictionary<string, object?> { [AiFunctionAuditFilter.ToolDefinitionIdMetadataKey] = tool.Id }),
+            });
+        var kernel = Kernel.CreateBuilder().Build();
+        kernel.Plugins.AddFromFunctions("DynamicTools", [throwingFunction]);
+        kernel.FunctionInvocationFilters.Add(harness.Scope.ServiceProvider.GetRequiredService<AiFunctionAuditFilter>());
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => kernel.InvokeAsync(kernel.Plugins.GetFunction("DynamicTools", "Get_Supplier")));
+
+        await InvokeAsync(harness, "TimePlugin", "Now"); // ungoverned utility: not ledgered
+
+        var execution = Assert.Single(await LedgerAsync(harness));
+        Assert.Equal(ToolExecutionStatus.Failed, execution.Status);
+        Assert.Equal("boom", execution.Error);
+    }
 }

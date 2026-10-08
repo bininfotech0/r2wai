@@ -39,6 +39,7 @@ public interface ITenantDbContext
     DbSet<ApprovalRequest> ApprovalRequests { get; }
     DbSet<ApprovalPolicy> ApprovalPolicies { get; }
     DbSet<ApprovalNotificationDispatch> ApprovalNotificationDispatches { get; }
+    DbSet<ToolExecution> ToolExecutions { get; }
     DbSet<ToolDefinition> ToolDefinitions { get; }
     DbSet<ToolDefinitionVersion> ToolDefinitionVersions { get; }
     DbSet<BusinessCapability> BusinessCapabilities { get; }
@@ -48,6 +49,7 @@ public interface ITenantDbContext
     DbSet<WebhookEndpoint> WebhookEndpoints { get; }
     DbSet<ApiKey> ApiKeys { get; }
     DbSet<ChatbotChannel> ChatbotChannels { get; }
+    DbSet<ChatbotSessionTurn> ChatbotSessionTurns { get; }
     DbSet<TestCase> TestCases { get; }
     DbSet<TestRun> TestRuns { get; }
     DbSet<TestCaseResult> TestCaseResults { get; }
@@ -113,6 +115,7 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
     public DbSet<ApprovalPolicy> ApprovalPolicies => Set<ApprovalPolicy>();
     public DbSet<ApprovalNotificationDispatch> ApprovalNotificationDispatches => Set<ApprovalNotificationDispatch>();
+    public DbSet<ToolExecution> ToolExecutions => Set<ToolExecution>();
     public DbSet<ToolDefinition> ToolDefinitions => Set<ToolDefinition>();
     public DbSet<ToolDefinitionVersion> ToolDefinitionVersions => Set<ToolDefinitionVersion>();
     public DbSet<BusinessCapability> BusinessCapabilities => Set<BusinessCapability>();
@@ -122,6 +125,7 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
     public DbSet<WebhookEndpoint> WebhookEndpoints => Set<WebhookEndpoint>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<ChatbotChannel> ChatbotChannels => Set<ChatbotChannel>();
+    public DbSet<ChatbotSessionTurn> ChatbotSessionTurns => Set<ChatbotSessionTurn>();
     public DbSet<TestCase> TestCases => Set<TestCase>();
     public DbSet<TestRun> TestRuns => Set<TestRun>();
     public DbSet<TestCaseResult> TestCaseResults => Set<TestCaseResult>();
@@ -186,7 +190,8 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
                     // A Message's own construction time is meaningful: the user turn and the reply are
                     // usually saved in one SaveChanges after the model call, so stamping both with the
                     // save time collapsed every response time to 0s and made the pair's order ambiguous.
-                    if (entry.Entity is Message) break;
+                    // Same for a chatbot session turn: the visitor turn and the reply share one save.
+                    if (entry.Entity is Message or ChatbotSessionTurn) break;
                     entry.Entity.GetType().GetProperty("CreatedAt")?.SetValue(entry.Entity, utcNow);
                     break;
 

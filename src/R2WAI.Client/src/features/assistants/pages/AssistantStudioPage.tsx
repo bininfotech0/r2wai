@@ -34,6 +34,7 @@ import type { KnowledgeBaseDto } from '../../knowledge/types'
 import { CapabilitiesTab } from '../../capabilities/components/CapabilitiesTab'
 import { createChatbot, listChatbots } from '../../chatbots/api'
 import { listModels } from '../../admin/api'
+import { describePromptPlaceholders } from '../../../lib/prompts/promptPlaceholders'
 
 const TABS = ['Overview', 'Knowledge', 'Capabilities', 'Behavior', 'Security', 'Channels', 'Analytics'] as const
 
@@ -244,7 +245,8 @@ export function AssistantStudioPage() {
                   fullWidth
                   multiline
                   minRows={6}
-                  helperText="The system prompt that defines this assistant's behavior."
+                  error={describePromptPlaceholders(systemPrompt).isWarning}
+                  helperText={`The system prompt that defines this assistant's behavior. ${describePromptPlaceholders(systemPrompt).message}`}
                 />
                 <Box>
                   <Button

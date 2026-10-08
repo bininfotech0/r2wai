@@ -131,7 +131,6 @@ const NAVIGATION: readonly NavigationEntry[] = [
 
   // Route-only entries supply breadcrumb names for work surfaces that are reached from another
   // page, or whose path differs from the customer-facing name in the sidebar.
-  { id: 'departments-route', label: 'Departments', path: '/departments', icon: 'CorporateFare', routeLabel: 'Departments', visibleTo: ALL_PERSONAS, sidebar: false },
   { id: 'automation-detail-route', label: 'Automations', path: '/automations/:id', icon: 'AccountTree', routeLabel: 'Automations', visibleTo: ADMIN_PERSONAS, sidebar: false },
   { id: 'automation-builder-route', label: 'Builder', path: '/automations/:id/builder', icon: 'AccountTree', routeLabel: 'Builder', visibleTo: ADMIN_PERSONAS, sidebar: false },
   { id: 'chatbot-detail-route', label: 'Chatbots', path: '/chatbots/:id', icon: 'Forum', routeLabel: 'Chatbots', visibleTo: ADMIN_PERSONAS, sidebar: false },

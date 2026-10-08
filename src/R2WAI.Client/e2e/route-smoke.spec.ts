@@ -26,7 +26,6 @@ const ROUTES: { path: string; expect: RegExp | string }[] = [
   { path: '/runs', expect: /Execution|Runs/i },
   { path: '/approvals', expect: /Confirmation|Approval/i },
   { path: '/monitor', expect: /Monitor/i },
-  { path: '/departments', expect: /Department/i },
   { path: '/workspaces', expect: /Connections|Connected Systems|Workspace/i },
   { path: '/tools', expect: /Tools/i },
   { path: '/models', expect: /Model/i },

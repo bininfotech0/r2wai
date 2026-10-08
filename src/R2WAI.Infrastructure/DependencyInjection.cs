@@ -112,6 +112,7 @@ public static class DependencyInjection
         services.AddScoped<IPromptTemplateService, AI.Prompts.PromptTemplateService>();
         services.AddScoped<IWorkflowTemplateService, Workflows.WorkflowTemplateService>();
         services.AddScoped<IConversationMemoryService, AI.ConversationMemoryService>();
+        services.AddScoped<IChatbotSessionMemory, AI.ChatbotSessionMemory>();
         services.AddScoped<AI.AgentRuntime>();
         services.AddScoped<AI.AgentFrameworkRuntime>();
         services.AddScoped<AI.DynamicTools.MafToolFunctionFactory>();

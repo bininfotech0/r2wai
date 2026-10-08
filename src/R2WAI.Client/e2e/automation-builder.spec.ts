@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/cleanup'
 import { loginAsAdmin } from './fixtures/auth'
 
 // Phase 8's verify criteria: graph round-trips save->reload identically, and
@@ -6,7 +6,7 @@ import { loginAsAdmin } from './fixtures/auth'
 // from the palette isn't simulated here — graphConversion.test.ts already
 // proves round-trip fidelity as pure logic; this test proves the REAL
 // backend round-trip (save -> reload -> same data), which unit tests can't.
-test('Advanced Automation Builder: canvas reflects real steps, edits round-trip through the API', async ({ page }) => {
+test('Advanced Automation Builder: canvas reflects real steps, edits round-trip through the API', async ({ page, cleanup }) => {
   test.setTimeout(60_000)
 
   await loginAsAdmin(page)
@@ -16,6 +16,7 @@ test('Advanced Automation Builder: canvas reflects real steps, edits round-trip 
   await page.getByRole('button', { name: 'New Automation' }).click()
   await page.getByRole('button', { name: /configure manually/i }).click()
   const uniqueName = `E2E Builder Test ${Date.now()}`
+  cleanup.add('automation', uniqueName)
   const createDialog = page.getByRole('dialog')
   await createDialog.getByLabel('Name').fill(uniqueName)
   await createDialog.getByRole('button', { name: 'Create' }).click()

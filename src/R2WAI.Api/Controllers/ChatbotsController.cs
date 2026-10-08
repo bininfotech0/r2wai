@@ -34,6 +34,7 @@ public class ChatbotsController(
     IUnitOfWork unitOfWork,
     IConfiguration configuration,
     IPromptRenderer promptRenderer,
+    IChatbotSessionMemory sessionMemory,
     ILogger<ChatbotsController> logger) : ControllerBase
 {
     // docs/api/MISSING-BACKEND-ENDPOINTS.md §3.1 #56. Deliberately much tighter than
@@ -221,7 +222,9 @@ public class ChatbotsController(
         return Ok(new ChatbotPublicInfo(chatbot.Name, chatbot.WelcomeMessage, chatbot.VoiceEnabled, suggestedQuestions));
     }
 
-    public record ChatbotChatRequest(string Message);
+    // SessionId is optional: the widget sends a random id per visitor conversation so the bot
+    // remembers earlier turns. Without it each message is answered stand-alone.
+    public record ChatbotChatRequest(string Message, string? SessionId = null);
 
     // Anonymous for the same reason as GetPublicInfo above — this is the endpoint the public
     // embed widget calls to actually send a message.
@@ -263,7 +266,8 @@ public class ChatbotsController(
         if (effectiveMessage is null)
             return StatusCode(451, new { error = "This message appears to contain personal information this tenant's policy doesn't allow sending to the assistant. Please remove it and try again." });
 
-        var context = await SearchKnowledgeBaseContextAsync(chatbot, effectiveMessage, ct);
+        var sessionId = ChatbotSessionIds.Normalize(request.SessionId);
+        var context = await BuildReplyContextAsync(chatbot, sessionId, effectiveMessage, ct);
         // Widget visitors are anonymous, so {{user.name}} renders as a guest and the chatbot is the workspace.
         var systemPrompt = await promptRenderer.RenderAsync(
             chatbot.PromptTemplate ?? "You are a helpful AI assistant.", chatbot.TenantId, chatbot.Name, ct);
@@ -276,6 +280,8 @@ public class ChatbotsController(
             chatbot, "ChatbotsController.Chat", ct);
         if (reply is null)
             return StatusCode(503, new { error = ReplyUnavailableMessage });
+        if (sessionId is not null)
+            await sessionMemory.AppendExchangeAsync(chatbot, sessionId, effectiveMessage, reply, ct);
         await IncrementMessagesServedAsync(chatbot, ct);
 
         return Ok(new { reply });
@@ -365,6 +371,14 @@ public class ChatbotsController(
                 .IgnoreQueryFilters()
                 .Where(a => a.Id == assistantId && a.TenantId == chatbot.TenantId)
                 .ExecuteUpdateAsync(s => s.SetProperty(a => a.UsageCount, a => a.UsageCount + 1), ct);
+    }
+
+    // Knowledge-base excerpts plus, when the caller sent a session id, that session's earlier turns.
+    private async Task<string?> BuildReplyContextAsync(Chatbot chatbot, string? sessionId, string message, CancellationToken ct)
+    {
+        var knowledge = await SearchKnowledgeBaseContextAsync(chatbot, message, ct);
+        var history = sessionId is null ? null : await sessionMemory.BuildHistoryAsync(chatbot, sessionId, ct);
+        return ChatbotSessionIds.ComposeContext(history, knowledge);
     }
 
     private async Task<string?> SearchKnowledgeBaseContextAsync(Chatbot chatbot, string message, CancellationToken ct)
@@ -472,6 +486,11 @@ public class ChatbotsController(
             }
         }
 
+        var sessionId = ChatbotSessionIds.Normalize(request.SessionId);
+        if (sessionId is not null)
+            context = ChatbotSessionIds.ComposeContext(
+                await sessionMemory.BuildHistoryAsync(chatbot, sessionId, streamCt), context);
+
         // Widget visitors are anonymous, so {{user.name}} renders as a guest and the chatbot is the workspace.
         var systemPrompt = await promptRenderer.RenderAsync(
             chatbot.PromptTemplate ?? "You are a helpful AI assistant.", chatbot.TenantId, chatbot.Name, streamCt);
@@ -482,11 +501,13 @@ public class ChatbotsController(
         // text is flowing the deadline is lifted — a long answer is not a stalled one.
         using var firstChunkCts = new CancellationTokenSource(ReplyTimeout);
         using var replyCts = CancellationTokenSource.CreateLinkedTokenSource(streamCt, firstChunkCts.Token);
+        var replyBuffer = new StringBuilder();
         try
         {
             await foreach (var chunk in aiService.StreamChatAsync(effectiveMessage, context, systemPrompt, enableTools: false, modelConfig: modelConfig, ct: replyCts.Token))
             {
                 firstChunkCts.CancelAfter(Timeout.InfiniteTimeSpan);
+                replyBuffer.Append(chunk);
                 await WriteSseEventAsync("chunk", new { content = chunk }, streamCt);
             }
         }
@@ -512,6 +533,9 @@ public class ChatbotsController(
             await WriteSseEventAsync("citations", new { citations }, streamCt);
         }
 
+        // Only a completed reply is remembered; a failed or abandoned stream returned above.
+        if (sessionId is not null)
+            await sessionMemory.AppendExchangeAsync(chatbot, sessionId, effectiveMessage, replyBuffer.ToString(), streamCt);
         await IncrementMessagesServedAsync(chatbot, streamCt);
         await WriteSseEventAsync("done", new { message = "Stream complete" }, streamCt);
     }
@@ -612,7 +636,9 @@ public class ChatbotsController(
         return Ok(new ChatbotAttachmentResponse(url, safeFileName, file.ContentType, file.Length));
     }
 
-    public record ChatbotWebhookRequest(string Message);
+    // SessionId: the caller's own thread key (chat id, phone number...) to give the bot memory
+    // across messages of one conversation. Omit it for stand-alone replies.
+    public record ChatbotWebhookRequest(string Message, string? SessionId = null);
     public record ChatbotWebhookReply(string Reply);
 
     // Closes the gap the Webhook Key panel on the chatbot detail page used to disclose honestly:
@@ -676,7 +702,8 @@ public class ChatbotsController(
         if (effectiveMessage is null)
             return StatusCode(451, new { error = "This message appears to contain personal information this tenant's policy doesn't allow sending to the assistant." });
 
-        var context = await SearchKnowledgeBaseContextAsync(chatbot, effectiveMessage, ct);
+        var sessionId = ChatbotSessionIds.Normalize(request.SessionId);
+        var context = await BuildReplyContextAsync(chatbot, sessionId, effectiveMessage, ct);
         // Widget visitors are anonymous, so {{user.name}} renders as a guest and the chatbot is the workspace.
         var systemPrompt = await promptRenderer.RenderAsync(
             chatbot.PromptTemplate ?? "You are a helpful AI assistant.", chatbot.TenantId, chatbot.Name, ct);
@@ -688,6 +715,8 @@ public class ChatbotsController(
             chatbot, "ChatbotsController.Webhook", ct);
         if (reply is null)
             return StatusCode(503, new { error = ReplyUnavailableMessage });
+        if (sessionId is not null)
+            await sessionMemory.AppendExchangeAsync(chatbot, sessionId, effectiveMessage, reply, ct);
         await IncrementMessagesServedAsync(chatbot, ct);
 
         return Ok(new ChatbotWebhookReply(reply));

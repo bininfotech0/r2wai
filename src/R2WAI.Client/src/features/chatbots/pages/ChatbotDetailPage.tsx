@@ -50,6 +50,7 @@ import {
   type ChatbotChannelType,
   type ChatbotStatus,
 } from '../types'
+import { describePromptPlaceholders } from '../../../lib/prompts/promptPlaceholders'
 
 const STATUS_COLOR: Record<string, 'success' | 'warning' | 'default'> = {
   Active: 'success',
@@ -275,6 +276,8 @@ export function ChatbotDetailPage() {
             minRows={3}
             value={promptTemplate}
             onChange={(e) => setPromptTemplate(e.target.value)}
+            error={describePromptPlaceholders(promptTemplate).isWarning}
+            helperText={describePromptPlaceholders(promptTemplate).message}
           />
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Switch checked={voiceEnabled} onChange={(e) => setVoiceEnabled(e.target.checked)} />
@@ -372,7 +375,7 @@ export function ChatbotDetailPage() {
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
           <Typography variant="subtitle2">Webhook Key</Typography>
-          <Tooltip title="POST { message } to the URL below with this key in an X-Webhook-Key header to get { reply } back — the same generic channel a custom integration or a provider-specific adapter (WhatsApp, Slack, Telegram) can send through.">
+          <Tooltip title="POST { message, sessionId } to the URL below with this key in an X-Webhook-Key header to get { reply } back. Reuse one sessionId per conversation so the bot remembers earlier turns — the same generic channel a custom integration or a provider-specific adapter (WhatsApp, Slack, Telegram) can send through.">
             <InfoOutlined fontSize="small" color="disabled" />
           </Tooltip>
         </Stack>

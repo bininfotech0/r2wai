@@ -1,8 +1,8 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/cleanup'
 import { loginAsAdmin } from './fixtures/auth'
 
 test.describe('Monitor', () => {
-  test('all tabs render real data, and a test case can be created, run, and deleted', async ({ page }) => {
+  test('all tabs render real data, and a test case can be created, run, and deleted', async ({ page, cleanup }) => {
     test.setTimeout(120_000)
     await loginAsAdmin(page)
 
@@ -11,6 +11,7 @@ test.describe('Monitor', () => {
     await page.getByRole('button', { name: 'New Assistant' }).click()
     await page.getByRole('button', { name: /configure manually/i }).click()
     const assistantName = `E2E Monitor Assistant ${Date.now()}`
+    cleanup.add('assistant', assistantName)
     const createDialog = page.getByRole('dialog')
     await createDialog.getByLabel('Name').fill(assistantName)
     await createDialog.getByRole('button', { name: 'Create' }).click()

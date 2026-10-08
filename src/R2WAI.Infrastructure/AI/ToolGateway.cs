@@ -70,7 +70,10 @@ public class ToolGateway : IToolGateway
             plugin, function, request.ArgumentsForAudit, _currentUser.UserId, _currentUser.TenantId);
 
         var isUtilityPlugin = BuiltInToolGovernance.IsUtilityPlugin(plugin);
-        var toolDef = isUtilityPlugin ? null : await ResolveToolDefinitionAsync(request.ToolDefinitionId, function);
+        var (toolDef, isRegistered) = isUtilityPlugin ? (null, false) : await ResolveToolDefinitionAsync(request.ToolDefinitionId, function);
+        // Only a ToolDefinition that exists in the database can be linked from the ledger — the
+        // built-in defaults are code-defined records with fixed ids that are never persisted.
+        var ledgerToolId = isRegistered ? toolDef?.Id : null;
 
         var decision = isUtilityPlugin
             ? GovernanceDecision.Allow
@@ -100,6 +103,7 @@ public class ToolGateway : IToolGateway
         {
             _logger.LogWarning("Denied {Plugin}.{Function} — it has no governance record (unregistered tool)", plugin, function);
             await WriteUnknownToolDenialAuditAsync(function);
+            await RecordDeniedAsync(null, plugin, function, "not a registered, governed tool");
             return new ToolInvocationOutcome(false, "This action is not available: it is not a registered, governed tool.");
         }
 
@@ -107,6 +111,7 @@ public class ToolGateway : IToolGateway
         {
             _logger.LogWarning("Denied {Function} — user lacks required role {Role}", function, toolDef!.RequiredRole);
             await WriteDenialAuditAsync(toolDef, function, "missing required role");
+            await RecordDeniedAsync(ledgerToolId, plugin, function, $"missing required role '{toolDef.RequiredRole}'");
             return new ToolInvocationOutcome(false,
                 $"Access denied: this action requires the '{toolDef.RequiredRole}' role, which you do not have.");
         }
@@ -119,6 +124,8 @@ public class ToolGateway : IToolGateway
                 var requestId = await CreateDeferredApprovalRequestAsync(tenantId, userId, toolDef!, request.InputArgument);
                 _logger.LogWarning("Paused {Function} for approval — created standalone approval request {RequestId}", function, requestId);
                 await WriteDenialAuditAsync(toolDef!, function, "approval required — request created");
+                if (ledgerToolId is { } pausedToolId)
+                    await AddExecutionAsync(ToolExecution.AwaitingApproval(tenantId, userId, pausedToolId, plugin, function, requestId));
                 return new ToolInvocationOutcome(false,
                     $"This action requires administrator approval. An approval request has been created (ID: {requestId}) " +
                     "and the assigned approver has been notified. It will run automatically once approved.");
@@ -126,6 +133,7 @@ public class ToolGateway : IToolGateway
 
             _logger.LogWarning("Denied {Function} — approval required, not yet supported for this tool type", function);
             await WriteDenialAuditAsync(toolDef!, function, "approval required");
+            await RecordDeniedAsync(ledgerToolId, plugin, function, "approval required, not yet supported for this tool type");
             return new ToolInvocationOutcome(false,
                 "This action requires administrator approval and cannot be performed automatically yet.");
         }
@@ -134,6 +142,7 @@ public class ToolGateway : IToolGateway
         {
             _logger.LogWarning("Denied {Function} — tool risk level {RiskLevel} exceeds this tenant's configured ToolExecution policy ceiling", function, toolDef!.RiskLevel);
             await WriteDenialAuditAsync(toolDef, function, "exceeds policy risk ceiling");
+            await RecordDeniedAsync(ledgerToolId, plugin, function, "risk level exceeds the tenant's policy ceiling");
             return new ToolInvocationOutcome(false,
                 "This action's risk level exceeds what this tenant's policy allows the AI to perform automatically.");
         }
@@ -142,6 +151,7 @@ public class ToolGateway : IToolGateway
         {
             _logger.LogWarning("Denied {Function} — not in the calling assistant's enabled-tool list (defense-in-depth check)", function);
             await WriteDenialAuditAsync(toolDef!, function, "not enabled for this assistant");
+            await RecordDeniedAsync(ledgerToolId, plugin, function, "not enabled for this assistant");
             return new ToolInvocationOutcome(false, "This action is not available to this assistant.");
         }
 
@@ -149,15 +159,40 @@ public class ToolGateway : IToolGateway
         if (_streamContext.OnProgress is { } onStarted)
             await onStarted(new ToolCallProgressEvent(displayName, ToolCallProgressKind.Started));
 
+        // Prepare before Send (docs/architecture/EXECUTION-AND-WORKFLOWS.md): a row left in Prepared
+        // means the process died mid-call, which is exactly what a later reconcile needs to find.
+        // Utility plugins (no governance record) are not ledgered, matching how they skip governance.
+        Guid? executionId = null;
+        if (!isUtilityPlugin && _currentUser.TenantId is { } ledgerTenantId)
+        {
+            var prepared = ToolExecution.Prepared(ledgerTenantId, _currentUser.UserId, ledgerToolId, plugin, function);
+            await AddExecutionAsync(prepared);
+            executionId = prepared.Id;
+        }
+
         var sw = Stopwatch.StartNew();
         try
         {
             await request.ExecuteAsync(ct);
             sw.Stop();
         }
+        catch (OperationCanceledException ex)
+        {
+            // Cancelled or timed out after the call may already have reached the target.
+            sw.Stop();
+            await CompleteExecutionAsync(executionId, e => e.MarkUnknown(sw.ElapsedMilliseconds, ex.Message));
+            RecordToolMetrics(plugin, function, sw.ElapsedMilliseconds, success: false);
+            _traceCollector.RecordFunctionCall(plugin, function, request.ArgumentsForAudit, sw.ElapsedMilliseconds, success: false, error: ex.Message);
+            if (toolDef?.AuditRequired ?? true)
+                await WriteExecutionAuditAsync(toolDef, function, success: false, error: ex.Message, sw.ElapsedMilliseconds);
+            if (_streamContext.OnProgress is { } onCancelled)
+                await onCancelled(new ToolCallProgressEvent(displayName, ToolCallProgressKind.Completed, Success: false));
+            throw;
+        }
         catch (Exception ex)
         {
             sw.Stop();
+            await CompleteExecutionAsync(executionId, e => e.Fail(sw.ElapsedMilliseconds, ex.Message));
             RecordToolMetrics(plugin, function, sw.ElapsedMilliseconds, success: false);
             _traceCollector.RecordFunctionCall(plugin, function, request.ArgumentsForAudit, sw.ElapsedMilliseconds, success: false, error: ex.Message);
             if (toolDef?.AuditRequired ?? true)
@@ -167,6 +202,7 @@ public class ToolGateway : IToolGateway
             throw;
         }
 
+        await CompleteExecutionAsync(executionId, e => e.Succeed(sw.ElapsedMilliseconds));
         RecordToolMetrics(plugin, function, sw.ElapsedMilliseconds, success: true);
         _traceCollector.RecordFunctionCall(plugin, function, request.ArgumentsForAudit, sw.ElapsedMilliseconds, success: true, error: null);
         if (toolDef?.AuditRequired ?? true)
@@ -193,16 +229,48 @@ public class ToolGateway : IToolGateway
     // Caller-supplied id (e.g. Semantic Kernel function metadata) is tried first — exact,
     // collision-free, immune to a sanitised function name differing from ToolDefinition.Name.
     // Falls back to name-based lookup, then the code-defined built-in defaults.
-    private async Task<ToolDefinition?> ResolveToolDefinitionAsync(Guid? toolDefinitionId, string function)
+    private async Task<(ToolDefinition? ToolDef, bool IsRegistered)> ResolveToolDefinitionAsync(Guid? toolDefinitionId, string function)
     {
         if (_currentUser.TenantId is not { } tenantId)
-            return null;
+            return (null, false);
 
         if (toolDefinitionId is { } id)
-            return await _toolDefinitions.FirstOrDefaultAsync(t => t.Id == id && t.TenantId == tenantId);
+        {
+            var byId = await _toolDefinitions.FirstOrDefaultAsync(t => t.Id == id && t.TenantId == tenantId);
+            return (byId, byId is not null);
+        }
 
         var registered = await _toolDefinitions.FirstOrDefaultAsync(t => t.Name == function && t.TenantId == tenantId);
-        return registered ?? BuiltInToolGovernance.TryCreateDefault(function, tenantId);
+        return registered is not null ? (registered, true) : (BuiltInToolGovernance.TryCreateDefault(function, tenantId), false);
+    }
+
+    private async Task RecordDeniedAsync(Guid? toolDefinitionId, string plugin, string function, string reason)
+    {
+        if (_currentUser.TenantId is not { } tenantId) return;
+        await AddExecutionAsync(ToolExecution.Denied(tenantId, _currentUser.UserId, toolDefinitionId, plugin, function, reason));
+    }
+
+    // Isolated scope for the same reason as WriteAuditAsync below.
+    private async Task AddExecutionAsync(ToolExecution execution)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var executions = scope.ServiceProvider.GetRequiredService<IRepository<ToolExecution>>();
+        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        await executions.AddAsync(execution);
+        await unitOfWork.SaveChangesAsync();
+    }
+
+    private async Task CompleteExecutionAsync(Guid? executionId, Action<ToolExecution> complete)
+    {
+        if (executionId is not { } id) return;
+        using var scope = _scopeFactory.CreateScope();
+        var executions = scope.ServiceProvider.GetRequiredService<IRepository<ToolExecution>>();
+        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var execution = await executions.GetByIdAsync(id);
+        if (execution is null) return;
+        complete(execution);
+        executions.Update(execution);
+        await unitOfWork.SaveChangesAsync();
     }
 
     private async Task WriteUnknownToolDenialAuditAsync(string function)

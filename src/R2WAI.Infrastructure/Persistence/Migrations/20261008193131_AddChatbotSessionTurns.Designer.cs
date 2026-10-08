@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using R2WAI.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using R2WAI.Infrastructure.Persistence;
 namespace R2WAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261008193131_AddChatbotSessionTurns")]
+    partial class AddChatbotSessionTurns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2423,83 +2426,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("ToolDefinitionVersions", (string)null);
                 });
 
-            modelBuilder.Entity("R2WAI.Domain.Entities.ToolExecution", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ApprovalRequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DenialReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<long?>("DurationMs")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Error")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<string>("Function")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("IdempotencyKey")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("ModifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Plugin")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ToolDefinitionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ApprovalRequestId");
-
-                    b.HasIndex("ToolDefinitionId");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("TenantId", "CreatedAt");
-
-                    b.HasIndex("TenantId", "IdempotencyKey")
-                        .IsUnique()
-                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
-
-                    b.ToTable("ToolExecutions", (string)null);
-                });
-
             modelBuilder.Entity("R2WAI.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3598,30 +3524,6 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("ToolDefinition");
-                });
-
-            modelBuilder.Entity("R2WAI.Domain.Entities.ToolExecution", b =>
-                {
-                    b.HasOne("R2WAI.Domain.Entities.ApprovalRequest", null)
-                        .WithMany()
-                        .HasForeignKey("ApprovalRequestId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("R2WAI.Domain.Entities.Tenant", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("R2WAI.Domain.Entities.ToolDefinition", null)
-                        .WithMany()
-                        .HasForeignKey("ToolDefinitionId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("R2WAI.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.User", b =>

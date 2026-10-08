@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/cleanup'
 import { loginAsAdmin } from './fixtures/auth'
 
 // Phase 11: sidebar becomes an overlay below `md`, a fixed bottom nav takes over below `sm`, chat
@@ -90,7 +90,7 @@ test.describe('Responsive layout', () => {
     await page.keyboard.press('Escape')
   })
 
-  test('mobile (<sm): Automation Builder canvas is view-only', async ({ page }) => {
+  test('mobile (<sm): Automation Builder canvas is view-only', async ({ page, cleanup }) => {
     await loginAsAdmin(page)
 
     // Seed a minimal automation on desktop first (builder needs a real workflow to open).
@@ -98,6 +98,7 @@ test.describe('Responsive layout', () => {
     await page.getByRole('button', { name: 'New Automation' }).click()
     await page.getByRole('button', { name: /configure manually/i }).click()
     const uniqueName = `E2E Responsive Test ${Date.now()}`
+    cleanup.add('automation', uniqueName)
     const createDialog = page.getByRole('dialog')
     await createDialog.getByLabel('Name').fill(uniqueName)
     await createDialog.getByRole('button', { name: 'Create' }).click()

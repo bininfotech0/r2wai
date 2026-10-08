@@ -205,6 +205,20 @@ public class ApprovalsController(
             .Include(ar => ar.WorkflowInstance)
             .FirstOrDefaultAsync(ar => ar.Id == id, ct);
 
+        // A rejected paused AI tool call never runs — close its ledger row so it doesn't sit in
+        // "awaiting approval" forever.
+        if (approvalRequest is not null && approvalRequest.WorkflowInstanceId is null)
+        {
+            try
+            {
+                await deferredToolCallExecutor.RecordRejectionAsync(approvalRequest, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to record rejection in the tool execution ledger for approval {RequestId}", id);
+            }
+        }
+
         if (approvalRequest?.WorkflowInstance?.ElsaInstanceId is not null)
         {
             try

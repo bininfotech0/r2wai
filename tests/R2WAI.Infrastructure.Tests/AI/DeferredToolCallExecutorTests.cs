@@ -1,4 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Common.Models;
 using R2WAI.Domain.Entities;
@@ -22,10 +24,12 @@ public class DeferredToolCallExecutorTests
         public string Description => "fake";
         public ToolContext? LastContext { get; private set; }
         public ToolResult Result { get; set; } = new() { Success = true, Data = "ok" };
+        public Exception? Throws { get; set; }
 
         public Task<ToolResult> ExecuteAsync(ToolContext context)
         {
             LastContext = context;
+            if (Throws is not null) throw Throws;
             return Task.FromResult(Result);
         }
     }
@@ -66,7 +70,35 @@ public class DeferredToolCallExecutorTests
         public Task<int> SaveChangesAsync(CancellationToken ct = default) => Task.FromResult(0);
     }
 
-    private static DeferredToolCallExecutor CreateSut(FakeTool fakeTool, params ToolDefinition[] toolDefs)
+    // Audit rows and ledger rows the executor wrote through its isolated scope.
+    private readonly List<AuditLog> _audits = [];
+    private readonly List<ToolExecution> _executions = [];
+
+    private IServiceScopeFactory CreateAuditScopeFactory()
+    {
+        var auditRepo = new Mock<R2WAI.Domain.Interfaces.IRepository<AuditLog>>();
+        auditRepo.Setup(r => r.AddAsync(It.IsAny<AuditLog>(), It.IsAny<CancellationToken>()))
+            .Callback<AuditLog, CancellationToken>((a, _) => _audits.Add(a))
+            .ReturnsAsync((AuditLog a, CancellationToken _) => a);
+        var executionRepo = new Mock<R2WAI.Domain.Interfaces.IRepository<ToolExecution>>();
+        executionRepo.Setup(r => r.AddAsync(It.IsAny<ToolExecution>(), It.IsAny<CancellationToken>()))
+            .Callback<ToolExecution, CancellationToken>((e, _) => _executions.Add(e))
+            .ReturnsAsync((ToolExecution e, CancellationToken _) => e);
+        executionRepo.Setup(r => r.FirstOrDefaultAsync(It.IsAny<System.Linq.Expressions.Expression<Func<ToolExecution, bool>>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((System.Linq.Expressions.Expression<Func<ToolExecution, bool>> predicate, CancellationToken _) =>
+                _executions.AsQueryable().FirstOrDefault(predicate));
+        executionRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => _executions.FirstOrDefault(e => e.Id == id));
+        var unitOfWork = new Mock<R2WAI.Domain.Interfaces.IUnitOfWork>();
+        return new ServiceCollection()
+            .AddSingleton(executionRepo.Object)
+            .AddSingleton(auditRepo.Object)
+            .AddSingleton(unitOfWork.Object)
+            .BuildServiceProvider()
+            .GetRequiredService<IServiceScopeFactory>();
+    }
+
+    private DeferredToolCallExecutor CreateSut(FakeTool fakeTool, params ToolDefinition[] toolDefs)
     {
         var registry = new FakeRegistry();
         registry.Register(fakeTool);
@@ -74,7 +106,8 @@ public class DeferredToolCallExecutorTests
         var mcpClient = new McpClientAdapter(NullLogger<McpClientAdapter>.Instance);
         var mcpExecutor = new McpDynamicToolExecutor(mcpClient, new NoOpEncryptionService(), NullLogger<McpDynamicToolExecutor>.Instance);
         return new DeferredToolCallExecutor(
-            new FakeToolDefinitionRepository(toolDefs), dynamicExecutor, mcpExecutor, NullLogger<DeferredToolCallExecutor>.Instance);
+            new FakeToolDefinitionRepository(toolDefs), dynamicExecutor, mcpExecutor, CreateAuditScopeFactory(),
+            NullLogger<DeferredToolCallExecutor>.Instance);
     }
 
     private sealed class NoOpEncryptionService : IEncryptionService
@@ -186,5 +219,108 @@ public class DeferredToolCallExecutorTests
 
         Assert.Contains("not allowed", result);
         Assert.Null(fakeTool.LastContext); // never reached the HTTP-tool dispatch path
+    }
+
+    [Fact]
+    public async Task TryExecuteAsync_ApprovedCall_WritesAnExecutedAuditRow_LinkedToItsApproval()
+    {
+        var fakeTool = new FakeTool();
+        var tenantId = Guid.NewGuid();
+        var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, "Create Order", ToolType.Http, "desc", "https://api.example.com");
+        var sut = CreateSut(fakeTool, toolDef);
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolDef.Id, "{}").ToJson());
+
+        await sut.TryExecuteAsync(request);
+
+        var audit = Assert.Single(_audits);
+        Assert.Equal(tenantId, audit.TenantId);
+        Assert.Equal(toolDef.Id.ToString(), audit.EntityId);
+        Assert.Equal(request.RequesterId, audit.UserId);
+        Assert.Contains("\"status\":\"executed\"", audit.Metadata);
+        Assert.Contains(request.Id.ToString(), audit.Metadata);
+    }
+
+    [Fact]
+    public async Task TryExecuteAsync_ApprovedCallThatThrows_RecordsTheFailure_InsteadOfLosingIt()
+    {
+        var fakeTool = new FakeTool { Throws = new HttpRequestException("upstream 502") };
+        var tenantId = Guid.NewGuid();
+        var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, "Create Order", ToolType.Http, "desc", "https://api.example.com");
+        var sut = CreateSut(fakeTool, toolDef);
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolDef.Id, "{}").ToJson());
+
+        var result = await sut.TryExecuteAsync(request);
+
+        Assert.Equal("Execution failed: upstream 502", result); // lands on the approval's comments
+        var audit = Assert.Single(_audits);
+        Assert.Contains("\"status\":\"failed\"", audit.Metadata);
+        Assert.Contains("upstream 502", audit.Metadata);
+    }
+
+    [Fact]
+    public async Task TryExecuteAsync_ToolWithAuditDisabled_RunsWithoutAnAuditRow()
+    {
+        var fakeTool = new FakeTool();
+        var tenantId = Guid.NewGuid();
+        var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, "Get Status", ToolType.Http, "desc", "https://api.example.com");
+        toolDef.ConfigureGovernance("Low", requiredRole: null, confirmationRequired: false, approvalRequired: true, auditRequired: false);
+        var sut = CreateSut(fakeTool, toolDef);
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolDef.Id, null).ToJson());
+
+        await sut.TryExecuteAsync(request);
+
+        Assert.NotNull(fakeTool.LastContext);
+        Assert.Empty(_audits);
+    }
+
+    [Fact]
+    public async Task TryExecuteAsync_ApprovedPausedCall_MovesItsLedgerRowFromAwaitingApprovalToSucceeded()
+    {
+        var fakeTool = new FakeTool();
+        var tenantId = Guid.NewGuid();
+        var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, "Create Order", ToolType.Http, "desc", "https://api.example.com");
+        var sut = CreateSut(fakeTool, toolDef);
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolDef.Id, "{}").ToJson());
+        _executions.Add(ToolExecution.AwaitingApproval(tenantId, request.RequesterId, toolDef.Id, "Tools", "Create Order", request.Id));
+
+        await sut.TryExecuteAsync(request);
+
+        var execution = Assert.Single(_executions); // the paused row was continued, not duplicated
+        Assert.Equal(ToolExecutionStatus.Succeeded, execution.Status);
+        Assert.NotNull(execution.DurationMs);
+    }
+
+    [Fact]
+    public async Task TryExecuteAsync_ApprovedCallThatThrows_LeavesAFailedLedgerRow()
+    {
+        var fakeTool = new FakeTool { Throws = new HttpRequestException("upstream 502") };
+        var tenantId = Guid.NewGuid();
+        var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, "Create Order", ToolType.Http, "desc", "https://api.example.com");
+        var sut = CreateSut(fakeTool, toolDef);
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolDef.Id, "{}").ToJson());
+
+        await sut.TryExecuteAsync(request); // no paused row: a request from before the ledger existed
+
+        var execution = Assert.Single(_executions);
+        Assert.Equal(ToolExecutionStatus.Failed, execution.Status);
+        Assert.Equal(request.Id, execution.ApprovalRequestId);
+        Assert.Equal("upstream 502", execution.Error);
+    }
+
+    [Fact]
+    public async Task RecordRejectionAsync_ClosesThePausedRowAsDenied_AndIgnoresNonToolApprovals()
+    {
+        var tenantId = Guid.NewGuid();
+        var toolId = Guid.NewGuid();
+        var sut = CreateSut(new FakeTool());
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolId, "{}").ToJson());
+        _executions.Add(ToolExecution.AwaitingApproval(tenantId, request.RequesterId, toolId, "Tools", "Create Order", request.Id));
+
+        await sut.RecordRejectionAsync(request);
+        await sut.RecordRejectionAsync(CreateStandaloneRequest(tenantId, data: "supplier update"));
+
+        var execution = Assert.Single(_executions);
+        Assert.Equal(ToolExecutionStatus.Denied, execution.Status);
+        Assert.Equal("confirmation rejected", execution.DenialReason);
     }
 }

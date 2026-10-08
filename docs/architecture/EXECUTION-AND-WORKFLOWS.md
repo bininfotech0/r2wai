@@ -100,6 +100,26 @@ Call/Email uncovered would have been a misleadingly-named half-measure — not b
 The full Propose→Cancel model above remains the long-term target; building the rest of it now,
 without a further concrete triggering defect beyond what this phase found, would be speculative.
 
+**Built (2026-10-08): `ToolExecution` ledger for AI tool calls — the gateway half only.** The
+objection above is about workflow steps; it does not apply to AI tool calls, because every one of
+those (Semantic Kernel, Agent Framework, MCP) already crosses a single boundary, `ToolGateway`, so
+a ledger there is complete rather than a half-measure. Scope and shape:
+
+- One `ToolExecutions` row per governed call, written by `ToolGateway` (isolated scope, like its
+  audit writes): `Denied` with a reason, `AwaitingApproval` linked to its `ApprovalRequest`, or
+  `Prepared` before the call is sent → `Succeeded` / `Failed` / `Unknown` (cancelled or timed out
+  after sending). Utility plugins that skip governance are not ledgered.
+- Confirmed calls continue their own row: `DeferredToolCallExecutor` moves it
+  `AwaitingApproval → Prepared → Succeeded/Failed` (creating one for requests paused before the
+  ledger existed); a rejected confirmation closes it as `Denied`. That executor also now writes the
+  same execution AuditLog row and metrics as a direct call — before this, approved calls ran with no
+  execution record at all.
+- `IdempotencyKey` is reserved (nullable, unique per tenant when set) for the Prepare step above and
+  is **not populated yet**: what counts as "the same call" for a self-retrying agent is still
+  unspecified, so no dedup is claimed. Nor is there a Verify/reconcile job for `Prepared`/`Unknown`
+  rows yet — they are recorded so one can be built.
+- **Not covered:** automation/workflow API Call and Email steps, for exactly the reasons above.
+
 **Elsa removal:** not planned in the current phase set. The seam is proven swappable
 (`NoOpWorkflowBridge`), but actual removal waits until the ledger is proven and any active Elsa
 processes are safely drained — per this codebase's own established caution against destructive

@@ -1,11 +1,11 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/cleanup'
 import { loginAsAdmin } from './fixtures/auth'
 
 // Full CRUD + live preview streaming, per Phase 6's verify criteria. Manual
 // creation (not AI-generate) keeps this test fast; the AI-generate path
 // shares the same create/update endpoints already exercised elsewhere, and
 // the live-preview assertion below is what actually needs a real AI call.
-test('Assistant Studio: create, edit, live preview, publish, delete', async ({ page }) => {
+test('Assistant Studio: create, edit, live preview, publish, delete', async ({ page, cleanup }) => {
   test.setTimeout(240_000)
 
   await loginAsAdmin(page)
@@ -16,6 +16,9 @@ test('Assistant Studio: create, edit, live preview, publish, delete', async ({ p
   await page.getByRole('button', { name: 'New Assistant' }).click()
   await page.getByRole('button', { name: /configure manually/i }).click()
   const uniqueName = `E2E Assistant ${Date.now()}`
+  // The test renames it partway through, so either name may be the one left behind.
+  cleanup.add('assistant', uniqueName)
+  cleanup.add('assistant', `${uniqueName} (Updated)`)
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Name').fill(uniqueName)
   await dialog.getByRole('button', { name: 'Create' }).click()
@@ -43,8 +46,10 @@ test('Assistant Studio: create, edit, live preview, publish, delete', async ({ p
   // long enough to blow past even this test's 200s wait on a loaded shared
   // Ollama instance. A plain, unconstrained prompt keeps the model's
   // thinking phase to a few seconds.
-  const preview = page.getByText('Live Preview').locator('..').locator('..')
-  const previewInput = preview.getByPlaceholder('Ask something…')
+  // Anchor on the input itself, then take its nearest container that also holds the pane's
+  // "Live preview" heading — robust to the pane's wrapper depth changing.
+  const previewInput = page.getByPlaceholder('Ask something…')
+  const preview = previewInput.locator('xpath=ancestor::div[.//*[normalize-space()="Live preview"]][1]')
   await previewInput.fill('Reply with just the word OK and nothing else.')
   await previewInput.press('Enter')
   await expect(preview.getByText('Reply with just the word OK and nothing else.')).toBeVisible()

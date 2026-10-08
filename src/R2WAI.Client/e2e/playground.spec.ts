@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/cleanup'
 import { loginAsAdmin } from './fixtures/auth'
 
 // Phase 6's verify criteria: run an Assistant test and an Automation test through the new
@@ -8,7 +8,7 @@ import { loginAsAdmin } from './fixtures/auth'
 // reply — Automation and Capability modes get the full run-and-verify treatment since they're
 // not LLM-dependent.
 test.describe('Playground', () => {
-  test('unified 3-panel layout: mode switch, automation run, capability test', async ({ page }) => {
+  test('unified 3-panel layout: mode switch, automation run, capability test', async ({ page, cleanup }) => {
     test.setTimeout(120_000)
     await loginAsAdmin(page)
 
@@ -18,6 +18,7 @@ test.describe('Playground', () => {
     await page.getByRole('button', { name: 'New Automation' }).click()
     await page.getByRole('button', { name: /configure manually/i }).click()
     const uniqueName = `E2E Playground ${Date.now()}`
+    cleanup.add('automation', uniqueName)
     const createDialog = page.getByRole('dialog')
     await createDialog.getByLabel('Name').fill(uniqueName)
     await createDialog.getByRole('button', { name: 'Create' }).click()

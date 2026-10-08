@@ -1,4 +1,4 @@
-import { fetchPublicInfo, postFeedback, streamChat, uploadAttachment } from './api'
+import { fetchPublicInfo, newSessionId, postFeedback, streamChat, uploadAttachment, type PublicInfo } from './api'
 
 export interface WidgetConfig {
   chatbotId: string
@@ -214,12 +214,18 @@ function createWidget(config: WidgetConfig) {
   headerSubtitle.textContent = 'AI assistant'
   headerCopy.appendChild(headerTitle)
   headerCopy.appendChild(headerSubtitle)
+  const newChatBtn = document.createElement('button')
+  newChatBtn.type = 'button'
+  newChatBtn.appendChild(createIcon(['M3 12a9 9 0 1 0 3-6.7', 'M3 4v5h5']))
+  newChatBtn.setAttribute('aria-label', 'Start a new chat')
+  newChatBtn.title = 'New chat'
   const closeBtn = document.createElement('button')
   closeBtn.type = 'button'
   closeBtn.appendChild(createIcon(['M18 6 6 18', 'm6 6 12 12']))
   closeBtn.setAttribute('aria-label', 'Close chat')
   header.appendChild(brandMark)
   header.appendChild(headerCopy)
+  header.appendChild(newChatBtn)
   header.appendChild(closeBtn)
   panel.appendChild(header)
 
@@ -299,7 +305,9 @@ function createWidget(config: WidgetConfig) {
   }
 
   let infoLoaded = false
+  let info: PublicInfo | null = null
   let sending = false
+  let sessionId = newSessionId()
 
   // Speech-to-text input (browser SpeechRecognition API) and text-to-speech output (browser
   // speechSynthesis) — both no server component, no API keys. Recognized text lands in the
@@ -421,19 +429,37 @@ function createWidget(config: WidgetConfig) {
     messages.scrollTop = messages.scrollHeight
   }
 
+  function renderGreeting() {
+    if (!info) return
+    if (info.welcomeMessage) addBubble('bot', info.welcomeMessage)
+    if (info.suggestedQuestions?.length) renderSuggestions(info.suggestedQuestions)
+  }
+
+  // Clears the transcript and starts a new server-side session, so the bot forgets this one.
+  function startNewChat() {
+    if (sending) return
+    if (listening) stopListening()
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+    sessionId = newSessionId()
+    messages.replaceChildren()
+    textarea.value = ''
+    resizeTextarea()
+    renderGreeting()
+    textarea.focus()
+  }
+
   async function ensureInfoLoaded() {
     if (infoLoaded) return
     infoLoaded = true
     try {
-      const info = await fetchPublicInfo(config.baseUrl, config.chatbotId)
+      info = await fetchPublicInfo(config.baseUrl, config.chatbotId)
       headerTitle.textContent = escapeAttempt(config.title ?? info.name)
       panel.setAttribute('aria-label', `${config.title ?? info.name} conversation`)
-      if (info.welcomeMessage) addBubble('bot', info.welcomeMessage)
       if (info.voiceEnabled) {
         setupVoiceInput()
         setupVoiceOutput()
       }
-      if (info.suggestedQuestions?.length) renderSuggestions(info.suggestedQuestions)
+      renderGreeting()
     } catch {
       addBubble('error', 'Could not load this chatbot.')
     }
@@ -486,7 +512,7 @@ function createWidget(config: WidgetConfig) {
     addBubble('user', text)
     const botBubble = addBubble('bot', '')
 
-    await streamChat(config.baseUrl, config.chatbotId, text, {
+    await streamChat(config.baseUrl, config.chatbotId, text, sessionId, {
       onChunk: (chunk) => {
         botBubble.textContent += chunk
         messages.scrollTop = messages.scrollHeight
@@ -512,6 +538,7 @@ function createWidget(config: WidgetConfig) {
     launcher.setAttribute('aria-expanded', 'true')
     void ensureInfoLoaded()
   })
+  newChatBtn.addEventListener('click', startNewChat)
   closeBtn.addEventListener('click', () => {
     if (listening) stopListening()
     panel.classList.add('hidden')

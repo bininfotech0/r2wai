@@ -37,7 +37,6 @@ export const router = createBrowserRouter([
             children: [
               { path: '/', lazy: lazyPage(() => import('../features/dashboard/pages/HomePage').then((m) => ({ default: m.HomePage }))) },
               { path: '/home', element: <LegacyRedirect to={() => '/'} /> },
-              { path: '/departments', lazy: lazyPage(() => import('../features/departments/pages/DepartmentsPage').then((m) => ({ default: m.DepartmentsPage }))) },
               { path: '/assistants', lazy: lazyPage(() => import('../features/assistants/pages/AssistantsLibraryPage').then((m) => ({ default: m.AssistantsLibraryPage }))) },
               { path: '/assistants/:id', lazy: lazyPage(() => import('../features/assistants/pages/AssistantStudioPage').then((m) => ({ default: m.AssistantStudioPage }))) },
               { path: '/agents', element: <LegacyRedirect to={() => '/assistants'} /> },

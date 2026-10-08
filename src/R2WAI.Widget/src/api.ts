@@ -27,12 +27,25 @@ export interface StreamHandlers {
  * delimited) from POST .../chat/stream. No SSE library — plain fetch +
  * ReadableStream keeps this package dependency-light per the migration plan.
  */
-export async function streamChat(baseUrl: string, chatbotId: string, message: string, handlers: StreamHandlers): Promise<void> {
-  const response = await fetch(`${baseUrl}/api/v1/chatbots/${chatbotId}/chat/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
-  })
+export async function streamChat(
+  baseUrl: string,
+  chatbotId: string,
+  message: string,
+  sessionId: string,
+  handlers: StreamHandlers,
+): Promise<void> {
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/api/v1/chatbots/${chatbotId}/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // sessionId lets the server remember earlier turns of this conversation.
+      body: JSON.stringify({ message, sessionId }),
+    })
+  } catch {
+    handlers.onError('Could not reach the assistant.')
+    return
+  }
   if (!response.ok || !response.body) {
     handlers.onError(`Request failed (HTTP ${response.status})`)
     return
@@ -65,6 +78,17 @@ export async function streamChat(baseUrl: string, chatbotId: string, message: st
   } catch {
     handlers.onError('Connection lost while streaming.')
   }
+}
+
+/**
+ * A fresh random id per visible conversation. Kept in page memory only, matching the transcript:
+ * a reload shows an empty chat, so the bot should not silently remember the old one either.
+ */
+export function newSessionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 export interface AttachmentUploadResult {

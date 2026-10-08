@@ -11,7 +11,7 @@ namespace R2WAI.Infrastructure.AI.Policies;
 /// for a sweep that must see every tenant's policy regardless of who/what triggered it (a background
 /// loop with no HttpContext, or an admin's own authenticated request via the on-demand endpoint).
 /// </summary>
-public class DataRetentionService(ApplicationDbContext dbContext, ILogger<DataRetentionService> logger) : IDataRetentionService
+public class DataRetentionService(ApplicationDbContext dbContext, IConfiguration configuration, ILogger<DataRetentionService> logger) : IDataRetentionService
 {
     private const string PolicyType = "DataRetention";
 
@@ -23,6 +23,12 @@ public class DataRetentionService(ApplicationDbContext dbContext, ILogger<DataRe
             .ToListAsync(ct);
 
         int messagesPurged = 0, conversationsPurged = 0, documentsPurged = 0, tenantsSwept = 0;
+
+        // Chatbot session memory has its own short default lifetime, policy or not: it is anonymous
+        // visitor text kept only so a live conversation can refer back to itself.
+        var sessionRetentionDays = Math.Clamp(configuration.GetValue("Chatbots:SessionMemory:RetentionDays", 7), 1, 365);
+        var sessionCutoff = DateTime.UtcNow.AddDays(-sessionRetentionDays);
+        var sessionTurnsPurged = await PurgeChatbotSessionTurnsAsync(null, sessionCutoff, ct);
 
         foreach (var policy in activePolicies)
         {
@@ -54,6 +60,9 @@ public class DataRetentionService(ApplicationDbContext dbContext, ILogger<DataRe
             foreach (var document in oldDocuments)
                 document.SoftDelete();
 
+            if (cutoff > sessionCutoff)
+                sessionTurnsPurged += await PurgeChatbotSessionTurnsAsync(tenantId, cutoff, ct);
+
             messagesPurged += oldMessages.Count;
             conversationsPurged += oldConversations.Count;
             documentsPurged += oldDocuments.Count;
@@ -69,6 +78,27 @@ public class DataRetentionService(ApplicationDbContext dbContext, ILogger<DataRe
         if (activePolicies.Count > 0)
             await dbContext.SaveChangesAsync(ct);
 
-        return new DataRetentionSweepResult(tenantsSwept, messagesPurged, conversationsPurged, documentsPurged);
+        if (sessionTurnsPurged > 0)
+            logger.LogInformation("Data retention: purged {Count} chatbot session turns", sessionTurnsPurged);
+
+        return new DataRetentionSweepResult(tenantsSwept, messagesPurged, conversationsPurged, documentsPurged, sessionTurnsPurged);
+    }
+
+    // Hard delete: soft-deleted session text would still be anonymous visitor data sitting in the
+    // database. ExecuteDeleteAsync is relational-only, so the InMemory test provider takes the
+    // load-and-remove path.
+    private async Task<int> PurgeChatbotSessionTurnsAsync(Guid? tenantId, DateTime cutoff, CancellationToken ct)
+    {
+        var query = dbContext.ChatbotSessionTurns
+            .IgnoreQueryFilters()
+            .Where(t => t.CreatedAt < cutoff && (tenantId == null || t.TenantId == tenantId));
+
+        if (dbContext.Database.IsRelational())
+            return await query.ExecuteDeleteAsync(ct);
+
+        var rows = await query.ToListAsync(ct);
+        dbContext.ChatbotSessionTurns.RemoveRange(rows);
+        await dbContext.SaveChangesAsync(ct);
+        return rows.Count;
     }
 }

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/cleanup'
 import { loginAsAdmin } from './fixtures/auth'
 
 // Phase 12's verify criteria: full admin CRUD, plus an explicit confirmation
@@ -56,7 +56,7 @@ test.describe('Admin', () => {
     await expect(page.getByText('Role deleted')).toBeVisible()
   })
 
-  test('AI Models: create, test connection, then delete', async ({ page }) => {
+  test('AI Models: create, test connection, then delete', async ({ page, cleanup }) => {
     test.setTimeout(60_000)
     await loginAsAdmin(page)
 
@@ -64,6 +64,7 @@ test.describe('Admin', () => {
     await expect(page.getByRole('heading', { name: 'AI Models' })).toBeVisible()
 
     const name = `E2E Model ${Date.now()}`
+    cleanup.add('model', name)
     await page.getByRole('button', { name: 'New Model' }).click()
     const dialog = page.getByRole('dialog')
     await dialog.getByLabel('Name').fill(name)
