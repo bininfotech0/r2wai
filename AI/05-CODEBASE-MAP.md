@@ -16,15 +16,13 @@ src/
 ├── R2WAI.Domain           (84 .cs)   — Entities(47), Enums(27), Events(3), ValueObjects(1)
 ├── R2WAI.Infrastructure   (266 .cs)  — EF Core + Npgsql, AI runtime, services, persistence
 ├── R2WAI.Client           (139 .tsx + 119 .ts) — React 19 + TS + Vite 8 + MUI v9 SPA (not in any .slnx)
-├── R2WAI.Widget           (3 .ts)    — embeddable vanilla-TS chat widget (not in any .slnx)
-├── R2WAI.slnx             — narrower solution; OMITS tests/R2WAI.Api.Tests (known CI bug)
+└── R2WAI.Widget           (3 .ts)    — embeddable vanilla-TS chat widget (not in any .slnx)
 tests/
 ├── R2WAI.Api.Tests          (64 .cs)  — controllers, integration, security, middleware
 ├── R2WAI.Application.Tests  (30 .cs)  — handlers + policy/codec tests
 ├── R2WAI.Domain.Tests       (29 .cs)  — entity invariants + value objects
 ├── R2WAI.Infrastructure.Tests (37 .cs) — AI runtime, encryption, egress guard
-├── browser-*.mjs (6) + data-seed-fixed.mjs — legacy standalone Playwright scripts
-└── screenshots/ (86 .png)
+└── e2e/                     — standalone Node/Playwright scripts (see tests/e2e/README.md); screenshots/ git-ignored
 ```
 
 Root solution `R2WAI.slnx` = 4 src projects + 4 test projects. This is the solution CI uses

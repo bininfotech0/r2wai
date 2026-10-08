@@ -40,7 +40,7 @@ Polyglot monorepo. Root `R2WAI.slnx` references 4 src projects (`R2WAI.Api`,
 `Directory.Build.props`: `net10.0`, `ImplicitUsings`, `Nullable`, `TreatWarningsAsErrors=false`,
 `EnforceCodeStyleInBuild=true`; no central package management, no `global.json`.
 
-`src/R2WAI.slnx` is a second, narrower solution that omits `tests/R2WAI.Api.Tests` — a known
+`src/R2WAI.slnx` (a narrower solution omitting `tests/R2WAI.Api.Tests`) was removed 2026-10-09; it was a known
 past CI incident documented at `.github/workflows/ci.yml:29-33` and `:158-161`.
 
 `src/R2WAI.Client` (React SPA) and `src/R2WAI.Widget` are not referenced by either `.slnx`;
