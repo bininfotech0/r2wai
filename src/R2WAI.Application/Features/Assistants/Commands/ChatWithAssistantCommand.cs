@@ -1,4 +1,5 @@
 using FluentValidation;
+using R2WAI.Application.Common.AI;
 
 namespace R2WAI.Application.Features.Assistants.Commands;
 
@@ -44,7 +45,8 @@ public class ChatWithAssistantCommandHandler(
     IChatTraceCollector traceCollector,
     ICurrentUserService currentUser,
     IUnitOfWork unitOfWork,
-    ILogger<ChatWithAssistantCommandHandler> logger) : IRequestHandler<ChatWithAssistantCommand, ChatWithAssistantResult>
+    ILogger<ChatWithAssistantCommandHandler> logger,
+    IPromptRenderer? promptRenderer = null) : IRequestHandler<ChatWithAssistantCommand, ChatWithAssistantResult>
 {
     public async Task<ChatWithAssistantResult> Handle(ChatWithAssistantCommand command, CancellationToken cancellationToken)
     {
@@ -194,6 +196,10 @@ public class ChatWithAssistantCommandHandler(
 
         var basePrompt = assistant.SystemPrompt
             ?? await promptTemplateService.GetActiveTemplateAsync(assistant.Type, tenantId, cancellationToken);
+        // Fill {{tenant.name}}-style placeholders an admin wrote into the prompt; the model used to
+        // receive them as literal braces.
+        if (promptRenderer is not null)
+            basePrompt = await promptRenderer.RenderAsync(basePrompt, tenantId, assistant.Name, cancellationToken);
         var systemPrompt = basePrompt
             + $"\n\n[Assistant context: your assistant ID is {assistant.Id}, your name is \"{assistant.Name}\"" +
               (!string.IsNullOrWhiteSpace(assistant.Description)
@@ -218,16 +224,22 @@ public class ChatWithAssistantCommandHandler(
         if (behaviorSettings?.CitationsEnabled == false)
             citations = null;
 
-        var reply = await aiService.ChatAsync(
-            effectiveMessage,
-            context,
-            systemPrompt,
-            enableTools: true,
-            modelConfig: modelConfig,
-            enabledToolIds: assistant.GetEnabledToolIds(),
-            ct: cancellationToken);
+        string reply;
+        int? tokensUsed;
+        using (var usage = AiTokenUsageScope.Begin())
+        {
+            reply = await aiService.ChatAsync(
+                effectiveMessage,
+                context,
+                systemPrompt,
+                enableTools: true,
+                modelConfig: modelConfig,
+                enabledToolIds: assistant.GetEnabledToolIds(),
+                ct: cancellationToken);
+            tokensUsed = usage.TotalTokens;
+        }
 
-        var assistantMessage = conversation.AddMessage(Guid.NewGuid(), null, MessageRole.Assistant, reply);
+        var assistantMessage = conversation.AddMessage(Guid.NewGuid(), null, MessageRole.Assistant, reply, tokensUsed: tokensUsed);
         assistantMessage.AddDomainEvent(new MessageCreatedEvent(
             assistantMessage.Id, conversation.Id, tenantId, userId, reply, MessageRole.Assistant));
         await messageRepo.AddAsync(assistantMessage, cancellationToken);
@@ -237,6 +249,6 @@ public class ChatWithAssistantCommandHandler(
         stopwatch.Stop();
         var functionCalls = traceCollector.GetTrace().ToList();
 
-        return new ChatWithAssistantResult(conversation.Id, reply, 0, citations, stopwatch.ElapsedMilliseconds, functionCalls);
+        return new ChatWithAssistantResult(conversation.Id, reply, tokensUsed ?? 0, citations, stopwatch.ElapsedMilliseconds, functionCalls);
     }
 }

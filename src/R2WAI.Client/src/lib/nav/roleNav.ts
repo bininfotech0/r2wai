@@ -14,6 +14,8 @@ export interface NavItem {
   label: string
   path: string
   icon: string
+  /** Other paths that should also mark this item active (the rest of its tab group). */
+  matchPaths?: string[]
 }
 
 export interface NavSection {
@@ -44,6 +46,12 @@ interface NavigationEntry extends NavItem {
   breadcrumbParentPath?: string
   bottomNav?: Partial<Record<RolePersona, BottomNavPlacement>>
   labelsByPersona?: Partial<Record<RolePersona, string>>
+  /**
+   * Pages that are facets of one destination share a tab group: the sidebar shows only the
+   * group's first entry, and MainLayout renders the group as tabs above each member page.
+   */
+  tabGroup?: string
+  tabLabel?: string
 }
 
 const ADMIN_PERSONAS = ['Admin', 'SuperAdmin'] as const
@@ -78,11 +86,12 @@ const NAVIGATION: readonly NavigationEntry[] = [
       Public: { order: 2, label: 'Chat' },
     },
   },
-  { id: 'connections', section: 'Connections', label: 'Connections', path: '/workspaces', icon: 'Apps', routeLabel: 'Connections', visibleTo: ADMIN_PERSONAS },
-  { id: 'integrations', section: 'Connections', label: 'Integrations', path: '/integrations', icon: 'Build', routeLabel: 'Integrations', visibleTo: ADMIN_PERSONAS },
-  { id: 'mcp', section: 'Connections', label: 'MCP Servers', path: '/mcp-connections', icon: 'RocketLaunch', routeLabel: 'MCP Servers', visibleTo: ADMIN_PERSONAS },
-  { id: 'tools', section: 'Connections', label: 'Tools & APIs', path: '/tools', icon: 'Extension', routeLabel: 'Tools & APIs', visibleTo: ['SuperAdmin'] },
-  { id: 'models', section: 'Connections', label: 'AI Models', path: '/models', icon: 'ModelTraining', routeLabel: 'AI Models', visibleTo: ['SuperAdmin'] },
+  // One "Connections" destination: four pages that all answer "how does an agent reach an outside
+  // system" used to be four sidebar items. Each keeps its own URL; they render as tabs instead.
+  { id: 'connections', section: 'Connections', label: 'Connections', path: '/workspaces', icon: 'Apps', routeLabel: 'Connections', visibleTo: ADMIN_PERSONAS, tabGroup: 'connections', tabLabel: 'Connected Systems' },
+  { id: 'integrations', label: 'Integrations', path: '/integrations', icon: 'Build', routeLabel: 'Integrations', breadcrumbParentPath: '/workspaces', visibleTo: ADMIN_PERSONAS, sidebar: false, tabGroup: 'connections' },
+  { id: 'mcp', label: 'MCP Servers', path: '/mcp-connections', icon: 'RocketLaunch', routeLabel: 'MCP Servers', breadcrumbParentPath: '/workspaces', visibleTo: ADMIN_PERSONAS, sidebar: false, tabGroup: 'connections' },
+  { id: 'tools', label: 'Tools & APIs', path: '/tools', icon: 'Extension', routeLabel: 'Tools & APIs', breadcrumbParentPath: '/workspaces', visibleTo: ['SuperAdmin'], sidebar: false, tabGroup: 'connections' },
   {
     id: 'knowledge', section: 'Knowledge', sectionsByPersona: { User: '' }, label: 'Knowledge', path: '/knowledge', icon: 'MenuBook', routeLabel: 'Knowledge', visibleTo: ALL_PERSONAS,
     bottomNav: { User: { order: 2 } },
@@ -90,6 +99,7 @@ const NAVIGATION: readonly NavigationEntry[] = [
   { id: 'automations', section: 'Automations', label: 'Automations', path: '/automations', icon: 'AccountTree', routeLabel: 'Automations', visibleTo: ADMIN_PERSONAS },
   {
     id: 'publish', section: 'Publish', label: 'Publish', path: '/chatbots', icon: 'Forum', routeLabel: 'Publish', visibleTo: ADMIN_PERSONAS,
+    tabGroup: 'publish', tabLabel: 'Chatbots',
   },
   { id: 'activity', section: 'Activity', label: 'Activity', path: '/runs', icon: 'PlayCircleOutline', routeLabel: 'Activity', visibleTo: ADMIN_PERSONAS },
   { id: 'confirmations', section: 'Activity', label: 'Confirmations', path: '/approvals', icon: 'FactCheck', routeLabel: 'Confirmations', visibleTo: ADMIN_PERSONAS },
@@ -99,6 +109,7 @@ const NAVIGATION: readonly NavigationEntry[] = [
     id: 'users', section: 'Settings', label: 'Users & Roles', path: '/users', icon: 'PeopleAlt', routeLabel: 'Users & Roles', visibleTo: ADMIN_PERSONAS,
     labelsByPersona: { Admin: 'Users' },
   },
+  { id: 'models', section: 'Settings', label: 'AI Models', path: '/models', icon: 'ModelTraining', routeLabel: 'AI Models', visibleTo: ['SuperAdmin'] },
   { id: 'security', section: 'Settings', label: 'Security & Policies', path: '/security', icon: 'Lock', routeLabel: 'Security & Policies', visibleTo: ['SuperAdmin'] },
   { id: 'developer', section: 'Settings', label: 'API & SDK', path: '/developer', icon: 'Code', routeLabel: 'API & SDK', visibleTo: ADMIN_PERSONAS },
   {
@@ -124,8 +135,8 @@ const NAVIGATION: readonly NavigationEntry[] = [
   { id: 'automation-detail-route', label: 'Automations', path: '/automations/:id', icon: 'AccountTree', routeLabel: 'Automations', visibleTo: ADMIN_PERSONAS, sidebar: false },
   { id: 'automation-builder-route', label: 'Builder', path: '/automations/:id/builder', icon: 'AccountTree', routeLabel: 'Builder', visibleTo: ADMIN_PERSONAS, sidebar: false },
   { id: 'chatbot-detail-route', label: 'Chatbots', path: '/chatbots/:id', icon: 'Forum', routeLabel: 'Chatbots', visibleTo: ADMIN_PERSONAS, sidebar: false },
-  { id: 'channels-route', label: 'Channels', path: '/deploy', icon: 'Forum', routeLabel: 'Channels', breadcrumbParentPath: '/chatbots', visibleTo: ADMIN_PERSONAS, sidebar: false },
-  { id: 'widget-route', label: 'Website Widget', path: '/deploy/widget', icon: 'Language', routeLabel: 'Website Widget', visibleTo: ADMIN_PERSONAS, sidebar: false },
+  { id: 'channels-route', label: 'Channels', path: '/deploy', icon: 'Forum', routeLabel: 'Channels', breadcrumbParentPath: '/chatbots', visibleTo: ADMIN_PERSONAS, sidebar: false, tabGroup: 'publish' },
+  { id: 'widget-route', label: 'Website Widget', path: '/deploy/widget', icon: 'Language', routeLabel: 'Website Widget', visibleTo: ADMIN_PERSONAS, sidebar: false, tabGroup: 'publish' },
   { id: 'widget-chatbot-route', label: 'Website Widget', path: '/deploy/widget/:chatbotId', icon: 'Language', routeLabel: 'Website Widget', visibleTo: ADMIN_PERSONAS, sidebar: false },
   { id: 'whatsapp-route', label: 'WhatsApp', path: '/deploy/whatsapp/:chatbotId', icon: 'Forum', routeLabel: 'WhatsApp', visibleTo: ADMIN_PERSONAS, sidebar: false },
   { id: 'about-route', label: 'About', path: '/about', icon: 'Help', routeLabel: 'About', visibleTo: ALL_PERSONAS, sidebar: false },
@@ -142,12 +153,21 @@ function isVisibleTo(entry: NavigationEntry, persona: RolePersona): boolean {
   return entry.visibleTo.includes(persona)
 }
 
+function tabGroupMembers(group: string, persona: RolePersona): NavigationEntry[] {
+  return NAVIGATION.filter((entry) => entry.tabGroup === group && isVisibleTo(entry, persona))
+}
+
 function itemForPersona(entry: NavigationEntry, persona: RolePersona): NavItem {
-  return {
+  const item: NavItem = {
     label: entry.labelsByPersona?.[persona] ?? entry.label,
     path: entry.path,
     icon: entry.icon,
   }
+  if (entry.tabGroup) {
+    const others = tabGroupMembers(entry.tabGroup, persona).map((member) => member.path).filter((path) => path !== entry.path)
+    if (others.length > 0) item.matchPaths = others
+  }
+  return item
 }
 
 export function getHomeNavItem(): NavItem {
@@ -230,6 +250,24 @@ export function getBreadcrumbs(pathname: string, persona: RolePersona): Breadcru
   }
 
   return breadcrumbs
+}
+
+export interface SectionTabs {
+  tabs: NavItem[]
+  /** Path of the tab the current page belongs to. */
+  activePath: string
+}
+
+/** The tab strip for a page that belongs to a tab group, or null for every other page. */
+export function getSectionTabs(pathname: string, persona: RolePersona): SectionTabs | null {
+  const entry = routeEntry(pathname, persona)
+  if (!entry?.tabGroup) return null
+  const members = tabGroupMembers(entry.tabGroup, persona)
+  if (members.length < 2) return null
+  return {
+    tabs: members.map((member) => ({ label: member.tabLabel ?? member.label, path: member.path, icon: member.icon })),
+    activePath: entry.path,
+  }
 }
 
 export function getPersonaLabel(persona: RolePersona): string {

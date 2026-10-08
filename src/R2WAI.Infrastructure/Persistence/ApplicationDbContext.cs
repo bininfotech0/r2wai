@@ -183,6 +183,10 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
             switch (entry.State)
             {
                 case EntityState.Added:
+                    // A Message's own construction time is meaningful: the user turn and the reply are
+                    // usually saved in one SaveChanges after the model call, so stamping both with the
+                    // save time collapsed every response time to 0s and made the pair's order ambiguous.
+                    if (entry.Entity is Message) break;
                     entry.Entity.GetType().GetProperty("CreatedAt")?.SetValue(entry.Entity, utcNow);
                     break;
 

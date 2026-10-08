@@ -132,7 +132,7 @@ abstractions required by `09-API-INTEGRATION-STANDARDS.md:100-112`.
 - Secrets: `docker/.env` gitignored (verified via `git ls-files`); production validation at
   `Program.cs:536-593`.
 - CORS fails closed when `CORS:AllowedOrigins` unset outside dev (`Program.cs:197-207`).
-- **Deviation:** `tests/browser-*.mjs` hardcode credentials
+- **Deviation:** `tests/e2e/*.mjs` hardcode credentials
   (`admin@r2wai.io / R2wai_Admin!2026`, `browser-full-cycle-test.mjs:4-5`) and a stale port
   (3001). These scripts are unregistered (not referenced by any package.json script or CI job).
 - CI security gates fail only on **Critical** CVEs (`ci.yml:165-170`, `:212-226`); High is

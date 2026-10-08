@@ -1,28 +1,21 @@
 import { useEffect, useState } from 'react'
-import { Link as RouterLink } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box, Button, CircularProgress, Paper, Stack, Switch, Tab, Tabs, TextField, Typography } from '@mui/material'
 import BusinessOutlined from '@mui/icons-material/BusinessOutlined'
-import SmartToyOutlined from '@mui/icons-material/SmartToyOutlined'
 import ToggleOnOutlined from '@mui/icons-material/ToggleOnOutlined'
-import StorageOutlined from '@mui/icons-material/StorageOutlined'
-import CodeOutlined from '@mui/icons-material/CodeOutlined'
 import TuneOutlined from '@mui/icons-material/TuneOutlined'
-import ArrowForwardOutlined from '@mui/icons-material/ArrowForwardOutlined'
 import SaveOutlined from '@mui/icons-material/SaveOutlined'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { ErrorState } from '../../../components/ErrorState'
 import { getSettings, parseFeatureFlags, parseLimits, updateFeatureFlags, updateLimits, updateOrganizationDetails } from '../api'
-import { DeveloperTab } from '../components/DeveloperTab'
 import type { TenantFeatureFlags, TenantLimits } from '../types'
 
+// API keys and webhooks live on the API & SDK page and AI models have their own Settings entry,
+// so this page keeps only what is edited nowhere else.
 const CATEGORIES = [
   { label: 'General', icon: <BusinessOutlined fontSize="small" /> },
-  { label: 'AI', icon: <SmartToyOutlined fontSize="small" /> },
   { label: 'Features', icon: <ToggleOnOutlined fontSize="small" /> },
-  { label: 'Data', icon: <StorageOutlined fontSize="small" /> },
-  { label: 'Developer', icon: <CodeOutlined fontSize="small" /> },
-  { label: 'Advanced', icon: <TuneOutlined fontSize="small" /> },
+  { label: 'Limits', icon: <TuneOutlined fontSize="small" /> },
 ] as const
 type Category = (typeof CATEGORIES)[number]['label']
 
@@ -113,7 +106,7 @@ export function SettingsPage() {
           Settings
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Organization, features, limits, and developer access.
+          Organization details, enabled features, and usage limits.
         </Typography>
       </Box>
 
@@ -134,23 +127,6 @@ export function SettingsPage() {
                 {orgMutation.isPending ? 'Saving…' : 'Save changes'}
               </Button>
             </Box>
-          </Stack>
-        </Paper>
-      )}
-
-      {category === 'AI' && (
-        <Paper variant="outlined" sx={{ p: 2, maxWidth: 500 }}>
-          <Stack spacing={1.5}>
-            <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-              <SmartToyOutlined color="primary" />
-              <Box>
-                <Typography variant="subtitle2">AI models</Typography>
-                <Typography variant="body2" color="text.secondary">Manage providers, models, and defaults.</Typography>
-              </Box>
-            </Stack>
-            <Button component={RouterLink} to="/models" variant="outlined" endIcon={<ArrowForwardOutlined />} sx={{ alignSelf: 'flex-start' }}>
-              Open AI models
-            </Button>
           </Stack>
         </Paper>
       )}
@@ -179,7 +155,7 @@ export function SettingsPage() {
         </Paper>
       )}
 
-      {category === 'Data' && (
+      {category === 'Limits' && (
         <Paper variant="outlined" sx={{ p: 2, maxWidth: 500 }}>
           <Stack spacing={2}>
             <TextField
@@ -196,20 +172,6 @@ export function SettingsPage() {
               value={limits.maxStorageMb}
               onChange={(e) => setLimits({ ...limits, maxStorageMb: Number(e.target.value) })}
             />
-            <Box>
-              <Button variant="contained" startIcon={<SaveOutlined />} disabled={limitsMutation.isPending || !hasLimitChanges} onClick={() => limitsMutation.mutate()}>
-                {limitsMutation.isPending ? 'Saving…' : 'Save changes'}
-              </Button>
-            </Box>
-          </Stack>
-        </Paper>
-      )}
-
-      {category === 'Developer' && <DeveloperTab />}
-
-      {category === 'Advanced' && (
-        <Paper variant="outlined" sx={{ p: 2, maxWidth: 500 }}>
-          <Stack spacing={2}>
             <TextField
               label="Max users"
               type="number"

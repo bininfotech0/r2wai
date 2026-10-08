@@ -183,9 +183,14 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
         var tenantId = currentUser.TenantId.Value;
         var since = DateTime.UtcNow.AddDays(-30);
 
-        var totalTokens = await dbContext.Messages
-            .Where(m => m.TenantId == tenantId && m.TokensUsed != null && m.CreatedAt >= since)
-            .SumAsync(m => (long?)m.TokensUsed, ct) ?? 0L;
+        // null (not 0) when no message carries a token count: no chat path computes tokens yet, so
+        // a sum of nothing would show "0 tokens used" next to dozens of real conversations.
+        // (Sum over an empty set is 0 in EF, so the "anything measured?" check has to be explicit.)
+        var tokenMessages = dbContext.Messages
+            .Where(m => m.TenantId == tenantId && m.TokensUsed != null && m.CreatedAt >= since);
+        long? totalTokens = await tokenMessages.AnyAsync(ct)
+            ? await tokenMessages.SumAsync(m => (long)m.TokensUsed!.Value, ct)
+            : null;
 
         var totalConversations = await dbContext.Conversations
             .Where(c => c.TenantId == tenantId && c.CreatedAt >= since)
@@ -197,7 +202,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
             .Select(m => new { m.ConversationId, m.Role, m.CreatedAt })
             .ToListAsync(ct);
 
-        double avgResponseSec = 0;
+        double? avgResponseSec = null;
         var responseSpans = new List<double>();
         DateTime? lastUserAt = null;
         Guid? lastConvId = null;
@@ -208,7 +213,9 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
             else if (m.Role == R2WAI.Domain.Enums.MessageRole.Assistant && lastUserAt is not null)
             {
                 var span = (m.CreatedAt - lastUserAt.Value).TotalSeconds;
-                if (span >= 0 && span < 120) responseSpans.Add(span);
+                // span == 0 is a pair stamped by the same SaveChanges (rows written before Message kept
+                // its own CreatedAt) — not a real measurement, so it must not drag the average to 0s.
+                if (span > 0 && span < 120) responseSpans.Add(span);
                 lastUserAt = null;
             }
         }
@@ -218,7 +225,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
         {
             totalTokens,
             totalConversations,
-            avgResponseTimeSec = Math.Round(avgResponseSec, 1),
+            avgResponseTimeSec = avgResponseSec is null ? (double?)null : Math.Round(avgResponseSec.Value, 1),
             samplesUsed = responseSpans.Count,
             windowDays = 30
         });

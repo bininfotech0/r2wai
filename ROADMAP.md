@@ -833,7 +833,7 @@ See [ARCHITECTURE.md]\(ARCHITECTURE.md) for the full target architecture and com
 
 \- Prometheus + Grafana monitoring stack
 
-See [docs/COMPLETE_ROADMAP.md]\(docs/COMPLETE_ROADMAP.md) for the legacy sprint plans, epic backlogs, and task-level breakdowns (pre-pivot).
+See [docs/archive/COMPLETE_ROADMAP.md]\(docs/archive/COMPLETE_ROADMAP.md) for the legacy sprint plans, epic backlogs, and task-level breakdowns (pre-pivot).
 
 **---**
 

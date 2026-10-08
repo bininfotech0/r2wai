@@ -38,7 +38,9 @@ function useAuthenticatedImage(url: string | null) {
     let revoked: string | null = null
     let cancelled = false
     void authFetch(url)
-      .then((res) => (res.ok ? res.blob() : null))
+      // Discard a failed response's body (e.g. 404 for an avatar whose file is gone) so the request
+      // actually completes instead of staying open.
+      .then((res) => (res.ok ? res.blob() : res.body?.cancel().then(() => null) ?? null))
       .then((blob) => {
         if (cancelled || !blob) return
         const created = URL.createObjectURL(blob)

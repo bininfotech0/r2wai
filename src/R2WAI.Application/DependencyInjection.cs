@@ -2,6 +2,8 @@ using System.Reflection;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using R2WAI.Application.Common.AI;
 using R2WAI.Application.Common.Behaviors;
 
 namespace R2WAI.Application;
@@ -21,6 +23,9 @@ public static class DependencyInjection
 
         services.AddValidatorsFromAssembly(AssemblyReference.Assembly);
         services.AddAutoMapper(cfg => cfg.AddMaps(AssemblyReference.Assembly));
+
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<IPromptRenderer, PromptRenderer>();
 
         return services;
     }

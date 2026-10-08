@@ -1,4 +1,5 @@
 using FluentValidation;
+using R2WAI.Application.Common.AI;
 
 namespace R2WAI.Application.Features.Chat.Commands;
 
@@ -107,16 +108,21 @@ public class SendMessageCommandHandler(
                 ? streamingService.SendToolCallStartedAsync(command.ConversationId, evt.ToolName, cancellationToken)
                 : streamingService.SendToolCallCompletedAsync(command.ConversationId, evt.ToolName, evt.Success ?? true, cancellationToken);
 
-            await foreach (var chunk in aiService.StreamChatAsync(command.Content, history, null, enableTools: true, ct: cancellationToken))
+            int? tokensUsed;
+            using (var usage = AiTokenUsageScope.Begin())
             {
-                responseBuffer.Append(chunk);
-                await streamingService.SendStreamChunkAsync(command.ConversationId, chunk, cancellationToken);
+                await foreach (var chunk in aiService.StreamChatAsync(command.Content, history, null, enableTools: true, ct: cancellationToken))
+                {
+                    responseBuffer.Append(chunk);
+                    await streamingService.SendStreamChunkAsync(command.ConversationId, chunk, cancellationToken);
+                }
+                tokensUsed = usage.TotalTokens;
             }
 
             var aiResponse = responseBuffer.ToString();
             var assistantMessage = conversation.AddMessage(
                 Guid.NewGuid(), userMessage.Id, MessageRole.Assistant, aiResponse,
-                contentBlocks: chatStreamContext.CapturedContentBlock);
+                contentBlocks: chatStreamContext.CapturedContentBlock, tokensUsed: tokensUsed);
             await messageRepo.AddAsync(assistantMessage, cancellationToken);
             assistantMessage.UpdateStatus(MessageStatus.Completed);
 

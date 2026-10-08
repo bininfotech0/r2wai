@@ -7,14 +7,12 @@ import {
   Chip,
   Grid,
   Paper,
-  Skeleton,
   Stack,
   Typography,
 } from '@mui/material'
 import LanguageIcon from '@mui/icons-material/Language'
 import ForumIcon from '@mui/icons-material/Forum'
 import AddIcon from '@mui/icons-material/Add'
-import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { PageHeader } from '../../../components/PageHeader'
 import { ErrorState } from '../../../components/ErrorState'
 import { EmptyState } from '../../../components/EmptyState'
@@ -42,11 +40,6 @@ export function DeployChannelsPage() {
 
   return (
     <Box>
-      {/* This overview has no sidebar entry of its own — Chatbots is the single door to
-          distribution — so it needs a visible way back for a deep link or a browser Back. */}
-      <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/chatbots')} sx={{ mb: 1 }}>
-        Chatbots
-      </Button>
       <PageHeader
         title="Channels"
         description="Where your agents are published, and what is actually live."
@@ -58,9 +51,9 @@ export function DeployChannelsPage() {
       />
 
       <Alert severity="info" sx={{ mb: 2 }}>
-        A channel counts as live only when a real provider adapter is deployed and has confirmed the connection.
-        Today only the <strong>website widget</strong> has a working runtime — messaging channels can store
-        configuration but cannot yet send or receive messages.
+        Today only the <strong>website widget</strong> has a working runtime. Messaging channels (
+        {[...ALL_CHANNEL_TYPES, ...UNAVAILABLE_CHANNELS.map((entry) => entry.channel)].join(', ')}) cannot send or
+        receive messages yet, so they are hidden here unless a chatbot already has settings stored for one.
       </Alert>
 
       {listQuery.isLoading ? (
@@ -191,58 +184,29 @@ function ChatbotChannelsCard({ chatbot }: { chatbot: ChatbotDto }) {
           />
         </Grid>
 
-        {channelsQuery.isLoading
-          ? // Same reasoning as the error case: an empty set during load is
-            // indistinguishable from a genuine "nothing stored", so don't assert it.
-            ALL_CHANNEL_TYPES.map((channel) => (
-              <Grid key={channel} size={{ xs: 12, sm: 6, md: 3 }}>
-                <Skeleton variant="rounded" height={168} />
-                <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
-                  Checking {channel}…
-                </Typography>
-              </Grid>
-            ))
-          : ALL_CHANNEL_TYPES.map((channel) => {
-              const state = describeChannelState(channel, chatbot, configuredChannels.has(channel))
-              return (
-                <Grid key={channel} size={{ xs: 12, sm: 6, md: 3 }}>
-                  <ChannelTile
-                    icon={<ForumIcon fontSize="small" color="disabled" />}
-                    title={channel}
-                    description={CHANNEL_CAPABILITIES[channel].note}
-                    status={state.label}
-                    statusTone={state.tone}
-                    detail={
-                      configuredChannels.has(channel)
-                        ? `Stored ${new Date(
-                            (channelsQuery.data ?? []).find((c) => c.channel === channel)?.connectedAt ??
-                              chatbot.createdAt,
-                          ).toLocaleDateString()}`
-                        : undefined
-                    }
-                    action={channel === 'WhatsApp' ? 'Set up WhatsApp' : 'Manage on chatbot'}
-                    onAction={() =>
-                      channel === 'WhatsApp'
-                        ? navigate(`/deploy/whatsapp/${chatbot.id}`)
-                        : navigate(`/chatbots/${chatbot.id}`)
-                    }
-                  />
-                </Grid>
-              )
-            })}
-
-        {UNAVAILABLE_CHANNELS.map((entry) => (
-          <Grid key={entry.channel} size={{ xs: 12, sm: 6, md: 3 }}>
-            <ChannelTile
-              icon={<ForumIcon fontSize="small" color="disabled" />}
-              title={entry.channel}
-              description={entry.reason}
-              status="Unavailable"
-              statusTone="error"
-              note={entry.specRef}
-            />
-          </Grid>
-        ))}
+        {/* Messaging channels have no provider adapter, so a tile is only worth showing when it
+            holds stored settings the admin may want to review or remove. */}
+        {ALL_CHANNEL_TYPES.filter((channel) => configuredChannels.has(channel)).map((channel) => {
+          const state = describeChannelState(channel, chatbot, true)
+          return (
+            <Grid key={channel} size={{ xs: 12, sm: 6, md: 3 }}>
+              <ChannelTile
+                icon={<ForumIcon fontSize="small" color="disabled" />}
+                title={channel}
+                description={CHANNEL_CAPABILITIES[channel].note}
+                status={state.label}
+                statusTone={state.tone}
+                detail={`Stored ${new Date(
+                  (channelsQuery.data ?? []).find((c) => c.channel === channel)?.connectedAt ?? chatbot.createdAt,
+                ).toLocaleDateString()}`}
+                action={channel === 'WhatsApp' ? 'Set up WhatsApp' : 'Manage on chatbot'}
+                onAction={() =>
+                  channel === 'WhatsApp' ? navigate(`/deploy/whatsapp/${chatbot.id}`) : navigate(`/chatbots/${chatbot.id}`)
+                }
+              />
+            </Grid>
+          )
+        })}
       </Grid>
     </Paper>
   )

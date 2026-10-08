@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getPersona, getNavSections, getBottomNavItems, getBreadcrumbs } from './roleNav'
+import { getPersona, getNavSections, getBottomNavItems, getBreadcrumbs, getSectionTabs } from './roleNav'
 import type { UserInfo } from '../auth/types'
 
 function makeUser(roles: string[]): UserInfo {
@@ -180,16 +180,17 @@ describe('getNavSections', () => {
     expect(settings?.items.map((i) => i.label)).toEqual(['Settings', 'Users', 'API & SDK'])
   })
 
-  it('gives Admin a limited Connections section without AI Models', () => {
+  it('collapses Connections to one sidebar item whose tab group keeps it highlighted', () => {
     const connections = getNavSections('Admin').find((s) => s.label === 'Connections')
-    expect(connections?.items.map((i) => i.label)).toEqual(['Connections', 'Integrations', 'MCP Servers'])
+    expect(connections?.items.map((i) => i.label)).toEqual(['Connections'])
+    expect(connections?.items[0].matchPaths).toEqual(['/integrations', '/mcp-connections'])
   })
 
-  it('places Tools & APIs and AI Models under Connections for SuperAdmin only (ROADMAP.md §2)', () => {
+  it('reaches Tools & APIs through the Connections tabs and AI Models under Settings, SuperAdmin only', () => {
     const sections = getNavSections('SuperAdmin')
-    const connections = sections.find((s) => s.label === 'Connections')
-    expect(connections?.items.some((i) => i.path === '/tools')).toBe(true)
-    expect(connections?.items.some((i) => i.path === '/models')).toBe(true)
+    expect(sections.find((s) => s.label === 'Connections')?.items[0].matchPaths).toContain('/tools')
+    expect(sections.find((s) => s.label === 'Settings')?.items.some((i) => i.path === '/models')).toBe(true)
+    expect(getNavSections('Admin').some((s) => s.items.some((i) => i.path === '/models'))).toBe(false)
   })
 
   it('never surfaces Tools & APIs for Admin — CapabilitiesController is SystemAdmin-only, unaffected by the nav move', () => {
@@ -259,5 +260,34 @@ describe('getBreadcrumbs', () => {
       { label: 'Agents', path: '/assistants' },
       { label: '123e4567 E89b 12d3 A456 42661417400z', path: '/assistants/123e4567-e89b-12d3-a456-42661417400z' },
     ])
+  })
+})
+
+describe('getSectionTabs', () => {
+  it('renders the Connections tabs on every member page, scoped to the persona', () => {
+    expect(getSectionTabs('/integrations', 'Admin')).toEqual({
+      tabs: [
+        { label: 'Connected Systems', path: '/workspaces', icon: 'Apps' },
+        { label: 'Integrations', path: '/integrations', icon: 'Build' },
+        { label: 'MCP Servers', path: '/mcp-connections', icon: 'RocketLaunch' },
+      ],
+      activePath: '/integrations',
+    })
+    expect(getSectionTabs('/tools', 'SuperAdmin')?.tabs.map((t) => t.path)).toEqual([
+      '/workspaces', '/integrations', '/mcp-connections', '/tools',
+    ])
+  })
+
+  it('groups Chatbots, Channels and Website Widget under Publish', () => {
+    expect(getSectionTabs('/deploy/widget', 'Admin')).toMatchObject({
+      tabs: [{ path: '/chatbots' }, { path: '/deploy' }, { path: '/deploy/widget' }],
+      activePath: '/deploy/widget',
+    })
+  })
+
+  it('shows no tabs on detail pages or pages outside a group', () => {
+    expect(getSectionTabs('/chatbots/123e4567-e89b-12d3-a456-426614174000', 'Admin')).toBeNull()
+    expect(getSectionTabs('/tools/123e4567-e89b-12d3-a456-426614174000', 'SuperAdmin')).toBeNull()
+    expect(getSectionTabs('/runs', 'Admin')).toBeNull()
   })
 })

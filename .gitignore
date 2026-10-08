@@ -46,3 +46,6 @@ packages/
 
 # Test artifacts
 test-results/
+
+# E2E / browser-script output
+tests/e2e/screenshots/

@@ -1,4 +1,5 @@
 using FluentValidation;
+using R2WAI.Application.Common.AI;
 
 namespace R2WAI.Application.Features.Assistants.Commands;
 
@@ -45,7 +46,8 @@ public class ChatWithPublishedAssistantCommandHandler(
     IChatTraceCollector traceCollector,
     ICurrentUserService currentUser,
     IUnitOfWork unitOfWork,
-    ILogger<ChatWithPublishedAssistantCommandHandler> logger) : IRequestHandler<ChatWithPublishedAssistantCommand, ChatWithAssistantResult>
+    ILogger<ChatWithPublishedAssistantCommandHandler> logger,
+    IPromptRenderer? promptRenderer = null) : IRequestHandler<ChatWithPublishedAssistantCommand, ChatWithAssistantResult>
 {
     public async Task<ChatWithAssistantResult> Handle(ChatWithPublishedAssistantCommand command, CancellationToken cancellationToken)
     {
@@ -179,6 +181,10 @@ public class ChatWithPublishedAssistantCommandHandler(
 
         var basePrompt = snapshot.SystemPrompt
             ?? await promptTemplateService.GetActiveTemplateAsync(snapshot.Type, tenantId, cancellationToken);
+        // Fill {{tenant.name}}-style placeholders an admin wrote into the prompt; the model used to
+        // receive them as literal braces.
+        if (promptRenderer is not null)
+            basePrompt = await promptRenderer.RenderAsync(basePrompt, tenantId, assistant.Name, cancellationToken);
         var systemPrompt = basePrompt
             + $"\n\n[Assistant context: your assistant ID is {assistant.Id}, your name is \"{snapshot.Name}\""
             + (!string.IsNullOrWhiteSpace(snapshot.Description)
@@ -197,24 +203,33 @@ public class ChatWithPublishedAssistantCommandHandler(
         if (behaviorSettings?.CitationsEnabled == false)
             citations = null;
 
-        var reply = await aiService.ChatAsync(
-            effectiveMessage,
-            context,
-            systemPrompt,
-            enableTools: true,
-            modelConfig: modelConfig,
-            enabledToolIds: AssistantVersionSnapshotService.ParseEnabledToolIds(snapshot.Tools),
-            ct: cancellationToken);
+        string reply;
+        int? tokensUsed;
+        using (var usage = AiTokenUsageScope.Begin())
+        {
+            reply = await aiService.ChatAsync(
+                effectiveMessage,
+                context,
+                systemPrompt,
+                enableTools: true,
+                modelConfig: modelConfig,
+                enabledToolIds: AssistantVersionSnapshotService.ParseEnabledToolIds(snapshot.Tools),
+                ct: cancellationToken);
+            tokensUsed = usage.TotalTokens;
+        }
 
-        var assistantMessage = conversation.AddMessage(Guid.NewGuid(), null, MessageRole.Assistant, reply);
+        var assistantMessage = conversation.AddMessage(Guid.NewGuid(), null, MessageRole.Assistant, reply, tokensUsed: tokensUsed);
         assistantMessage.AddDomainEvent(new MessageCreatedEvent(
             assistantMessage.Id, conversation.Id, tenantId, userId, reply, MessageRole.Assistant));
         await messageRepo.AddAsync(assistantMessage, cancellationToken);
+        // Same counter the draft-chat path bumps — without it, published traffic never showed up in
+        // the dashboard's per-agent usage ranking.
+        assistant.IncrementUsageCount();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         stopwatch.Stop();
         var functionCalls = traceCollector.GetTrace().ToList();
 
-        return new ChatWithAssistantResult(conversation.Id, reply, 0, citations, stopwatch.ElapsedMilliseconds, functionCalls);
+        return new ChatWithAssistantResult(conversation.Id, reply, tokensUsed ?? 0, citations, stopwatch.ElapsedMilliseconds, functionCalls);
     }
 }

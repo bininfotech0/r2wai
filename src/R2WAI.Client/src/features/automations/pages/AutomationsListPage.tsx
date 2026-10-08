@@ -101,7 +101,7 @@ export function AutomationsListPage() {
             loading={metricsQuery.isLoading}
           />
           <StatCard
-            label="Active"
+            label="In progress"
             value={metricsQuery.data?.activeWorkflows ?? 0}
             icon={PlayCircleOutlineOutlined}
             color="success"

@@ -63,6 +63,10 @@ services:
       # ChatbotEmbedDialog). Defaults to a no-op duplicate of origin 0; set
       # WIDGET_TEST_ORIGIN to verify cross-origin embedding locally.
       - CORS__AllowedOrigins__1=${WIDGET_TEST_ORIGIN:-http://localhost:8080}
+    # Uploaded documents and avatars live here (Storage__Provider=Local). Without a volume every
+    # rebuild wiped them while the database still referenced them — same mount as production compose.
+    volumes:
+      - api-storage:/app/App_Data/Storage
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -122,6 +126,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  api-storage:
 
 networks:
   r2wai-network:

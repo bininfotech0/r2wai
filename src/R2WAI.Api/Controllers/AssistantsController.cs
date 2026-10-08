@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using R2WAI.Application.Common.AI;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Assistants.Commands;
 using R2WAI.Application.Features.Assistants.Queries;
@@ -29,6 +30,7 @@ public class AssistantsController(
     IUnitOfWork unitOfWork,
     ICurrentUserService currentUser,
     IChatStreamContext chatStreamContext,
+    IPromptRenderer promptRenderer,
     ILogger<AssistantsController> logger) : ControllerBase
 {
     [HttpPost]
@@ -353,6 +355,7 @@ public class AssistantsController(
 
         var basePrompt = assistant.SystemPrompt
             ?? await promptTemplateService.GetActiveTemplateAsync(assistant.Type, assistant.TenantId, streamCt);
+        basePrompt = await promptRenderer.RenderAsync(basePrompt, assistant.TenantId, assistant.Name, streamCt);
         var systemPrompt = basePrompt
             + $"\n\n[Assistant context: your assistant ID is {assistant.Id}, your name is \"{assistant.Name}\"" +
               (!string.IsNullOrWhiteSpace(assistant.Description)

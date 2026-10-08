@@ -69,9 +69,11 @@ export interface DailyTrendPoint {
 
 // Mirrors ...Operations.DTOs.AiStatsDto — a rolled-up window, not a per-day series.
 export interface AiStatsDto {
-  totalTokens: number
+  /** null when no message has a recorded token count (not measured yet, not zero usage). */
+  totalTokens: number | null
   totalConversations: number
-  avgResponseTimeSec: number
+  /** null when no real user→reply timing sample exists in the window. */
+  avgResponseTimeSec: number | null
   samplesUsed: number
   windowDays: number
 }

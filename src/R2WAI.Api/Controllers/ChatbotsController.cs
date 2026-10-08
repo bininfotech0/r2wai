@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using R2WAI.Application.Common.AI;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Assistants.Commands;
 using R2WAI.Application.Features.Chatbots;
@@ -32,6 +33,7 @@ public class ChatbotsController(
     IRepository<AuditLog> auditLogRepo,
     IUnitOfWork unitOfWork,
     IConfiguration configuration,
+    IPromptRenderer promptRenderer,
     ILogger<ChatbotsController> logger) : ControllerBase
 {
     // docs/api/MISSING-BACKEND-ENDPOINTS.md §3.1 #56. Deliberately much tighter than
@@ -262,13 +264,19 @@ public class ChatbotsController(
             return StatusCode(451, new { error = "This message appears to contain personal information this tenant's policy doesn't allow sending to the assistant. Please remove it and try again." });
 
         var context = await SearchKnowledgeBaseContextAsync(chatbot, effectiveMessage, ct);
-        var systemPrompt = chatbot.PromptTemplate ?? "You are a helpful AI assistant.";
+        // Widget visitors are anonymous, so {{user.name}} renders as a guest and the chatbot is the workspace.
+        var systemPrompt = await promptRenderer.RenderAsync(
+            chatbot.PromptTemplate ?? "You are a helpful AI assistant.", chatbot.TenantId, chatbot.Name, ct);
         var modelConfig = await modelConfigResolver.ResolveAsync(chatbot.ModelConfigurationId, chatbot.TenantId, ct);
         // enableTools stays false: this endpoint is [AllowAnonymous] for the public embed
         // widget, and must never expose mutating tools (start_workflow, submit_approval_request,
         // notify_approver) to unauthenticated website visitors.
-        var reply = await aiService.ChatAsync(effectiveMessage, context, systemPrompt, enableTools: false, modelConfig: modelConfig, ct: ct);
-        await IncrementMessagesServedAsync(chatbot.Id, ct);
+        var reply = await TryGetPublicReplyAsync(
+            replyCt => aiService.ChatAsync(effectiveMessage, context, systemPrompt, enableTools: false, modelConfig: modelConfig, ct: replyCt),
+            chatbot, "ChatbotsController.Chat", ct);
+        if (reply is null)
+            return StatusCode(503, new { error = ReplyUnavailableMessage });
+        await IncrementMessagesServedAsync(chatbot, ct);
 
         return Ok(new { reply });
     }
@@ -340,15 +348,23 @@ public class ChatbotsController(
     // atomic increment (c.Count + 1 in the UPDATE itself), same IsRelational() guard and reasoning as
     // RecordWidgetSeenAsync above — this must never fail or slow down an actual reply being served,
     // and a lost increment under the (test-only) InMemory provider is an acceptable trade for that.
-    private async Task IncrementMessagesServedAsync(Guid chatbotId, CancellationToken ct)
+    // Also credits the linked assistant: widget traffic is real agent usage, and without this the
+    // dashboard's per-agent ranking never counted the one publish channel that actually works.
+    private async Task IncrementMessagesServedAsync(Chatbot chatbot, CancellationToken ct)
     {
         if (!dbContext.Database.IsRelational())
             return;
 
         await dbContext.Chatbots
             .IgnoreQueryFilters()
-            .Where(c => c.Id == chatbotId)
+            .Where(c => c.Id == chatbot.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.TotalMessagesServed, c => c.TotalMessagesServed + 1), ct);
+
+        if (chatbot.AssistantId is { } assistantId)
+            await dbContext.AssistantDefinitions
+                .IgnoreQueryFilters()
+                .Where(a => a.Id == assistantId && a.TenantId == chatbot.TenantId)
+                .ExecuteUpdateAsync(s => s.SetProperty(a => a.UsageCount, a => a.UsageCount + 1), ct);
     }
 
     private async Task<string?> SearchKnowledgeBaseContextAsync(Chatbot chatbot, string message, CancellationToken ct)
@@ -456,13 +472,21 @@ public class ChatbotsController(
             }
         }
 
-        var systemPrompt = chatbot.PromptTemplate ?? "You are a helpful AI assistant.";
+        // Widget visitors are anonymous, so {{user.name}} renders as a guest and the chatbot is the workspace.
+        var systemPrompt = await promptRenderer.RenderAsync(
+            chatbot.PromptTemplate ?? "You are a helpful AI assistant.", chatbot.TenantId, chatbot.Name, streamCt);
         var modelConfig = await modelConfigResolver.ResolveAsync(chatbot.ModelConfigurationId, chatbot.TenantId, streamCt);
 
+        // A visitor watching an empty bubble gives up long before the provider's own timeout and
+        // retry (2.5 min, twice) run out, so the first words must arrive within ReplyTimeout. Once
+        // text is flowing the deadline is lifted — a long answer is not a stalled one.
+        using var firstChunkCts = new CancellationTokenSource(ReplyTimeout);
+        using var replyCts = CancellationTokenSource.CreateLinkedTokenSource(streamCt, firstChunkCts.Token);
         try
         {
-            await foreach (var chunk in aiService.StreamChatAsync(effectiveMessage, context, systemPrompt, enableTools: false, modelConfig: modelConfig, ct: streamCt))
+            await foreach (var chunk in aiService.StreamChatAsync(effectiveMessage, context, systemPrompt, enableTools: false, modelConfig: modelConfig, ct: replyCts.Token))
             {
+                firstChunkCts.CancelAfter(Timeout.InfiniteTimeSpan);
                 await WriteSseEventAsync("chunk", new { content = chunk }, streamCt);
             }
         }
@@ -471,8 +495,15 @@ public class ChatbotsController(
             // Same fix as AssistantsController.StreamChat — see its comment for the full
             // reasoning. This is the public, anonymous widget path, so a graceful error here
             // matters even more: an unauthenticated visitor has no other way to know what happened.
-            logger.LogWarning(ex, "AI provider failed mid-stream for chatbot {ChatbotId}", id);
-            await WriteSseEventAsync("error", new { message = "The AI service failed while generating a response. Please try again." }, ct);
+            var timedOut = firstChunkCts.IsCancellationRequested;
+            if (timedOut)
+                logger.LogWarning("AI provider produced no reply within {Timeout} for chatbot {ChatbotId}", ReplyTimeout, id);
+            else
+                logger.LogWarning(ex, "AI provider failed mid-stream for chatbot {ChatbotId}", id);
+            await WriteSseEventAsync("error", new
+            {
+                message = timedOut ? ReplyUnavailableMessage : "The AI service failed while generating a response. Please try again."
+            }, ct);
             return;
         }
 
@@ -481,7 +512,7 @@ public class ChatbotsController(
             await WriteSseEventAsync("citations", new { citations }, streamCt);
         }
 
-        await IncrementMessagesServedAsync(chatbot.Id, streamCt);
+        await IncrementMessagesServedAsync(chatbot, streamCt);
         await WriteSseEventAsync("done", new { message = "Stream complete" }, streamCt);
     }
 
@@ -646,14 +677,49 @@ public class ChatbotsController(
             return StatusCode(451, new { error = "This message appears to contain personal information this tenant's policy doesn't allow sending to the assistant." });
 
         var context = await SearchKnowledgeBaseContextAsync(chatbot, effectiveMessage, ct);
-        var systemPrompt = chatbot.PromptTemplate ?? "You are a helpful AI assistant.";
+        // Widget visitors are anonymous, so {{user.name}} renders as a guest and the chatbot is the workspace.
+        var systemPrompt = await promptRenderer.RenderAsync(
+            chatbot.PromptTemplate ?? "You are a helpful AI assistant.", chatbot.TenantId, chatbot.Name, ct);
         var modelConfig = await modelConfigResolver.ResolveAsync(chatbot.ModelConfigurationId, chatbot.TenantId, ct);
         // enableTools stays false: same rationale as Chat above — a message arriving from an
         // external channel is no more trusted than an anonymous widget visitor.
-        var reply = await aiService.ChatAsync(effectiveMessage, context, systemPrompt, enableTools: false, modelConfig: modelConfig, ct: ct);
-        await IncrementMessagesServedAsync(chatbot.Id, ct);
+        var reply = await TryGetPublicReplyAsync(
+            replyCt => aiService.ChatAsync(effectiveMessage, context, systemPrompt, enableTools: false, modelConfig: modelConfig, ct: replyCt),
+            chatbot, "ChatbotsController.Webhook", ct);
+        if (reply is null)
+            return StatusCode(503, new { error = ReplyUnavailableMessage });
+        await IncrementMessagesServedAsync(chatbot, ct);
 
         return Ok(new ChatbotWebhookReply(reply));
+    }
+
+    private const string ReplyUnavailableMessage = "The assistant is taking too long to respond right now. Please try again in a moment.";
+
+    // How long an anonymous channel waits for the model before telling the visitor to retry.
+    // Without it a slow local model left them waiting ~5 minutes (the provider client's 2.5-minute
+    // timeout, retried once) for a generic 500.
+    private TimeSpan ReplyTimeout =>
+        TimeSpan.FromSeconds(Math.Clamp(configuration.GetValue("Chatbots:ReplyTimeoutSeconds", 90), 1, 600));
+
+    // Returns null when the model timed out or failed, so the caller can answer with a retryable
+    // 503 instead of an unhandled 500. A caller that disconnected still propagates its cancellation.
+    private async Task<string?> TryGetPublicReplyAsync(
+        Func<CancellationToken, Task<string>> getReply, Chatbot chatbot, string source, CancellationToken ct)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(ReplyTimeout);
+        try
+        {
+            return await getReply(timeoutCts.Token);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            if (timeoutCts.IsCancellationRequested)
+                logger.LogWarning("{Source}: AI provider produced no reply within {Timeout} for chatbot {ChatbotId}", source, ReplyTimeout, chatbot.Id);
+            else
+                logger.LogError(ex, "{Source}: AI provider failed for chatbot {ChatbotId}", source, chatbot.Id);
+            return null;
+        }
     }
 
     private async Task WriteSseEventAsync(string eventType, object data, CancellationToken ct)

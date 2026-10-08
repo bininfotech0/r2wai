@@ -22,7 +22,7 @@ export function AiOperationsTab() {
       <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
         <StatCard
           label="Tokens (30d)"
-          value={statsQuery.data?.totalTokens ?? 0}
+          value={statsQuery.data?.totalTokens?.toLocaleString() ?? '—'}
           icon={TokenOutlined}
           color="primary"
           loading={statsQuery.isLoading}
@@ -36,15 +36,15 @@ export function AiOperationsTab() {
         />
         <StatCard
           label="Avg Response Time"
-          value={statsQuery.data ? `${statsQuery.data.avgResponseTimeSec}s` : '—'}
+          value={statsQuery.data?.avgResponseTimeSec != null ? `${statsQuery.data.avgResponseTimeSec}s` : '—'}
           icon={TimerOutlined}
           color="info"
           loading={statsQuery.isLoading}
         />
       </Stack>
-      {statsQuery.data && statsQuery.data.totalTokens === 0 && (
+      {statsQuery.data && statsQuery.data.totalTokens == null && (
         <Typography variant="caption" color="text.secondary">
-          Tokens show 0 because the assistant-chat write path doesn't record per-message token usage yet — a known
+          Tokens show — because the assistant-chat write path doesn't record per-message token usage yet — a known
           backend gap, not empty usage.
         </Typography>
       )}

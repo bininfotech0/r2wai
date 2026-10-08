@@ -5,6 +5,14 @@
   "author": "R2WAI Team",
   "license": "UNLICENSED",
   "private": true,
+  "scripts": {
+    "e2e:pages": "node tests/e2e/check-all-pages.mjs",
+    "e2e:audit": "node tests/e2e/enterprise-audit.mjs",
+    "e2e:full-cycle": "node tests/e2e/full-cycle.mjs",
+    "e2e:verify": "node tests/e2e/final-verify.mjs",
+    "e2e:usefulness": "node tests/e2e/page-usefulness-audit.mjs",
+    "e2e:seed": "node tests/e2e/seed-data.mjs"
+  },
   "keywords": [
     "enterprise-ai",
     "blazor",

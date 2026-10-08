@@ -284,6 +284,7 @@ public class SemanticKernelService : IAIService
             new KeyValuePair<string, object?>("provider", provider), new KeyValuePair<string, object?>("type", "prompt"));
         DiagnosticsConfig.AiTokens.Add(usage.OutputTokenCount,
             new KeyValuePair<string, object?>("provider", provider), new KeyValuePair<string, object?>("type", "completion"));
+        R2WAI.Application.Common.AI.AiTokenUsageScope.Report(usage.TotalTokenCount);
     }
 
     public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, [EnumeratorCancellation] CancellationToken ct = default)
@@ -385,6 +386,11 @@ public class SemanticKernelService : IAIService
 
         await foreach (var chunk in streamingResult)
         {
+            // Providers that report usage on a stream send it on the final, content-less update —
+            // check before the null-content skip below or it is never seen.
+            if (chunk.Metadata?.GetValueOrDefault("Usage") is OpenAI.Chat.ChatTokenUsage streamUsage)
+                R2WAI.Application.Common.AI.AiTokenUsageScope.Report(streamUsage.TotalTokenCount);
+
             if (chunk.Content is null)
                 continue;
 

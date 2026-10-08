@@ -20,6 +20,8 @@ import {
   MenuItem,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   Toolbar,
   Tooltip,
   Typography,
@@ -38,7 +40,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import CircleIcon from '@mui/icons-material/Circle'
 import { Link as RouterLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom'
 import { useAuth } from '../lib/auth/useAuth'
-import { getBottomNavItems, getBreadcrumbs, getHomeNavItem, getNavSections, getPersona, getPersonaLabel } from '../lib/nav/roleNav'
+import { getBottomNavItems, getBreadcrumbs, getHomeNavItem, getNavSections, getPersona, getPersonaLabel, getSectionTabs, type NavItem } from '../lib/nav/roleNav'
 import { getNavIcon } from '../lib/nav/navIcons'
 import { useThemeMode } from '../theme/ThemeModeProvider'
 import { CommandPalette } from '../components/CommandPalette'
@@ -83,6 +85,15 @@ function environmentColor(environment: string): 'success' | 'warning' | 'info' {
   if (environment === 'Production') return 'success'
   if (environment === 'Staging') return 'warning'
   return 'info'
+}
+
+function pathMatches(path: string, pathname: string): boolean {
+  return pathname === path || pathname.startsWith(`${path}/`)
+}
+
+/** A sidebar item stays highlighted on every page of its tab group, not just its own path. */
+function isNavItemActive(item: NavItem, pathname: string): boolean {
+  return pathMatches(item.path, pathname) || (item.matchPaths ?? []).some((path) => pathMatches(path, pathname))
 }
 
 export function MainLayout() {
@@ -173,6 +184,11 @@ export function MainLayout() {
 
   const breadcrumbs = useMemo(
     () => getBreadcrumbs(location.pathname, persona),
+    [location.pathname, persona],
+  )
+
+  const sectionTabs = useMemo(
+    () => getSectionTabs(location.pathname, persona),
     [location.pathname, persona],
   )
 
@@ -466,7 +482,7 @@ export function MainLayout() {
               const visibleItems = primaryItem && !isRailCollapsed ? section.items.slice(1) : section.items
               const renderItem = (item: (typeof section.items)[number], isPrimaryItem: boolean) => {
                 const Icon = getNavIcon(item.icon)
-                const active = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+                const active = isNavItemActive(item, location.pathname)
                 return (
                   <Tooltip key={item.path} title={isRailCollapsed ? item.label : ''} placement="right">
                     <ListItemButton
@@ -539,6 +555,19 @@ export function MainLayout() {
             ),
           )}
         </Breadcrumbs>
+        {sectionTabs && (
+          <Tabs
+            value={sectionTabs.activePath}
+            variant="scrollable"
+            scrollButtons="auto"
+            aria-label={`${sectionTabs.tabs[0].label} sections`}
+            sx={{ mb: { xs: 2, md: 3 }, borderBottom: 1, borderColor: 'divider', minHeight: 40 }}
+          >
+            {sectionTabs.tabs.map((tab) => (
+              <Tab key={tab.path} value={tab.path} label={tab.label} component={RouterLink} to={tab.path} sx={{ minHeight: 40 }} />
+            ))}
+          </Tabs>
+        )}
         {navigation.state === 'loading' ? <LoadingSkeleton variant="text" count={8} /> : <Outlet />}
       </Box>
 

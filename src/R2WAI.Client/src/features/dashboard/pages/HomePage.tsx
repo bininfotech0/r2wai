@@ -379,8 +379,7 @@ export function HomePage() {
       >
         <StatCard
           label="Automations"
-          value={metrics.data?.activeWorkflows ?? 0}
-          trendPercent={metrics.data?.applicationsTrendPercent}
+          value={metrics.data?.totalWorkflows ?? 0}
           icon={AccountTreeOutlined}
           color="secondary"
           loading={metrics.isLoading}
