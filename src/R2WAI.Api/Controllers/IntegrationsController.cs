@@ -1,3 +1,4 @@
+using R2WAI.Application.Common.AI;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -48,12 +49,18 @@ public class IntegrationsController(
     [HttpPost("openapi-import/commit")]
     public async Task<IActionResult> CommitOpenApiImport([FromBody] CommitOpenApiRequest request, CancellationToken ct = default)
     {
+        var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
+
+        // Each operation is committed by its own command, so a name clash rejected midway would leave
+        // a half-imported spec. Names are made unique up front instead — the same rule discovery uses.
+        var taken = await CapabilityNames.LoadTakenAsync(toolDefinitions, tenantId, excludeId: null, ct);
+
         var ids = new List<Guid>();
         foreach (var op in request.Operations)
         {
             var id = await mediator.Send(new CreateIntegrationCommand
             {
-                Name = op.SuggestedName,
+                Name = CapabilityNames.MakeUnique(op.SuggestedName, prefix: null, taken),
                 Type = "Http",
                 Description = op.Summary,
                 EndpointUrl = request.BaseUrl,

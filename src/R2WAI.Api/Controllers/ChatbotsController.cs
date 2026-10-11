@@ -266,11 +266,10 @@ public class ChatbotsController(
         if (effectiveMessage is null)
             return StatusCode(451, new { error = "This message appears to contain personal information this tenant's policy doesn't allow sending to the assistant. Please remove it and try again." });
 
-        var sessionId = ChatbotSessionIds.Normalize(request.SessionId);
+        var sessionId = ChatbotSessionIds.Scope(ChatbotSessionIds.WidgetChannel, request.SessionId);
         var context = await BuildReplyContextAsync(chatbot, sessionId, effectiveMessage, ct);
         // Widget visitors are anonymous, so {{user.name}} renders as a guest and the chatbot is the workspace.
-        var systemPrompt = await promptRenderer.RenderAsync(
-            chatbot.PromptTemplate ?? "You are a helpful AI assistant.", chatbot.TenantId, chatbot.Name, ct);
+        var systemPrompt = await RenderSystemPromptAsync(chatbot, ct);
         var modelConfig = await modelConfigResolver.ResolveAsync(chatbot.ModelConfigurationId, chatbot.TenantId, ct);
         // enableTools stays false: this endpoint is [AllowAnonymous] for the public embed
         // widget, and must never expose mutating tools (start_workflow, submit_approval_request,
@@ -373,6 +372,15 @@ public class ChatbotsController(
                 .ExecuteUpdateAsync(s => s.SetProperty(a => a.UsageCount, a => a.UsageCount + 1), ct);
     }
 
+    // The admin's template with its placeholders filled, plus the fixed website-chat rules
+    // (ChatbotChannelPrompt) every anonymous channel needs regardless of what the template says.
+    private async Task<string> RenderSystemPromptAsync(Chatbot chatbot, CancellationToken ct)
+    {
+        var rendered = await promptRenderer.RenderAsync(
+            chatbot.PromptTemplate ?? "You are a helpful AI assistant.", chatbot.TenantId, chatbot.Name, ct);
+        return ChatbotChannelPrompt.Compose(rendered, configuration.GetValue("Chatbots:ChannelRules:Enabled", true));
+    }
+
     // Knowledge-base excerpts plus, when the caller sent a session id, that session's earlier turns.
     private async Task<string?> BuildReplyContextAsync(Chatbot chatbot, string? sessionId, string message, CancellationToken ct)
     {
@@ -470,7 +478,6 @@ public class ChatbotsController(
 
                 if (searchResult.Items.Count > 0)
                 {
-                    context = string.Join("\n\n", searchResult.Items.Select(i => i.Content));
                     citations = searchResult.Items
                         .Select((item, index) => new CitationDto(
                             item.SourceName ?? "Unknown",
@@ -478,6 +485,8 @@ public class ChatbotsController(
                             (float)item.Score,
                             index + 1))
                         .ToList();
+                    // Labelled [n] so the widget can turn the model's [^n] markers into footnotes.
+                    context = CitationContext.Format(citations);
                 }
             }
             catch (Exception ex)
@@ -486,14 +495,13 @@ public class ChatbotsController(
             }
         }
 
-        var sessionId = ChatbotSessionIds.Normalize(request.SessionId);
+        var sessionId = ChatbotSessionIds.Scope(ChatbotSessionIds.WidgetChannel, request.SessionId);
         if (sessionId is not null)
             context = ChatbotSessionIds.ComposeContext(
                 await sessionMemory.BuildHistoryAsync(chatbot, sessionId, streamCt), context);
 
         // Widget visitors are anonymous, so {{user.name}} renders as a guest and the chatbot is the workspace.
-        var systemPrompt = await promptRenderer.RenderAsync(
-            chatbot.PromptTemplate ?? "You are a helpful AI assistant.", chatbot.TenantId, chatbot.Name, streamCt);
+        var systemPrompt = await RenderSystemPromptAsync(chatbot, streamCt);
         var modelConfig = await modelConfigResolver.ResolveAsync(chatbot.ModelConfigurationId, chatbot.TenantId, streamCt);
 
         // A visitor watching an empty bubble gives up long before the provider's own timeout and
@@ -535,7 +543,7 @@ public class ChatbotsController(
 
         // Only a completed reply is remembered; a failed or abandoned stream returned above.
         if (sessionId is not null)
-            await sessionMemory.AppendExchangeAsync(chatbot, sessionId, effectiveMessage, replyBuffer.ToString(), streamCt);
+            await sessionMemory.AppendExchangeAsync(chatbot, sessionId, effectiveMessage, CitationContext.StripMarkers(replyBuffer.ToString()), streamCt);
         await IncrementMessagesServedAsync(chatbot, streamCt);
         await WriteSseEventAsync("done", new { message = "Stream complete" }, streamCt);
     }
@@ -702,11 +710,10 @@ public class ChatbotsController(
         if (effectiveMessage is null)
             return StatusCode(451, new { error = "This message appears to contain personal information this tenant's policy doesn't allow sending to the assistant." });
 
-        var sessionId = ChatbotSessionIds.Normalize(request.SessionId);
+        var sessionId = ChatbotSessionIds.Scope(ChatbotSessionIds.WebhookChannel, request.SessionId);
         var context = await BuildReplyContextAsync(chatbot, sessionId, effectiveMessage, ct);
         // Widget visitors are anonymous, so {{user.name}} renders as a guest and the chatbot is the workspace.
-        var systemPrompt = await promptRenderer.RenderAsync(
-            chatbot.PromptTemplate ?? "You are a helpful AI assistant.", chatbot.TenantId, chatbot.Name, ct);
+        var systemPrompt = await RenderSystemPromptAsync(chatbot, ct);
         var modelConfig = await modelConfigResolver.ResolveAsync(chatbot.ModelConfigurationId, chatbot.TenantId, ct);
         // enableTools stays false: same rationale as Chat above — a message arriving from an
         // external channel is no more trusted than an anonymous widget visitor.

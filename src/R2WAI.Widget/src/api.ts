@@ -3,6 +3,8 @@
 // chatbot's id in the URL is the only "credential". Mirrors the working
 // reference implementation at src/R2WAI.Web/Components/Pages/ChatbotWidget.razor.
 
+import type { Citation } from './citations'
+
 export interface PublicInfo {
   name: string
   welcomeMessage: string | null
@@ -18,6 +20,7 @@ export async function fetchPublicInfo(baseUrl: string, chatbotId: string): Promi
 
 export interface StreamHandlers {
   onChunk: (content: string) => void
+  onCitations: (citations: Citation[]) => void
   onDone: () => void
   onError: (message: string) => void
 }
@@ -134,6 +137,14 @@ function handleEvent(event: string, data: string, handlers: StreamHandlers) {
     } catch {
       // Malformed frame — skip it rather than crash the stream.
     }
+  } else if (event === 'citations') {
+    // Sent after the last chunk, before "done".
+    try {
+      const parsed = JSON.parse(data) as { citations?: Citation[] }
+      if (Array.isArray(parsed.citations)) handlers.onCitations(parsed.citations)
+    } catch {
+      // Malformed frame — keep the plain reply.
+    }
   } else if (event === 'done') {
     handlers.onDone()
   } else if (event === 'error') {
@@ -144,5 +155,4 @@ function handleEvent(event: string, data: string, handlers: StreamHandlers) {
       handlers.onError('The assistant hit an error.')
     }
   }
-  // "citations" events are ignored — the widget shows plain reply text only.
 }

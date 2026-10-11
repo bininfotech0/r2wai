@@ -1,4 +1,5 @@
 import { fetchPublicInfo, newSessionId, postFeedback, streamChat, uploadAttachment, type PublicInfo } from './api'
+import { renderWithCitations, stripCitations, type Citation } from './citations'
 
 export interface WidgetConfig {
   chatbotId: string
@@ -59,6 +60,8 @@ const STYLE = `
   .bubble.user { align-self: flex-end; color: #fff; background: var(--r2wai-color, #6d28d9); border-bottom-right-radius: 6px; }
   .bubble.bot { align-self: flex-start; color: #202431; background: #f4f5f8; border-color: #eceef2; border-bottom-left-radius: 6px; }
   .bubble.error { align-self: flex-start; color: #991b1b; background: #fff4f2; border-color: #fee2e2; }
+  .cite { font-size: .72em; color: var(--r2wai-color, #6d28d9); cursor: help; }
+  .sources { margin: 8px 0 0; padding: 7px 0 0 18px; border-top: 1px solid #e3e6ec; font-size: 11.5px; color: #5b6170; white-space: normal; }
   .inputRow { flex: 0 0 auto; padding: 12px 14px 10px; border-top: 1px solid #eef0f4; background: #fff; }
   .composer {
     border: 1px solid #dfe3ea; border-radius: 17px; padding: 11px 10px 8px 14px; background: #fff;
@@ -511,16 +514,26 @@ function createWidget(config: WidgetConfig) {
     resizeTextarea()
     addBubble('user', text)
     const botBubble = addBubble('bot', '')
+    let citations: Citation[] = []
 
     await streamChat(config.baseUrl, config.chatbotId, text, sessionId, {
+      // Chunks stream as plain text (a marker can be split across two chunks);
+      // markers become footnotes once the whole reply is in.
       onChunk: (chunk) => {
         botBubble.textContent += chunk
         messages.scrollTop = messages.scrollHeight
       },
+      onCitations: (received) => {
+        citations = received
+      },
       onDone: () => {
         sending = false
         sendBtn.disabled = false
-        speak(botBubble.textContent ?? '')
+        const reply = botBubble.textContent ?? ''
+        if (citations.length) renderWithCitations(botBubble, reply, citations)
+        else botBubble.textContent = stripCitations(reply)
+        messages.scrollTop = messages.scrollHeight
+        speak(stripCitations(reply))
         addFeedbackRow()
       },
       onError: (message) => {

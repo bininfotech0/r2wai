@@ -16,10 +16,16 @@ const TYPE_OPTIONS: FilterBarOption[] = [
   { value: 'all', label: 'All types' },
   { value: 'Automation', label: 'Automation' },
   { value: 'Assistant', label: 'Assistant' },
+  { value: 'ToolCall', label: 'Tool call' },
 ]
 const STATUS_OPTIONS: FilterBarOption[] = [
   { value: 'all', label: 'Any status' },
   ...['Running', 'Completed', 'Failed', 'Cancelled', 'Started', 'Active'].map((value) => ({ value, label: value })),
+  // Tool-call (ToolExecution ledger) outcomes.
+  { value: 'Succeeded', label: 'Succeeded' },
+  { value: 'Denied', label: 'Denied' },
+  { value: 'AwaitingApproval', label: 'Awaiting approval' },
+  { value: 'Unknown', label: 'Unknown outcome' },
 ]
 const DATE_RANGES = [
   { value: 'all', label: 'Any time' },
@@ -110,7 +116,7 @@ export function RunsPage() {
         </Tooltip>
       ),
     },
-    { field: 'type', headerName: 'Type', width: 110 },
+    { field: 'type', headerName: 'Type', width: 110, valueFormatter: (value: string) => (value === 'ToolCall' ? 'Tool call' : value) },
     { field: 'name', headerName: 'Name', flex: 1 },
     { field: 'applicationName', headerName: 'Application', width: 160, valueFormatter: (value: string | null) => value ?? '—' },
     { field: 'linkedName', headerName: 'Assistant / Capability', width: 180, valueFormatter: (value: string | null) => value ?? '—' },
@@ -124,7 +130,7 @@ export function RunsPage() {
     <Box>
       <PageHeader
         title="Executions"
-        description="Search and review automation runs and assistant conversations."
+        description="Search and review automation runs, assistant conversations, and the tools your AI called."
         actions={<FormControlLabel control={<Switch checked={live} onChange={(e) => setLive(e.target.checked)} />} label="Live" />}
       />
 

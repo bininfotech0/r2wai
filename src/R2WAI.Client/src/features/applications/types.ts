@@ -125,4 +125,9 @@ export interface ApplicationDiscoveryResultDto {
   operationsDiscovered: number
   capabilitiesCreated: number
   capabilitiesSkippedAsExisting: number
+  capabilitiesRelinked: number
+  capabilitiesNeedingReview: number
+  capabilitiesRenamedForUniqueness: number
+  staleCapabilityCount: number
+  staleCapabilityNames: string[]
 }

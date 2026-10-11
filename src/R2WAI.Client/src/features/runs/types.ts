@@ -90,11 +90,28 @@ export interface PagedResult<T> {
   pageSize: number
 }
 
-// The unified GET /runs projection represents workflow executions and assistant conversations.
-// Assistant rows are synthesized from conversation data; fields without a durable execution
-// ledger (for example detailed tool steps or token usage) may be unavailable. TestRuns remain a
-// separate QA regression feature surfaced from Monitor.
-export type RunType = 'Automation' | 'Assistant'
+// The unified GET /runs projection represents workflow executions, assistant conversations, and
+// individual AI tool calls (from the ToolExecution ledger). TestRuns remain a separate QA
+// regression feature surfaced from Monitor.
+export type RunType = 'Automation' | 'Assistant' | 'ToolCall'
+
+/** GET /runs/tool-calls/{id} — one row of the ToolExecution ledger. */
+export interface ToolCallDetailDto {
+  id: string
+  plugin: string
+  function: string
+  toolDefinitionId: string | null
+  toolName: string | null
+  status: 'Denied' | 'AwaitingApproval' | 'Prepared' | 'Succeeded' | 'Failed' | 'Unknown'
+  denialReason: string | null
+  error: string | null
+  durationMs: number | null
+  startedAt: string
+  completedAt: string | null
+  approvalRequestId: string | null
+  userId: string | null
+  userName: string | null
+}
 
 export interface RunItem {
   id: string

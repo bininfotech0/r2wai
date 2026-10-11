@@ -22,12 +22,13 @@ import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import {
   getConversation,
   getMessages,
+  getToolCall,
   getWorkflowInstance,
   getWorkflowInstanceSteps,
   listAuditLogsByEntityType,
   retryFailedStep,
 } from '../api'
-import type { RunItem } from '../types'
+import type { RunItem, ToolCallDetailDto } from '../types'
 
 interface RunInspectorDrawerProps {
   run: RunItem | null
@@ -41,6 +42,8 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
   const [showTechnical, setShowTechnical] = useState(false)
 
   const isAutomation = run?.type === 'Automation'
+  const isToolCall = run?.type === 'ToolCall'
+  const isConversation = !!run && !isAutomation && !isToolCall
 
   const instanceQuery = useQuery({
     queryKey: ['run-instance', run?.id],
@@ -61,18 +64,23 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
   const conversationQuery = useQuery({
     queryKey: ['run-conversation', run?.id],
     queryFn: () => getConversation(run!.id),
-    enabled: !!run && !isAutomation,
+    enabled: isConversation,
   })
   const messagesQuery = useQuery({
     queryKey: ['run-messages', run?.id],
     queryFn: () => getMessages(run!.id),
-    enabled: !!run && !isAutomation,
+    enabled: isConversation,
+  })
+  const toolCallQuery = useQuery({
+    queryKey: ['run-tool-call', run?.id],
+    queryFn: () => getToolCall(run!.id),
+    enabled: !!run && isToolCall,
   })
 
   const auditQuery = useQuery({
     queryKey: ['run-audit', run?.type, run?.id],
     queryFn: () => listAuditLogsByEntityType(isAutomation ? 'WorkflowInstance' : 'Conversation'),
-    enabled: !!run,
+    enabled: !!run && !isToolCall,
   })
   const correlationId = auditQuery.data?.items.find((a) => a.entityId === run?.id)?.correlationId ?? null
 
@@ -89,6 +97,12 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
   const hasFailedStep = (stepsQuery.data?.items ?? []).some((s) => s.status === 'Failed')
 
   function handleViewAudit() {
+    if (isToolCall) {
+      // A tool call's audit trail lives on its ToolDefinition (execution/denial rows).
+      const toolId = toolCallQuery.data?.toolDefinitionId
+      navigate(toolId ? `/monitor?tab=audit&entityType=ToolDefinition&entityId=${toolId}` : '/monitor?tab=audit&entityType=ToolDefinition')
+      return
+    }
     navigate(`/monitor?tab=audit&entityType=${isAutomation ? 'WorkflowInstance' : 'Conversation'}&entityId=${run?.id}`)
   }
 
@@ -106,13 +120,20 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
               </IconButton>
             </Stack>
             <Stack direction="row" spacing={1}>
-              <Chip label={run.type} size="small" variant="outlined" />
+              <Chip label={isToolCall ? 'Tool call' : run.type} size="small" variant="outlined" />
               <Chip label={run.status} size="small" variant="outlined" />
             </Stack>
 
             <Divider />
 
-            {isAutomation ? (
+            {isToolCall ? (
+              <ToolCallDetails
+                detail={toolCallQuery.data}
+                loading={toolCallQuery.isLoading}
+                failed={toolCallQuery.isError}
+                onOpenConfirmation={() => navigate('/approvals')}
+              />
+            ) : isAutomation ? (
               <>
                 <Typography variant="subtitle2">Timeline</Typography>
                 {stepsQuery.isLoading && <CircularProgress size={20} />}
@@ -188,7 +209,15 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
               <ExpandMoreIcon fontSize="small" sx={{ transform: showTechnical ? 'rotate(180deg)' : 'none' }} />
               Technical details
             </Link>
-            {showTechnical && (
+            {showTechnical && isToolCall && (
+              <Stack spacing={0.75}>
+                <TechnicalRow label="Execution ID" value={run.id} />
+                <TechnicalRow label="Source" value={toolCallQuery.data?.plugin ?? '—'} />
+                <TechnicalRow label="Function" value={toolCallQuery.data?.function ?? '—'} />
+                <TechnicalRow label="Confirmation ID" value={toolCallQuery.data?.approvalRequestId ?? '—'} />
+              </Stack>
+            )}
+            {showTechnical && !isToolCall && (
               <Stack spacing={0.75}>
                 <TechnicalRow label="Correlation ID" value={correlationId ?? '—'} />
                 <TechnicalRow label="Runtime" value="Semantic Kernel" />
@@ -208,7 +237,7 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
               </Stack>
             )}
 
-            {!isAutomation && conversationQuery.data?.module && (
+            {isConversation && conversationQuery.data?.module && (
               <Typography variant="caption" color="text.secondary">
                 Module: {conversationQuery.data.module}
               </Typography>
@@ -217,6 +246,47 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
         )}
       </Box>
     </Drawer>
+  )
+}
+
+const TOOL_CALL_SUMMARY: Record<ToolCallDetailDto['status'], string> = {
+  Succeeded: 'The tool ran and completed.',
+  Failed: 'The tool ran but returned an error.',
+  Denied: 'Governance blocked this call before it ran.',
+  AwaitingApproval: 'Paused until someone approves the confirmation.',
+  Prepared: 'Started but never recorded a result — the server may have stopped mid-call.',
+  Unknown: 'Timed out or was cancelled after sending — the target may or may not have acted.',
+}
+
+function ToolCallDetails({ detail, loading, failed, onOpenConfirmation }: {
+  detail: ToolCallDetailDto | undefined
+  loading: boolean
+  failed: boolean
+  onOpenConfirmation: () => void
+}) {
+  if (loading) return <CircularProgress size={20} />
+  if (failed || !detail) return <Alert severity="error">This tool call's details could not be loaded.</Alert>
+
+  return (
+    <Stack spacing={1.25}>
+      <Typography variant="subtitle2">Outcome</Typography>
+      <Typography variant="body2">{TOOL_CALL_SUMMARY[detail.status]}</Typography>
+      {detail.denialReason && <Alert severity="warning">Reason: {detail.denialReason}</Alert>}
+      {detail.error && <Alert severity="error" sx={{ wordBreak: 'break-word' }}>{detail.error}</Alert>}
+      <Stack spacing={0.75}>
+        <TechnicalRow label="Tool" value={detail.toolName ?? detail.function} />
+        <TechnicalRow label="Requested by" value={detail.userName ?? '—'} />
+        <TechnicalRow label="Started" value={new Date(detail.startedAt).toLocaleString()} />
+        <TechnicalRow label="Duration" value={detail.durationMs != null ? `${detail.durationMs} ms` : '—'} />
+      </Stack>
+      {detail.approvalRequestId && (
+        <Box>
+          <Button size="small" variant="outlined" onClick={onOpenConfirmation}>
+            Open confirmations
+          </Button>
+        </Box>
+      )}
+    </Stack>
   )
 }
 

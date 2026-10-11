@@ -14,6 +14,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { apiErrorMessage } from '../../../lib/api/fetchJson'
 import { discoverApplication } from '../api'
 import type { ApplicationDiscoveryResultDto } from '../types'
 
@@ -89,7 +90,9 @@ export function DiscoverApplicationDialog({ open, applicationId, onClose, onDisc
             </Box>
           )}
 
-          {discoverMutation.isError && <Alert severity="error">Failed to discover from this spec.</Alert>}
+          {discoverMutation.isError && (
+            <Alert severity="error">{apiErrorMessage(discoverMutation.error, 'Failed to discover from this spec.')}</Alert>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>

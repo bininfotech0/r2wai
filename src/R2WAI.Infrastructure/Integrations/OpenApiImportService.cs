@@ -93,13 +93,27 @@ public class OpenApiImportService(IHttpClientFactory httpClientFactory, ILogger<
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(15));
 
-        using var response = await client.GetAsync(url, cts.Token);
+        using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token);
         if (!response.IsSuccessStatusCode)
             throw new ValidationException("url", $"Failed to fetch spec: HTTP {(int)response.StatusCode}.");
 
         if (response.Content.Headers.ContentLength is { } len && len > MaxSpecBytes)
             throw new ValidationException("url", "Spec file is too large (max 5 MB).");
 
-        return await response.Content.ReadAsStringAsync(cts.Token);
+        // Content-Length is optional (chunked responses omit it), so the cap is also enforced while
+        // reading — otherwise an unbounded body would be buffered in full before any check ran.
+        await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await stream.ReadAsync(chunk, cts.Token)) > 0)
+        {
+            if (buffer.Length + read > MaxSpecBytes)
+                throw new ValidationException("url", "Spec file is too large (max 5 MB).");
+            buffer.Write(chunk, 0, read);
+        }
+
+        // ReadAsStringAsync used to strip a UTF-8 BOM; decoding the bytes by hand keeps it, so drop it.
+        return System.Text.Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length).TrimStart('﻿');
     }
 }

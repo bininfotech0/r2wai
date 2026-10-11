@@ -165,8 +165,10 @@ public class WidgetUsageCreditRegressionTests : IAsyncLifetime
             $"Widget chat failed: {response.StatusCode} — {await response.Content.ReadAsStringAsync()}");
 
         var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+        // The rendered template, then the fixed website-chat rules every anonymous channel appends.
         Assert.Equal(
-            $"Org {tenantName}, workspace Placeholder Bot, user Guest (Guest), date {today}, keep {{{{ticket.id}}}}.",
+            $"Org {tenantName}, workspace Placeholder Bot, user Guest (Guest), date {today}, keep {{{{ticket.id}}}}.\n\n"
+                +R2WAI.Application.Features.Chatbots.ChatbotChannelPrompt.Rules,
             CannedReplyAiService.LastSystemPrompt);
     }
     private async Task<Guid> SeedActiveChatbotAsync(string name)

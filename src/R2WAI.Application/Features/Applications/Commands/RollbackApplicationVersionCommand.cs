@@ -41,11 +41,20 @@ public class RollbackApplicationVersionCommandHandler(
             ? parsedEnvironment
             : ApplicationEnvironment.Development;
 
+        // The snapshot's name may since have been taken by another system in this tenant.
+        await ApplicationUniqueness.EnsureNameIsFreeAsync(applicationRepo, snapshot.Name, application.Id, cancellationToken);
+
         application.UpdateDetails(snapshot.Name, snapshot.Description, snapshot.BaseUrl, environment);
 
+        // Reconcile APIs in place, matched by name, rather than delete-and-recreate. Recreating gave
+        // every API a new id, which (FK SetNull) unlinked every capability discovery had attached to
+        // it — the next discovery then duplicated them all — and dropped the encrypted credential,
+        // which the snapshot deliberately does not carry.
         var existingApis = await apiRepo.FindAsync(a => a.ApplicationId == application.Id, cancellationToken);
-        foreach (var existingApi in existingApis)
-            apiRepo.Delete(existingApi);
+        var existingByName = existingApis
+            .GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var keptIds = new HashSet<Guid>();
 
         foreach (var apiSnapshot in snapshot.Apis)
         {
@@ -53,12 +62,22 @@ public class RollbackApplicationVersionCommandHandler(
                 ? parsedScheme
                 : ApiAuthScheme.None;
 
+            if (existingByName.TryGetValue(apiSnapshot.Name, out var existingApi) && keptIds.Add(existingApi.Id))
+            {
+                existingApi.UpdateDetails(apiSnapshot.Name, apiSnapshot.BaseUrl, authScheme,
+                    apiSnapshot.CredentialRef, apiSnapshot.OpenApiSource);
+                continue;
+            }
+
             var restoredApi = new ApplicationApi(
                 Guid.NewGuid(), tenantId, application.Id, apiSnapshot.Name, apiSnapshot.BaseUrl,
                 authScheme, apiSnapshot.CredentialRef, apiSnapshot.OpenApiSource);
 
             await apiRepo.AddAsync(restoredApi, cancellationToken);
         }
+
+        foreach (var staleApi in existingApis.Where(a => !keptIds.Contains(a.Id)))
+            apiRepo.Delete(staleApi);
 
         if (snapshot.Configuration is not null)
         {

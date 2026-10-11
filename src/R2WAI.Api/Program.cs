@@ -560,6 +560,15 @@ static void ValidateProductionConfig(WebApplication app)
     else if (encryptionKey.Contains("CHANGE_ME") || encryptionKey.StartsWith("${"))
         errors.Add("Encryption key contains a placeholder value. Override via Security__EncryptionKey env var");
 
+    // MinioStorageService falls back to minioadmin/minioadmin, MinIO's well-known default login.
+    var storageMode = config["Storage:Mode"] ?? config["Storage:Provider"] ?? "local";
+    if (storageMode.Equals("minio", StringComparison.OrdinalIgnoreCase))
+    {
+        var minioSecret = config["Storage:Minio:SecretKey"];
+        if (string.IsNullOrEmpty(minioSecret) || minioSecret == "minioadmin" || minioSecret.Contains("CHANGE_ME"))
+            errors.Add("MinIO storage is enabled with the default credentials. Set Storage__Minio__AccessKey and Storage__Minio__SecretKey env vars");
+    }
+
     var aiProvider = (config["AI:Provider"] ?? "openai").ToLowerInvariant();
     if (aiProvider == "openai")
     {

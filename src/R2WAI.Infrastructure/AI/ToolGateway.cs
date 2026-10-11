@@ -125,7 +125,7 @@ public class ToolGateway : IToolGateway
                 _logger.LogWarning("Paused {Function} for approval — created standalone approval request {RequestId}", function, requestId);
                 await WriteDenialAuditAsync(toolDef!, function, "approval required — request created");
                 if (ledgerToolId is { } pausedToolId)
-                    await AddExecutionAsync(ToolExecution.AwaitingApproval(tenantId, userId, pausedToolId, plugin, function, requestId));
+                    await TryAddExecutionAsync(ToolExecution.AwaitingApproval(tenantId, userId, pausedToolId, plugin, function, requestId));
                 return new ToolInvocationOutcome(false,
                     $"This action requires administrator approval. An approval request has been created (ID: {requestId}) " +
                     "and the assigned approver has been notified. It will run automatically once approved.");
@@ -247,10 +247,27 @@ public class ToolGateway : IToolGateway
     private async Task RecordDeniedAsync(Guid? toolDefinitionId, string plugin, string function, string reason)
     {
         if (_currentUser.TenantId is not { } tenantId) return;
-        await AddExecutionAsync(ToolExecution.Denied(tenantId, _currentUser.UserId, toolDefinitionId, plugin, function, reason));
+        await TryAddExecutionAsync(ToolExecution.Denied(tenantId, _currentUser.UserId, toolDefinitionId, plugin, function, reason));
     }
 
-    // Isolated scope for the same reason as WriteAuditAsync below.
+    // For rows written when the call's outcome is already decided (denied, paused). A failed ledger
+    // write must not turn that outcome into an exception: the model would see a tool error and may
+    // retry, and a retried paused call opens a second approval request.
+    private async Task TryAddExecutionAsync(ToolExecution execution)
+    {
+        try
+        {
+            await AddExecutionAsync(execution);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to record {Status} tool execution {Plugin}.{Function} in the ledger",
+                execution.Status, execution.Plugin, execution.Function);
+        }
+    }
+
+    // Isolated scope for the same reason as WriteAuditAsync below. Throws on failure: the Prepared
+    // row is written before Send, and a call that cannot be recorded is not sent (fail closed).
     private async Task AddExecutionAsync(ToolExecution execution)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -260,17 +277,27 @@ public class ToolGateway : IToolGateway
         await unitOfWork.SaveChangesAsync();
     }
 
+    // Runs after the call reached the target, so it never throws: a ledger failure surfacing here
+    // would report a call that already acted as failed, and the model's retry would act twice. The
+    // row stays Prepared, which is what a reconcile treats as "outcome not recorded".
     private async Task CompleteExecutionAsync(Guid? executionId, Action<ToolExecution> complete)
     {
         if (executionId is not { } id) return;
-        using var scope = _scopeFactory.CreateScope();
-        var executions = scope.ServiceProvider.GetRequiredService<IRepository<ToolExecution>>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var execution = await executions.GetByIdAsync(id);
-        if (execution is null) return;
-        complete(execution);
-        executions.Update(execution);
-        await unitOfWork.SaveChangesAsync();
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var executions = scope.ServiceProvider.GetRequiredService<IRepository<ToolExecution>>();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var execution = await executions.GetByIdAsync(id);
+            if (execution is null) return;
+            complete(execution);
+            executions.Update(execution);
+            await unitOfWork.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to record the outcome of tool execution {ExecutionId} in the ledger", id);
+        }
     }
 
     private async Task WriteUnknownToolDenialAuditAsync(string function)
@@ -315,12 +342,22 @@ public class ToolGateway : IToolGateway
     // comment on this exact method (moved here verbatim): the caller's own chat request can hold a
     // long-lived DbContext across a multi-minute AI call, and sharing it for a fire-and-forget audit
     // write entangles this side effect with the caller's own unit of work.
+    // Never throws: every audit row is written after the decision or after the call, so none of them
+    // guards a Send. A failure surfacing here would turn a completed call (or a created approval
+    // request) into a tool error the model retries — acting twice, or opening a second approval.
     private async Task WriteAuditAsync(AuditLog auditLog)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var auditLogs = scope.ServiceProvider.GetRequiredService<IRepository<AuditLog>>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        await auditLogs.AddAsync(auditLog);
-        await unitOfWork.SaveChangesAsync();
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var auditLogs = scope.ServiceProvider.GetRequiredService<IRepository<AuditLog>>();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            await auditLogs.AddAsync(auditLog);
+            await unitOfWork.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write tool audit log for {EntityId}: {Metadata}", auditLog.EntityId, auditLog.Metadata);
+        }
     }
 }

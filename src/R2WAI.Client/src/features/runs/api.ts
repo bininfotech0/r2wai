@@ -1,6 +1,6 @@
 import { authFetch } from '../../lib/auth/authClient'
 import { ApiRequestError, fetchJson } from '../../lib/api/fetchJson'
-import type { AuditLogDto, ConversationDto, MessageDto, PagedResult, RunsFiltersDto, RunsPageDto, WorkflowInstanceDto, WorkflowStepExecutionDto } from './types'
+import type { AuditLogDto, ConversationDto, MessageDto, PagedResult, RunsFiltersDto, RunsPageDto, ToolCallDetailDto, WorkflowInstanceDto, WorkflowStepExecutionDto } from './types'
 
 export interface RunsQuery {
   page: number
@@ -26,6 +26,10 @@ export function listRuns(query: RunsQuery) {
 
 export function getRunsFilters() {
   return fetchJson<RunsFiltersDto>('/runs/filters')
+}
+
+export function getToolCall(id: string) {
+  return fetchJson<ToolCallDetailDto>(`/runs/tool-calls/${id}`)
 }
 
 export function listWorkflowInstances(page: number, pageSize: number) {

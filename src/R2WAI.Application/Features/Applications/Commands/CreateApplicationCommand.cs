@@ -53,19 +53,26 @@ public class CreateApplicationCommandHandler(
         // (tenant, department, code), department-less ones per (tenant, code) via a filtered index.
         // The tenant filter is applied by the global query filter, so this cannot see other tenants.
         // This check is a courtesy for the user; the unique index remains the authority.
+        // Compared case-insensitively: "HR" and "hr" are indistinguishable to the user, even though
+        // the index itself is case-sensitive.
+        var name = command.Name.Trim();
+        var code = command.Code.Trim();
+        var normalizedCode = code.ToLower();
         var existingWithCode = await applicationRepo.FirstOrDefaultAsync(
-            a => a.Code == command.Code && a.DepartmentId == command.DepartmentId,
+            a => a.Code.ToLower() == normalizedCode && a.DepartmentId == command.DepartmentId,
             cancellationToken);
 
         if (existingWithCode is not null)
             throw new ValidationException(nameof(command.Code),
-                $"Code '{command.Code}' is already used by another connected system in this scope.");
+                $"Code '{code}' is already used by another connected system in this scope.");
+
+        await ApplicationUniqueness.EnsureNameIsFreeAsync(applicationRepo, name, excludeId: null, cancellationToken);
 
         var application = new ConnectedApplication(
-            Guid.NewGuid(), tenantId, command.DepartmentId, command.Name, command.Code,
+            Guid.NewGuid(), tenantId, command.DepartmentId, name, code,
             command.Description, command.BaseUrl);
 
-        application.UpdateDetails(command.Name, command.Description, command.BaseUrl, command.Environment);
+        application.UpdateDetails(name, command.Description, command.BaseUrl, command.Environment);
 
         await applicationRepo.AddAsync(application, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);

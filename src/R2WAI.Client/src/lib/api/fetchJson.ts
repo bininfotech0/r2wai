@@ -15,6 +15,17 @@ export class ApiRequestError extends Error {
 }
 
 /**
+ * One line for a mutation's error toast/alert. A 4xx carries an actionable reason (e.g. "A connected
+ * system named 'HR Portal' already exists") — a validation failure's lives in its field errors, its
+ * top-level message being the generic "One or more validation failures". Anything else gets the fallback.
+ */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiRequestError) || ![400, 409, 422].includes(error.status)) return fallback
+  const fieldMessage = error.errors ? Object.values(error.errors).flat().find(Boolean) : undefined
+  return fieldMessage ?? error.message ?? fallback
+}
+
+/**
  * Distinguishes the failure kinds a query's `error` can actually be, for a UX-Quality-appropriate
  * message: a real HTTP response the caller isn't allowed to see (403 — distinct from 401, which is
  * already handled app-wide by authFetch's session-expiry redirect), a genuine network failure

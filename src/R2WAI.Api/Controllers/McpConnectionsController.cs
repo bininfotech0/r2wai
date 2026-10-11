@@ -1,3 +1,4 @@
+using R2WAI.Application.Common.AI;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using R2WAI.Application.Common.Exceptions;
@@ -159,10 +160,27 @@ public class McpConnectionsController(
         var connection = await GetOwnedConnectionAsync(id, ct);
         var tenantId = TenantId;
 
+        // Re-committing a tool already imported from this connection used to create a second row for
+        // it; those are skipped. New ones get a tenant-unique display name (prefixed with the
+        // connection's name on a clash) — the real MCP tool name is kept separately via LinkMcpServer,
+        // so renaming the display name never changes what gets called on the server.
+        var existing = await toolDefinitions.FindAsync(t => t.TenantId == tenantId, ct);
+        var alreadyImported = existing
+            .Where(t => t.McpServerConnectionId == connection.Id && t.McpToolName != null)
+            .Select(t => t.McpToolName!)
+            .ToHashSet(StringComparer.Ordinal);
+        var taken = existing
+            .Select(t => ToolFunctionName.Sanitize(t.Name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var ids = new List<Guid>();
         foreach (var tool in request.Tools)
         {
-            var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, tool.Name, ToolType.Mcp, tool.Description);
+            if (!alreadyImported.Add(tool.Name))
+                continue;
+
+            var displayName = CapabilityNames.MakeUnique(tool.Name, connection.Name, taken);
+            var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, displayName, ToolType.Mcp, tool.Description);
             toolDef.LinkMcpServer(connection.Id, tool.Name);
             toolDef.Deactivate();
 

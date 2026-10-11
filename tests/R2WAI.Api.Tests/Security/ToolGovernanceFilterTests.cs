@@ -366,4 +366,42 @@ public class ToolGovernanceFilterTests : IClassFixture<R2WAIWebApplicationFactor
         Assert.Equal(ToolExecutionStatus.Failed, execution.Status);
         Assert.Equal("boom", execution.Error);
     }
+
+    [Fact]
+    public async Task Ledger_failure_after_the_call_ran_still_returns_the_result_so_the_model_does_not_retry()
+    {
+        using var harness = SignIn();
+        var tool = RegisteredTool(harness.TenantId, "Get Supplier");
+        harness.Context.ToolDefinitions.Add(tool);
+        await harness.Context.SaveChangesAsync();
+
+        // While the call runs, its Prepared row is closed elsewhere, so the gateway's own Succeed()
+        // throws — the same path a failed ledger save takes once the target has already acted.
+        var function = KernelFunctionFactory.CreateFromMethod(
+            () =>
+            {
+                using var other = _factory.Services.CreateScope();
+                var db = other.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var row = db.ToolExecutions.IgnoreQueryFilters()
+                    .Single(e => e.TenantId == harness.TenantId && e.Status == ToolExecutionStatus.Prepared);
+                row.Fail(0, "closed concurrently");
+                db.SaveChanges();
+                return "tool-ran";
+            },
+            new KernelFunctionFromMethodOptions
+            {
+                FunctionName = "Get_Supplier",
+                AdditionalMetadata = new System.Collections.ObjectModel.ReadOnlyDictionary<string, object?>(
+                    new Dictionary<string, object?> { [AiFunctionAuditFilter.ToolDefinitionIdMetadataKey] = tool.Id }),
+            });
+        var kernel = Kernel.CreateBuilder().Build();
+        kernel.Plugins.AddFromFunctions("DynamicTools", [function]);
+        kernel.FunctionInvocationFilters.Add(harness.Scope.ServiceProvider.GetRequiredService<AiFunctionAuditFilter>());
+
+        var result = await kernel.InvokeAsync(kernel.Plugins.GetFunction("DynamicTools", "Get_Supplier"));
+
+        Assert.Equal("tool-ran", result.GetValue<string>());
+        var execution = Assert.Single(await LedgerAsync(harness));
+        Assert.Equal("closed concurrently", execution.Error);
+    }
 }

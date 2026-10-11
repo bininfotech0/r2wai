@@ -63,12 +63,21 @@ public class ConnectedApplicationConfiguration : IEntityTypeConfiguration<Connec
         // sharing a Code would both be accepted. The filtered index below restores tenant-level
         // uniqueness for exactly those rows, without narrowing the existing constraint for
         // department-scoped ones.
+        //
+        // Both skip soft-deleted rows: the handlers' pre-checks run through the IsDeleted query
+        // filter, so an index that still counted deleted rows made "delete a system, re-create one
+        // with the same code" pass validation and then fail on insert with a bare 409.
+        //
+        // Case-insensitive versions of these, plus name uniqueness, live as raw-SQL lower(...)
+        // expression indexes in migration CaseInsensitiveApplicationNameAndCodeUniqueness — EF's
+        // HasIndex can't express them, so they are not modelled here.
         builder.HasIndex(a => new { a.TenantId, a.DepartmentId, a.Code })
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("\"IsDeleted\" = false");
 
         builder.HasIndex(a => new { a.TenantId, a.Code })
             .IsUnique()
-            .HasFilter("\"DepartmentId\" IS NULL")
+            .HasFilter("\"DepartmentId\" IS NULL AND \"IsDeleted\" = false")
             .HasDatabaseName("IX_Applications_TenantId_Code_NoDepartment");
 
         builder.HasIndex(a => new { a.TenantId, a.Status });

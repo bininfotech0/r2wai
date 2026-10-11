@@ -1,3 +1,4 @@
+using R2WAI.Application.Common.AI;
 using FluentValidation;
 
 namespace R2WAI.Application.Features.Capabilities.Commands;
@@ -46,7 +47,9 @@ public class UpdateCapabilityCommandHandler(
         var capability = await capabilityRepo.GetByIdAsync(command.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(ToolDefinition), command.Id);
 
-        capability.Update(command.Name, command.Description, ToolType.Http, capability.EndpointUrl, capability.Configuration);
+        await CapabilityNames.EnsureFreeAsync(capabilityRepo, capability.TenantId, command.Name, capability.Id, cancellationToken);
+
+        capability.Update(command.Name.Trim(), command.Description, ToolType.Http, capability.EndpointUrl, capability.Configuration);
         capability.LinkApi(command.ApplicationApiId, command.HttpMethod, command.EndpointPath);
         capability.ConfigureGovernance(command.RiskLevel, command.RequiredRole,
             command.ConfirmationRequired, command.ApprovalRequired, command.AuditRequired);

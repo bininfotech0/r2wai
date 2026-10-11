@@ -277,7 +277,7 @@ export function ChatbotDetailPage() {
             value={promptTemplate}
             onChange={(e) => setPromptTemplate(e.target.value)}
             error={describePromptPlaceholders(promptTemplate).isWarning}
-            helperText={describePromptPlaceholders(promptTemplate).message}
+            helperText={`${describePromptPlaceholders(promptTemplate).message} Website-chat rules (anonymous visitor, plain-text replies, no actions, use the conversation and knowledge base) are added automatically, so describe only what this bot is for.`}
           />
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <Switch checked={voiceEnabled} onChange={(e) => setVoiceEnabled(e.target.checked)} />

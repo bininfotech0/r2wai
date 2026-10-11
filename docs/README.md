@@ -5,7 +5,7 @@ AI coding-agent rules and standards live in [`/AI`](../AI/README.md).
 
 | Folder | Contents |
 |---|---|
-| [product/](product/) | [Vision](product/PRODUCT-VISION.md), [user journeys](product/USER-JOURNEYS.md), [navigation & UX](product/NAVIGATION-AND-UX.md), [feature matrix](product/FEATURE-MATRIX.md) |
+| [product/](product/) | **[Product details](product/PRODUCT-DETAILS.md) (start here)**, [vision](product/PRODUCT-VISION.md), [user journeys](product/USER-JOURNEYS.md), [navigation & UX](product/NAVIGATION-AND-UX.md), [feature matrix](product/FEATURE-MATRIX.md) |
 | [architecture/](architecture/) | [Overview](architecture/ARCHITECTURE.md), [data model](architecture/DATA-MODEL.md), [AI runtime](architecture/AI-RUNTIME.md), [tool gateway](architecture/TOOL-GATEWAY.md), [execution & workflows](architecture/EXECUTION-AND-WORKFLOWS.md), [integrations](architecture/INTEGRATIONS.md), [workspace migration plan](architecture/WORKSPACE-MIGRATION-PLAN.md) |
 | [adr/](adr/) | Architecture Decision Records (`NNNN-title.md`) |
 | [api/](api/) | [API reference](api/API.md), [missing backend endpoints](api/MISSING-BACKEND-ENDPOINTS.md) |

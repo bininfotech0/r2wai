@@ -34,7 +34,10 @@ public class UpdateApplicationCommandHandler(
         var application = await applicationRepo.GetByIdAsync(command.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(ConnectedApplication), command.Id);
 
-        application.UpdateDetails(command.Name, command.Description, command.BaseUrl, command.Environment);
+        var name = command.Name.Trim();
+        await ApplicationUniqueness.EnsureNameIsFreeAsync(applicationRepo, name, application.Id, cancellationToken);
+
+        application.UpdateDetails(name, command.Description, command.BaseUrl, command.Environment);
         application.SetManager(command.ManagerUserId);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);

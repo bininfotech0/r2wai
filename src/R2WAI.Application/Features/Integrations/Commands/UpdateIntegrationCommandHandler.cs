@@ -1,3 +1,4 @@
+using R2WAI.Application.Common.AI;
 using R2WAI.Application.Common.Security;
 
 namespace R2WAI.Application.Features.Integrations.Commands;
@@ -21,7 +22,9 @@ public class UpdateIntegrationCommandHandler(
         // value for any secret field the incoming payload left out.
         var configuration = IntegrationCredentialCodec.MergeAndEncrypt(tool.Configuration, command.Configuration, encryptionService);
 
-        tool.Update(command.Name, command.Description, toolType, command.EndpointUrl, configuration);
+        await CapabilityNames.EnsureFreeAsync(repo, tool.TenantId, command.Name, tool.Id, cancellationToken);
+
+        tool.Update(command.Name.Trim(), command.Description, toolType, command.EndpointUrl, configuration);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("Updated integration {Name}", tool.Name);

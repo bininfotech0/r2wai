@@ -1,3 +1,4 @@
+using R2WAI.Application.Common.AI;
 using R2WAI.Application.Common.Security;
 
 namespace R2WAI.Application.Features.Integrations.Commands;
@@ -20,8 +21,10 @@ public class CreateIntegrationCommandHandler(
         // plaintext the client submitted — see IntegrationCredentialCodec's doc comment.
         var configuration = IntegrationCredentialCodec.EncryptSecrets(command.Configuration, encryptionService);
 
+        await CapabilityNames.EnsureFreeAsync(repo, tenantId, command.Name, excludeId: null, cancellationToken);
+
         var tool = new ToolDefinition(
-            Guid.NewGuid(), tenantId, command.Name, toolType,
+            Guid.NewGuid(), tenantId, command.Name.Trim(), toolType,
             command.Description, command.EndpointUrl, configuration);
 
         if (!string.IsNullOrWhiteSpace(command.HttpMethod) || !string.IsNullOrWhiteSpace(command.EndpointPath))

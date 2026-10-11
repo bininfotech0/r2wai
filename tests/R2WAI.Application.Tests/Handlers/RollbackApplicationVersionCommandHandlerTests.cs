@@ -74,6 +74,34 @@ public class RollbackApplicationVersionCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ApiInSnapshot_IsUpdatedInPlaceNotRecreated()
+    {
+        // Recreating the API gave it a new id, which unlinked every discovered capability (FK
+        // SetNull) and dropped its encrypted credential, which snapshots deliberately omit.
+        var api = new ApplicationApi(Guid.NewGuid(), _tenantId, _application.Id, "Tax API", "https://new.example.gov");
+        api.SetCredential("encrypted-secret", "X-Api-Key");
+        var removedApi = new ApplicationApi(Guid.NewGuid(), _tenantId, _application.Id, "Added Later", "https://later.example.gov");
+        _apiRepoMock.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<ApplicationApi, bool>>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<ApplicationApi>)[api, removedApi]);
+
+        const string snapshotJson =
+            """{"Name":"Property Tax","Apis":[{"Name":"tax api","BaseUrl":"https://old.example.gov","AuthScheme":"ApiKey"}]}""";
+        var version = ApplicationVersion.CreateSnapshot(Guid.NewGuid(), _tenantId, _application.Id, 1, snapshotJson);
+        _versionRepoMock.Setup(r => r.GetByIdAsync(version.Id, It.IsAny<CancellationToken>())).ReturnsAsync(version);
+        _versionRepoMock.Setup(r => r.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<ApplicationVersion, bool>>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyList<ApplicationVersion>)[version]);
+
+        await CreateHandler().Handle(new RollbackApplicationVersionCommand { VersionId = version.Id }, CancellationToken.None);
+
+        Assert.Equal("https://old.example.gov", api.BaseUrl);
+        Assert.Equal(ApiAuthScheme.ApiKey, api.AuthScheme);
+        Assert.Equal("encrypted-secret", api.CredentialSecretEncrypted);
+        _apiRepoMock.Verify(r => r.Delete(api), Times.Never);
+        _apiRepoMock.Verify(r => r.Delete(removedApi), Times.Once);
+        _apiRepoMock.Verify(r => r.AddAsync(It.IsAny<ApplicationApi>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Handle_VersionNotFound_ThrowsNotFound()
     {
         _versionRepoMock.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))

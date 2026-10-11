@@ -25,10 +25,12 @@ public class DeferredToolCallExecutorTests
         public ToolContext? LastContext { get; private set; }
         public ToolResult Result { get; set; } = new() { Success = true, Data = "ok" };
         public Exception? Throws { get; set; }
+        public Action? OnExecute { get; set; }
 
         public Task<ToolResult> ExecuteAsync(ToolContext context)
         {
             LastContext = context;
+            OnExecute?.Invoke();
             if (Throws is not null) throw Throws;
             return Task.FromResult(Result);
         }
@@ -74,11 +76,18 @@ public class DeferredToolCallExecutorTests
     private readonly List<AuditLog> _audits = [];
     private readonly List<ToolExecution> _executions = [];
 
+    // Simulates the database failing for the writes that happen after the approved call ran.
+    private bool _postCallWritesFail;
+
     private IServiceScopeFactory CreateAuditScopeFactory()
     {
         var auditRepo = new Mock<R2WAI.Domain.Interfaces.IRepository<AuditLog>>();
         auditRepo.Setup(r => r.AddAsync(It.IsAny<AuditLog>(), It.IsAny<CancellationToken>()))
-            .Callback<AuditLog, CancellationToken>((a, _) => _audits.Add(a))
+            .Callback<AuditLog, CancellationToken>((a, _) =>
+            {
+                if (_postCallWritesFail) throw new InvalidOperationException("audit store down");
+                _audits.Add(a);
+            })
             .ReturnsAsync((AuditLog a, CancellationToken _) => a);
         var executionRepo = new Mock<R2WAI.Domain.Interfaces.IRepository<ToolExecution>>();
         executionRepo.Setup(r => r.AddAsync(It.IsAny<ToolExecution>(), It.IsAny<CancellationToken>()))
@@ -88,7 +97,9 @@ public class DeferredToolCallExecutorTests
             .ReturnsAsync((System.Linq.Expressions.Expression<Func<ToolExecution, bool>> predicate, CancellationToken _) =>
                 _executions.AsQueryable().FirstOrDefault(predicate));
         executionRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid id, CancellationToken _) => _executions.FirstOrDefault(e => e.Id == id));
+            .ReturnsAsync((Guid id, CancellationToken _) => _postCallWritesFail
+                ? throw new InvalidOperationException("ledger store down")
+                : _executions.FirstOrDefault(e => e.Id == id));
         var unitOfWork = new Mock<R2WAI.Domain.Interfaces.IUnitOfWork>();
         return new ServiceCollection()
             .AddSingleton(executionRepo.Object)
@@ -241,6 +252,24 @@ public class DeferredToolCallExecutorTests
     }
 
     [Fact]
+    public async Task TryExecuteAsync_LedgerAndAuditFailAfterTheCallRan_StillReturnsTheToolResult()
+    {
+        var fakeTool = new FakeTool { Result = new ToolResult { Success = true, Data = "{\"orderId\":7}" } };
+        var tenantId = Guid.NewGuid();
+        var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, "Create Order", ToolType.Http, "desc", "https://api.example.com");
+        var sut = CreateSut(fakeTool, toolDef);
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolDef.Id, "{}").ToJson());
+        // Let Prepare (before the call) succeed, then fail everything written afterwards.
+        fakeTool.OnExecute = () => _postCallWritesFail = true;
+
+        var result = await sut.TryExecuteAsync(request);
+
+        Assert.Equal("{\"orderId\":7}", result); // reaches the approval instead of being lost to an exception
+        Assert.Equal(ToolExecutionStatus.Prepared, Assert.Single(_executions).Status);
+        Assert.Empty(_audits);
+    }
+
+    [Fact]
     public async Task TryExecuteAsync_ApprovedCallThatThrows_RecordsTheFailure_InsteadOfLosingIt()
     {
         var fakeTool = new FakeTool { Throws = new HttpRequestException("upstream 502") };
@@ -251,7 +280,10 @@ public class DeferredToolCallExecutorTests
 
         var result = await sut.TryExecuteAsync(request);
 
-        Assert.Equal("Execution failed: upstream 502", result); // lands on the approval's comments
+        // The result lands on the approval's comments, so the upstream error stays out of it and
+        // goes only to the admin-facing audit entry.
+        Assert.StartsWith("Execution failed.", result);
+        Assert.DoesNotContain("upstream 502", result);
         var audit = Assert.Single(_audits);
         Assert.Contains("\"status\":\"failed\"", audit.Metadata);
         Assert.Contains("upstream 502", audit.Metadata);

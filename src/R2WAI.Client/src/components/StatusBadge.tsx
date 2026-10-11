@@ -37,6 +37,17 @@ const DEFAULT_STATUS_TONES: Record<string, StatusTone> = {
   Error: 'error',
   Rejected: 'error',
   Unhealthy: 'error',
+
+  // Tool-call ledger outcomes.
+  Denied: 'error',
+  AwaitingApproval: 'warning',
+  Prepared: 'warning',
+  Unknown: 'warning',
+}
+
+// Multi-word status values as they arrive from the API, shown as words.
+const STATUS_LABELS: Record<string, string> = {
+  AwaitingApproval: 'Awaiting approval',
 }
 
 interface StatusBadgeProps {
@@ -51,7 +62,7 @@ export function StatusBadge({ status, tone, toneMap }: StatusBadgeProps) {
   const resolved = tone ?? toneMap?.[status] ?? DEFAULT_STATUS_TONES[status] ?? 'default'
   return (
     <Chip
-      label={status}
+      label={STATUS_LABELS[status] ?? status}
       size="small"
       color={resolved === 'default' ? 'default' : resolved}
       variant="outlined"

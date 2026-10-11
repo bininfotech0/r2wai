@@ -31,7 +31,7 @@ import HubOutlinedIcon from '@mui/icons-material/HubOutlined'
 import { ConfirmDeleteDialog } from '../../../components/dialogs/ConfirmDeleteDialog'
 import { ErrorState } from '../../../components/ErrorState'
 import { EmptyState } from '../../../components/EmptyState'
-import { describeApiError } from '../../../lib/api/fetchJson'
+import { apiErrorMessage, describeApiError } from '../../../lib/api/fetchJson'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { TooltipIconButton as IconButton } from '../../../components/TooltipIconButton'
 import { listAssistants } from '../../assistants/api'
@@ -167,7 +167,7 @@ export function ApplicationWorkspacePage() {
       notify('Connected system saved', 'success')
       void invalidateApp()
     },
-    onError: () => notify('Failed to save connected system', 'error'),
+    onError: (error) => notify(apiErrorMessage(error, 'Failed to save connected system'), 'error'),
   })
 
   const statusMutation = useMutation({
@@ -703,11 +703,21 @@ export function ApplicationWorkspacePage() {
         onClose={() => setDiscoverOpen(false)}
         onDiscovered={(result) => {
           setDiscoverOpen(false)
+          const parts = [
+            `${result.capabilitiesCreated} capabilit${result.capabilitiesCreated === 1 ? 'y' : 'ies'} created`,
+            result.capabilitiesRenamedForUniqueness > 0 && `${result.capabilitiesRenamedForUniqueness} renamed to avoid a name clash`,
+            result.capabilitiesSkippedAsExisting > 0 && `${result.capabilitiesSkippedAsExisting} unchanged`,
+            result.capabilitiesRelinked > 0 && `${result.capabilitiesRelinked} re-linked to a moved endpoint`,
+            result.capabilitiesNeedingReview > 0 && `${result.capabilitiesNeedingReview} active moved endpoint(s) need review`,
+            result.staleCapabilityCount > 0 &&
+              `${result.staleCapabilityCount} no longer in the spec (${result.staleCapabilityNames.slice(0, 5).join(', ')}` +
+                `${result.staleCapabilityCount > 5 ? ', …' : ''})`,
+          ].filter(Boolean)
+          // Anything an admin must act on downgrades the toast so it isn't skimmed past as a plain success.
+          const needsAttention = result.capabilitiesNeedingReview > 0 || result.staleCapabilityCount > 0
           notify(
-            `Discovered ${result.operationsDiscovered} operation${result.operationsDiscovered === 1 ? '' : 's'} — ` +
-              `${result.capabilitiesCreated} capabilit${result.capabilitiesCreated === 1 ? 'y' : 'ies'} created` +
-              (result.capabilitiesSkippedAsExisting > 0 ? `, ${result.capabilitiesSkippedAsExisting} already existed` : ''),
-            'success',
+            `Discovered ${result.operationsDiscovered} operation${result.operationsDiscovered === 1 ? '' : 's'} — ${parts.join(', ')}`,
+            needsAttention ? 'warning' : 'success',
           )
           void invalidateApp()
           void queryClient.invalidateQueries({ queryKey: ['application-apis', id] })

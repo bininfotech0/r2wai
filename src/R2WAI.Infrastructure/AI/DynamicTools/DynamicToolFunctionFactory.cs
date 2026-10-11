@@ -124,16 +124,6 @@ public class DynamicToolFunctionFactory
         functions.Add(function);
     }
 
-    // Semantic Kernel function names must be letters/digits/underscore only; ToolDefinition.Name is
-    // free text (admin-entered in the Integrations/Tools UI), so this maps arbitrary names into that
-    // space deterministically rather than rejecting anything with spaces or punctuation.
-    private static readonly Regex InvalidNameChars = new(@"[^A-Za-z0-9_]", RegexOptions.Compiled);
-
-    public static string SanitizeFunctionName(string name)
-    {
-        var sanitized = InvalidNameChars.Replace(name.Trim(), "_");
-        if (sanitized.Length == 0 || char.IsDigit(sanitized[0]))
-            sanitized = "tool_" + sanitized;
-        return sanitized.Length > 64 ? sanitized[..64] : sanitized;
-    }
+    public static string SanitizeFunctionName(string name) =>
+        R2WAI.Application.Common.AI.ToolFunctionName.Sanitize(name);
 }

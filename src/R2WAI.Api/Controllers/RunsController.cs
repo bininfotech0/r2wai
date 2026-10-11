@@ -35,10 +35,11 @@ public sealed class RunsController(ApplicationDbContext dbContext) : ControllerB
         var normalizedType = type?.Trim();
         var normalizedStatus = status?.Trim();
         var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var onlyToolCalls = string.Equals(normalizedType, ToolCallType, StringComparison.OrdinalIgnoreCase);
 
         var workflowRuns = dbContext.WorkflowInstances.AsNoTracking()
             .Where(instance => instance.TenantId == tenantId.Value);
-        if (string.Equals(normalizedType, "Assistant", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(normalizedType, "Assistant", StringComparison.OrdinalIgnoreCase) || onlyToolCalls)
             workflowRuns = workflowRuns.Where(_ => false);
         if (applicationId.HasValue)
             workflowRuns = workflowRuns.Where(instance => instance.Workflow.ApplicationId == applicationId);
@@ -69,7 +70,7 @@ public sealed class RunsController(ApplicationDbContext dbContext) : ControllerB
             .Where(conversation => conversation.TenantId == tenantId.Value &&
                                    conversation.UserId == currentUserId &&
                                    !conversation.IsArchived && conversation.Module == "assistant");
-        if (string.Equals(normalizedType, "Automation", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(normalizedType, "Automation", StringComparison.OrdinalIgnoreCase) || onlyToolCalls)
             conversations = conversations.Where(_ => false);
         if (applicationId.HasValue)
             conversations = conversations.Where(conversation => conversation.ReferenceId.HasValue &&
@@ -101,9 +102,37 @@ public sealed class RunsController(ApplicationDbContext dbContext) : ControllerB
                  !string.Equals(normalizedStatus, "all", StringComparison.OrdinalIgnoreCase))
             conversations = conversations.Where(_ => false);
 
+        // Tool calls from the ToolExecution ledger. Admins see the whole tenant's (it is governance
+        // data); everyone else only the calls their own AI sessions made.
+        var toolCalls = VisibleToolCalls(currentUserId);
+        if (normalizedType is not null && !onlyToolCalls && !string.Equals(normalizedType, "all", StringComparison.OrdinalIgnoreCase))
+            toolCalls = toolCalls.Where(_ => false);
+        if (applicationId.HasValue || assistantId.HasValue) // the ledger has no application/assistant link yet
+            toolCalls = toolCalls.Where(_ => false);
+        if (userId.HasValue)
+            toolCalls = toolCalls.Where(execution => execution.UserId == userId);
+        if (from.HasValue)
+            toolCalls = toolCalls.Where(execution => execution.CreatedAt >= from.Value);
+        if (to.HasValue)
+            toolCalls = toolCalls.Where(execution => execution.CreatedAt < to.Value);
+        if (!string.IsNullOrWhiteSpace(normalizedSearch))
+            toolCalls = toolCalls.Where(execution =>
+                execution.Function.ToLower().Contains(normalizedSearch) ||
+                execution.Plugin.ToLower().Contains(normalizedSearch) ||
+                dbContext.ToolDefinitions.Any(tool => tool.Id == execution.ToolDefinitionId && tool.Name.ToLower().Contains(normalizedSearch)) ||
+                dbContext.Users.Any(user => user.Id == execution.UserId &&
+                    (user.FirstName.ToLower().Contains(normalizedSearch) || user.LastName.ToLower().Contains(normalizedSearch))));
+        if (!string.IsNullOrWhiteSpace(normalizedStatus) &&
+            Enum.TryParse<ToolExecutionStatus>(normalizedStatus, true, out var toolCallStatus))
+            toolCalls = toolCalls.Where(execution => execution.Status == toolCallStatus);
+        else if (!string.IsNullOrWhiteSpace(normalizedStatus) &&
+                 !string.Equals(normalizedStatus, "all", StringComparison.OrdinalIgnoreCase))
+            toolCalls = toolCalls.Where(_ => false);
+
         var workflowCount = await workflowRuns.CountAsync(ct);
         var conversationCount = await conversations.CountAsync(ct);
-        var totalCount = workflowCount + conversationCount;
+        var toolCallCount = await toolCalls.CountAsync(ct);
+        var totalCount = workflowCount + conversationCount + toolCallCount;
         page = Math.Min(page, Math.Max(1, (totalCount + pageSize - 1) / pageSize));
         var skip = (page - 1) * pageSize;
         var take = skip + pageSize;
@@ -155,7 +184,27 @@ public sealed class RunsController(ApplicationDbContext dbContext) : ControllerB
                 conversation.CreatedAt))
             .ToListAsync(ct);
 
-        var items = workflowItems.Concat(conversationItems)
+        var toolCallItems = await toolCalls
+            .OrderByDescending(execution => execution.CreatedAt)
+            .Take(take)
+            .Select(execution => new RunProjection(
+                execution.Id,
+                ToolCallType,
+                dbContext.ToolDefinitions.Where(tool => tool.Id == execution.ToolDefinitionId).Select(tool => tool.Name).FirstOrDefault() ?? execution.Function,
+                execution.Status.ToString(),
+                execution.CreatedAt,
+                execution.CompletedAt,
+                null,
+                null,
+                execution.ToolDefinitionId,
+                execution.Plugin,
+                execution.UserId,
+                dbContext.Users.Where(user => user.Id == execution.UserId).Select(user => user.FirstName + " " + user.LastName).FirstOrDefault(),
+                null,
+                execution.CreatedAt))
+            .ToListAsync(ct);
+
+        var items = workflowItems.Concat(conversationItems).Concat(toolCallItems)
             .OrderByDescending(item => item.SortAt)
             .Skip(skip)
             .Take(pageSize)
@@ -171,6 +220,47 @@ public sealed class RunsController(ApplicationDbContext dbContext) : ControllerB
             page,
             pageSize
         });
+    }
+
+    [HttpGet("tool-calls/{id:guid}")]
+    public async Task<IActionResult> GetToolCall(Guid id, CancellationToken ct = default)
+    {
+        if (dbContext.TenantId is null) return Unauthorized();
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var currentUserId)) return Unauthorized();
+
+        var toolCall = await VisibleToolCalls(currentUserId)
+            .Where(execution => execution.Id == id)
+            .Select(execution => new
+            {
+                execution.Id,
+                execution.Plugin,
+                execution.Function,
+                execution.ToolDefinitionId,
+                ToolName = dbContext.ToolDefinitions.Where(tool => tool.Id == execution.ToolDefinitionId).Select(tool => tool.Name).FirstOrDefault(),
+                Status = execution.Status.ToString(),
+                execution.DenialReason,
+                execution.Error,
+                execution.DurationMs,
+                StartedAt = execution.CreatedAt,
+                execution.CompletedAt,
+                execution.ApprovalRequestId,
+                execution.UserId,
+                UserName = dbContext.Users.Where(user => user.Id == execution.UserId).Select(user => user.FirstName + " " + user.LastName).FirstOrDefault(),
+            })
+            .FirstOrDefaultAsync(ct);
+
+        return toolCall is null ? NotFound() : Ok(toolCall);
+    }
+
+    private const string ToolCallType = "ToolCall";
+
+    // Tenant-scoped by the global query filter; narrowed to the caller's own rows unless they administer the tenant.
+    private IQueryable<R2WAI.Domain.Entities.ToolExecution> VisibleToolCalls(Guid currentUserId)
+    {
+        var executions = dbContext.ToolExecutions.AsNoTracking().Where(execution => execution.TenantId == dbContext.TenantId);
+        return User.IsInRole("Admin") || User.IsInRole("SystemAdmin")
+            ? executions
+            : executions.Where(execution => execution.UserId == currentUserId);
     }
 
     [HttpGet("filters")]

@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { DataTable } from '../../../components/data/DataTable'
 import { EmptyState } from '../../../components/EmptyState'
 import { PageHeader } from '../../../components/PageHeader'
+import { apiErrorMessage } from '../../../lib/api/fetchJson'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { createApplication, listApplications } from '../api'
 import { CreateApplicationDialog } from '../dialogs/CreateApplicationDialog'
@@ -48,7 +49,7 @@ export function ApplicationsPage() {
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEY] })
       navigate(`/workspaces/${app.id}`)
     },
-    onError: () => notify('Failed to add connected system', 'error'),
+    onError: (error) => notify(apiErrorMessage(error, 'Failed to add connected system'), 'error'),
   })
 
   const columns: GridColDef<ApplicationDto>[] = [

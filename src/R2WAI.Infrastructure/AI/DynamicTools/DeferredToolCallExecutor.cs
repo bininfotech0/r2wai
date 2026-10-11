@@ -82,7 +82,9 @@ public class DeferredToolCallExecutor : IDeferredToolCallExecutor
             RecordMetrics(toolDef, sw.ElapsedMilliseconds, success: false);
             await CompleteLedgerAsync(executionId, e => e.Fail(sw.ElapsedMilliseconds, ex.Message));
             await WriteExecutionAuditAsync(request, toolDef, success: false, ex.Message, sw.ElapsedMilliseconds);
-            return $"Execution failed: {ex.Message}";
+            // ex.Message stays in the log, ledger row and audit entry; this text lands on the approval
+            // comments the requester and approver read, so it carries no upstream detail.
+            return "Execution failed. The error was recorded for administrators in the activity log.";
         }
 
         sw.Stop();
@@ -124,16 +126,25 @@ public class DeferredToolCallExecutor : IDeferredToolCallExecutor
         return execution.Id;
     }
 
+    // The approved call already ran, so a ledger failure must not stop its result and audit row from
+    // being recorded — same rule as ToolGateway.CompleteExecutionAsync. The row stays Prepared.
     private async Task CompleteLedgerAsync(Guid executionId, Action<ToolExecution> complete)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var executions = scope.ServiceProvider.GetRequiredService<IRepository<ToolExecution>>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var execution = await executions.GetByIdAsync(executionId);
-        if (execution is null) return;
-        complete(execution);
-        executions.Update(execution);
-        await unitOfWork.SaveChangesAsync();
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var executions = scope.ServiceProvider.GetRequiredService<IRepository<ToolExecution>>();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var execution = await executions.GetByIdAsync(executionId);
+            if (execution is null) return;
+            complete(execution);
+            executions.Update(execution);
+            await unitOfWork.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to record the outcome of approved tool execution {ExecutionId} in the ledger", executionId);
+        }
     }
 
     private async Task UpdateLedgerAsync(ApprovalRequest request, Action<ToolExecution> update)
@@ -179,11 +190,20 @@ public class DeferredToolCallExecutor : IDeferredToolCallExecutor
             approvedBy = request.ApproverId,
         });
 
-        using var scope = _scopeFactory.CreateScope();
-        var auditLogs = scope.ServiceProvider.GetRequiredService<IRepository<AuditLog>>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        await auditLogs.AddAsync(new AuditLog(Guid.NewGuid(), request.TenantId, AuditAction.Execute, "ToolDefinition",
-            toolDef.Id.ToString(), request.RequesterId, metadata: metadata));
-        await unitOfWork.SaveChangesAsync();
+        // Written after the approved call ran; a failure must not hide its result from the approval
+        // (same rule as ToolGateway.WriteAuditAsync). The metadata goes to the log instead.
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var auditLogs = scope.ServiceProvider.GetRequiredService<IRepository<AuditLog>>();
+            var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            await auditLogs.AddAsync(new AuditLog(Guid.NewGuid(), request.TenantId, AuditAction.Execute, "ToolDefinition",
+                toolDef.Id.ToString(), request.RequesterId, metadata: metadata));
+            await unitOfWork.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to write audit log for approved tool call {ToolDefinitionId}: {Metadata}", toolDef.Id, metadata);
+        }
     }
 }

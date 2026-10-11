@@ -1,3 +1,4 @@
+using R2WAI.Application.Common.AI;
 using FluentValidation;
 
 namespace R2WAI.Application.Features.Capabilities.Commands;
@@ -48,7 +49,9 @@ public class CreateCapabilityCommandHandler(
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
 
-        var capability = new ToolDefinition(Guid.NewGuid(), tenantId, command.Name, ToolType.Http, command.Description);
+        await CapabilityNames.EnsureFreeAsync(capabilityRepo, tenantId, command.Name, excludeId: null, cancellationToken);
+
+        var capability = new ToolDefinition(Guid.NewGuid(), tenantId, command.Name.Trim(), ToolType.Http, command.Description);
         capability.AssignApplication(command.ApplicationId);
         capability.LinkApi(command.ApplicationApiId, command.HttpMethod, command.EndpointPath);
         capability.ConfigureGovernance(command.RiskLevel, command.RequiredRole,

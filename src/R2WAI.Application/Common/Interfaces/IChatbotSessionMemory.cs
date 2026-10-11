@@ -19,7 +19,23 @@ public interface IChatbotSessionMemory
 
 public static partial class ChatbotSessionIds
 {
-    public const int MaxLength = 100;
+    /// <summary>The anonymous embed-widget routes (chat, chat/stream).</summary>
+    public const string WidgetChannel = "widget";
+
+    /// <summary>The webhook route, which requires the chatbot's webhook key.</summary>
+    public const string WebhookChannel = "webhook";
+
+    // Caller part only; the "webhook:" prefix Scope adds must still fit the 100-char column.
+    public const int MaxLength = 90;
+
+    /// <summary>
+    /// The stored session key: the normalized caller id prefixed with its channel, or null when the
+    /// id is unusable. The prefix is the security boundary between channels — webhook callers use
+    /// guessable thread keys (phone numbers, chat ids), and without it an anonymous widget request
+    /// sending that same id would be handed the webhook conversation as context.
+    /// </summary>
+    public static string? Scope(string channel, string? sessionId) =>
+        Normalize(sessionId) is { } id ? $"{channel}:{id}" : null;
 
     /// <summary>
     /// Returns the trimmed id when usable, else null (no memory for this request). The widget sends

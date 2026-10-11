@@ -1168,12 +1168,13 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "Code")
                         .IsUnique()
                         .HasDatabaseName("IX_Applications_TenantId_Code_NoDepartment")
-                        .HasFilter("\"DepartmentId\" IS NULL");
+                        .HasFilter("\"DepartmentId\" IS NULL AND \"IsDeleted\" = false");
 
                     b.HasIndex("TenantId", "Status");
 
                     b.HasIndex("TenantId", "DepartmentId", "Code")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.ToTable("Applications", (string)null);
                 });
