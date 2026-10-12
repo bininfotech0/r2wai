@@ -12,7 +12,7 @@ test.describe('Connected Systems', () => {
     test.setTimeout(60_000)
     await loginAsAdmin(page)
 
-    await page.goto('/workspaces')
+    await page.goto('/connections')
     await expect(page.getByRole('heading', { name: 'Connections' })).toBeVisible()
 
     const uniqueName = `E2E Connected System ${Date.now()}`
@@ -23,7 +23,7 @@ test.describe('Connected Systems', () => {
     await createDialog.getByLabel('Code').fill(uniqueCode)
     await createDialog.getByRole('button', { name: 'Create' }).click()
 
-    await expect(page).toHaveURL(/\/workspaces\/[0-9a-f-]+$/)
+    await expect(page).toHaveURL(/\/connections\/[0-9a-f-]+$/)
     await expect(page.getByRole('heading', { name: uniqueName })).toBeVisible()
 
     // APIs tab.
@@ -76,7 +76,7 @@ test.describe('Connected Systems', () => {
     const confirmDialog = page.getByRole('dialog')
     await confirmDialog.getByRole('button', { name: 'Delete' }).click()
     await expect(page.getByText('Connected system deleted')).toBeVisible()
-    await expect(page).toHaveURL(/\/workspaces$/)
+    await expect(page).toHaveURL(/\/connections$/)
   })
 
   test('a connected system can be created with no department at all', async ({ page }) => {
@@ -85,7 +85,7 @@ test.describe('Connected Systems', () => {
 
     // A connected system is a first-class integration and does not require an organizational
     // classification. The standard creation flow should not ask the user to choose a Department.
-    await page.goto('/workspaces')
+    await page.goto('/connections')
     await expect(page.getByRole('heading', { name: 'Connections' })).toBeVisible()
 
     const uniqueName = `E2E No Department ${Date.now()}`
@@ -101,11 +101,11 @@ test.describe('Connected Systems', () => {
     await createDialog.getByRole('button', { name: 'Create' }).click()
 
     // Creating must succeed and land on the new system's workspace.
-    await expect(page).toHaveURL(/\/workspaces\/[0-9a-f-]+$/)
+    await expect(page).toHaveURL(/\/connections\/[0-9a-f-]+$/)
     await expect(page.getByRole('heading', { name: uniqueName })).toBeVisible()
 
     // Department remains optional legacy metadata and is not part of the everyday connection list.
-    await page.goto('/workspaces')
+    await page.goto('/connections')
     await page.getByPlaceholder(/Search connected systems/i).fill(uniqueName)
     const row = page.getByRole('row', { name: new RegExp(uniqueName) })
     await expect(row).toBeVisible()
@@ -113,18 +113,18 @@ test.describe('Connected Systems', () => {
 
     // Clean up from the detail page — the list DataTable has no per-row actions column.
     await row.click()
-    await expect(page).toHaveURL(/\/workspaces\/[0-9a-f-]+$/)
+    await expect(page).toHaveURL(/\/connections\/[0-9a-f-]+$/)
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
     const confirmDialog = page.getByRole('dialog')
     await confirmDialog.getByRole('button', { name: 'Delete' }).click()
     await expect(page.getByText('Connected system deleted')).toBeVisible()
-    await expect(page).toHaveURL(/\/workspaces$/)
+    await expect(page).toHaveURL(/\/connections$/)
   })
 
   test('a duplicate Code for a department-less system is rejected', async ({ page }) => {
     test.setTimeout(90_000)
     await loginAsAdmin(page)
-    await page.goto('/workspaces')
+    await page.goto('/connections')
 
     const sharedCode = `EDUP${Date.now()}`
     const first = `E2E Dup A ${Date.now()}`
@@ -143,10 +143,10 @@ test.describe('Connected Systems', () => {
     // index, so relaxing the column silently dropped the guarantee until the filtered unique
     // index IX_Applications_TenantId_Code_NoDepartment was added.
     await createWithoutDepartment(first)
-    await expect(page).toHaveURL(/\/workspaces\/[0-9a-f-]+$/)
+    await expect(page).toHaveURL(/\/connections\/[0-9a-f-]+$/)
     await expect(page.getByRole('heading', { name: first })).toBeVisible()
 
-    await page.goto('/workspaces')
+    await page.goto('/connections')
     const duplicateResponse = page.waitForResponse((response) =>
       response.url().includes('/api/v1/applications') && response.request().method() === 'POST',
     )
@@ -154,9 +154,9 @@ test.describe('Connected Systems', () => {
     // The API's command validator returns 400 before the database unique index is reached.
     expect((await duplicateResponse).status()).toBe(400)
 
-    // Rejected: the dialog stays open, the UI surfaces its create failure, and no navigation occurs.
-    await expect(page.getByText('Failed to add connected system')).toBeVisible()
-    await expect(page).toHaveURL(/\/workspaces$/)
+    // Rejected: the dialog stays open, the UI surfaces the API's actual reason, and no navigation occurs.
+    await expect(page.getByText(`Code '${sharedCode}' is already used by another connected system in this scope.`)).toBeVisible()
+    await expect(page).toHaveURL(/\/connections$/)
 
     // Dismiss whatever dialog is open, then clean up the one that was created.
     const stillOpen = page.getByRole('dialog')
@@ -173,11 +173,11 @@ test.describe('Connected Systems', () => {
     await expect(page.getByText('Connected system deleted')).toBeVisible()
   })
 
-  test('old /applications URLs redirect to /workspaces, and an unknown route shows a real 404 page', async ({ page }) => {
+  test('old /applications URLs redirect to /connections, and an unknown route shows a real 404 page', async ({ page }) => {
     await loginAsAdmin(page)
 
     await page.goto('/applications')
-    await expect(page).toHaveURL(/\/workspaces$/)
+    await expect(page).toHaveURL(/\/connections$/)
     await expect(page.getByRole('heading', { name: 'Connections' })).toBeVisible()
 
     await page.goto('/this-route-does-not-exist')

@@ -2,12 +2,9 @@ import { PublicClientApplication, InteractionRequiredAuthError } from '@azure/ms
 import type { IPublicClientApplication } from '@azure/msal-browser'
 
 /**
- * Port of src/R2WAI.Web/wwwroot/js/auth.js. In Blazor these values came from
- * server-side IConfiguration; a client-rendered SPA has no server process to
- * read appsettings from, so they're baked in at build time instead (Vite env
- * vars, unset by default — matches today's default-disabled state, since
- * R2WAI.Web itself has no appsettings.json of its own and normally runs with
- * these unset too).
+ * Microsoft Entra ID sign-in. A client-rendered SPA has no server process to read
+ * appsettings from, so the app registration is baked in at build time through Vite
+ * env vars. Both are unset by default, which leaves Entra sign-in disabled.
  */
 const CLIENT_ID = import.meta.env.VITE_ENTRA_CLIENT_ID as string | undefined
 const TENANT_ID = import.meta.env.VITE_ENTRA_TENANT_ID as string | undefined

@@ -3,49 +3,98 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert,
+  Avatar,
   Box,
   Button,
   Chip,
-  CircularProgress,
-  Grid,
+  Drawer,
+  IconButton,
   MenuItem,
   Paper,
+  Skeleton,
   Stack,
   Switch,
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import CloseIcon from '@mui/icons-material/Close'
+import ChatOutlined from '@mui/icons-material/ChatOutlined'
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined'
+import SmartToyOutlined from '@mui/icons-material/SmartToyOutlined'
 import { Link as RouterLink } from 'react-router-dom'
 import { LivePreviewPane } from '../components/LivePreviewPane'
-import { AssistantApiAccessSection } from '../components/AssistantApiAccessSection'
+import { AgentSettingsDrawer } from '../components/AgentSettingsDrawer'
+import { AgentChannelsTab } from '../components/AgentChannelsTab'
+import { parseEnabledIds } from '../toolsJson'
 import { PublishChecklist } from '../../../components/PublishChecklist'
+import { SectionCard } from '../../../components/SectionCard'
 import { ConfirmDeleteDialog } from '../../../components/dialogs/ConfirmDeleteDialog'
 import { EmptyState } from '../../../components/EmptyState'
 import { ErrorState } from '../../../components/ErrorState'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { fetchJson } from '../../../lib/api/fetchJson'
 import { deleteAssistant, getAssistant, getAssistantPublishReadiness, publishAssistant, updateAssistant } from '../api'
-import { buildFullUpdatePayload, GENERATABLE_TYPES, type AssistantDto, type AssistantType, type BehaviorSettings } from '../types'
+import { buildFullUpdatePayload, GENERATABLE_TYPES, type AssistantDto, type AssistantType } from '../types'
 import type { KnowledgeBaseDto } from '../../knowledge/types'
 import { CapabilitiesTab } from '../../capabilities/components/CapabilitiesTab'
-import { createChatbot, listChatbots } from '../../chatbots/api'
 import { listModels } from '../../admin/api'
 import { describePromptPlaceholders } from '../../../lib/prompts/promptPlaceholders'
 
-const TABS = ['Overview', 'Knowledge', 'Capabilities', 'Behavior', 'Security', 'Channels', 'Analytics'] as const
+const TABS = ['Overview', 'Knowledge', 'Tools', 'Channels', 'Analytics'] as const
+type StudioTab = (typeof TABS)[number]
+
+// Copilot Studio keeps "Test your agent" beside every tab; remember whether it was closed.
+const TEST_PANE_KEY = 'r2wai.agent.testPane'
+const TEST_PANE_WIDTH = 400
+
+function readTestPaneOpen(): boolean {
+  try {
+    return window.localStorage.getItem(TEST_PANE_KEY) !== 'closed'
+  } catch {
+    return true
+  }
+}
+
+const knowledgeBasesQuery = {
+  queryKey: ['knowledgebases', 'all'] as const,
+  queryFn: () => fetchJson<{ items: KnowledgeBaseDto[] }>('/knowledgebases?page=1&pageSize=100'),
+}
 
 export function AssistantStudioPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { notify } = useSnackbar()
-  const [tab, setTab] = useState<(typeof TABS)[number]>('Overview')
+  const theme = useTheme()
+  const paneDocked = useMediaQuery(theme.breakpoints.up('lg'))
+  const [tab, setTab] = useState<StudioTab>('Overview')
   const [publishOpen, setPublishOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  // Docked (large screens): open unless the user closed it. Overlay (smaller): opened on demand.
+  const [dockedTestOpen, setDockedTestOpen] = useState(readTestPaneOpen)
+  const [overlayTestOpen, setOverlayTestOpen] = useState(false)
+  const testOpen = paneDocked ? dockedTestOpen : overlayTestOpen
+
+  const toggleTest = () => {
+    if (!paneDocked) {
+      setOverlayTestOpen((o) => !o)
+      return
+    }
+    const next = !dockedTestOpen
+    setDockedTestOpen(next)
+    try {
+      window.localStorage.setItem(TEST_PANE_KEY, next ? 'open' : 'closed')
+    } catch {
+      // Preference only; the toggle still works for this visit.
+    }
+  }
 
   const query = useQuery({
     queryKey: queryKeys.assistants.detail(id),
@@ -60,20 +109,26 @@ export function AssistantStudioPage() {
     enabled: !!id && publishOpen,
   })
 
-  // Overview fields
+  // Overview fields, edited in place on the Details and Instructions cards.
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [systemPrompt, setSystemPrompt] = useState('')
   const [type, setType] = useState<AssistantType>('General')
   const [modelConfigurationId, setModelConfigurationId] = useState('')
+  const [editingDetails, setEditingDetails] = useState(false)
+  const [editingInstructions, setEditingInstructions] = useState(false)
+  const [instructionsExpanded, setInstructionsExpanded] = useState(false)
+
+  const resetOverview = (a: AssistantDto) => {
+    setName(a.name)
+    setDescription(a.description ?? '')
+    setSystemPrompt(a.systemPrompt ?? '')
+    setType(a.type)
+    setModelConfigurationId(a.modelConfigurationId ?? '')
+  }
 
   useEffect(() => {
-    if (!assistant) return
-    setName(assistant.name)
-    setDescription(assistant.description ?? '')
-    setSystemPrompt(assistant.systemPrompt ?? '')
-    setType(assistant.type)
-    setModelConfigurationId(assistant.modelConfigurationId ?? '')
+    if (assistant) resetOverview(assistant)
   }, [assistant])
 
   const hasUnsavedOverviewChanges = !!assistant && (
@@ -86,6 +141,7 @@ export function AssistantStudioPage() {
 
   const modelsQuery = useQuery({ queryKey: ['admin', 'models'], queryFn: listModels, enabled: tab === 'Overview' })
   const activeModels = (modelsQuery.data?.items ?? []).filter((m) => m.isActive)
+  const kbQuery = useQuery({ ...knowledgeBasesQuery, enabled: tab === 'Overview' })
 
   const saveOverview = useMutation({
     mutationFn: () =>
@@ -103,6 +159,8 @@ export function AssistantStudioPage() {
       ),
     onSuccess: () => {
       notify('Saved', 'success')
+      setEditingDetails(false)
+      setEditingInstructions(false)
       void queryClient.invalidateQueries({ queryKey: queryKeys.assistants.detail(id) })
       void queryClient.invalidateQueries({ queryKey: queryKeys.assistants.publishReadiness(id) })
     },
@@ -112,7 +170,7 @@ export function AssistantStudioPage() {
   const publishMutation = useMutation({
     mutationFn: () => publishAssistant(id!),
     onSuccess: () => {
-      notify('Assistant published', 'success')
+      notify('Agent published', 'success')
       setPublishOpen(false)
       void queryClient.invalidateQueries({ queryKey: queryKeys.assistants.detail(id) })
     },
@@ -122,236 +180,356 @@ export function AssistantStudioPage() {
   const deleteMutation = useMutation({
     mutationFn: () => deleteAssistant(id!),
     onSuccess: () => {
-      notify('Assistant deleted', 'success')
+      notify('Agent deleted', 'success')
       navigate('/assistants')
     },
-    onError: () => notify('Failed to delete assistant', 'error'),
-  })
-
-  const channelsQuery = useQuery({
-    queryKey: queryKeys.assistants.chatbots(id),
-    queryFn: () => listChatbots(1, 20, id),
-    enabled: !!id && tab === 'Channels',
-  })
-
-  const createChannelMutation = useMutation({
-    mutationFn: () => createChatbot({ name: `${assistant!.name} Widget`, assistantId: id!, voiceEnabled: false }),
-    onSuccess: (chatbot) => {
-      notify('Embeddable chatbot created', 'success')
-      void queryClient.invalidateQueries({ queryKey: queryKeys.assistants.chatbots(id) })
-      navigate(`/chatbots/${chatbot.id}`)
-    },
-    onError: () => notify('Failed to create chatbot', 'error'),
+    onError: () => notify('Failed to delete agent', 'error'),
   })
 
   if (query.isError) {
-    return <Box><Button component={RouterLink} to="/assistants" startIcon={<ArrowBackIcon />} size="small">AI Assistants</Button><ErrorState title="Unable to load assistant" description="The assistant details could not be retrieved." onRetry={() => void query.refetch()} /></Box>
-  }
-
-  if (query.isLoading || !assistant) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-        <CircularProgress />
+      <Box>
+        <Button component={RouterLink} to="/assistants" startIcon={<ArrowBackIcon />} size="small">Agents</Button>
+        <ErrorState title="Unable to load agent" description="The agent details could not be retrieved." onRetry={() => void query.refetch()} />
       </Box>
     )
   }
 
+  if (query.isLoading || !assistant) {
+    return (
+      <Stack spacing={2} role="status" aria-busy="true">
+        <Skeleton variant="text" width={240} height={40} />
+        <Skeleton variant="rounded" height={40} />
+        <Skeleton variant="rounded" height={160} />
+        <Skeleton variant="rounded" height={220} />
+      </Stack>
+    )
+  }
+
   const nextVersion = assistant.publishedVersion > 0 ? `${assistant.publishedVersion + 1}` : '1'
+  const statusLabel = assistant.publishStatus === 'Published'
+    ? `Published · v${assistant.publishedVersion}`
+    : assistant.publishStatus
+  const modelName = modelConfigurationId
+    ? activeModels.find((m) => m.id === modelConfigurationId)?.name ?? 'Custom model'
+    : 'Tenant default model'
+  const linkedKb = kbQuery.data?.items.find((kb) => kb.id === assistant.knowledgeBaseId)
+  const enabledToolCount = parseEnabledIds(assistant.tools).length
+  const placeholderCheck = describePromptPlaceholders(systemPrompt)
+
+  const testPane = (
+    <Paper
+      variant="outlined"
+      component="section"
+      aria-label="Test your agent"
+      sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+    >
+      <LivePreviewPane
+        assistantId={assistant.id}
+        title="Test your agent"
+        subtitle="As users will see it"
+        headerAction={(
+          <IconButton size="small" aria-label="Close test pane" onClick={toggleTest}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        )}
+      />
+    </Paper>
+  )
 
   return (
     <Box>
-      <Stack direction="row" sx={{ alignItems: 'center', mb: 2, gap: 1 }}>
-        <Button component={RouterLink} to="/assistants" startIcon={<ArrowBackIcon />} size="small">
-          AI Assistants
-        </Button>
-        <Box sx={{ flexGrow: 1 }} />
-        <Button color="error" onClick={() => setDeleteOpen(true)}>
-          Delete
-        </Button>
-        <Button variant="contained" disabled={hasUnsavedOverviewChanges} onClick={() => setPublishOpen(true)}>
-          Publish
-        </Button>
+      {/* Header: Copilot Studio's agent bar. */}
+      <Stack
+        direction={{ xs: 'column', md: 'row' }}
+        spacing={1.5}
+        sx={{ alignItems: { md: 'center' }, mb: 2 }}
+      >
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flex: 1, minWidth: 0 }}>
+          <Tooltip title="Back to Agents">
+            <IconButton component={RouterLink} to="/assistants" aria-label="Back to Agents" size="small">
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          {assistant.avatarUrl ? (
+            <Avatar src={assistant.avatarUrl} alt="" sx={{ width: 40, height: 40 }} />
+          ) : (
+            <Box sx={{ display: 'grid', placeItems: 'center', width: 40, height: 40, borderRadius: 2, flexShrink: 0, bgcolor: 'action.hover', color: 'primary.main' }}>
+              <SmartToyOutlined />
+            </Box>
+          )}
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h5" component="h1" noWrap title={assistant.name} sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+              {assistant.name}
+            </Typography>
+            <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', mt: 0.25 }}>
+              <Box
+                component="span"
+                aria-hidden
+                sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: assistant.publishStatus === 'Published' ? 'success.main' : 'text.disabled' }}
+              />
+              <Typography variant="caption" color="text.secondary">
+                {statusLabel} · {assistant.type}
+              </Typography>
+            </Stack>
+          </Box>
+        </Stack>
+        <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+          <Button
+            variant={testOpen ? 'contained' : 'outlined'}
+            color={testOpen ? 'secondary' : 'inherit'}
+            startIcon={<ChatOutlined />}
+            onClick={toggleTest}
+            aria-pressed={testOpen}
+          >
+            Test
+          </Button>
+          <Button variant="outlined" color="inherit" startIcon={<SettingsOutlined />} onClick={() => setSettingsOpen(true)}>
+            Settings
+          </Button>
+          <Tooltip title={hasUnsavedOverviewChanges ? 'Save your changes first, so the published version matches what you see' : ''}>
+            <span>
+              <Button variant="contained" disabled={hasUnsavedOverviewChanges} onClick={() => setPublishOpen(true)}>
+                Publish
+              </Button>
+            </span>
+          </Tooltip>
+        </Stack>
       </Stack>
-      {hasUnsavedOverviewChanges && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          Save your Overview changes before publishing so the published version matches what you see here.
-        </Alert>
+
+      <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Tabs
+            value={tab}
+            onChange={(_, v: StudioTab) => setTab(v)}
+            variant="scrollable"
+            scrollButtons="auto"
+            aria-label="Agent sections"
+            sx={{ mb: 2.5, borderBottom: 1, borderColor: 'divider' }}
+          >
+            {TABS.map((t) => <Tab key={t} label={t} value={t} />)}
+          </Tabs>
+
+          {tab === 'Overview' && (
+            <Stack spacing={2} sx={{ pb: hasUnsavedOverviewChanges ? 10 : 0 }}>
+              <SectionCard
+                title="Details"
+                description="Name, purpose and the model this agent runs on."
+                action={!editingDetails && <Button size="small" onClick={() => setEditingDetails(true)}>Edit</Button>}
+              >
+                {editingDetails ? (
+                  <Stack spacing={2}>
+                    <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth required error={!name.trim()} />
+                    <TextField select label="Type" value={type} onChange={(e) => setType(e.target.value as AssistantType)} fullWidth>
+                      {GENERATABLE_TYPES.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+                    </TextField>
+                    <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth multiline minRows={2} />
+                    <TextField
+                      select
+                      label="Model"
+                      value={modelConfigurationId}
+                      onChange={(e) => setModelConfigurationId(e.target.value)}
+                      fullWidth
+                      helperText="Leave on the tenant default to use whichever model is marked default."
+                      slotProps={{ inputLabel: { shrink: true }, select: { displayEmpty: true } }}
+                    >
+                      <MenuItem value="">Use tenant default</MenuItem>
+                      {activeModels.map((m) => (
+                        <MenuItem key={m.id} value={m.id}>{m.name} ({m.provider}){m.isDefault ? ' · Default' : ''}</MenuItem>
+                      ))}
+                    </TextField>
+                  </Stack>
+                ) : (
+                  <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '140px 1fr' }, rowGap: 1, columnGap: 2 }}>
+                    <Typography component="dt" variant="body2" color="text.secondary">Name</Typography>
+                    <Typography component="dd" variant="body2" sx={{ m: 0 }}>{name}</Typography>
+                    <Typography component="dt" variant="body2" color="text.secondary">Type</Typography>
+                    <Typography component="dd" variant="body2" sx={{ m: 0 }}>{type}</Typography>
+                    <Typography component="dt" variant="body2" color="text.secondary">Description</Typography>
+                    <Typography component="dd" variant="body2" sx={{ m: 0, color: description ? 'text.primary' : 'text.secondary' }}>
+                      {description || 'No description yet'}
+                    </Typography>
+                    <Typography component="dt" variant="body2" color="text.secondary">Model</Typography>
+                    <Typography component="dd" variant="body2" sx={{ m: 0 }}>{modelName}</Typography>
+                  </Box>
+                )}
+              </SectionCard>
+
+              <SectionCard
+                title="Instructions"
+                description="How the agent should behave, what it should and shouldn't do."
+                action={!editingInstructions && <Button size="small" onClick={() => setEditingInstructions(true)}>Edit</Button>}
+              >
+                {editingInstructions ? (
+                  <TextField
+                    label="Instructions"
+                    value={systemPrompt}
+                    onChange={(e) => setSystemPrompt(e.target.value)}
+                    fullWidth
+                    multiline
+                    minRows={8}
+                    autoFocus
+                    error={placeholderCheck.isWarning}
+                    helperText={`${systemPrompt.length.toLocaleString()} characters. ${placeholderCheck.message}`}
+                  />
+                ) : systemPrompt ? (
+                  <Box>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        whiteSpace: 'pre-wrap',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
+                        fontSize: 13,
+                        ...(instructionsExpanded ? {} : { display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }),
+                      }}
+                    >
+                      {systemPrompt}
+                    </Typography>
+                    {systemPrompt.split('\n').length > 6 || systemPrompt.length > 480 ? (
+                      <Button size="small" sx={{ mt: 1, px: 0 }} onClick={() => setInstructionsExpanded((v) => !v)}>
+                        {instructionsExpanded ? 'Show less' : 'Show more'}
+                      </Button>
+                    ) : null}
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No instructions yet. Tell the agent what it is for and how to answer.
+                  </Typography>
+                )}
+              </SectionCard>
+
+              <SectionCard
+                title="Knowledge"
+                description="Where the agent finds answers. It cites these sources."
+                action={<Button size="small" onClick={() => setTab('Knowledge')}>{assistant.knowledgeBaseId ? 'Change' : '+ Add knowledge'}</Button>}
+              >
+                {assistant.knowledgeBaseId ? (
+                  <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{linkedKb?.name ?? 'Linked knowledge base'}</Typography>
+                      {linkedKb && <Typography variant="caption" color="text.secondary">{linkedKb.documentCount} documents</Typography>}
+                    </Box>
+                    {linkedKb && <Chip label={linkedKb.status} size="small" variant="outlined" />}
+                  </Stack>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No knowledge yet. Add a knowledge base so the agent answers from your documents instead of general knowledge.
+                  </Typography>
+                )}
+              </SectionCard>
+
+              <SectionCard
+                title="Tools"
+                description="Actions the agent can take in your connected systems. Risky ones ask for confirmation or approval."
+                action={<Button size="small" onClick={() => setTab('Tools')}>{enabledToolCount > 0 ? 'Manage' : '+ Add tool'}</Button>}
+              >
+                <Typography variant="body2" color={enabledToolCount > 0 ? 'text.primary' : 'text.secondary'}>
+                  {enabledToolCount > 0
+                    ? `${enabledToolCount} tool${enabledToolCount === 1 ? '' : 's'} enabled.`
+                    : 'No tools yet. Without tools the agent can only answer questions.'}
+                </Typography>
+              </SectionCard>
+            </Stack>
+          )}
+
+          {tab === 'Knowledge' && (
+            <SectionCard title="Knowledge" description="An agent uses one knowledge base at a time.">
+              <KnowledgeTab assistant={assistant} />
+            </SectionCard>
+          )}
+
+          {tab === 'Tools' && <CapabilitiesTab assistantId={assistant.id} toolsJson={assistant.tools} />}
+
+          {tab === 'Channels' && <AgentChannelsTab assistant={assistant} />}
+
+          {tab === 'Analytics' && (
+            <SectionCard title="Analytics" description="Usage of this agent across every channel.">
+              <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '180px 1fr' }, rowGap: 1, columnGap: 2 }}>
+                <Typography component="dt" variant="body2" color="text.secondary">Conversations</Typography>
+                <Typography component="dd" variant="body2" sx={{ m: 0 }}>{assistant.usageCount.toLocaleString()}</Typography>
+                <Typography component="dt" variant="body2" color="text.secondary">Status</Typography>
+                <Typography component="dd" variant="body2" sx={{ m: 0 }}>{statusLabel}</Typography>
+                <Typography component="dt" variant="body2" color="text.secondary">Created</Typography>
+                <Typography component="dd" variant="body2" sx={{ m: 0 }}>{new Date(assistant.createdAt).toLocaleString()}</Typography>
+              </Box>
+              <Button component={RouterLink} to="/runs" size="small" sx={{ mt: 2, px: 0 }}>
+                See every run in Activity
+              </Button>
+            </SectionCard>
+          )}
+        </Box>
+
+        {paneDocked && testOpen && (
+          <Box
+            sx={{
+              width: TEST_PANE_WIDTH,
+              flexShrink: 0,
+              position: 'sticky',
+              top: 72,
+              height: 'calc(100dvh - 96px)',
+            }}
+          >
+            {testPane}
+          </Box>
+        )}
+      </Box>
+
+      {!paneDocked && (
+        <Drawer
+          anchor="right"
+          open={overlayTestOpen}
+          onClose={() => setOverlayTestOpen(false)}
+          slotProps={{ paper: { sx: { width: { xs: '100%', sm: 420 }, p: 1 } } }}
+        >
+          {testPane}
+        </Drawer>
       )}
 
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          {assistant.name}
-        </Typography>
-        <Chip
-          label={assistant.publishStatus}
-          size="small"
-          color={assistant.publishStatus === 'Published' ? 'success' : 'default'}
+      {hasUnsavedOverviewChanges && tab === 'Overview' && (
+        <Paper
+          elevation={6}
+          role="region"
+          aria-label="Unsaved changes"
+          sx={{
+            position: 'sticky',
+            bottom: 16,
+            mt: 2,
+            px: 2.5,
+            py: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            zIndex: 2,
+          }}
+        >
+          <Typography variant="body2" sx={{ flex: 1, fontWeight: 600 }}>You have unsaved changes</Typography>
+          <Button
+            color="inherit"
+            onClick={() => {
+              resetOverview(assistant)
+              setEditingDetails(false)
+              setEditingInstructions(false)
+            }}
+          >
+            Discard
+          </Button>
+          <Button variant="contained" disabled={saveOverview.isPending || !name.trim()} onClick={() => saveOverview.mutate()}>
+            {saveOverview.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </Paper>
+      )}
+
+      {settingsOpen && (
+        <AgentSettingsDrawer
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          assistant={assistant}
+          onDelete={() => {
+            setSettingsOpen(false)
+            setDeleteOpen(true)
+          }}
         />
-      </Stack>
-
-      <Tabs value={tab} onChange={(_, v: (typeof TABS)[number]) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
-        {TABS.map((t) => (
-          <Tab key={t} label={t} value={t} />
-        ))}
-      </Tabs>
-
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Paper variant="outlined" sx={{ p: 3, minHeight: 480 }}>
-            {tab === 'Overview' && (
-              <Stack spacing={2}>
-                <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth />
-                <TextField
-                  select
-                  label="Type"
-                  value={type}
-                  onChange={(e) => setType(e.target.value as AssistantType)}
-                  fullWidth
-                >
-                  {GENERATABLE_TYPES.map((t) => (
-                    <MenuItem key={t} value={t}>
-                      {t}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  label="Description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  fullWidth
-                  multiline
-                  minRows={2}
-                />
-                <TextField
-                  select
-                  label="Base Model"
-                  value={modelConfigurationId}
-                  onChange={(e) => setModelConfigurationId(e.target.value)}
-                  fullWidth
-                  helperText="Leave on tenant default to use whichever model is marked default."
-                  slotProps={{ inputLabel: { shrink: true }, select: { displayEmpty: true } }}
-                >
-                  <MenuItem value="">Use tenant default</MenuItem>
-                  {activeModels.map((m) => (
-                    <MenuItem key={m.id} value={m.id}>
-                      {m.name} ({m.provider}){m.isDefault ? ' · Default' : ''}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  label="Instructions"
-                  value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
-                  fullWidth
-                  multiline
-                  minRows={6}
-                  error={describePromptPlaceholders(systemPrompt).isWarning}
-                  helperText={`The system prompt that defines this assistant's behavior. ${describePromptPlaceholders(systemPrompt).message}`}
-                />
-                <Box>
-                  <Button
-                    variant="contained"
-                    disabled={saveOverview.isPending || !name.trim()}
-                    onClick={() => saveOverview.mutate()}
-                  >
-                    {saveOverview.isPending ? 'Saving…' : 'Save changes'}
-                  </Button>
-                </Box>
-              </Stack>
-            )}
-
-            {tab === 'Knowledge' && <KnowledgeTab assistant={assistant} />}
-
-            {tab === 'Capabilities' && <CapabilitiesTab assistantId={assistant.id} toolsJson={assistant.tools} />}
-
-            {tab === 'Behavior' && <BehaviorTab assistant={assistant} />}
-
-            {tab === 'Security' && (
-              <Stack spacing={2}>
-                <Typography variant="body2" color="text.secondary">
-                  Assistant-level security policy doesn't exist separately from the platform's
-                  tenant-wide policies — this assistant is governed by the same Tool Gateway
-                  authorization and audit rules as every other assistant.
-                </Typography>
-                <Typography variant="body2">
-                  Enabled tools for this assistant are shown on the Capabilities tab (under
-                  Advanced); each call still passes through server-side policy/authorization
-                  checks regardless of what's configured here.
-                </Typography>
-                <Button component={RouterLink} to="/security" variant="outlined" size="small" sx={{ alignSelf: 'flex-start' }}>
-                  Open Security & Policies
-                </Button>
-              </Stack>
-            )}
-
-            {tab === 'Channels' && (
-              <Stack spacing={2}>
-                <Typography variant="body2" color="text.secondary">
-                  Publish this assistant to an external channel by creating an embeddable chatbot
-                  backed by it — the chatbot's own detail page handles the widget embed code, an
-                  optional origin allowlist, and webhook access for other systems to call in.
-                </Typography>
-                {assistant.publishStatus !== 'Published' && (
-                  <Alert severity="warning" variant="outlined">
-                    This assistant isn't published yet — a linked chatbot won't be able to serve chat
-                    requests until you publish it.
-                  </Alert>
-                )}
-                {(channelsQuery.data?.items ?? []).map((cb) => (
-                  <Paper key={cb.id} variant="outlined" sx={{ p: 2 }}>
-                    <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {cb.name}
-                        </Typography>
-                        <Chip
-                          label={cb.status}
-                          size="small"
-                          color={cb.status === 'Active' ? 'success' : cb.status === 'Paused' ? 'warning' : 'default'}
-                        />
-                      </Stack>
-                      <Button component={RouterLink} to={`/chatbots/${cb.id}`} size="small">
-                        Manage
-                      </Button>
-                    </Stack>
-                  </Paper>
-                ))}
-                {channelsQuery.data?.items.length === 0 && (
-                  <Button
-                    variant="contained"
-                    sx={{ alignSelf: 'flex-start' }}
-                    disabled={createChannelMutation.isPending}
-                    onClick={() => createChannelMutation.mutate()}
-                  >
-                    {createChannelMutation.isPending ? 'Creating…' : 'Create embeddable chatbot'}
-                  </Button>
-                )}
-
-                <AssistantApiAccessSection assistant={assistant} />
-              </Stack>
-            )}
-
-            {tab === 'Analytics' && (
-              <Stack spacing={1.5}>
-                <Typography variant="body2">Used {assistant.usageCount} times</Typography>
-                <Typography variant="body2">Status: {assistant.publishStatus}</Typography>
-                {assistant.publishStatus === 'Published' && (
-                  <Typography variant="body2">Published version: {assistant.publishedVersion}</Typography>
-                )}
-                <Typography variant="body2" color="text.secondary">
-                  Created {new Date(assistant.createdAt).toLocaleString()}
-                </Typography>
-              </Stack>
-            )}
-          </Paper>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Paper variant="outlined" sx={{ height: 480, display: 'flex', flexDirection: 'column' }}>
-            <LivePreviewPane assistantId={assistant.id} />
-          </Paper>
-        </Grid>
-      </Grid>
+      )}
 
       <PublishChecklist
         open={publishOpen}
@@ -370,7 +548,7 @@ export function AssistantStudioPage() {
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onConfirm={() => deleteMutation.mutate()}
-        title="Delete Assistant"
+        title="Delete agent"
         message={`Delete "${assistant.name}"? This cannot be undone.`}
         isDeleting={deleteMutation.isPending}
       />
@@ -382,10 +560,7 @@ function KnowledgeTab({ assistant }: { assistant: AssistantDto }) {
   const navigate = useNavigate()
   const { notify } = useSnackbar()
   const queryClient = useQueryClient()
-  const kbQuery = useQuery({
-    queryKey: ['knowledgebases', 'all'],
-    queryFn: () => fetchJson<{ items: KnowledgeBaseDto[] }>('/knowledgebases?page=1&pageSize=100'),
-  })
+  const kbQuery = useQuery(knowledgeBasesQuery)
 
   const mutation = useMutation({
     mutationFn: (kbId: string | null) =>
@@ -404,10 +579,6 @@ function KnowledgeTab({ assistant }: { assistant: AssistantDto }) {
 
   return (
     <Stack spacing={1.5}>
-      <Typography variant="body2" color="text.secondary">
-        Knowledge available to this assistant. An assistant connects to one knowledge base at a
-        time today.
-      </Typography>
       {kbQuery.data?.items.length === 0 && (
         <EmptyState
           title="No knowledge bases yet"
@@ -434,7 +605,7 @@ function KnowledgeTab({ assistant }: { assistant: AssistantDto }) {
             checked={assistant.knowledgeBaseId === kb.id}
             size="small"
             disabled={mutation.isPending}
-            title={assistant.knowledgeBaseId === kb.id ? 'Click to remove this knowledge base' : undefined}
+            slotProps={{ input: { 'aria-label': `Use ${kb.name}` } }}
           />
           <Box sx={{ flexGrow: 1 }}>
             <Typography variant="body2">{kb.name}</Typography>
@@ -445,130 +616,6 @@ function KnowledgeTab({ assistant }: { assistant: AssistantDto }) {
           <Chip label={kb.status} size="small" variant="outlined" />
         </Stack>
       ))}
-    </Stack>
-  )
-}
-
-const RESPONSE_STYLES: NonNullable<BehaviorSettings['responseStyle']>[] = [
-  'Professional',
-  'Friendly',
-  'Concise',
-  'Detailed',
-]
-const ANSWER_LENGTHS: NonNullable<BehaviorSettings['answerLength']>[] = ['Brief', 'Balanced', 'Thorough']
-
-function BehaviorTab({ assistant }: { assistant: AssistantDto }) {
-  const { notify } = useSnackbar()
-  const queryClient = useQueryClient()
-  const [settings, setSettings] = useState<BehaviorSettings>({})
-  const [showAdvanced, setShowAdvanced] = useState(false)
-
-  useEffect(() => {
-    if (!assistant.settings) return
-    try {
-      setSettings(JSON.parse(assistant.settings) as BehaviorSettings)
-    } catch {
-      // malformed/legacy settings — start fresh rather than crash the tab
-    }
-  }, [assistant.settings])
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      updateAssistant(assistant.id, buildFullUpdatePayload(assistant, { settings: JSON.stringify(settings) })),
-    onSuccess: () => {
-      notify('Behavior settings saved', 'success')
-      void queryClient.invalidateQueries({ queryKey: queryKeys.assistants.detail(assistant.id) })
-    },
-    onError: () => notify('Failed to save settings', 'error'),
-  })
-
-  return (
-    <Stack spacing={2}>
-      <TextField
-        select
-        label="Response style"
-        value={settings.responseStyle ?? 'Professional'}
-        onChange={(e) => setSettings((s) => ({ ...s, responseStyle: e.target.value as BehaviorSettings['responseStyle'] }))}
-      >
-        {RESPONSE_STYLES.map((v) => (
-          <MenuItem key={v} value={v}>
-            {v}
-          </MenuItem>
-        ))}
-      </TextField>
-      <TextField
-        select
-        label="Answer length"
-        value={settings.answerLength ?? 'Balanced'}
-        onChange={(e) => setSettings((s) => ({ ...s, answerLength: e.target.value as BehaviorSettings['answerLength'] }))}
-      >
-        {ANSWER_LENGTHS.map((v) => (
-          <MenuItem key={v} value={v}>
-            {v}
-          </MenuItem>
-        ))}
-      </TextField>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Switch
-          checked={settings.citationsEnabled ?? true}
-          onChange={(e) => setSettings((s) => ({ ...s, citationsEnabled: e.target.checked }))}
-        />
-        <Typography variant="body2">Citations enabled</Typography>
-      </Stack>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-        <Switch
-          checked={settings.askClarification ?? true}
-          onChange={(e) => setSettings((s) => ({ ...s, askClarification: e.target.checked }))}
-        />
-        <Typography variant="body2">Ask clarifying questions</Typography>
-      </Stack>
-
-      {assistant.knowledgeBaseId && (
-        <Box>
-          <TextField
-            select
-            fullWidth
-            label="Knowledge retrieval"
-            value={settings.retrievalMode ?? 'Standard'}
-            onChange={(e) => setSettings((s) => ({ ...s, retrievalMode: e.target.value as BehaviorSettings['retrievalMode'] }))}
-          >
-            <MenuItem value="Standard">Standard — one search, fastest</MenuItem>
-            <MenuItem value="Agentic">Agentic — retries with a rewritten query if the first search is weak</MenuItem>
-          </TextField>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-            {settings.retrievalMode === 'Agentic'
-              ? "Adds up to one extra search (a rewritten query) when the first pass doesn't find a confident match, and tells the assistant to say so rather than guess if it still can't find one. Slightly slower on questions that need the retry."
-              : 'A single knowledge base search per message. Switch to Agentic for questions that often need a differently-worded search to find the right answer.'}
-          </Typography>
-        </Box>
-      )}
-
-      <Button size="small" onClick={() => setShowAdvanced((v) => !v)} sx={{ alignSelf: 'flex-start' }}>
-        {showAdvanced ? 'Hide advanced' : 'Advanced settings ▸'}
-      </Button>
-      {showAdvanced && (
-        <Stack spacing={2}>
-          <TextField
-            label="Temperature"
-            type="number"
-            slotProps={{ htmlInput: { step: 0.1, min: 0, max: 2 } }}
-            value={settings.temperature ?? 0.7}
-            onChange={(e) => setSettings((s) => ({ ...s, temperature: Number(e.target.value) }))}
-          />
-          <TextField
-            label="Maximum output tokens"
-            type="number"
-            value={settings.maxOutputTokens ?? 2048}
-            onChange={(e) => setSettings((s) => ({ ...s, maxOutputTokens: Number(e.target.value) }))}
-          />
-        </Stack>
-      )}
-
-      <Box>
-        <Button variant="contained" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-          {mutation.isPending ? 'Saving…' : 'Save changes'}
-        </Button>
-      </Box>
     </Stack>
   )
 }

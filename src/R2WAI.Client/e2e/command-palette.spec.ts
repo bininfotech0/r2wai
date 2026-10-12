@@ -4,7 +4,7 @@ import { loginAsAdmin } from './fixtures/auth'
 test.describe('Command palette & shortcuts', () => {
   test('Ctrl+K opens the palette, an action command runs, and a nav command navigates', async ({ page }) => {
     await loginAsAdmin(page)
-    await expect(page.getByRole('button', { name: /Search assistants/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Search agents/ })).toBeVisible()
 
     await page.keyboard.press('Control+K')
     const dialog = page.getByRole('dialog')
@@ -16,14 +16,14 @@ test.describe('Command palette & shortcuts', () => {
 
     // Nav command.
     await page.keyboard.press('Control+K')
-    await page.getByPlaceholder(/Search assistants/).fill('Settings')
+    await page.getByPlaceholder(/Search agents/).fill('Settings')
     await page.getByRole('option', { name: 'Settings', exact: true }).click()
     await expect(page).toHaveURL(/\/settings$/)
   })
 
   test('? opens the keyboard shortcuts help', async ({ page }) => {
     await loginAsAdmin(page)
-    await expect(page.getByRole('button', { name: /Search assistants/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Search agents/ })).toBeVisible()
 
     await page.locator('body').press('?')
     await expect(page.getByRole('heading', { name: 'Keyboard shortcuts' })).toBeVisible()

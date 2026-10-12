@@ -22,7 +22,7 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
             // existing user meaningfully from day one instead of leaving them all at "unknown, so
             // treat as not overdue" indefinitely.
             migrationBuilder.Sql(
-                """UPDATE "Users" SET "PasswordChangedAt" = "CreatedAt" WHERE "PasswordChangedAt" IS NULL AND "PasswordHash" IS NOT NULL""");
+                """UPDATE "Users" SET "PasswordChangedAt" = "CreatedAt" WHERE "PasswordChangedAt" IS NULL AND "PasswordHash" IS NOT NULL;""");
         }
 
         /// <inheritdoc />

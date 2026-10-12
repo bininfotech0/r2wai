@@ -1,9 +1,10 @@
 import { useState, type MouseEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Box, Button, Menu, MenuItem, Stack, Tab, Tabs, Typography } from '@mui/material'
+import { Box, Button, Menu, MenuItem, Stack, Tab, Tabs } from '@mui/material'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import ScienceOutlined from '@mui/icons-material/ScienceOutlined'
 import { OverviewTab } from '../components/OverviewTab'
+import { PlatformOverview } from '../../dashboard/components/PlatformOverview'
 import { ErrorsTab } from '../components/ErrorsTab'
 import { AiOperationsTab } from '../components/AiOperationsTab'
 import { AuditLogsTab } from '../components/AuditLogsTab'
@@ -11,6 +12,7 @@ import { ReportsTab } from '../components/ReportsTab'
 import { UsageAnalyticsTab } from '../components/UsageAnalyticsTab'
 import { TestCasesTab } from '../components/TestCasesTab'
 import { TestHistoryTab } from '../components/TestHistoryTab'
+import { PageHeader } from '../../../components/PageHeader'
 
 // Ops monitoring — what an admin checks day to day for platform health.
 const PRIMARY_TABS = [
@@ -64,14 +66,7 @@ export function MonitorPage() {
 
   return (
     <Box>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          Monitor
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Platform health, errors, AI usage, and the audit trail.
-        </Typography>
-      </Box>
+      <PageHeader title="Monitor" description="Platform health, errors, AI usage, and the audit trail." />
 
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Tabs
@@ -105,7 +100,12 @@ export function MonitorPage() {
         </Menu>
       </Stack>
 
-      {tab === 'overview' && <OverviewTab />}
+      {tab === 'overview' && (
+        <>
+          <PlatformOverview />
+          <OverviewTab />
+        </>
+      )}
       {tab === 'errors' && <ErrorsTab />}
       {tab === 'ai' && <AiOperationsTab />}
       {tab === 'audit' && (

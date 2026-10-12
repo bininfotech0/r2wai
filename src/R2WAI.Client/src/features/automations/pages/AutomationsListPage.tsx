@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Box, Button, Chip, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import AccountTreeOutlined from '@mui/icons-material/AccountTreeOutlined'
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined'
@@ -15,6 +15,7 @@ import { listWorkflows } from '../api'
 import { CreateAutomationDialog } from '../dialogs/CreateAutomationDialog'
 import type { WorkflowDto } from '../types'
 import type { MetricsDto } from '../../dashboard/types'
+import { PageHeader } from '../../../components/PageHeader'
 
 export function AutomationsListPage() {
   const navigate = useNavigate()
@@ -54,23 +55,15 @@ export function AutomationsListPage() {
 
   return (
     <Box>
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={1.5}
-        sx={{ alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', mb: 2 }}
-      >
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Automations
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Automate repeatable work across your enterprise systems.
-          </Typography>
-        </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)} sx={{ alignSelf: { xs: 'flex-start', sm: 'auto' } }}>
-          New Automation
-        </Button>
-      </Stack>
+      <PageHeader
+        title="Automations"
+        description="Automate repeatable work across your enterprise systems."
+        actions={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+            New Automation
+          </Button>
+        }
+      />
 
       {metricsQuery.isError ? (
         <Alert

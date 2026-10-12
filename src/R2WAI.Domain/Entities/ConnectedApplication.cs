@@ -9,9 +9,10 @@ namespace R2WAI.Domain.Entities;
 /// Class name is <c>ConnectedApplication</c> because the simple name <c>Application</c> is shadowed by the
 /// <c>R2WAI.Application</c> namespace everywhere in the <c>R2WAI.*</c> tree (see ADR-0001).
 /// </summary>
-public sealed class ConnectedApplication : BaseEntity<Guid>
+public sealed class ConnectedApplication : BaseEntity<Guid>, IWorkspaceScoped
 {
     public Guid TenantId { get; private set; }
+    public Guid? WorkspaceId { get; private set; }
     /// <summary>
     /// Optional organisational classification. A connected system is a first-class integration
     /// target and must be creatable without any organisational container existing first, so this
@@ -119,5 +120,11 @@ public sealed class ConnectedApplication : BaseEntity<Guid>
     {
         if (Status == ApplicationStatus.Archived)
             throw new InvalidOperationException("Archived applications cannot be modified.");
+    }
+
+    public void MoveToWorkspace(Guid workspaceId)
+    {
+        WorkspaceId = workspaceId;
+        MarkAsModified();
     }
 }

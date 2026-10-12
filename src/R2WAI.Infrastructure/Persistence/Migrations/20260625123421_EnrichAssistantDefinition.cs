@@ -58,7 +58,7 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                 columns: new[] { "TenantId", "PublishStatus" });
 
             migrationBuilder.Sql(
-                """UPDATE "AssistantDefinitions" SET "PublishStatus" = 'Published', "PublishedVersion" = 1, "PublishedAt" = NOW() WHERE "IsActive" = true""");
+                """UPDATE "AssistantDefinitions" SET "PublishStatus" = 'Published', "PublishedVersion" = 1, "PublishedAt" = NOW() WHERE "IsActive" = true;""");
         }
 
         /// <inheritdoc />

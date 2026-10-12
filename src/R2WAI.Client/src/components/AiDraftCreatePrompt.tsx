@@ -38,6 +38,7 @@ export function AiDraftCreatePrompt({
         multiline
         minRows={3}
         placeholder={placeholder}
+        slotProps={{ htmlInput: { 'aria-label': 'Describe what to create' } }}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         fullWidth

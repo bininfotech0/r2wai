@@ -8,10 +8,6 @@ export function listMcpConnections() {
   return fetchJson<McpConnectionDto[]>('/mcp-connections')
 }
 
-export function getMcpConnection(id: string) {
-  return fetchJson<McpConnectionDto>(`/mcp-connections/${id}`)
-}
-
 export function createMcpConnection(input: McpConnectionInput) {
   return postJson<McpConnectionDto>('/mcp-connections', input)
 }

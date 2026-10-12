@@ -47,7 +47,7 @@ export function ApplicationsPage() {
       notify('Connected system added', 'success')
       setCreateOpen(false)
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEY] })
-      navigate(`/workspaces/${app.id}`)
+      navigate(`/connections/${app.id}`)
     },
     onError: (error) => notify(apiErrorMessage(error, 'Failed to add connected system'), 'error'),
   })
@@ -104,7 +104,7 @@ export function ApplicationsPage() {
             onAction={search ? undefined : () => setCreateOpen(true)}
           />
         }
-        onRowClick={(id) => navigate(`/workspaces/${id}`)}
+        onRowClick={(id) => navigate(`/connections/${id}`)}
       />
 
       <CreateApplicationDialog

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Box, Button, Stack, Typography } from '@mui/material'
+import { Box, Button } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
 import type { GridColDef } from '@mui/x-data-grid'
@@ -11,6 +11,7 @@ import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { createChatbot, listChatbots } from '../api'
 import { CreateChatbotDialog } from '../dialogs/CreateChatbotDialog'
 import type { ChatbotDto } from '../types'
+import { PageHeader } from '../../../components/PageHeader'
 
 const QUERY_KEY = 'chatbots'
 
@@ -84,26 +85,22 @@ export function ChatbotsPage() {
 
   return (
     <Box>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', mb: 2 }}>
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Publish
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Embeddable chat surfaces for assistants — publishable to a website via a script tag.
-          </Typography>
-        </Box>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          {/* Distribution lives under Chatbots rather than in its own nav section, so this is
-              the one door to the cross-chatbot overview. */}
-          <Button sx={{ width: { xs: '100%', sm: 'auto' } }} variant="outlined" startIcon={<RocketLaunchIcon />} onClick={() => navigate('/deploy')}>
-            Deployment overview
-          </Button>
-          <Button sx={{ width: { xs: '100%', sm: 'auto' } }} variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-            New Chatbot
-          </Button>
-        </Stack>
-      </Stack>
+      <PageHeader
+        title="Publish"
+        description="Embeddable chat surfaces for assistants — publishable to a website via a script tag."
+        actions={
+          <>
+            {/* Distribution lives under Chatbots rather than in its own nav section, so this is
+                the one door to the cross-chatbot overview. */}
+            <Button variant="outlined" startIcon={<RocketLaunchIcon />} onClick={() => navigate('/deploy')}>
+              Deployment overview
+            </Button>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+              New Chatbot
+            </Button>
+          </>
+        }
+      />
 
       <DataTable
         rows={query.data?.items ?? []}

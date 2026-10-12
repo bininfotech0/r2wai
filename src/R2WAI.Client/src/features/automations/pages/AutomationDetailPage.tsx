@@ -203,7 +203,7 @@ export function AutomationDetailPage() {
       </Stack>
 
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
+        <Typography variant="h4" component="h1" sx={{ fontSize: { xs: '1.55rem', sm: '1.85rem', lg: '2.1rem' }, fontWeight: 750, letterSpacing: '-0.035em', lineHeight: 1.15, overflowWrap: 'anywhere' }}>
           {workflow.name}
         </Typography>
         <Chip

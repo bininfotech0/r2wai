@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Box, Button, Chip, Grid, Paper, Stack, Tab, Tabs, Typography } from '@mui/material'
-import CodeIcon from '@mui/icons-material/Code'
 import KeyOutlined from '@mui/icons-material/KeyOutlined'
 import WebhookOutlined from '@mui/icons-material/WebhookOutlined'
 import InfoOutlined from '@mui/icons-material/InfoOutlined'
 import { CodeSnippet } from '../../../components/CodeSnippet'
 import { DeveloperTab } from '../../settings/components/DeveloperTab'
+import { PageHeader } from '../../../components/PageHeader'
 
 /**
  * Developer hub.
@@ -65,17 +65,7 @@ const { reply } = await res.json()`
 
   return (
     <Box>
-      <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mb: 2 }}>
-        <CodeIcon color="primary" />
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Developer
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Authenticate with an API key, call the REST API, and receive inbound webhooks.
-          </Typography>
-        </Box>
-      </Stack>
+      <PageHeader title="Developer" description="Authenticate with an API key, call the REST API, and receive inbound webhooks." />
 
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { xs: 'stretch', sm: 'baseline' }, mb: 1 }}>

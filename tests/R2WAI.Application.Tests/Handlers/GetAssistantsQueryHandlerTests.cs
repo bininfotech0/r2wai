@@ -35,7 +35,7 @@ public class GetAssistantsQueryHandlerTests
     }
 
     private GetAssistantsQueryHandler CreateHandler() =>
-        new(_repoMock.Object, _currentUserMock.Object, _cacheMock.Object, _mapper);
+        new(_repoMock.Object, _currentUserMock.Object, Mock.Of<IWorkspaceContext>(), _cacheMock.Object, _mapper);
 
     private AssistantDefinition Assistant(string name, PublishStatus status, int usageCount, DateTime createdAt)
     {

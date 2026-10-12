@@ -79,7 +79,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
 
         if (!string.IsNullOrEmpty(kb.VectorCollectionName))
         {
-            try { await _vectorStore.DeleteCollectionAsync(kb.VectorCollectionName, ct); }
+            try { await _vectorStore.DeleteCollectionAsync(kb.TenantId, kb.VectorCollectionName, ct); }
             catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete vector collection {Collection}", kb.VectorCollectionName); }
         }
 
@@ -135,7 +135,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
                     // see DeterministicChunkId. Without this the old chunk count has to go first,
                     // because a source that got shorter leaves stale high-index chunks behind that
                     // the upsert can no longer overwrite.
-                    await DeleteSourceVectorsQuietlyAsync(kb.VectorCollectionName, source.Id, indexingCts.Token);
+                    await DeleteSourceVectorsQuietlyAsync(kb.TenantId, kb.VectorCollectionName, source.Id, indexingCts.Token);
 
                     var embeddings = await _aiService.GenerateEmbeddingsAsync(chunks, indexingCts.Token);
                     var vectors = new List<(Guid Id, float[] Vector, Dictionary<string, object> Payload)>();
@@ -160,7 +160,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
 
                     if (vectors.Count > 0)
                     {
-                        await _vectorStore.UpsertVectorsAsync(kb.VectorCollectionName, vectors, indexingCts.Token);
+                        await _vectorStore.UpsertVectorsAsync(kb.TenantId, kb.VectorCollectionName, vectors, indexingCts.Token);
                         _logger.LogInformation("Indexed {ChunkCount} chunks from source {SourceId} into {Collection}",
                             vectors.Count, source.Id, kb.VectorCollectionName);
                     }
@@ -244,7 +244,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
 
         if (!string.IsNullOrEmpty(kb.VectorCollectionName))
         {
-            await DeleteSourceVectorsQuietlyAsync(kb.VectorCollectionName, id, ct);
+            await DeleteSourceVectorsQuietlyAsync(kb.TenantId, kb.VectorCollectionName, id, ct);
         }
 
         _context.KnowledgeBaseSources.Remove(source);
@@ -257,11 +257,11 @@ public class KnowledgeBaseService : IKnowledgeBaseService
     /// swallow-everything shape that let orphaned vectors accumulate unnoticed for so long, so it is
     /// deliberately confined to one place where it is at least logged at Warning with the source id.
     /// </summary>
-    private async Task DeleteSourceVectorsQuietlyAsync(string collectionName, Guid sourceId, CancellationToken ct)
+    private async Task DeleteSourceVectorsQuietlyAsync(Guid tenantId, string collectionName, Guid sourceId, CancellationToken ct)
     {
         try
         {
-            await _vectorStore.DeleteVectorsBySourceAsync(collectionName, sourceId, ct);
+            await _vectorStore.DeleteVectorsBySourceAsync(tenantId, collectionName, sourceId, ct);
         }
         catch (Exception ex)
         {
@@ -328,7 +328,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
 
                 var queryVector = await _aiService.GenerateEmbeddingAsync(query, ct);
                 var searchResults = await _vectorStore.HybridSearchAsync(
-                    kb.VectorCollectionName, [.. queryVector], query, pageSize, 0.7f, minRelevance, ct);
+                    kb.TenantId, kb.VectorCollectionName, [.. queryVector], query, pageSize, 0.7f, minRelevance, ct);
 
                 results.AddRange(searchResults.Select(r => new SearchResultDto
                 {

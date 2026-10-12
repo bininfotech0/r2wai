@@ -253,7 +253,7 @@ function ChannelTile({
         </Typography>
       )}
       {note && (
-        <Typography variant="caption" color="text.disabled" sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
           {note}
         </Typography>
       )}

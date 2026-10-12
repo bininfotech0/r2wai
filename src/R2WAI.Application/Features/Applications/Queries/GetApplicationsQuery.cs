@@ -11,6 +11,7 @@ public record GetApplicationsQuery : IRequest<PagedResult<ApplicationDto>>
 public class GetApplicationsQueryHandler(
     IRepository<ConnectedApplication> applicationRepo,
     ICurrentUserService currentUser,
+    IWorkspaceContext workspace,
     IMapper mapper) : IRequestHandler<GetApplicationsQuery, PagedResult<ApplicationDto>>
 {
     public async Task<PagedResult<ApplicationDto>> Handle(GetApplicationsQuery query, CancellationToken cancellationToken)
@@ -18,9 +19,11 @@ public class GetApplicationsQueryHandler(
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
 
         var searchTerm = query.Search?.ToLower();
+        var workspaceId = workspace.WorkspaceId;
         var filtered = await applicationRepo.FindAsync(
             a => a.TenantId == tenantId && !a.IsDeleted
               && (!query.DepartmentId.HasValue || a.DepartmentId == query.DepartmentId)
+              && (workspaceId == null || a.WorkspaceId == workspaceId)
               && (string.IsNullOrEmpty(searchTerm)
                   || a.Name.ToLower().Contains(searchTerm)
                   || a.Code.ToLower().Contains(searchTerm)),

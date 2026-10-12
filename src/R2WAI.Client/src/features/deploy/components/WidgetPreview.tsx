@@ -107,7 +107,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
             </Box>
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography noWrap sx={{ fontSize: 15, lineHeight: 1.25, fontWeight: 650 }}>{title}</Typography>
-              <Typography sx={{ mt: 0.4, color: 'rgba(255,255,255,.82)', fontSize: 11.5, lineHeight: 1 }}>AI assistant</Typography>
+              <Typography sx={{ mt: 0.4, color: 'rgba(255,255,255,.82)', fontSize: 12, lineHeight: 1 }}>AI assistant</Typography>
             </Box>
             <IconButton
               onClick={() => setOpen(false)}
@@ -160,7 +160,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
             ))}
             {suggestedQuestions.length > 0 && messages.length <= 1 && (
               <Stack spacing={0.875} sx={{ alignSelf: 'flex-start', maxWidth: '94%', mt: 0.5 }}>
-                <Typography sx={{ ml: 0.4, color: '#8b93a1', fontSize: 9.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+                <Typography sx={{ ml: 0.4, color: '#6b7280', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}>
                   Suggested questions
                 </Typography>
                 {suggestedQuestions.map((q) => (
@@ -201,6 +201,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
               maxRows={3}
               value={draft}
               placeholder="Type a message…"
+              slotProps={{ htmlInput: { 'aria-label': 'Message' } }}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -208,7 +209,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
                   send(draft)
                 }
               }}
-              sx={{ flex: 1, '& .MuiInputBase-root': { fontSize: 13.5, lineHeight: 1.5 }, '& .MuiInputBase-input': { py: '2px', color: '#202431' }, '& .MuiInputBase-input::placeholder': { color: '#98a0ae', opacity: 1 } }}
+              sx={{ flex: 1, '& .MuiInputBase-root': { fontSize: 13.5, lineHeight: 1.5 }, '& .MuiInputBase-input': { py: '2px', color: '#202431' }, '& .MuiInputBase-input::placeholder': { color: '#6b7280', opacity: 1 } }}
             />
             <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
               <Stack direction="row" spacing={0.5}>
@@ -230,7 +231,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
               </Box>
             </Stack>
             </Stack>
-            <Typography sx={{ pt: 1, color: '#a0a6b2', textAlign: 'center', fontSize: 10.5, lineHeight: 1.3 }}>
+            <Typography sx={{ pt: 1, color: '#6b7280', textAlign: 'center', fontSize: 12, lineHeight: 1.3 }}>
               Enter to send · Shift + Enter for a new line
             </Typography>
           </Box>

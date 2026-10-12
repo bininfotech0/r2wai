@@ -32,11 +32,6 @@ export function getToolCall(id: string) {
   return fetchJson<ToolCallDetailDto>(`/runs/tool-calls/${id}`)
 }
 
-export function listWorkflowInstances(page: number, pageSize: number) {
-  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
-  return fetchJson<PagedResult<WorkflowInstanceDto>>(`/workflows/instances?${params.toString()}`)
-}
-
 export function getWorkflowInstance(id: string) {
   return fetchJson<WorkflowInstanceDto>(`/workflows/instances/${id}`)
 }

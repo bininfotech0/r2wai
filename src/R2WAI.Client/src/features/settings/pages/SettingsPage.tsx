@@ -9,6 +9,7 @@ import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { ErrorState } from '../../../components/ErrorState'
 import { getSettings, parseFeatureFlags, parseLimits, updateFeatureFlags, updateLimits, updateOrganizationDetails } from '../api'
 import type { TenantFeatureFlags, TenantLimits } from '../types'
+import { PageHeader } from '../../../components/PageHeader'
 
 // API keys and webhooks live on the API & SDK page and AI models have their own Settings entry,
 // so this page keeps only what is edited nowhere else.
@@ -101,14 +102,7 @@ export function SettingsPage() {
 
   return (
     <Box>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          Settings
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Organization details, enabled features, and usage limits.
-        </Typography>
-      </Box>
+      <PageHeader title="Settings" description="Organization details, enabled features, and usage limits." />
 
       <Tabs value={category} onChange={(_, v) => setCategory(v)} variant="scrollable" scrollButtons="auto" sx={{ mb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
         {CATEGORIES.map(({ label, icon }) => (

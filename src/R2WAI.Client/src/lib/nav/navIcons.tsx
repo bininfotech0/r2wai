@@ -22,6 +22,8 @@ import RocketLaunchOutlined from '@mui/icons-material/RocketLaunchOutlined'
 import LanguageOutlined from '@mui/icons-material/LanguageOutlined'
 import CodeOutlined from '@mui/icons-material/CodeOutlined'
 import CorporateFareOutlined from '@mui/icons-material/CorporateFareOutlined'
+import WorkspacesOutlined from '@mui/icons-material/WorkspacesOutlined'
+import MoreHorizOutlined from '@mui/icons-material/MoreHorizOutlined'
 
 const ICONS: Record<string, SvgIconComponent> = {
   Apps: AppsOutlined,
@@ -47,6 +49,8 @@ const ICONS: Record<string, SvgIconComponent> = {
   Person: PersonOutlined,
   Home: SpaceDashboardOutlined,
   CorporateFare: CorporateFareOutlined,
+  Workspaces: WorkspacesOutlined,
+  More: MoreHorizOutlined,
 }
 
 export function getNavIcon(name: string): SvgIconComponent {

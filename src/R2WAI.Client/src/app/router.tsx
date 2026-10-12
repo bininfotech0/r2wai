@@ -64,15 +64,16 @@ export const router = createBrowserRouter([
               // so this route is what makes that link resolve rather than 404. It composes the
               // existing settings DeveloperTab for keys/webhooks instead of duplicating the forms.
               { path: '/developer', lazy: lazyPage(() => import('../features/developer/pages/DeveloperPage').then((m) => ({ default: m.DeveloperPage }))) },
-              { path: '/workspaces', lazy: lazyPage(() => import('../features/applications/pages/ApplicationsPage').then((m) => ({ default: m.ApplicationsPage }))) },
-              { path: '/workspaces/:id', lazy: lazyPage(() => import('../features/applications/pages/ApplicationWorkspacePage').then((m) => ({ default: m.ApplicationWorkspacePage }))) },
-              { path: '/connections', element: <LegacyRedirect to={() => '/workspaces'} /> },
-              { path: '/connections/:id', element: <LegacyRedirect to={({ id }) => `/workspaces/${id}`} /> },
+              { path: '/workspaces', lazy: lazyPage(() => import('../features/workspaces/pages/WorkspacesPage').then((m) => ({ default: m.WorkspacesPage }))) },
+              // Connected systems lived at /workspaces/:id before workspaces became real containers.
+              { path: '/workspaces/:id', element: <LegacyRedirect to={({ id }) => `/connections/${id}`} /> },
+              { path: '/connections', lazy: lazyPage(() => import('../features/applications/pages/ApplicationsPage').then((m) => ({ default: m.ApplicationsPage }))) },
+              { path: '/connections/:id', lazy: lazyPage(() => import('../features/applications/pages/ApplicationWorkspacePage').then((m) => ({ default: m.ApplicationWorkspacePage }))) },
               // Back-compat for the pre-rename "Application" URLs (bookmarks, stale links). Route path
               // stays /workspaces even though the UI label is now "Connected Systems" (see roleNav.ts) —
               // "Workspace" was redefined to mean the bigger Assistant/Capability container, so this
               // page — always just ConnectedApplication under the hood — moved off that word, not the URL.
-              { path: '/applications', element: <Navigate to="/workspaces" replace /> },
+              { path: '/applications', element: <Navigate to="/connections" replace /> },
               { path: '/applications/:id', lazy: lazyPage(() => import('./ApplicationRedirect').then((m) => ({ default: m.ApplicationRedirect }))) },
               { path: '/runs', lazy: lazyPage(() => import('../features/runs/pages/RunsPage').then((m) => ({ default: m.RunsPage }))) },
               { path: '/activity', element: <LegacyRedirect to={() => '/runs'} /> },

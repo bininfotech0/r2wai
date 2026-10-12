@@ -192,7 +192,7 @@ export function ChatbotDetailPage() {
       </Stack>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', mb: 2 }}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+          <Typography variant="h4" component="h1" sx={{ fontSize: { xs: '1.55rem', sm: '1.85rem', lg: '2.1rem' }, fontWeight: 750, letterSpacing: '-0.035em', lineHeight: 1.15, overflowWrap: 'anywhere' }}>
             {chatbot.name}
           </Typography>
           <Chip label={chatbot.status} size="small" color={STATUS_COLOR[chatbot.status] ?? 'default'} variant="outlined" />

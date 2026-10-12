@@ -163,27 +163,4 @@ public sealed class User : BaseEntity<Guid>
             UserRoles.Add(new UserRole(Id, roleId));
         MarkAsModified();
     }
-
-    public bool HasPermission(Permission permission)
-    {
-        if (UserRoles is null || UserRoles.Count == 0)
-            return false;
-
-        return UserRoles
-            .Where(ur => ur.Role is not null)
-            .Select(ur => ur.Role!.Permissions)
-            .Any(permissions => !string.IsNullOrEmpty(permissions) &&
-                ParsePermissions(permissions).HasFlag(permission));
-    }
-
-    private static Permission ParsePermissions(string permissions)
-    {
-        var result = Permission.None;
-        foreach (var part in permissions.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-        {
-            if (Enum.TryParse<Permission>(part, ignoreCase: true, out var parsed))
-                result |= parsed;
-        }
-        return result;
-    }
 }

@@ -164,6 +164,7 @@ export function CopilotPanel({ open, onClose }: CopilotPanelProps) {
               fullWidth
               size="small"
               placeholder="Ask something…"
+              slotProps={{ htmlInput: { 'aria-label': 'Message' } }}
               value={input}
               disabled={busy}
               onChange={(e) => setInput(e.target.value)}

@@ -35,6 +35,7 @@ import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { getAuthStatus, listPolicies, upsertPolicy } from '../api'
 import { EditPolicyDialog } from '../dialogs/EditPolicyDialog'
 import { POLICY_TYPES, type GlobalPolicyDto, type PolicyType } from '../types'
+import { PageHeader } from '../../../components/PageHeader'
 
 const NAV_PERSONA_BY_ROLE: Record<string, string> = { SystemAdmin: 'Super Admin', Admin: 'Admin', User: 'User' }
 
@@ -116,14 +117,7 @@ export function SecurityPolicyCenterPage() {
 
   return (
     <Box>
-      <Stack sx={{ mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          Security & Policies
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Review authentication, permissions, and data protection.
-        </Typography>
-      </Stack>
+      <PageHeader title="Security & Policies" description="Review authentication, permissions, and data protection." />
 
       {failedQueries.length > 0 && (
         <Alert

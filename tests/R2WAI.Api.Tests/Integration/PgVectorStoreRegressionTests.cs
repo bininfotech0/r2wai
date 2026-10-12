@@ -163,16 +163,16 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         await WithStoreAsync(async store =>
         {
             await store.CreateCollectionAsync(collection, 3);
-            await store.UpsertVectorsAsync(collection, BuildChunks(sourceId, "sourceId", 5));
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(sourceId, "sourceId", 5));
             Assert.Equal(5, await CountAsync(collection));
 
             // Same ids, changed content: exactly what a re-index produces.
-            await store.UpsertVectorsAsync(collection,
+            await store.UpsertVectorsAsync(TenantId, collection,
                 BuildChunks(sourceId, "sourceId", 5, suffix: "re-indexed "));
 
             Assert.Equal(5, await CountAsync(collection));
 
-            var rows = await store.SearchVectorsAsync(collection, [1f, 0f, 0f], 100);
+            var rows = await store.SearchVectorsAsync(TenantId, collection, [1f, 0f, 0f], 100);
             Assert.Equal(5, rows.Count);
             Assert.All(rows, r => Assert.StartsWith("re-indexed ", PayloadText(r, "content")));
         });
@@ -190,8 +190,8 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         await WithStoreAsync(async store =>
         {
             await store.CreateCollectionAsync(collection, 3);
-            await store.UpsertVectorsAsync(collection, BuildChunks(Guid.NewGuid(), "sourceId", 3));
-            await store.UpsertVectorsAsync(collection, BuildChunks(Guid.NewGuid(), "sourceId", 3));
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(Guid.NewGuid(), "sourceId", 3));
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(Guid.NewGuid(), "sourceId", 3));
 
             Assert.Equal(6, await CountAsync(collection));
         });
@@ -216,10 +216,10 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         await WithStoreAsync(async store =>
         {
             await store.CreateCollectionAsync(collection, 3);
-            await store.UpsertVectorsAsync(collection, BuildChunks(sourceId, payloadKey, 6));
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(sourceId, payloadKey, 6));
             Assert.Equal(6, await CountAsync(collection));
 
-            await store.DeleteVectorsBySourceAsync(collection, sourceId);
+            await store.DeleteVectorsBySourceAsync(TenantId, collection, sourceId);
 
             Assert.Equal(0, await CountAsync(collection));
         });
@@ -236,10 +236,10 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         await WithStoreAsync(async store =>
         {
             await store.CreateCollectionAsync(collection, 3);
-            await store.UpsertVectorsAsync(collection, BuildChunks(sourceId, "sourceId", 150));
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(sourceId, "sourceId", 150));
             Assert.Equal(150, await CountAsync(collection));
 
-            await store.DeleteVectorsBySourceAsync(collection, sourceId);
+            await store.DeleteVectorsBySourceAsync(TenantId, collection, sourceId);
 
             Assert.Equal(0, await CountAsync(collection));
         });
@@ -257,13 +257,13 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         await WithStoreAsync(async store =>
         {
             await store.CreateCollectionAsync(collection, 3);
-            await store.UpsertVectorsAsync(collection, BuildChunks(doomed, "sourceId", 4));
-            await store.UpsertVectorsAsync(collection, BuildChunks(survivor, "sourceId", 3));
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(doomed, "sourceId", 4));
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(survivor, "sourceId", 3));
 
-            await store.DeleteVectorsBySourceAsync(collection, doomed);
+            await store.DeleteVectorsBySourceAsync(TenantId, collection, doomed);
 
             Assert.Equal(3, await CountAsync(collection));
-            var left = await store.SearchVectorsAsync(collection, [1f, 0f, 0f], 100);
+            var left = await store.SearchVectorsAsync(TenantId, collection, [1f, 0f, 0f], 100);
             Assert.All(left, r => Assert.Equal(survivor.ToString(), PayloadText(r, "sourceId")));
         });
     }
@@ -281,14 +281,95 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         {
             await store.CreateCollectionAsync(a, 3);
             await store.CreateCollectionAsync(b, 3);
-            await store.UpsertVectorsAsync(a, BuildChunks(shared, "sourceId", 4));
-            await store.UpsertVectorsAsync(b, BuildChunks(shared, "sourceId", 4));
+            await store.UpsertVectorsAsync(TenantId, a, BuildChunks(shared, "sourceId", 4));
+            await store.UpsertVectorsAsync(TenantId, b, BuildChunks(shared, "sourceId", 4));
 
-            await store.DeleteVectorsBySourceAsync(a, shared);
+            await store.DeleteVectorsBySourceAsync(TenantId, a, shared);
 
             Assert.Equal(0, await CountAsync(a));
             Assert.Equal(4, await CountAsync(b));
         });
+    }
+
+    // ------------------------------------------------------------------
+    // tenant_id isolates vectors even when the caller knows the collection name
+    // ------------------------------------------------------------------
+
+    private static readonly Guid OtherTenantId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+
+    [Fact]
+    public async Task SearchAndDelete_NeverReachAnotherTenantsCollection()
+    {
+        if (!_dockerAvailable) return;
+
+        var collection = NewCollection();
+        var sourceId = Guid.NewGuid();
+
+        await WithStoreAsync(async store =>
+        {
+            await store.CreateCollectionAsync(collection, 3);
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(sourceId, "sourceId", 3));
+
+            // The collection name alone used to be the whole boundary: any caller holding it read
+            // and deleted the vectors no matter whose they were.
+            Assert.Empty(await store.SearchVectorsAsync(OtherTenantId, collection, [1f, 0f, 0f], 100));
+            Assert.Empty(await store.HybridSearchAsync(OtherTenantId, collection, [1f, 0f, 0f], "chunk", 100));
+
+            await store.DeleteVectorsBySourceAsync(OtherTenantId, collection, sourceId);
+            await store.DeleteCollectionAsync(OtherTenantId, collection);
+            Assert.Equal(3, await CountAsync(collection));
+
+            Assert.Equal(3, (await store.SearchVectorsAsync(TenantId, collection, [1f, 0f, 0f], 100)).Count);
+        });
+    }
+
+    [Fact]
+    public async Task Upsert_RefusesToTakeOverAnotherTenantsPointIds()
+    {
+        if (!_dockerAvailable) return;
+
+        var ours = NewCollection();
+        var theirs = NewCollection();
+        var sourceId = Guid.NewGuid();
+
+        await WithStoreAsync(async store =>
+        {
+            await store.CreateCollectionAsync(ours, 3);
+            await store.CreateCollectionAsync(theirs, 3);
+            await store.UpsertVectorsAsync(TenantId, ours, BuildChunks(sourceId, "sourceId", 3));
+
+            // Same deterministic ids from another tenant. ON CONFLICT (id) used to rewrite
+            // collection_name, moving our rows into their collection.
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                store.UpsertVectorsAsync(OtherTenantId, theirs, BuildChunks(sourceId, "sourceId", 3, suffix: "stolen ")));
+
+            Assert.Equal(3, await CountAsync(ours));
+            Assert.Equal(0, await CountAsync(theirs));
+            var rows = await store.SearchVectorsAsync(TenantId, ours, [1f, 0f, 0f], 100);
+            Assert.All(rows, r => Assert.DoesNotContain("stolen", PayloadText(r, "content")));
+        });
+    }
+
+    [Fact]
+    public async Task VectorsWithoutATenant_AreNeverReturned()
+    {
+        if (!_dockerAvailable) return;
+
+        var collection = NewCollection();
+
+        await WithStoreAsync(async store =>
+        {
+            await store.CreateCollectionAsync(collection, 3);
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(Guid.NewGuid(), "sourceId", 2));
+        });
+
+        // What the migration's backfill leaves behind for a collection no KnowledgeBases row owns.
+        await ScalarAsync<int>(
+            "WITH u AS (UPDATE vector_embeddings SET tenant_id = NULL WHERE collection_name = @p RETURNING 1) SELECT count(*)::int FROM u",
+            collection);
+
+        await WithStoreAsync(async store =>
+            Assert.Empty(await store.SearchVectorsAsync(TenantId, collection, [1f, 0f, 0f], 100)));
     }
 
     // ------------------------------------------------------------------
@@ -305,7 +386,7 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         await WithStoreAsync(async store =>
         {
             await store.CreateCollectionAsync(collection, 3);
-            await store.UpsertVectorsAsync(collection, new()
+            await store.UpsertVectorsAsync(TenantId, collection, new()
             {
                 // Matches the query vector and the query text.
                 (Guid.NewGuid(), new[] { 1f, 0f, 0f }, Payload(Guid.NewGuid(), "sourceId", "widget assembly guide")),
@@ -313,10 +394,10 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
                 (Guid.NewGuid(), new[] { 0f, 1f, 0f }, Payload(Guid.NewGuid(), "sourceId", "unrelated prose about weather")),
             });
 
-            var unfloored = await store.HybridSearchAsync(collection, [1f, 0f, 0f], "widget", 10, 0.7f, 0f);
+            var unfloored = await store.HybridSearchAsync(TenantId, collection, [1f, 0f, 0f], "widget", 10, 0.7f, 0f);
             Assert.Equal(2, unfloored.Count);
 
-            var floored = await store.HybridSearchAsync(collection, [1f, 0f, 0f], "widget", 10, 0.7f, 0.5f);
+            var floored = await store.HybridSearchAsync(TenantId, collection, [1f, 0f, 0f], "widget", 10, 0.7f, 0.5f);
             Assert.NotEmpty(floored);
             Assert.All(floored, r => Assert.True(r.Score >= 0.5f, $"expected all results >= 0.5, got {r.Score}"));
             Assert.All(floored, r => Assert.Equal("widget assembly guide", PayloadText(r, "content")));
@@ -335,9 +416,9 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         await WithStoreAsync(async store =>
         {
             await store.CreateCollectionAsync(collection, 3);
-            await store.UpsertVectorsAsync(collection, BuildChunks(Guid.NewGuid(), "sourceId", 3));
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(Guid.NewGuid(), "sourceId", 3));
 
-            var results = await store.HybridSearchAsync(collection, [1f, 0f, 0f], "chunk 0", 10, 0.7f, 0.99f);
+            var results = await store.HybridSearchAsync(TenantId, collection, [1f, 0f, 0f], "chunk 0", 10, 0.7f, 0.99f);
 
             Assert.Empty(results);
         });
@@ -359,7 +440,7 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         {
             var store = scope.ServiceProvider.GetRequiredService<IVectorStoreService>();
             await store.CreateCollectionAsync(collection, 3);
-            await store.UpsertVectorsAsync(collection, BuildChunks(Guid.NewGuid(), "sourceId", 5));
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(Guid.NewGuid(), "sourceId", 5));
 
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var kb = NewKb(kbId, collection);
@@ -400,7 +481,7 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         {
             var store = scope.ServiceProvider.GetRequiredService<IVectorStoreService>();
             await store.CreateCollectionAsync(collection, 3);
-            await store.UpsertVectorsAsync(collection, BuildChunks(documentId, "documentId", 5));
+            await store.UpsertVectorsAsync(TenantId, collection, BuildChunks(documentId, "documentId", 5));
 
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             db.KnowledgeBases.Add(NewKb(kbId, collection));
@@ -530,7 +611,7 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
             };
 
             await Assert.ThrowsAnyAsync<Exception>(
-                () => store.UpsertVectorsAsync(collection, good.Concat(bad).ToList()));
+                () => store.UpsertVectorsAsync(TenantId, collection, good.Concat(bad).ToList()));
 
             // The atomic batch rolled back, so what survives is only the retry of the good points —
             // never a silently-partial success.
@@ -552,7 +633,7 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         await WithStoreAsync(async store =>
         {
             await store.CreateCollectionAsync(collection, 3);
-            await store.UpsertVectorsAsync(collection, new()
+            await store.UpsertVectorsAsync(TenantId, collection, new()
             {
                 (id, new[] { 0.125f, -0.5f, 0.0625f }, Payload(Guid.NewGuid(), "sourceId", "precise")),
             });

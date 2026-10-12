@@ -153,8 +153,6 @@ export interface CreateApiKeyInput {
   expiresAt?: string
 }
 
-export type UpdateApiKeyInput = CreateApiKeyInput
-
 export interface ApiKeyCreatedResult {
   id: string
   name: string
@@ -184,13 +182,6 @@ export interface WebhookDto {
 export interface CreateWebhookInput {
   name: string
   slug?: string
-  triggerType: string
-  workflowId?: string
-  secret?: string
-}
-
-export interface UpdateWebhookInput {
-  name: string
   triggerType: string
   workflowId?: string
   secret?: string

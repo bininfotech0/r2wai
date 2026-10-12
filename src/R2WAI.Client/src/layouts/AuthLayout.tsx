@@ -2,8 +2,7 @@ import { Box } from '@mui/material'
 import { Outlet, useNavigation } from 'react-router-dom'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 
-// Bare layout for auth pages (login/forgot/reset) — no app chrome, mirrors
-// R2WAI.Web's AuthLayout.razor.
+// Bare layout for auth pages (login/forgot/reset) — no app chrome.
 export function AuthLayout() {
   const navigation = useNavigation()
   return (

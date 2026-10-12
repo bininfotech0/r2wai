@@ -3,9 +3,10 @@ using R2WAI.Domain.Enums;
 
 namespace R2WAI.Domain.Entities;
 
-public sealed class Chatbot : BaseEntity<Guid>
+public sealed class Chatbot : BaseEntity<Guid>, IWorkspaceScoped
 {
     public Guid TenantId { get; private set; }
+    public Guid? WorkspaceId { get; private set; }
     public Guid UserId { get; private set; }
     public Guid? AssistantId { get; private set; }
     public string Name { get; private set; }
@@ -150,6 +151,12 @@ public sealed class Chatbot : BaseEntity<Guid>
     public void AssignAssistant(Guid? assistantId)
     {
         AssistantId = assistantId;
+        MarkAsModified();
+    }
+
+    public void MoveToWorkspace(Guid workspaceId)
+    {
+        WorkspaceId = workspaceId;
         MarkAsModified();
     }
 }

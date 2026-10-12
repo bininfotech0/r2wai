@@ -28,7 +28,7 @@ export function NotificationBell() {
             setAnchorEl(e.currentTarget)
             markAllRead()
           }}
-          aria-label="Notifications"
+          aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
         >
           <Badge badgeContent={unreadCount} color="error" max={9}>
             <NotificationsOutlinedIcon fontSize="small" />

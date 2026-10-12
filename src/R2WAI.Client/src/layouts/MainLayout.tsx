@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { createElement, useEffect, useMemo, useState } from 'react'
 import {
   AppBar,
   Avatar,
@@ -12,10 +12,9 @@ import {
   Drawer,
   IconButton,
   Link as MuiLink,
-  List,
-  ListItemButton,
   ListItemIcon,
   ListItemText,
+  ListSubheader,
   Menu,
   MenuItem,
   Paper,
@@ -40,46 +39,21 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import CircleIcon from '@mui/icons-material/Circle'
 import { Link as RouterLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom'
 import { useAuth } from '../lib/auth/useAuth'
-import { getBottomNavItems, getBreadcrumbs, getHomeNavItem, getNavSections, getPersona, getPersonaLabel, getSectionTabs, type NavItem } from '../lib/nav/roleNav'
+import { getBottomNavItems, getBreadcrumbs, getHomeNavItem, getPersona, getPersonaLabel, getRailLayout, getSectionTabs, type NavItem, type NavSection } from '../lib/nav/roleNav'
 import { getNavIcon } from '../lib/nav/navIcons'
 import { useThemeMode } from '../theme/ThemeModeProvider'
 import { CommandPalette } from '../components/CommandPalette'
 import { CopilotPanel } from '../components/CopilotPanel'
 import { NotificationBell } from '../components/NotificationBell'
+import { WorkspaceSwitcher } from '../components/WorkspaceSwitcher'
 import { NotificationFeedProvider } from '../lib/notifications/NotificationFeedProvider'
 import { KeyboardShortcutsHelp } from '../components/KeyboardShortcutsHelp'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 
-const DRAWER_WIDTH = 248
-const COLLAPSED_DRAWER_WIDTH = 72
-const DRAWER_COLLAPSED_STORAGE_KEY = 'r2wai.sidebar.collapsed'
-
-function readDesktopDrawerCollapsed(): boolean {
-  try {
-    return typeof window !== 'undefined' && window.localStorage.getItem(DRAWER_COLLAPSED_STORAGE_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-
-const sidebarIconSx = { minWidth: 36, color: 'inherit' }
-
-const sidebarItemSx = {
-  position: 'relative',
-  borderRadius: 2,
-  mb: 0.25,
-  color: 'text.secondary',
-  '& .MuiListItemText-primary': { fontSize: '0.875rem', fontWeight: 500 },
-  '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
-  '&.Mui-selected': {
-    bgcolor: (t: Theme) => `color-mix(in srgb, ${t.palette.primary.main} 12%, ${t.palette.background.paper})`,
-    color: 'primary.main',
-    '& .MuiListItemText-primary': { fontWeight: 700 },
-    '& .MuiListItemIcon-root': { color: 'primary.main' },
-    '&:hover': { bgcolor: (t: Theme) => `color-mix(in srgb, ${t.palette.primary.main} 16%, ${t.palette.background.paper})` },
-  },
-}
+// Copilot Studio-style frame: a full-width top bar over an icon-over-label rail.
+const RAIL_WIDTH = 80
+const TOP_BAR_HEIGHT = 56
 
 function environmentColor(environment: string): 'success' | 'warning' | 'info' {
   if (environment === 'Production') return 'success'
@@ -88,12 +62,126 @@ function environmentColor(environment: string): 'success' | 'warning' | 'info' {
 }
 
 function pathMatches(path: string, pathname: string): boolean {
+  if (path === '/') return pathname === '/'
   return pathname === path || pathname.startsWith(`${path}/`)
 }
 
-/** A sidebar item stays highlighted on every page of its tab group, not just its own path. */
+/** A rail item stays highlighted on every page of its section and tab group, not just its own path. */
 function isNavItemActive(item: NavItem, pathname: string): boolean {
   return pathMatches(item.path, pathname) || (item.matchPaths ?? []).some((path) => pathMatches(path, pathname))
+}
+
+const activePillBg = (t: Theme) => `color-mix(in srgb, ${t.palette.primary.main} 14%, transparent)`
+
+function RailButton({ icon, label, active, ...rest }: {
+  icon: string
+  label: string
+  active: boolean
+} & ({ to: string; onClick?: never; expanded?: never } | { to?: never; onClick: (event: React.MouseEvent<HTMLElement>) => void; expanded: boolean })) {
+  const linkProps = rest.to
+    ? { component: RouterLink, to: rest.to, 'aria-current': active ? ('page' as const) : undefined }
+    : { onClick: rest.onClick, 'aria-haspopup': 'menu' as const, 'aria-expanded': rest.expanded }
+  return (
+    <ButtonBase
+      {...linkProps}
+      aria-label={label}
+      sx={{
+        width: 72,
+        py: 0.75,
+        flexDirection: 'column',
+        gap: 0.5,
+        borderRadius: 2,
+        color: active ? 'primary.main' : 'text.secondary',
+        '&:hover': { color: 'text.primary' },
+        '&:hover .rail-pill': { bgcolor: active ? activePillBg : 'action.hover' },
+        '&.Mui-focusVisible .rail-pill': { outline: '2px solid', outlineColor: 'primary.main' },
+      }}
+    >
+      <Box
+        className="rail-pill"
+        sx={{
+          display: 'grid',
+          placeItems: 'center',
+          width: 48,
+          height: 30,
+          borderRadius: 999,
+          bgcolor: active ? activePillBg : 'transparent',
+          transition: (t) => t.transitions.create('background-color', { duration: 140, easing: 'ease' }),
+        }}
+      >
+        {createElement(getNavIcon(icon), { sx: { fontSize: 20 } })}
+      </Box>
+      <Typography
+        component="span"
+        noWrap
+        sx={{ maxWidth: 72, fontSize: 11, lineHeight: 1.2, fontWeight: active ? 700 : 500, textAlign: 'center' }}
+      >
+        {label}
+      </Typography>
+    </ButtonBase>
+  )
+}
+
+function NavRail({ items, more, pathname }: { items: NavItem[]; more: NavSection[]; pathname: string }) {
+  const [moreAnchor, setMoreAnchor] = useState<HTMLElement | null>(null)
+  const moreActive = more.some((section) => section.items.some((item) => isNavItemActive(item, pathname)))
+    && !items.some((item) => isNavItemActive(item, pathname))
+
+  return (
+    <Box
+      component="nav"
+      aria-label="Main navigation"
+      sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25, height: '100%', py: 1, overflowY: 'auto' }}
+    >
+      {items.map((item) => (
+        <RailButton key={item.path} icon={item.icon} label={item.label} to={item.path} active={isNavItemActive(item, pathname)} />
+      ))}
+      <Box sx={{ flexGrow: 1 }} />
+      {more.length > 0 && (
+        <>
+          <RailButton
+            icon="More"
+            label="More"
+            active={moreActive || moreAnchor !== null}
+            expanded={moreAnchor !== null}
+            onClick={(event) => setMoreAnchor(event.currentTarget)}
+          />
+          <Menu
+            anchorEl={moreAnchor}
+            open={moreAnchor !== null}
+            onClose={() => setMoreAnchor(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+            slotProps={{ paper: { sx: { minWidth: 240, ml: 1 } }, list: { dense: true } }}
+          >
+            {more.flatMap((section, index) => [
+              index > 0 && <Divider key={`${section.label}-divider`} />,
+              <ListSubheader key={`${section.label}-header`} sx={{ lineHeight: '32px', bgcolor: 'transparent' }}>
+                {section.label}
+              </ListSubheader>,
+              ...section.items.map((item) => {
+                const Icon = getNavIcon(item.icon)
+                const active = isNavItemActive(item, pathname)
+                return (
+                  <MenuItem
+                    key={item.path}
+                    component={RouterLink}
+                    to={item.path}
+                    selected={active}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => setMoreAnchor(null)}
+                  >
+                    <ListItemIcon><Icon fontSize="small" /></ListItemIcon>
+                    <ListItemText primary={item.label} />
+                  </MenuItem>
+                )
+              }),
+            ])}
+          </Menu>
+        </>
+      )}
+    </Box>
+  )
 }
 
 export function MainLayout() {
@@ -103,14 +191,14 @@ export function MainLayout() {
   const navigation = useNavigation()
   const navigate = useNavigate()
   const theme = useTheme()
-  // Below `md`: sidebar becomes an overlay (temporary) instead of pushing content, matching the
-  // brief's §21 requirement. Below `sm`: the bottom nav takes over as the primary quick-access
-  // surface, since a temporary drawer isn't a great one-thumb-reach pattern on a phone.
+  // Below `md` the rail becomes an overlay drawer opened from the top bar; below `sm` the bottom
+  // nav is the primary quick-access surface (one-thumb reach on a phone).
   const isTablet = useMediaQuery(theme.breakpoints.down('md'))
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
 
-  const [drawerOpen, setDrawerOpen] = useState(!isTablet)
-  const [desktopCollapsed, setDesktopCollapsed] = useState(readDesktopDrawerCollapsed)
+  // The overlay rail remembers the page it was opened on, so navigating closes it without an effect.
+  const [drawerOpenedAt, setDrawerOpenedAt] = useState<string | null>(null)
+  const drawerOpen = isTablet && drawerOpenedAt === location.pathname
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [copilotOpen, setCopilotOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -119,33 +207,10 @@ export function MainLayout() {
 
   const persona = getPersona(user)
   const homeItem = getHomeNavItem()
-  const HomeIcon = getNavIcon(homeItem.icon)
-  const isRailCollapsed = !isTablet && desktopCollapsed
-  const desktopDrawerWidth = isRailCollapsed ? COLLAPSED_DRAWER_WIDTH : DRAWER_WIDTH
-  const sections = useMemo(() => getNavSections(persona), [persona])
+  const rail = useMemo(() => getRailLayout(persona), [persona])
   const bottomNavItems = useMemo(() => getBottomNavItems(persona), [persona])
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(DRAWER_COLLAPSED_STORAGE_KEY, String(desktopCollapsed))
-    } catch {
-      // The preference is optional; keep the in-memory toggle usable when storage is unavailable.
-    }
-  }, [desktopCollapsed])
-
-  // Auto-close the overlay drawer on navigation (temporary variant only — desktop's persistent
-  // drawer is meant to stay put).
-  useEffect(() => {
-    if (isTablet) setDrawerOpen(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname])
-
-  // Keep drawer state in sync when the viewport crosses the md breakpoint (e.g. resizing a
-  // browser window) — restore the persistent-open default going back to desktop, rather than
-  // leaving it stuck closed from whatever state the temporary drawer was last in.
-  useEffect(() => {
-    setDrawerOpen(!isTablet)
-  }, [isTablet])
+  // Workspaces scope admin resources; a plain user only sees what is shared with them.
+  const showWorkspaceSwitcher = persona === 'Admin' || persona === 'SuperAdmin'
 
   useEffect(() => {
     let cancelled = false
@@ -205,6 +270,8 @@ export function MainLayout() {
     navigate('/login')
   }
 
+  const railContent = <NavRail items={rail.items} more={rail.more} pathname={location.pathname} />
+
   return (
     <NotificationFeedProvider>
     <Box sx={{ display: 'flex', minHeight: '100dvh', bgcolor: 'background.default', color: 'text.primary' }}>
@@ -228,43 +295,56 @@ export function MainLayout() {
         elevation={0}
         sx={{
           backgroundColor: 'background.paper',
-          backdropFilter: 'blur(16px)',
           borderBottom: '1px solid',
           borderColor: 'divider',
           zIndex: (t) => t.zIndex.drawer + 1,
-          ml: { md: `${desktopDrawerWidth}px` },
-          width: { md: `calc(100% - ${desktopDrawerWidth}px)` },
-          transition: (t) => t.transitions.create(['margin', 'width']),
         }}
       >
-        <Toolbar sx={{ minHeight: { xs: 58, sm: 64 }, gap: { xs: 0.25, sm: 1 }, px: { xs: 1, sm: 2 } }}>
-          <Tooltip title={isTablet ? (drawerOpen ? 'Close navigation' : 'Open navigation') : (isRailCollapsed ? 'Expand navigation' : 'Collapse navigation')}>
+        <Toolbar sx={{ minHeight: { xs: TOP_BAR_HEIGHT }, gap: { xs: 0.5, sm: 1 }, px: { xs: 1, sm: 2 } }}>
+          {isTablet && (
             <IconButton
               edge="start"
-              size={isMobile ? 'small' : 'medium'}
-              onClick={() => isTablet ? setDrawerOpen((o) => !o) : setDesktopCollapsed((collapsed) => !collapsed)}
-              aria-label={isTablet ? (drawerOpen ? 'Close navigation' : 'Open navigation') : (isRailCollapsed ? 'Expand navigation' : 'Collapse navigation')}
+              size="small"
+              onClick={() => setDrawerOpenedAt(drawerOpen ? null : location.pathname)}
+              aria-label={drawerOpen ? 'Close navigation' : 'Open navigation'}
+              aria-expanded={drawerOpen}
             >
               <MenuIcon />
             </IconButton>
-          </Tooltip>
-          {isTablet && (
-            <Typography
-              variant="subtitle1"
-              component={RouterLink}
-              to="/"
-              sx={{ fontWeight: 700, textDecoration: 'none', color: 'inherit', mr: { xs: 0, sm: 1 }, fontSize: { xs: '0.875rem', sm: '1rem' } }}
-            >
-              {isMobile ? 'R2WAI' : 'R2WAI Studio'}
-            </Typography>
           )}
+          <Stack
+            direction="row"
+            spacing={1}
+            component={RouterLink}
+            to="/"
+            aria-label="R2WAI Studio"
+            sx={{ alignItems: 'center', textDecoration: 'none', color: 'text.primary', mr: { xs: 0.5, sm: 1.5 }, flexShrink: 0 }}
+          >
+            <Box
+              sx={{
+                display: 'grid',
+                placeItems: 'center',
+                width: 28,
+                height: 28,
+                borderRadius: 1.5,
+                background: (t) => `linear-gradient(135deg, ${t.palette.primary.main}, ${t.palette.secondary.main})`,
+                color: '#fff',
+              }}
+            >
+              <HubOutlinedIcon sx={{ fontSize: 18 }} />
+            </Box>
+            <Typography sx={{ display: { xs: 'none', sm: 'block' }, fontWeight: 650, fontSize: 15, whiteSpace: 'nowrap' }}>
+              R2WAI Studio
+            </Typography>
+          </Stack>
+          {showWorkspaceSwitcher && <WorkspaceSwitcher />}
           {environment && (
             <Chip
               size="small"
               icon={<CircleIcon sx={{ fontSize: '10px !important', color: `${environmentColor(environment)}.main` }} />}
               label={environment}
               variant="outlined"
-              sx={{ display: { xs: 'none', sm: 'flex' } }}
+              sx={{ display: { xs: 'none', lg: 'flex' } }}
             />
           )}
 
@@ -274,33 +354,33 @@ export function MainLayout() {
             component="button"
             type="button"
             onClick={() => setPaletteOpen(true)}
-            aria-label="Search assistants, knowledge, tools"
+            aria-label="Search agents, knowledge, tools"
             sx={{
               display: { xs: 'none', md: 'flex' },
               alignItems: 'center',
               gap: 1,
-              width: 320,
-              height: 36,
+              width: { md: 280, lg: 360 },
+              height: 34,
               px: 1.5,
               border: '1px solid',
               borderColor: 'divider',
-              borderRadius: 2,
+              borderRadius: 1,
               bgcolor: 'action.hover',
               color: 'text.secondary',
               font: 'inherit',
               cursor: 'pointer',
-              transition: 'border-color 120ms ease, background-color 120ms ease',
-              '&:hover': { borderColor: 'primary.main', bgcolor: 'action.selected' },
+              transition: (t) => t.transitions.create(['border-color', 'background-color'], { duration: 140, easing: 'ease' }),
+              '&:hover': { borderColor: 'text.secondary', bgcolor: 'action.selected' },
             }}
           >
             <SearchIcon fontSize="small" />
             <Typography variant="body2" sx={{ flexGrow: 1, textAlign: 'left', color: 'text.secondary' }} noWrap>
-              Search assistants, knowledge, tools…
+              Search agents, knowledge, tools…
             </Typography>
             <Box
               component="kbd"
               sx={{
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 fontFamily: 'inherit',
                 fontWeight: 600,
                 border: '1px solid',
@@ -315,6 +395,7 @@ export function MainLayout() {
               Ctrl K
             </Box>
           </Box>
+          <Box sx={{ flexGrow: { xs: 0, md: 1 } }} />
           <Tooltip title="Search (Ctrl+K)">
             <IconButton
               size="small"
@@ -326,7 +407,7 @@ export function MainLayout() {
             </IconButton>
           </Tooltip>
           <Tooltip title={isDark ? 'Light mode' : 'Dark mode'}>
-            <IconButton size="small" onClick={toggle} aria-label="Toggle dark mode">
+            <IconButton size="small" onClick={toggle} aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
               {isDark ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
             </IconButton>
           </Tooltip>
@@ -336,7 +417,8 @@ export function MainLayout() {
               size="small"
               color={copilotOpen ? 'primary' : 'default'}
               onClick={() => setCopilotOpen((o) => !o)}
-              aria-label="Toggle AI Copilot"
+              aria-label="AI Copilot"
+              aria-pressed={copilotOpen}
               sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
             >
               <AutoAwesomeIcon fontSize="small" />
@@ -353,13 +435,13 @@ export function MainLayout() {
             aria-label="Account menu"
             aria-haspopup="true"
             aria-expanded={!!userMenuAnchor}
-            sx={{ ml: 1, px: 1, py: 0.5, borderRadius: 2 }}
+            sx={{ ml: 0.5, px: 0.75, py: 0.5, borderRadius: 2 }}
           >
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <Avatar sx={{ width: 30, height: 30, fontSize: '0.8rem' }}>
                 {(user?.displayName ?? user?.email ?? 'U').charAt(0).toUpperCase()}
               </Avatar>
-              <Box sx={{ display: { xs: 'none', md: 'block' }, lineHeight: 1.2 }}>
+              <Box sx={{ display: { xs: 'none', lg: 'block' }, lineHeight: 1.2, textAlign: 'left' }}>
                 <Typography variant="caption" sx={{ display: 'block', fontWeight: 600 }}>
                   {user?.displayName ?? user?.email}
                 </Typography>
@@ -367,7 +449,7 @@ export function MainLayout() {
                   {getPersonaLabel(persona)}
                 </Typography>
               </Box>
-              <ExpandMoreIcon fontSize="small" sx={{ display: { xs: 'none', md: 'block' }, color: 'text.secondary' }} />
+              <ExpandMoreIcon fontSize="small" sx={{ display: { xs: 'none', lg: 'block' }, color: 'text.secondary' }} />
             </Stack>
           </ButtonBase>
           <Menu anchorEl={userMenuAnchor} open={!!userMenuAnchor} onClose={() => setUserMenuAnchor(null)}>
@@ -397,125 +479,28 @@ export function MainLayout() {
       </AppBar>
 
       <Drawer
-        variant={isTablet ? 'temporary' : 'persistent'}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        variant={isTablet ? 'temporary' : 'permanent'}
+        open={isTablet ? drawerOpen : true}
+        onClose={() => setDrawerOpenedAt(null)}
         ModalProps={{ keepMounted: true }}
         sx={{
-          width: isTablet ? 0 : desktopDrawerWidth,
+          // Under the top bar on every size: the overlay rail opens below it (see its spacer).
+          zIndex: (t) => t.zIndex.drawer,
+          width: isTablet ? 0 : RAIL_WIDTH,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
-            width: isTablet ? DRAWER_WIDTH : desktopDrawerWidth,
+            width: RAIL_WIDTH,
             boxSizing: 'border-box',
             overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
             bgcolor: 'background.paper',
-            color: 'text.primary',
             borderRight: '1px solid',
             borderColor: 'divider',
           },
         }}
       >
-        <Stack
-          direction="row"
-          spacing={1.25}
-          component={RouterLink}
-          to="/"
-          sx={{
-            flexShrink: 0,
-            alignItems: 'center',
-            justifyContent: isRailCollapsed ? 'center' : 'flex-start',
-            px: isRailCollapsed ? 1 : 2,
-            minHeight: 64,
-            textDecoration: 'none',
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-          }}
-        >
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 34,
-              height: 34,
-              borderRadius: 2,
-              flexShrink: 0,
-              background: (t) => `linear-gradient(135deg, ${t.palette.primary.main}, ${t.palette.secondary.main})`,
-              color: '#fff',
-            }}
-          >
-            <HubOutlinedIcon fontSize="small" />
-          </Box>
-          {!isRailCollapsed && (
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 750, color: 'text.primary', lineHeight: 1.2 }}>
-                R2WAI
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
-                AI Work Execution Platform
-              </Typography>
-            </Box>
-          )}
-        </Stack>
-        <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <List sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', px: isRailCollapsed ? 1 : 1.5, py: 1.5 }}>
-            <Tooltip title={isRailCollapsed ? homeItem.label : ''} placement="right">
-              <ListItemButton
-                component={RouterLink}
-                to={homeItem.path}
-                selected={location.pathname === homeItem.path}
-                aria-label={homeItem.label}
-                aria-current={location.pathname === homeItem.path ? 'page' : undefined}
-                sx={[sidebarItemSx, isRailCollapsed && { justifyContent: 'center', px: 1 }]}
-              >
-                <ListItemIcon sx={isRailCollapsed ? { minWidth: 0, justifyContent: 'center', color: 'inherit' } : sidebarIconSx}>
-                  <HomeIcon fontSize="small" />
-                </ListItemIcon>
-                {!isRailCollapsed && <ListItemText primary={homeItem.label} />}
-              </ListItemButton>
-            </Tooltip>
-
-            {sections.map((section) => {
-              const primaryItem = section.label ? section.items[0] : undefined
-              const visibleItems = primaryItem && !isRailCollapsed ? section.items.slice(1) : section.items
-              const renderItem = (item: (typeof section.items)[number], isPrimaryItem: boolean) => {
-                const Icon = getNavIcon(item.icon)
-                const active = isNavItemActive(item, location.pathname)
-                return (
-                  <Tooltip key={item.path} title={isRailCollapsed ? item.label : ''} placement="right">
-                    <ListItemButton
-                      component={RouterLink}
-                      to={item.path}
-                      selected={active}
-                      aria-label={item.label}
-                      aria-current={active ? 'page' : undefined}
-                      sx={[
-                        sidebarItemSx,
-                        isRailCollapsed && { justifyContent: 'center', px: 1 },
-                        !isPrimaryItem && !isRailCollapsed && { ml: 2, width: 'calc(100% - 16px)' },
-                        !isPrimaryItem && { '& .MuiListItemText-primary': { fontSize: '0.8125rem' } },
-                      ]}
-                    >
-                      <ListItemIcon sx={isRailCollapsed ? { minWidth: 0, justifyContent: 'center', color: 'inherit' } : sidebarIconSx}>
-                        <Icon fontSize="small" />
-                      </ListItemIcon>
-                      {!isRailCollapsed && <ListItemText primary={item.label} />}
-                    </ListItemButton>
-                  </Tooltip>
-                )
-              }
-              return (
-                <Box key={section.label || 'nav'} role="group" aria-label={section.label ? `${section.label} navigation` : 'Navigation'} sx={{ mb: 0.75 }}>
-                  {primaryItem && !isRailCollapsed && renderItem(primaryItem, true)}
-                  {visibleItems.map((item, index) => renderItem(item, !primaryItem && index === 0 || Boolean(primaryItem && isRailCollapsed && index === 0)))}
-                </Box>
-              )
-            })}
-          </List>
-
-        </Box>
+        {/* Spacer so the rail starts below the full-width top bar. */}
+        <Box sx={{ minHeight: TOP_BAR_HEIGHT, flexShrink: 0 }} />
+        {railContent}
       </Drawer>
 
       <Box
@@ -531,10 +516,9 @@ export function MainLayout() {
           p: { xs: 1.5, sm: 2.5, lg: 3 },
           // Room for the fixed bottom nav below `sm` so page content never sits under it.
           pb: isMobile ? 8 : { xs: 2, sm: 3 },
-          transition: (t) => t.transitions.create('margin'),
         }}
       >
-        <Toolbar />
+        <Box sx={{ minHeight: TOP_BAR_HEIGHT }} />
         <Box
           aria-live="polite"
           aria-atomic="true"
@@ -542,7 +526,7 @@ export function MainLayout() {
         >
           {pageLabel}
         </Box>
-        <Breadcrumbs sx={{ mb: { xs: 2.5, sm: 3 }, minHeight: 20 }} aria-label="Breadcrumb navigation">
+        <Breadcrumbs sx={{ mb: { xs: 2, sm: 2.5 }, minHeight: 20 }} aria-label="Breadcrumb navigation">
           {breadcrumbs.map((crumb, i) =>
             i === breadcrumbs.length - 1 ? (
               <Typography key={crumb.path} variant="body2" color="text.primary">
@@ -574,7 +558,7 @@ export function MainLayout() {
       {isMobile && (
         <Paper
           elevation={0}
-          sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: (t) => t.zIndex.drawer + 1, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', backdropFilter: 'blur(16px)' }}
+          sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: (t) => t.zIndex.drawer + 1, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}
         >
           <BottomNavigation
             // '/' prefix-matches every path, so it's checked last/explicitly rather than via

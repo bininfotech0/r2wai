@@ -18,7 +18,10 @@ public static class ToolExecutionPolicyEvaluator
     {
         ["Low"] = 0,
         ["Medium"] = 1,
-        ["High"] = 2
+        ["High"] = 2,
+        // Accepted by Create/UpdateCapabilityCommand's validators. It was missing here, so a
+        // Critical tool fell into the "unrecognized label" branch and passed every ceiling.
+        ["Critical"] = 3
     };
 
     /// <summary>
@@ -48,20 +51,23 @@ public static class ToolExecutionPolicyEvaluator
     }
 
     /// <summary>
-    /// True only when both risk levels are recognized (Low/Medium/High) and the tool's level ranks
-    /// strictly above the ceiling. An unrecognized label on either side never blocks — a typo in
-    /// policy content should not accidentally deny every tool call.
+    /// True when the tool's risk ranks strictly above the ceiling. The two sides fail differently on
+    /// purpose:
+    /// - an unrecognized <b>ceiling</b> (a typo in policy content) never blocks, so one bad policy
+    ///   edit cannot deny every tool call in the tenant;
+    /// - an unrecognized <b>tool</b> label always exceeds a configured ceiling. The label is data on
+    ///   the tool being called, and a tool whose risk can't be ranked must not slip under a limit.
     /// </summary>
     public static bool ExceedsCeiling(string toolRiskLevel, string? maxRiskLevel)
     {
         if (string.IsNullOrWhiteSpace(maxRiskLevel))
             return false;
 
-        if (!RiskRank.TryGetValue(toolRiskLevel, out var toolRank))
-            return false;
-
         if (!RiskRank.TryGetValue(maxRiskLevel, out var ceilingRank))
             return false;
+
+        if (!RiskRank.TryGetValue(toolRiskLevel ?? string.Empty, out var toolRank))
+            return true;
 
         return toolRank > ceilingRank;
     }

@@ -41,6 +41,7 @@ import {
 } from '../assistantView'
 import type { AssistantDto } from '../types'
 import type { GridColDef } from '@mui/x-data-grid'
+import { PageHeader } from '../../../components/PageHeader'
 
 const CARD_PAGE_SIZE = 12
 
@@ -188,28 +189,20 @@ export function AssistantsLibraryPage() {
 
   return (
     <Box>
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={1.5}
-        sx={{ alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', mb: 2 }}
-      >
-        <Box>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Agents
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Build assistants that answer questions and perform enterprise tasks.
-          </Typography>
-        </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)} sx={{ alignSelf: { xs: 'flex-start', sm: 'auto' } }}>
-          New Assistant
-        </Button>
-      </Stack>
+      <PageHeader
+        title="Agents"
+        description="Build assistants that answer questions and perform enterprise tasks."
+        actions={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+            New agent
+          </Button>
+        }
+      />
 
       <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <TextField
           size="small"
-          placeholder="Search assistants…"
+          placeholder="Search agents…"
           value={search}
           onChange={(e) => {
             setSearch(e.target.value)
@@ -234,7 +227,7 @@ export function AssistantsLibraryPage() {
                 </InputAdornment>
               ) : undefined,
             },
-            htmlInput: { 'aria-label': 'Search assistants' },
+            htmlInput: { 'aria-label': 'Search agents' },
           }}
           sx={{ width: { xs: '100%', sm: 320 } }}
         />
@@ -290,7 +283,7 @@ export function AssistantsLibraryPage() {
           icon={SmartToyOutlined}
           title={isFiltered ? 'No assistants match these filters' : 'No assistants yet'}
           description={isFiltered ? 'Try clearing the search or status filter.' : 'Create your first assistant to get started.'}
-          actionLabel={isFiltered ? undefined : 'New Assistant'}
+          actionLabel={isFiltered ? undefined : 'New agent'}
           onAction={isFiltered ? undefined : () => setCreateOpen(true)}
         />
       ) : (

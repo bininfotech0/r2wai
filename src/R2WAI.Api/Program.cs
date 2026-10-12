@@ -407,6 +407,7 @@ app.UseCors("ApiCorsPolicy");
 app.UseAuthentication();
 app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseMiddleware<WorkspaceContextMiddleware>();
 app.UseMiddleware<MfaSetupScopeMiddleware>();
 app.UseAuthorization();
 

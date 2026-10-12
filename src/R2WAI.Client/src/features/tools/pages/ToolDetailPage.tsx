@@ -162,7 +162,7 @@ export function ToolDetailPage() {
               <Box sx={{ minWidth: 0 }}>
                 <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 1.2 }}>TOOL WORKSPACE</Typography>
                 <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', mb: 0.5, flexWrap: 'wrap' }}>
-                  <Typography variant="h4" sx={{ fontWeight: 750, letterSpacing: '-0.035em', overflowWrap: 'anywhere' }}>{tool.name}</Typography>
+                  <Typography variant="h4" component="h1" sx={{ fontWeight: 750, letterSpacing: '-0.035em', overflowWrap: 'anywhere' }}>{tool.name}</Typography>
                   <Chip label={`${tool.riskLevel} risk`} size="small" color={RISK_COLOR[tool.riskLevel] ?? 'default'} variant="outlined" />
                 </Stack>
                 <Typography color="text.secondary" sx={{ maxWidth: 760 }}>

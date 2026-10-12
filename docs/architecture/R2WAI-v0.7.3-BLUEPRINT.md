@@ -16,7 +16,7 @@ once the real starting point is known.
 | 0.1 | Backend tests in "Python/TypeScript" | .NET 10 backend, xUnit + Moq (`tests/R2WAI.*.Tests`); widget is TS/Vite | Backend matrix is **C# xUnit**; widget matrix is **TS (Vitest)** |
 | 0.2 | Aadhaar logged as one-way **SHA-256** | `IAadhaarHasher` is **HMAC-SHA256 with an app secret** — deliberately, because 12-digit Aadhaar is brute-forceable from a plain hash | Keep HMAC. A plain SHA-256 would be a security regression. Normalise digits to ASCII before hashing (Devanagari digits match `\d`, see P-A5) |
 | 0.3 | Script-level tools exist and need auditing | **No script tools exist** — no `Process.Start`/`ProcessStartInfo` anywhere in `src/` | §3.2 is a *greenfield* design gate: script tools must not ship without it |
-| 0.4 | Web/URL ingestion exists, manual sync | **No URL/web ingestion exists** (no crawler, no URL source type) | §3.5 designs crawl + scheduling together, not a migration |
+| 0.4 | Web/URL ingestion exists, manual sync | _Corrected 2026-10-12:_ a KB source of type `Url` exists. `KnowledgeBaseService.AddSourceAsync` fetches the single page **once**, at add time, through `EgressGuard` (20 s timeout, regex HTML strip, 200 K chars). Nothing ever re-fetches it: `POST /knowledgebases/{id}/reindex` reprocesses uploaded documents only | §3.5 adds re-fetch + scheduling on top of the existing `Url` source, reusing `FetchUrlTextAsync` and `EgressGuard` |
 | 0.5 | Channels are "UI placeholders" | `ChatbotChannelType {Teams, Slack, WhatsApp, Sms}` + `ConnectChannel` stores config; a generic keyed HTTP `POST /chatbots/{id}/webhook` already works with session memory | Build adapters **on top of** the existing webhook pipeline and `ChatbotSessionIds.Scope` |
 | 0.6 | 7-day / 20-message memory needs building | Already exists: `ChatbotSessionMemory` (`MaxTurns` 20, `RetentionDays` 7, channel-prefixed scope) | Channels reuse it; new work is only per-channel scoping + sender-id hashing |
 | 0.7 | Widget citations suppressed | Server already emits SSE `event: citations` with `{citations:[{sourceName,content,score,index}]}`; `api.ts:147` drops it. Bundle is **19,672 B** — ~800 B under a 20 KiB ceiling | Fix is client-only and must fit in ~700 B minified |
@@ -215,6 +215,12 @@ regex engine (2026-10-11); the rest are from reading the code.
 
 ### 2.1 Matrix
 
+> **Update 2026-10-12:** every P-* and G-* row now passes. The two PII detectors were merged into
+> `Application/Common/Security/PiiDetector` with the wider patterns. `ExceedsCeiling` ranks
+> `Critical` (a label the capability validators accept but the rank table lacked, so Critical tools
+> passed every ceiling) and fails closed on unknown tool labels. Tests: `PiiDetectorTests.Find_Matrix`,
+> `ToolExecutionPolicyEvaluatorTests`.
+
 #### PII (P-*) — `PiiScanner` (ingest flag) and `PiiDetector` (redact/block)
 
 | ID | Input | Expected | Scanner today | Detector today | Status |
@@ -259,8 +265,8 @@ regex engine (2026-10-11); the rest are from reading the code.
 | T-1 | Same visitor id on widget vs webhook | different `Scope` keys | Pass |
 | T-2 | Same phone on WhatsApp vs Slack | different scope keys | **Gap** (new channels, §3.3) |
 | T-3 | Session id with `/`, space, 91+ chars | `Normalize` → null (no memory) | Pass |
-| T-4 | Vector search for tenant A with tenant B's collection name | **0 rows** | **Gap** — no tenant predicate (§3.6) |
-| T-5 | Upsert of an existing point id from another tenant's KB | rejected, original row untouched | **Gap** — `ON CONFLICT (id) DO UPDATE` rewrites `collection_name` |
+| T-4 | Vector search for tenant A with tenant B's collection name | **0 rows** | Pass (2026-10-12, §3.6) |
+| T-5 | Upsert of an existing point id from another tenant's KB | rejected, original row untouched | Pass (2026-10-12, §3.6) |
 | T-6 | Hybrid search 0.7/0.3 never returns rows outside the collection | — | Pass (integration) |
 
 #### Widget citations (W-*) — TS
@@ -1135,7 +1141,7 @@ Release check: `npm run build` in `src/R2WAI.Widget` and assert `dist/widget.js`
 
 ### 3.5 Scheduled URL ingestion (crawl + re-crawl)
 
-Greenfield (§0.4). Scope for v0.7.3: single URLs and same-host sitemaps; no open-ended spidering.
+Builds on the existing one-shot `Url` source (§0.4): the model below extends `KnowledgeBaseSource` rather than adding a parallel entity, and the fetch reuses `FetchUrlTextAsync` + `EgressGuard`. Scope for v0.7.3: single URLs and same-host sitemaps; no open-ended spidering.
 
 **Model**
 
@@ -1190,7 +1196,9 @@ Per claimed source:
 
 Manual "Sync now" stays, and just sets `NextRunAtUtc = now()`.
 
-### 3.6 Vector store tenant column (closes T-4 / T-5)
+### 3.6 Vector store tenant column (closes T-4 / T-5) — DONE 2026-10-12
+
+Shipped as migration `AddVectorEmbeddingTenantId` (guarded `DO` block; skips a missing table; ambiguous or orphaned collections stay NULL and are unreachable) plus `tenantId` on every `IVectorStoreService` method except `CreateCollectionAsync`. Tests: `PgVectorStoreRegressionTests` (`SearchAndDelete_NeverReachAnotherTenantsCollection`, `Upsert_RefusesToTakeOverAnotherTenantsPointIds`, `VectorsWithoutATenant_AreNeverReturned`). Original design kept below for reference.
 
 ```sql
 ALTER TABLE vector_embeddings ADD COLUMN tenant_id uuid;

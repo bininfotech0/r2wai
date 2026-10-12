@@ -4,6 +4,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import MonitorHeartOutlinedIcon from '@mui/icons-material/MonitorHeartOutlined'
 import CodeOutlinedIcon from '@mui/icons-material/CodeOutlined'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import { PageHeader } from '../../../components/PageHeader'
 import { useDocumentTitle } from '../../../lib/useDocumentTitle'
 
 interface HealthCheckEntry {
@@ -18,25 +19,29 @@ interface HealthReport {
   checks: HealthCheckEntry[]
 }
 
-// Names matched to roleNav.ts's current primary nav sections (ADR-0002) — these two used to say
-// "Operate"/"Manage" (the pre-2.0 Build/Test/Operate/Manage IA), which no longer exist as sections.
+// Names matched to roleNav.ts's current primary nav sections (ADR-0002).
 const FEATURES = [
-  { name: 'AI Assistant Studio', description: 'Create and manage domain-specific AI assistants with configurable LLMs' },
-  { name: 'Activity', description: 'Executions, confirmations, and monitoring across assistants and connected systems' },
-  { name: 'Knowledge & RAG', description: 'Upload documents, build knowledge bases, and enable semantic search with citations' },
-  { name: 'Connections', description: 'Connect external systems via REST/OpenAPI connectors' },
-  { name: 'Settings', description: 'Users, roles, AI models, security policies, and tenant settings' },
+  { name: 'Workspaces', description: 'Group agents, knowledge, automations, chatbots and connections by team or use case; connect external systems via REST/OpenAPI, integrations, and MCP servers' },
+  { name: 'Agents', description: 'Create domain-specific AI agents with configurable models, and test them in the Playground' },
+  { name: 'Knowledge', description: 'Upload documents, build knowledge bases, and enable semantic search with citations' },
+  { name: 'Automations', description: 'Design and run multi-step workflows across agents and connected systems' },
+  { name: 'Publish', description: 'Deploy chatbots to the website widget, WhatsApp, and other channels' },
+  { name: 'Activity', description: 'Executions, confirmations, and monitoring across agents and connected systems' },
+  { name: 'Settings', description: 'Users, roles, AI models, security policies, and API & SDK access' },
 ]
 
 const TECH_STACK = [
-  ['Frontend', 'React + TypeScript + MUI (Vite)'],
-  ['Backend Runtime', '.NET (ASP.NET Core)'],
-  ['Database', 'PostgreSQL + EF Core'],
+  ['Frontend', 'React 19 + TypeScript + MUI 9 (Vite)'],
+  ['Backend Runtime', '.NET 10 (ASP.NET Core)'],
+  ['Database', 'PostgreSQL + EF Core 10'],
   ['Vector Store', 'pgvector'],
-  ['AI Orchestration', 'Semantic Kernel'],
-  ['Workflow Engine', 'Elsa'],
+  ['AI Orchestration', 'Microsoft Agent Framework + Semantic Kernel'],
+  ['Tool Protocol', 'Model Context Protocol (MCP)'],
+  ['Workflow Engine', 'Elsa 3'],
   ['CQRS', 'MediatR'],
   ['Realtime', 'SignalR'],
+  ['Cache', 'Redis'],
+  ['Observability', 'OpenTelemetry + Serilog'],
 ]
 
 function healthColor(status: string): 'success' | 'warning' | 'error' | 'default' {
@@ -77,12 +82,7 @@ export function AboutPage() {
 
   return (
     <Box>
-      <Typography variant="h5" component="h1" sx={{ fontWeight: 600, mb: 0.5 }}>
-        About R2WAI Studio
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Platform information, health, and configuration.
-      </Typography>
+      <PageHeader title="About R2WAI Studio" description="Platform information, health, and configuration." />
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>

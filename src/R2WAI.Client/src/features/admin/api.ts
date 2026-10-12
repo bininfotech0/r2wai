@@ -14,11 +14,9 @@ import type {
   RawPagedResult,
   RoleDto,
   TenantDto,
-  UpdateApiKeyInput,
   UpdateRoleInput,
   UpdateTenantInput,
   UpdateUserInput,
-  UpdateWebhookInput,
   UserDto,
   WebhookDto,
 } from './types'
@@ -115,9 +113,6 @@ export function listApiKeys(page: number, pageSize: number) {
 export function createApiKey(input: CreateApiKeyInput) {
   return postJson<ApiKeyCreatedResult>('/admin/api-keys', input)
 }
-export function updateApiKey(id: string, input: UpdateApiKeyInput) {
-  return putJson<ApiKeyDto>(`/admin/api-keys/${id}`, input)
-}
 export function toggleApiKey(id: string) {
   return postJson<{ id: string; isActive: boolean }>(`/admin/api-keys/${id}/toggle`, {})
 }
@@ -136,9 +131,6 @@ export function listWebhooks(page: number, pageSize: number) {
 }
 export function createWebhook(input: CreateWebhookInput) {
   return postJson<{ id: string; name: string; endpointUrl: string }>('/admin/webhooks', input)
-}
-export function updateWebhook(id: string, input: UpdateWebhookInput) {
-  return putJson<{ id: string; name: string }>(`/admin/webhooks/${id}`, input)
 }
 export function toggleWebhook(id: string) {
   return postJson<{ id: string; isActive: boolean }>(`/admin/webhooks/${id}/toggle`, {})

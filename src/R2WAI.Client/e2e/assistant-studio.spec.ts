@@ -13,7 +13,7 @@ test('Assistant Studio: create, edit, live preview, publish, delete', async ({ p
   await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
 
   // Create (manual path)
-  await page.getByRole('button', { name: 'New Assistant' }).click()
+  await page.getByRole('button', { name: 'New agent' }).click()
   await page.getByRole('button', { name: /configure manually/i }).click()
   const uniqueName = `E2E Assistant ${Date.now()}`
   // The test renames it partway through, so either name may be the one left behind.
@@ -26,13 +26,19 @@ test('Assistant Studio: create, edit, live preview, publish, delete', async ({ p
   // Lands on the Studio editor for the new assistant.
   await expect(page.getByRole('heading', { name: uniqueName })).toBeVisible()
 
-  // Overview edit + save
-  const nameField = page.getByLabel('Name')
-  await nameField.fill(`${uniqueName} (Updated)`)
-  const instructions = page.getByLabel('Instructions')
-  await instructions.fill('You are a helpful assistant for E2E testing. Reply concisely.')
-  await page.getByRole('button', { name: 'Save changes' }).click()
-  await expect(page.getByText('Saved')).toBeVisible()
+  // Overview: section cards edit in place; one sticky bar saves them together.
+  const details = page.getByRole('region', { name: 'Details' })
+  await details.getByRole('button', { name: 'Edit' }).click()
+  await details.getByLabel('Name').fill(`${uniqueName} (Updated)`)
+  const instructionsCard = page.getByRole('region', { name: 'Instructions' })
+  await instructionsCard.getByRole('button', { name: 'Edit' }).click()
+  await instructionsCard.getByLabel('Instructions').fill('You are a helpful assistant for E2E testing. Reply concisely.')
+  // Publishing is blocked until the edits are saved.
+  await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled()
+  const unsaved = page.getByRole('region', { name: 'Unsaved changes' })
+  await unsaved.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible()
+  await expect(unsaved).toHaveCount(0)
   await expect(page.getByRole('heading', { name: `${uniqueName} (Updated)` })).toBeVisible()
 
   // Live preview — real AI call through the Studio's right pane. Wait for
@@ -49,7 +55,7 @@ test('Assistant Studio: create, edit, live preview, publish, delete', async ({ p
   // Anchor on the input itself, then take its nearest container that also holds the pane's
   // "Live preview" heading — robust to the pane's wrapper depth changing.
   const previewInput = page.getByPlaceholder('Ask something…')
-  const preview = previewInput.locator('xpath=ancestor::div[.//*[normalize-space()="Live preview"]][1]')
+  const preview = page.getByRole('region', { name: 'Test your agent' })
   await previewInput.fill('Reply with just the word OK and nothing else.')
   await previewInput.press('Enter')
   await expect(preview.getByText('Reply with just the word OK and nothing else.')).toBeVisible()
@@ -62,15 +68,20 @@ test('Assistant Studio: create, edit, live preview, publish, delete', async ({ p
   // Publish
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
   await page.getByRole('button', { name: /^Publish \d/ }).click()
-  await expect(page.getByText('Assistant published')).toBeVisible()
+  await expect(page.getByText('Agent published')).toBeVisible()
 
-  // Delete
-  await page.getByRole('button', { name: 'Delete' }).click()
-  await page.getByRole('button', { name: 'Delete' }).last().click()
-  await expect(page.getByText('Assistant deleted')).toBeVisible()
+  // Delete lives in Settings → Advanced, as in Copilot Studio.
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByRole('tab', { name: 'Advanced' }).click()
+  await page.getByRole('button', { name: 'Delete agent' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
+  await expect(page.getByText('Agent deleted')).toBeVisible()
   await expect(page).toHaveURL(/\/assistants$/)
   // exact:true avoids a strict-mode clash with the delete confirmation
   // dialog's own "Delete "...Updated)"? ..." text, which can still be
   // mid-unmount when this assertion first polls.
-  await expect(page.getByText(`${uniqueName} (Updated)`, { exact: true })).not.toBeVisible()
+  // toHaveCount(0) retries; a negated toBeVisible fails outright on two matches, and the agent page
+  // (name in the header and the Details card) can still be on screen while the list route loads.
+  await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
+  await expect(page.getByText(`${uniqueName} (Updated)`, { exact: true })).toHaveCount(0)
 })

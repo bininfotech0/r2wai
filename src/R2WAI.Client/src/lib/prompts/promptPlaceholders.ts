@@ -1,6 +1,6 @@
 // Mirrors R2WAI.Application.Common.AI.PromptPlaceholders — the placeholders the server fills in a
 // system prompt before the model sees it. Anything else in {{ }} is sent to the model as written.
-export const SUPPORTED_PROMPT_PLACEHOLDERS = [
+const SUPPORTED_PROMPT_PLACEHOLDERS = [
   'tenant.name',
   'workspace.name',
   'user.name',

@@ -11,7 +11,7 @@ test('Copilot panel sends a message and receives a real streamed reply', async (
   test.setTimeout(360_000)
 
   await loginAsAdmin(page)
-  await page.getByRole('button', { name: 'Toggle AI Copilot' }).click()
+  await page.getByRole('button', { name: 'AI Copilot' }).click()
 
   const input = page.getByPlaceholder('Ask something…')
   await expect(input).toBeVisible()

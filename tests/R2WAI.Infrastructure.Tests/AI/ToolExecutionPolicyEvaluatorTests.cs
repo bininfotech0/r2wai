@@ -46,9 +46,28 @@ public class ToolExecutionPolicyEvaluatorTests
     }
 
     [Theory]
-    [InlineData("Critical", "Low")] // unrecognized tool risk label -> don't block
-    [InlineData("High", "Critical")] // unrecognized ceiling label -> don't block
-    public void ExceedsCeiling_UnrecognizedLabel_NeverBlocks(string toolRisk, string maxRisk)
+    [InlineData("Critical", "Low", true)]     // Critical is a valid label (capability validators accept it)
+    [InlineData("Critical", "High", true)]
+    [InlineData("Critical", "Critical", false)]
+    [InlineData("High", "Critical", false)]
+    public void ExceedsCeiling_RanksCritical(string toolRisk, string maxRisk, bool expected)
+    {
+        Assert.Equal(expected, ToolExecutionPolicyEvaluator.ExceedsCeiling(toolRisk, maxRisk));
+    }
+
+    [Theory]
+    [InlineData("Hgh", "Low")]   // unrecognized tool label -> fail closed
+    [InlineData("", "High")]
+    [InlineData("Severe", "High")]
+    public void ExceedsCeiling_UnrecognizedToolLabel_Blocks(string toolRisk, string maxRisk)
+    {
+        Assert.True(ToolExecutionPolicyEvaluator.ExceedsCeiling(toolRisk, maxRisk));
+    }
+
+    [Theory]
+    [InlineData("High", "Hgh")]  // unrecognized ceiling (policy typo) -> never blocks
+    [InlineData("Low", "Severe")]
+    public void ExceedsCeiling_UnrecognizedCeiling_NeverBlocks(string toolRisk, string maxRisk)
     {
         Assert.False(ToolExecutionPolicyEvaluator.ExceedsCeiling(toolRisk, maxRisk));
     }

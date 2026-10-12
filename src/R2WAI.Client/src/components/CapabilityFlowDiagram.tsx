@@ -49,7 +49,7 @@ export function CapabilityFlowDiagram() {
               {stage}
             </Box>
             {i < STAGES.length - 1 && (
-              <Typography component="div" sx={{ color: 'text.disabled', lineHeight: 1, fontSize: '0.75rem' }}>
+              <Typography component="div" sx={{ color: 'text.secondary', lineHeight: 1, fontSize: '0.75rem' }}>
                 ↓
               </Typography>
             )}

@@ -13,14 +13,46 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
     ///  - case-insensitive lower(...) expression indexes for Name (per tenant) and Code (same two
     ///    scopes as above). EF's HasIndex can't express these, so they are raw SQL and deliberately
     ///    absent from the model snapshot — EF never sees them, so it never tries to drop them.
-    /// Would fail if a tenant already held live names/codes differing only by case; checked none
-    /// existed before this was added (2026-10-10).
+    /// Names were never unique before this, so a database can already hold live duplicates (exact or
+    /// differing only by case), and a failed index build fails startup — DatabaseInitializer rethrows.
+    /// Up therefore first renames every live duplicate except the oldest in its scope, appending the
+    /// first 8 characters of its own id ("HR Portal (3f2b8c1e)", code "HR_3f2b8c1e"). Unique by
+    /// construction, visibly renamed for an admin to tidy, and nothing is deleted.
     /// </summary>
     public partial class CaseInsensitiveApplicationNameAndCodeUniqueness : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Name is varchar(500): " (" + 8 + ")" is 11 characters.
+            migrationBuilder.Sql(
+                """
+                UPDATE "Applications" AS a
+                SET "Name" = left(a."Name", 489) || ' (' || left(a."Id"::text, 8) || ')'
+                FROM (
+                    SELECT "Id", row_number() OVER (
+                        PARTITION BY "TenantId", lower("Name") ORDER BY "CreatedAt", "Id") AS rn
+                    FROM "Applications"
+                    WHERE "IsDeleted" = false
+                ) AS d
+                WHERE a."Id" = d."Id" AND d.rn > 1;
+                """);
+
+            // Code is varchar(100): "_" + 8 is 9 characters. PARTITION BY groups NULL DepartmentIds
+            // together, which is exactly the department-less index's scope.
+            migrationBuilder.Sql(
+                """
+                UPDATE "Applications" AS a
+                SET "Code" = left(a."Code", 91) || '_' || left(a."Id"::text, 8)
+                FROM (
+                    SELECT "Id", row_number() OVER (
+                        PARTITION BY "TenantId", "DepartmentId", lower("Code") ORDER BY "CreatedAt", "Id") AS rn
+                    FROM "Applications"
+                    WHERE "IsDeleted" = false
+                ) AS d
+                WHERE a."Id" = d."Id" AND d.rn > 1;
+                """);
+
             migrationBuilder.DropIndex(
                 name: "IX_Applications_TenantId_Code_NoDepartment",
                 table: "Applications");

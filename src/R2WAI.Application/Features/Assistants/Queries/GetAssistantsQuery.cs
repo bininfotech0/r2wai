@@ -28,6 +28,7 @@ public class AssistantsPagedResult : PagedResult<AssistantDto>
 public class GetAssistantsQueryHandler(
     IRepository<AssistantDefinition> assistantRepo,
     ICurrentUserService currentUser,
+    IWorkspaceContext workspace,
     ICacheService cache,
     IMapper mapper) : IRequestHandler<GetAssistantsQuery, AssistantsPagedResult>
 {
@@ -39,7 +40,9 @@ public class GetAssistantsQueryHandler(
         var hasApplicationFilter = query.ApplicationId.HasValue;
         var hasStatusFilter = query.PublishStatus.HasValue;
         var hasSortOverride = !string.IsNullOrEmpty(query.SortBy) && query.SortBy != "recent";
-        var cacheable = !hasSearch && !hasApplicationFilter && !hasStatusFilter && !hasSortOverride;
+        // Workspace-filtered lists are not cached: AssistantCacheKeys invalidates per tenant only.
+        var cacheable = !hasSearch && !hasApplicationFilter && !hasStatusFilter && !hasSortOverride
+            && workspace.WorkspaceId is null;
 
         if (cacheable)
         {
@@ -49,10 +52,12 @@ public class GetAssistantsQueryHandler(
         }
 
         var searchTerm = query.Search?.ToLower();
+        var workspaceId = workspace.WorkspaceId;
         var scoped = await assistantRepo.FindAsync(
             a => a.TenantId == tenantId && !a.IsDeleted
               && (string.IsNullOrEmpty(searchTerm) || a.Name.ToLower().Contains(searchTerm))
-              && (!hasApplicationFilter || a.ApplicationId == query.ApplicationId),
+              && (!hasApplicationFilter || a.ApplicationId == query.ApplicationId)
+              && (workspaceId == null || a.WorkspaceId == workspaceId),
             cancellationToken);
 
         // Counted over the search/applicationId-scoped set, before the PublishStatus filter below

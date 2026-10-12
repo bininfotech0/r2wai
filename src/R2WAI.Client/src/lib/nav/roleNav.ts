@@ -69,6 +69,14 @@ const NAVIGATION: readonly NavigationEntry[] = [
       User: { order: 0 }, Admin: { order: 0 }, SuperAdmin: { order: 0 }, Public: { order: 0 },
     },
   },
+  // Workspaces leads the sidebar: the container every later destination's resources belong to.
+  // What a workspace connects to (connected systems, integrations, MCP servers, tools) renders as
+  // tabs on it rather than as separate sidebar items.
+  { id: 'workspaces', section: 'Workspaces', label: 'Workspaces', path: '/workspaces', icon: 'Workspaces', routeLabel: 'Workspaces', visibleTo: ADMIN_PERSONAS, tabGroup: 'workspaces', tabLabel: 'Workspaces' },
+  { id: 'connections', section: 'Connections', label: 'Connections', path: '/connections', icon: 'Apps', routeLabel: 'Connections', breadcrumbParentPath: '/workspaces', visibleTo: ADMIN_PERSONAS, tabGroup: 'workspaces' },
+  { id: 'integrations', label: 'Integrations', path: '/integrations', icon: 'Build', routeLabel: 'Integrations', breadcrumbParentPath: '/workspaces', visibleTo: ADMIN_PERSONAS, sidebar: false, tabGroup: 'workspaces' },
+  { id: 'mcp', label: 'MCP Servers', path: '/mcp-connections', icon: 'RocketLaunch', routeLabel: 'MCP Servers', breadcrumbParentPath: '/workspaces', visibleTo: ADMIN_PERSONAS, sidebar: false, tabGroup: 'workspaces' },
+  { id: 'tools', label: 'Tools & APIs', path: '/tools', icon: 'Extension', routeLabel: 'Tools & APIs', breadcrumbParentPath: '/workspaces', visibleTo: ['SuperAdmin'], sidebar: false, tabGroup: 'workspaces' },
   {
     id: 'agents', section: 'Agents', label: 'Agents', path: '/assistants', icon: 'SmartToy', routeLabel: 'Agents', visibleTo: ADMIN_PERSONAS,
     bottomNav: {
@@ -86,12 +94,6 @@ const NAVIGATION: readonly NavigationEntry[] = [
       Public: { order: 2, label: 'Chat' },
     },
   },
-  // One "Connections" destination: four pages that all answer "how does an agent reach an outside
-  // system" used to be four sidebar items. Each keeps its own URL; they render as tabs instead.
-  { id: 'connections', section: 'Connections', label: 'Connections', path: '/workspaces', icon: 'Apps', routeLabel: 'Connections', visibleTo: ADMIN_PERSONAS, tabGroup: 'connections', tabLabel: 'Connected Systems' },
-  { id: 'integrations', label: 'Integrations', path: '/integrations', icon: 'Build', routeLabel: 'Integrations', breadcrumbParentPath: '/workspaces', visibleTo: ADMIN_PERSONAS, sidebar: false, tabGroup: 'connections' },
-  { id: 'mcp', label: 'MCP Servers', path: '/mcp-connections', icon: 'RocketLaunch', routeLabel: 'MCP Servers', breadcrumbParentPath: '/workspaces', visibleTo: ADMIN_PERSONAS, sidebar: false, tabGroup: 'connections' },
-  { id: 'tools', label: 'Tools & APIs', path: '/tools', icon: 'Extension', routeLabel: 'Tools & APIs', breadcrumbParentPath: '/workspaces', visibleTo: ['SuperAdmin'], sidebar: false, tabGroup: 'connections' },
   {
     id: 'knowledge', section: 'Knowledge', sectionsByPersona: { User: '' }, label: 'Knowledge', path: '/knowledge', icon: 'MenuBook', routeLabel: 'Knowledge', visibleTo: ALL_PERSONAS,
     bottomNav: { User: { order: 2 } },
@@ -187,6 +189,60 @@ export function getNavSections(persona: RolePersona): NavSection[] {
   }
 
   return [...groups].map(([label, items]) => ({ label, items }))
+}
+
+export interface RailLayout {
+  /** Icon-over-label rail items, top to bottom. */
+  items: NavItem[]
+  /** Everything else, grouped, for the rail's "More" menu. */
+  more: NavSection[]
+}
+
+// Not rail destinations: workspaces are picked in the top-bar switcher, and settings live in More,
+// as in Copilot Studio.
+const RAIL_EXCLUDED_SECTIONS = new Set(['Workspaces', 'Settings'])
+
+// Rail order follows how an agent is built and shipped, not registry order: Connections sits with
+// the building blocks, after Automations.
+const RAIL_ORDER = ['Agents', 'Knowledge', 'Automations', 'Connections', 'Publish', 'Activity']
+const railRank = (label: string) => {
+  const index = RAIL_ORDER.indexOf(label)
+  return index === -1 ? RAIL_ORDER.length : index
+}
+
+/**
+ * The Copilot Studio-style shell: Home, then one rail item per sidebar section (its first entry),
+ * and a More menu with the section's other pages plus the excluded sections. A rail item stays
+ * highlighted on every page of its section, so moving to Playground keeps Agents lit.
+ * Personas whose items have no section (the User persona) get each item on the rail directly.
+ */
+export function getRailLayout(persona: RolePersona): RailLayout {
+  const items: NavItem[] = [getHomeNavItem()]
+  const more: NavSection[] = []
+
+  const sections = [...getNavSections(persona)].sort((a, b) => railRank(a.label) - railRank(b.label))
+  // Pages reached through More must not light a rail item, even when they share its tab group
+  // (/workspaces sits in the Connections tab strip).
+  const morePaths = new Set(
+    sections.filter((s) => RAIL_EXCLUDED_SECTIONS.has(s.label)).flatMap((s) => s.items.map((i) => i.path)),
+  )
+  for (const section of sections) {
+    if (!section.label) {
+      items.push(...section.items)
+      continue
+    }
+    if (RAIL_EXCLUDED_SECTIONS.has(section.label)) {
+      more.push(section)
+      continue
+    }
+    const [primary, ...rest] = section.items
+    const sectionPaths = rest.flatMap((item) => [item.path, ...(item.matchPaths ?? [])])
+    const matchPaths = [...(primary.matchPaths ?? []), ...sectionPaths].filter((path) => !morePaths.has(path))
+    items.push({ ...primary, matchPaths })
+    if (rest.length > 0) more.push({ label: section.label, items: rest })
+  }
+
+  return { items, more }
 }
 
 export function getBottomNavItems(persona: RolePersona): BottomNavItem[] {

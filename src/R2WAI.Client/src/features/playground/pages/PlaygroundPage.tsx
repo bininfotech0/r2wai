@@ -105,7 +105,7 @@ export function PlaygroundPage() {
               <Typography variant="overline" color="primary.main" sx={{ fontWeight: 750, letterSpacing: 1.1 }}>TEST WORKSPACE</Typography>
               <Chip icon={<BoltOutlinedIcon />} label="Real API" size="small" color="success" variant="outlined" />
             </Stack>
-            <Typography variant="h4" sx={{ fontWeight: 750, letterSpacing: '-0.035em', fontSize: { xs: '1.65rem', sm: '2rem' } }}>Playground</Typography>
+            <Typography variant="h4" component="h1" sx={{ fontWeight: 750, letterSpacing: '-0.035em', fontSize: { xs: '1.65rem', sm: '2rem' } }}>Playground</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 740 }}>
               Run a real conversation, automation, or tool check before you publish.
             </Typography>

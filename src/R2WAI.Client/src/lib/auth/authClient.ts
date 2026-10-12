@@ -1,5 +1,6 @@
 import { tokenStorage } from './tokenStorage'
 import { AuthError } from './types'
+import { getActiveWorkspaceId } from '../workspace/activeWorkspace'
 import type {
   ApiErrorBody,
   EntraIdRequest,
@@ -242,11 +243,19 @@ function notifySessionExpired(): void {
  * exactly one refresh-and-retry before giving up and clearing the session —
  * mirrors AuthenticatedHttpClient.HandleUnauthorizedAsync.
  */
+function isOwnApi(input: RequestInfo | URL): boolean {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  return url.startsWith('/api/') || url.startsWith(`${window.location.origin}/api/`)
+}
+
 export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   const withAuth = (): RequestInit => {
     const headers = new Headers(init.headers)
     const token = tokenStorage.getToken()
     if (token) headers.set('Authorization', `Bearer ${token}`)
+    // Only our own API: the header means nothing to (and must not leak to) another origin.
+    const workspaceId = getActiveWorkspaceId()
+    if (workspaceId && isOwnApi(input)) headers.set('X-Workspace-Id', workspaceId)
     return { ...init, headers }
   }
 

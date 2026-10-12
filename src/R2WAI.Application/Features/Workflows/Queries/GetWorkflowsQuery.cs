@@ -11,17 +11,20 @@ public record GetWorkflowsQuery : IRequest<PagedResult<WorkflowDto>>
 public class GetWorkflowsQueryHandler(
     IRepository<Workflow> workflowRepo,
     ICurrentUserService currentUser,
+    IWorkspaceContext workspace,
     IMapper mapper) : IRequestHandler<GetWorkflowsQuery, PagedResult<WorkflowDto>>
 {
     public async Task<PagedResult<WorkflowDto>> Handle(GetWorkflowsQuery query, CancellationToken cancellationToken)
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
         var searchTerm = query.Search?.ToLower();
+        var workspaceId = workspace.WorkspaceId;
 
         var filtered = await workflowRepo.FindAsync(
             w => w.TenantId == tenantId && !w.IsDeleted
               && (string.IsNullOrEmpty(searchTerm) || w.Name.ToLower().Contains(searchTerm))
-              && (!query.ApplicationId.HasValue || w.ApplicationId == query.ApplicationId),
+              && (!query.ApplicationId.HasValue || w.ApplicationId == query.ApplicationId)
+              && (workspaceId == null || w.WorkspaceId == workspaceId),
             cancellationToken);
 
         var ordered = filtered.OrderByDescending(w => w.CreatedAt);

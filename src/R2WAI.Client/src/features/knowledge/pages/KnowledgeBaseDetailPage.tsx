@@ -227,7 +227,7 @@ export function KnowledgeBaseDetailPage() {
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            <Typography variant="h4" component="h1" sx={{ fontSize: { xs: '1.55rem', sm: '1.85rem', lg: '2.1rem' }, fontWeight: 750, letterSpacing: '-0.035em', lineHeight: 1.15, overflowWrap: 'anywhere' }}>
               {kb.name}
             </Typography>
             <Chip label={kb.status} size="small" color={STATUS_COLOR[kb.status] ?? 'default'} variant="outlined" />

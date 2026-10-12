@@ -52,10 +52,6 @@ export function publishWorkflow(id: string) {
   return postJson<{ id: string; version: number; versionStatus: string }>(`/workflows/${id}/publish`, {})
 }
 
-export function unpublishWorkflow(id: string) {
-  return postJson<{ id: string; version: number; versionStatus: string }>(`/workflows/${id}/unpublish`, {})
-}
-
 export function executeWorkflow(id: string, data?: string) {
   return postJson<{ instanceId: string; status: string; warning?: string }>(`/workflows/${id}/execute`, { data })
 }

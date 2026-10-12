@@ -6,17 +6,15 @@ import { loginAsAdmin } from './fixtures/auth'
 // view-only below `sm` rather than attempting touch-drag support (brief §21).
 
 test.describe('Responsive layout', () => {
-  test('desktop (>=md): persistent sidebar, no bottom nav', async ({ page }) => {
+  test('desktop (>=md): fixed icon rail, no menu button, no bottom nav', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await loginAsAdmin(page)
 
-    await expect(page.getByRole('link', { name: 'Home' })).toBeVisible()
+    const rail = page.getByRole('navigation', { name: 'Main navigation' })
+    await expect(rail.getByRole('link', { name: 'Home' })).toBeVisible()
+    expect((await rail.boundingBox())?.width).toBeLessThanOrEqual(80)
+    await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveCount(0)
     await expect(page.locator('.MuiBottomNavigation-root')).toHaveCount(0)
-
-    await page.getByRole('button', { name: 'Collapse navigation' }).click()
-    await expect(page.getByRole('button', { name: 'Expand navigation' })).toBeVisible()
-    await page.reload()
-    await expect(page.getByRole('button', { name: 'Expand navigation' })).toBeVisible()
   })
 
   test('respects the operating system reduced-motion preference', async ({ page }) => {

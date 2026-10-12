@@ -1,3 +1,4 @@
+using R2WAI.Application.Common.Security;
 using R2WAI.Infrastructure.AI.Policies;
 
 namespace R2WAI.Infrastructure.Tests.AI;
@@ -14,6 +15,42 @@ public class PiiDetectorTests
     {
         var matches = PiiDetector.Find(text);
         Assert.Contains(matches, m => m.Type == expectedType);
+    }
+
+    // Blueprint test matrix (docs/architecture/R2WAI-v0.7.3-BLUEPRINT.md §2.1). Rows marked "was a
+    // gap" failed against one or both of the two detectors this one replaced.
+    [Theory]
+    [InlineData("P-A1", "UID 2345 6789 0123", "Aadhaar")]
+    [InlineData("P-A2", "UID 2345-6789-0123", "Aadhaar")]             // was a gap (ingest scanner)
+    [InlineData("P-A3", "UID 2345.6789.0123", "Aadhaar")]             // was a gap
+    [InlineData("P-A4", "UID 2345 6789 0123", "Aadhaar")]
+    [InlineData("P-A5", "UID २३४५ ६७८९ ०१२३", "Aadhaar")]
+    [InlineData("P-A6", "ref 123456789012345", null)]                  // 15 digits: not Aadhaar
+    [InlineData("P-A7", "UID 2345​6789​0123", "Aadhaar")]   // was a gap (zero-width)
+    [InlineData("P-P1", "PAN ABCDE1234F", "PAN")]
+    [InlineData("P-P2", "pan abcde1234f", "PAN")]                      // was a gap (ingest scanner)
+    [InlineData("P-P3", "PAN ABCDE 1234 F", "PAN")]                    // was a gap
+    [InlineData("P-M1", "call +91 9876543210", "Phone")]
+    [InlineData("P-M2", "call +91 98765 43210", "Phone")]              // was a gap
+    [InlineData("P-M3", "call 09876543210", "Phone")]                  // was a gap
+    [InlineData("P-M5", "id 5876543210", null)]                        // must start 6-9
+    public void Find_Matrix(string id, string text, string? expectedType)
+    {
+        var types = PiiDetector.FindTypes(text);
+        if (expectedType is null)
+            Assert.True(types.Count == 0, $"{id}: false positive [{string.Join(",", types)}]");
+        else
+            Assert.True(types.Contains(expectedType), $"{id}: expected {expectedType}, got [{string.Join(",", types)}]");
+    }
+
+    [Theory]
+    [InlineData("call +91 98765 43210 today", "98765")]
+    [InlineData("UID 2345​6789​0123", "0123")]
+    [InlineData("919876543210", "9876543210")]
+    [InlineData("PAN ABCDE 1234 F", "1234")]
+    public void Redact_LeavesNoFragmentOfTheIdentifier(string text, string fragment)
+    {
+        Assert.DoesNotContain(fragment, PiiDetector.Redact(text));
     }
 
     [Theory]

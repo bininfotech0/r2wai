@@ -11,17 +11,20 @@ public record GetKnowledgeBasesQuery : IRequest<PagedResult<KnowledgeBaseDto>>
 public class GetKnowledgeBasesQueryHandler(
     IRepository<KnowledgeBase> kbRepo,
     ICurrentUserService currentUser,
+    IWorkspaceContext workspace,
     IMapper mapper) : IRequestHandler<GetKnowledgeBasesQuery, PagedResult<KnowledgeBaseDto>>
 {
     public async Task<PagedResult<KnowledgeBaseDto>> Handle(GetKnowledgeBasesQuery query, CancellationToken cancellationToken)
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
         var searchTerm = query.Search?.ToLower();
+        var workspaceId = workspace.WorkspaceId;
 
         var filtered = await kbRepo.FindAsync(
             kb => kb.TenantId == tenantId && !kb.IsDeleted
               && (string.IsNullOrEmpty(searchTerm) || kb.Name.ToLower().Contains(searchTerm))
-              && (!query.ApplicationId.HasValue || kb.ApplicationId == query.ApplicationId),
+              && (!query.ApplicationId.HasValue || kb.ApplicationId == query.ApplicationId)
+              && (workspaceId == null || kb.WorkspaceId == workspaceId),
             cancellationToken);
 
         var ordered = filtered.OrderByDescending(kb => kb.CreatedAt);

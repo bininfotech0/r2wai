@@ -30,7 +30,7 @@ export interface OnboardingItem {
   isComplete: boolean
 }
 
-export const ONBOARDING_ITEMS: readonly Omit<OnboardingItem, 'isComplete'>[] = [
+const ONBOARDING_ITEMS: readonly Omit<OnboardingItem, 'isComplete'>[] = [
   {
     key: 'assistant',
     label: 'Create your first AI assistant',

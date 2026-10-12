@@ -1,8 +1,6 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Net;
-using System.Security.Cryptography;
-using System.Text;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -676,6 +674,8 @@ public class AdminController(
 
         var currentUser = HttpContext.RequestServices.GetRequiredService<ICurrentUserService>();
         var passwordHasher = HttpContext.RequestServices.GetRequiredService<IPasswordHasher>();
+        // The same keyed hash RegisterMemberCommand stores, so the Aadhaar login lookup finds these members.
+        var aadhaarHasher = HttpContext.RequestServices.GetRequiredService<IAadhaarHasher>();
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
 
         // Every seeded account shares one fixed password so QA can actually log into them.
@@ -695,7 +695,7 @@ public class AdminController(
                 do
                 {
                     aadhaar = R2WAI.Api.Services.AadhaarTestNumberGenerator.Generate();
-                    aadhaarHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(aadhaar)));
+                    aadhaarHash = aadhaarHasher.Hash(aadhaar);
                 } while (!seenHashes.Add(aadhaarHash));
 
                 var mobile = "9" + Random.Shared.Next(100000000, 999999999);

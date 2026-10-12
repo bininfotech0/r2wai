@@ -87,6 +87,7 @@ public class AssistantDefinitionConfiguration : IEntityTypeConfiguration<Assista
             .HasForeignKey(a => a.ApplicationId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.HasIndex(a => new { a.TenantId, a.WorkspaceId });
         builder.HasIndex(a => new { a.TenantId, a.Name });
         builder.HasIndex(a => new { a.TenantId, a.IsActive });
         builder.HasIndex(a => new { a.TenantId, a.PublishStatus });

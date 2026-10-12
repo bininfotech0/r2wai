@@ -575,6 +575,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid");
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -589,11 +592,15 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ModelConfigurationId");
 
+                    b.HasIndex("WorkspaceId");
+
                     b.HasIndex("TenantId", "IsActive");
 
                     b.HasIndex("TenantId", "Name");
 
                     b.HasIndex("TenantId", "PublishStatus");
+
+                    b.HasIndex("TenantId", "WorkspaceId");
 
                     b.ToTable("AssistantDefinitions", (string)null);
                 });
@@ -990,6 +997,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<string>("WidgetSettings")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AssistantId");
@@ -1002,7 +1012,11 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("WorkspaceId");
+
                     b.HasIndex("TenantId", "Name");
+
+                    b.HasIndex("TenantId", "WorkspaceId");
 
                     b.ToTable("Chatbots", (string)null);
                 });
@@ -1155,6 +1169,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid");
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -1165,12 +1182,16 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("DepartmentId");
 
+                    b.HasIndex("WorkspaceId");
+
                     b.HasIndex("TenantId", "Code")
                         .IsUnique()
                         .HasDatabaseName("IX_Applications_TenantId_Code_NoDepartment")
                         .HasFilter("\"DepartmentId\" IS NULL AND \"IsDeleted\" = false");
 
                     b.HasIndex("TenantId", "Status");
+
+                    b.HasIndex("TenantId", "WorkspaceId");
 
                     b.HasIndex("TenantId", "DepartmentId", "Code")
                         .IsUnique()
@@ -1465,15 +1486,22 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ApplicationId");
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("WorkspaceId");
+
                     b.HasIndex("TenantId", "Name");
 
                     b.HasIndex("TenantId", "Status");
+
+                    b.HasIndex("TenantId", "WorkspaceId");
 
                     b.ToTable("KnowledgeBases", (string)null);
                 });
@@ -2732,6 +2760,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid");
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -2744,9 +2775,13 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("WorkspaceId");
+
                     b.HasIndex("TenantId", "IsActive");
 
                     b.HasIndex("TenantId", "Name");
+
+                    b.HasIndex("TenantId", "WorkspaceId");
 
                     b.HasIndex("Trigger", "IsActive");
 
@@ -2978,6 +3013,53 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("WorkflowVersions", (string)null);
                 });
 
+            modelBuilder.Entity("R2WAI.Domain.Entities.Workspace", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Workspaces_TenantId_Default")
+                        .HasFilter("\"IsDefault\" = true AND \"IsDeleted\" = false");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
+
+                    b.ToTable("Workspaces", (string)null);
+                });
+
             modelBuilder.Entity("R2WAI.Domain.Entities.ApplicationApi", b =>
                 {
                     b.HasOne("R2WAI.Domain.Entities.ConnectedApplication", "Application")
@@ -3086,6 +3168,11 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("R2WAI.Domain.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Application");
 
@@ -3196,6 +3283,11 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("R2WAI.Domain.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Assistant");
 
                     b.Navigation("KnowledgeBase");
@@ -3243,6 +3335,11 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("R2WAI.Domain.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Department");
 
@@ -3334,6 +3431,11 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("R2WAI.Domain.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Application");
 
@@ -3683,6 +3785,11 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("R2WAI.Domain.Entities.Workspace", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Application");
 
                     b.Navigation("Tenant");
@@ -3748,6 +3855,15 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Workflow");
+                });
+
+            modelBuilder.Entity("R2WAI.Domain.Entities.Workspace", b =>
+                {
+                    b.HasOne("R2WAI.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("R2WAI.Domain.Entities.Conversation", b =>

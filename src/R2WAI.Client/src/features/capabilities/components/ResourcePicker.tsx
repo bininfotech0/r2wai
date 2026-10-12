@@ -32,6 +32,7 @@ export function ResourcePicker({
         fullWidth
         size="small"
         placeholder={searchPlaceholder}
+        slotProps={{ htmlInput: { 'aria-label': 'Search' } }}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         sx={{ mb: 1 }}

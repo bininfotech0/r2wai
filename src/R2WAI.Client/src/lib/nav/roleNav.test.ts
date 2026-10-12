@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getPersona, getNavSections, getBottomNavItems, getBreadcrumbs, getSectionTabs } from './roleNav'
+import { getPersona, getNavSections, getBottomNavItems, getBreadcrumbs, getSectionTabs, getRailLayout } from './roleNav'
 import type { UserInfo } from '../auth/types'
 
 function makeUser(roles: string[]): UserInfo {
@@ -55,8 +55,9 @@ describe('getNavSections', () => {
     const sections = getNavSections('SuperAdmin')
     const primaryItems = sections.map((section) => section.items[0])
     expect(primaryItems.map((item) => item.label)).toEqual([
-      'Agents',
+      'Workspaces',
       'Connections',
+      'Agents',
       'Knowledge',
       'Automations',
       'Publish',
@@ -64,8 +65,9 @@ describe('getNavSections', () => {
       'Settings',
     ])
     expect(primaryItems.map((item) => item.path)).toEqual([
-      '/assistants',
       '/workspaces',
+      '/connections',
+      '/assistants',
       '/knowledge',
       '/automations',
       '/chatbots',
@@ -73,8 +75,9 @@ describe('getNavSections', () => {
       '/settings',
     ])
     expect(sections.map((section) => section.label)).toEqual([
-      'Agents',
+      'Workspaces',
       'Connections',
+      'Agents',
       'Knowledge',
       'Automations',
       'Publish',
@@ -86,8 +89,9 @@ describe('getNavSections', () => {
   it('gives Admin the same primary links as SuperAdmin, minus restricted secondary items', () => {
     const sections = getNavSections('Admin')
     expect(sections.map((section) => section.items[0].label)).toEqual([
-      'Agents',
+      'Workspaces',
       'Connections',
+      'Agents',
       'Knowledge',
       'Automations',
       'Publish',
@@ -180,15 +184,15 @@ describe('getNavSections', () => {
     expect(settings?.items.map((i) => i.label)).toEqual(['Settings', 'Users', 'API & SDK'])
   })
 
-  it('collapses Connections to one sidebar item whose tab group keeps it highlighted', () => {
-    const connections = getNavSections('Admin').find((s) => s.label === 'Connections')
-    expect(connections?.items.map((i) => i.label)).toEqual(['Connections'])
-    expect(connections?.items[0].matchPaths).toEqual(['/integrations', '/mcp-connections'])
+  it('collapses Workspaces to one sidebar item whose tab group keeps it highlighted', () => {
+    const workspaces = getNavSections('Admin').find((s) => s.label === 'Workspaces')
+    expect(workspaces?.items.map((i) => i.label)).toEqual(['Workspaces'])
+    expect(workspaces?.items[0].matchPaths).toEqual(['/connections', '/integrations', '/mcp-connections'])
   })
 
-  it('reaches Tools & APIs through the Connections tabs and AI Models under Settings, SuperAdmin only', () => {
+  it('reaches Tools & APIs through the Workspaces tabs and AI Models under Settings, SuperAdmin only', () => {
     const sections = getNavSections('SuperAdmin')
-    expect(sections.find((s) => s.label === 'Connections')?.items[0].matchPaths).toContain('/tools')
+    expect(sections.find((s) => s.label === 'Workspaces')?.items[0].matchPaths).toContain('/tools')
     expect(sections.find((s) => s.label === 'Settings')?.items.some((i) => i.path === '/models')).toBe(true)
     expect(getNavSections('Admin').some((s) => s.items.some((i) => i.path === '/models'))).toBe(false)
   })
@@ -198,11 +202,11 @@ describe('getNavSections', () => {
     expect(sections.some((s) => s.items.some((i) => i.path === '/tools'))).toBe(false)
   })
 
-  it('uses Connections as the primary destination for Admin and SuperAdmin', () => {
+  it('uses Workspaces as the primary destination for Admin and SuperAdmin', () => {
     for (const persona of ['Admin', 'SuperAdmin'] as const) {
       const sections = getNavSections(persona)
-      expect(sections.find((s) => s.label === 'Connections')?.items[0]).toMatchObject({
-        label: 'Connections',
+      expect(sections.find((s) => s.label === 'Workspaces')?.items[0]).toMatchObject({
+        label: 'Workspaces',
         path: '/workspaces',
       })
     }
@@ -264,17 +268,18 @@ describe('getBreadcrumbs', () => {
 })
 
 describe('getSectionTabs', () => {
-  it('renders the Connections tabs on every member page, scoped to the persona', () => {
+  it('renders the Workspaces tabs on every member page, scoped to the persona', () => {
     expect(getSectionTabs('/integrations', 'Admin')).toEqual({
       tabs: [
-        { label: 'Connected Systems', path: '/workspaces', icon: 'Apps' },
+        { label: 'Workspaces', path: '/workspaces', icon: 'Workspaces' },
+        { label: 'Connections', path: '/connections', icon: 'Apps' },
         { label: 'Integrations', path: '/integrations', icon: 'Build' },
         { label: 'MCP Servers', path: '/mcp-connections', icon: 'RocketLaunch' },
       ],
       activePath: '/integrations',
     })
     expect(getSectionTabs('/tools', 'SuperAdmin')?.tabs.map((t) => t.path)).toEqual([
-      '/workspaces', '/integrations', '/mcp-connections', '/tools',
+      '/workspaces', '/connections', '/integrations', '/mcp-connections', '/tools',
     ])
   })
 
@@ -289,5 +294,38 @@ describe('getSectionTabs', () => {
     expect(getSectionTabs('/chatbots/123e4567-e89b-12d3-a456-426614174000', 'Admin')).toBeNull()
     expect(getSectionTabs('/tools/123e4567-e89b-12d3-a456-426614174000', 'SuperAdmin')).toBeNull()
     expect(getSectionTabs('/runs', 'Admin')).toBeNull()
+  })
+})
+
+describe('getRailLayout', () => {
+  it('puts Home and one item per destination on the rail, in build-and-ship order', () => {
+    expect(getRailLayout('Admin').items.map((i) => i.label)).toEqual([
+      'Home', 'Agents', 'Knowledge', 'Automations', 'Connections', 'Publish', 'Activity',
+    ])
+  })
+
+  it('moves secondary pages, Workspaces and Settings into More', () => {
+    const more = getRailLayout('SuperAdmin').more
+    expect(more.map((s) => s.label)).toEqual(['Agents', 'Activity', 'Workspaces', 'Settings'])
+    expect(more.find((s) => s.label === 'Activity')?.items.map((i) => i.label)).toEqual(['Confirmations', 'Monitor'])
+    expect(more.find((s) => s.label === 'Settings')?.items.some((i) => i.path === '/models')).toBe(true)
+  })
+
+  it('keeps a rail item lit on every page of its section and tab group', () => {
+    const items = getRailLayout('Admin').items
+    expect(items.find((i) => i.label === 'Agents')?.matchPaths).toContain('/playground')
+    expect(items.find((i) => i.label === 'Connections')?.matchPaths).toEqual(expect.arrayContaining(['/integrations', '/mcp-connections']))
+    expect(items.find((i) => i.label === 'Publish')?.matchPaths).toEqual(expect.arrayContaining(['/deploy', '/deploy/widget']))
+  })
+
+  it('never lights a rail item for a page that lives in More', () => {
+    const connections = getRailLayout('Admin').items.find((i) => i.label === 'Connections')
+    expect(connections?.matchPaths).not.toContain('/workspaces')
+  })
+
+  it('gives a plain user every item directly on the rail, with nothing in More', () => {
+    const layout = getRailLayout('User')
+    expect(layout.items.map((i) => i.path)).toEqual(['/', '/playground', '/knowledge', '/runs', '/inbox', '/profile'])
+    expect(layout.more).toEqual([])
   })
 })

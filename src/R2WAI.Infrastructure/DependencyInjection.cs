@@ -48,6 +48,9 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<IKnowledgeBaseService, KnowledgeBaseService>();
+        services.AddScoped<IWorkspaceDirectory, WorkspaceDirectory>();
+        services.AddScoped<WorkspaceContext>();
+        services.AddScoped<IWorkspaceContext>(sp => sp.GetRequiredService<WorkspaceContext>());
         services.AddScoped<IChatbotService, ChatbotService>();
         services.AddScoped<IWorkflowService, WorkflowService>();
         services.AddScoped<IApprovalService, ApprovalService>();

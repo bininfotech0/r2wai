@@ -14,6 +14,8 @@ interface StatCardProps {
   loading?: boolean
 }
 
+const srOnly = { position: 'absolute', width: 1, height: 1, p: 0, m: '-1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 } as const
+
 export function StatCard({ label, value, trendPercent, icon: Icon, color = 'primary', loading }: StatCardProps) {
   const hasTrend = trendPercent !== undefined && trendPercent !== null
   const isUp = hasTrend && trendPercent! >= 0
@@ -74,6 +76,7 @@ export function StatCard({ label, value, trendPercent, icon: Icon, color = 'prim
               <ArrowDownwardIcon sx={{ fontSize: 14, color: 'error.main' }} />
             )}
             <Typography variant="caption" sx={{ color: isUp ? 'success.main' : 'error.main' }}>
+              <Box component="span" sx={srOnly}>{isUp ? 'Up ' : 'Down '}</Box>
               {Math.abs(trendPercent!).toFixed(1)}%
             </Typography>
           </Stack>

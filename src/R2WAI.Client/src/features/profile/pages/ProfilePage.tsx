@@ -26,6 +26,7 @@ import { getPersona, getPersonaLabel } from '../../../lib/nav/roleNav'
 import { changePassword, updateProfile, uploadAvatar, type UpdateProfileInput } from '../api'
 import { MfaSection } from '../components/MfaSection'
 import { ApiRequestError } from '../../../lib/api/fetchJson'
+import { PageHeader } from '../../../components/PageHeader'
 
 function useAuthenticatedImage(url: string | null) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
@@ -169,12 +170,7 @@ export function ProfilePage() {
 
   return (
     <Box>
-      <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-        Profile
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Your account details and security settings.
-      </Typography>
+      <PageHeader title="Profile" description="Your account details and security settings." />
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 5 }}>

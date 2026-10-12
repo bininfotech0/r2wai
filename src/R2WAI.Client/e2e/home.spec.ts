@@ -11,7 +11,7 @@ test.describe('Home', () => {
     test.setTimeout(30_000)
     await loginAsAdmin(page)
 
-    await page.getByRole('button', { name: '+ Assistant' }).click()
+    await page.getByRole('button', { name: '+ Agent' }).click()
     await expect(page.getByRole('heading', { name: 'Create AI Assistant' })).toBeVisible()
     await page.keyboard.press('Escape')
 
@@ -21,41 +21,61 @@ test.describe('Home', () => {
 
     await page.getByRole('dialog').getByText('AI Assistant', { exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Create AI Assistant' })).toBeVisible()
-    await expect(page.getByText('E2E home prompt text')).toBeVisible()
+    await expect(page.getByRole('dialog').getByText('E2E home prompt text')).toBeVisible()
   })
 
-  // Connections is one sidebar destination; Integrations, MCP Servers and Tools & APIs are tabs on it.
-  // Tools & APIs stays reachable only by the SuperAdmin persona the seeded admin account holds
-  // (CapabilitiesController is still SystemAdmin-only — nav placement only, not an authorization change).
-  test('sets a per-route document title, and groups connection destinations as tabs', async ({ page }) => {
+  test('templates open the AI draft with their description, and the numbers moved to Monitor', async ({ page }) => {
+    await loginAsAdmin(page)
+    await expect(page.getByRole('heading', { name: 'What would you like to build?' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Start from the Citizen services template' }).click()
+    await expect(page.getByRole('heading', { name: 'Create AI Assistant' })).toBeVisible()
+    await expect(page.getByText(/citizen services agent that explains government scheme eligibility/)).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    await page.getByRole('link', { name: /Usage and performance/ }).click()
+    await expect(page).toHaveURL(/\/monitor$/)
+    await expect(page.getByText('Tokens used')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Agent performance' })).toBeVisible()
+  })
+
+  // Copilot Studio-style shell: an icon-over-label rail, a More menu for Workspaces/Settings/secondary
+  // pages, and the workspace switcher in the top bar. Tools & APIs stays reachable only by the
+  // SuperAdmin persona the seeded admin account holds (CapabilitiesController is SystemAdmin-only).
+  test('rail, More menu and workspace switcher reach every destination', async ({ page }) => {
     await loginAsAdmin(page)
     await expect(page).toHaveTitle('R2WAI Studio')
 
-    const sidebar = page.getByRole('group', { name: 'Connections navigation' })
-    await expect(sidebar.getByRole('link', { name: 'Connections' })).toBeVisible()
-    for (const label of ['Integrations', 'MCP Servers', 'Tools & APIs']) {
-      await expect(sidebar.getByRole('link', { name: label })).toHaveCount(0)
-    }
-    await expect(page.getByRole('group', { name: 'Settings navigation' }).getByRole('link', { name: 'AI Models' })).toBeVisible()
-    const publishFollowsConnections = await page.locator('a[href="/workspaces"]').first().evaluate((connections) => {
-      const publish = document.querySelector('a[href="/chatbots"]')
-      return publish !== null && Boolean(connections.compareDocumentPosition(publish) & Node.DOCUMENT_POSITION_FOLLOWING)
-    })
-    expect(publishFollowsConnections).toBe(true)
-    await expect(page.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
+    const rail = page.getByRole('navigation', { name: 'Main navigation' })
+    await expect(rail.getByRole('link')).toHaveCount(7) // evaluateAll below does not auto-wait
+    const railLabels = await rail.getByRole('link').evaluateAll((links) => links.map((l) => l.getAttribute('aria-label')))
+    expect(railLabels).toEqual(['Home', 'Agents', 'Knowledge', 'Automations', 'Connections', 'Publish', 'Activity'])
+    await expect(rail.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
 
-    await sidebar.getByRole('link', { name: 'Connections' }).click()
+    // More holds Workspaces, Settings and secondary pages.
+    await rail.getByRole('button', { name: 'More' }).click()
+    await expect(page.getByRole('menuitem', { name: 'AI Models' })).toBeVisible()
+    await page.getByRole('menuitem', { name: 'Workspaces' }).click()
     await expect(page).toHaveURL(/\/workspaces$/)
-    const tabs = page.getByRole('tablist', { name: 'Connected Systems sections' })
-    for (const label of ['Connected Systems', 'Integrations', 'MCP Servers', 'Tools & APIs']) {
+    await expect(page.getByRole('heading', { name: 'Workspaces' })).toBeVisible()
+
+    // The switcher shows the active workspace and links to management.
+    const switcher = page.getByRole('button', { name: /^Workspace: .+\. Change workspace$/ })
+    await expect(switcher).toBeVisible()
+    await switcher.click()
+    await expect(page.getByRole('menuitem', { name: 'Manage workspaces' })).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    // Connections tabs; the Connections rail item stays lit on every tab.
+    await rail.getByRole('link', { name: 'Connections' }).click()
+    await expect(page).toHaveURL(/\/connections$/)
+    const tabs = page.getByRole('tablist', { name: 'Workspaces sections' })
+    for (const label of ['Workspaces', 'Connections', 'Integrations', 'MCP Servers', 'Tools & APIs']) {
       await expect(tabs.getByRole('tab', { name: label })).toBeVisible()
     }
-
     await tabs.getByRole('tab', { name: 'Tools & APIs' }).click()
     await expect(page).toHaveURL(/\/tools$/)
-    await expect(tabs.getByRole('tab', { name: 'Tools & APIs' })).toHaveAttribute('aria-selected', 'true')
-    // The group's sidebar item stays highlighted on every one of its tabs.
-    await expect(sidebar.getByRole('link', { name: 'Connections' })).toHaveAttribute('aria-current', 'page')
+    await expect(rail.getByRole('link', { name: 'Connections' })).toHaveAttribute('aria-current', 'page')
     await expect(page).toHaveTitle('Tools & APIs · R2WAI Studio')
   })
 })

@@ -12,6 +12,7 @@ public interface ITenantDbContext
     Guid? TenantId { get; }
     DbSet<Tenant> Tenants { get; }
     DbSet<Department> Departments { get; }
+    DbSet<Workspace> Workspaces { get; }
     DbSet<ConnectedApplication> Applications { get; }
     DbSet<ApplicationApi> ApplicationApis { get; }
     DbSet<ApplicationConfiguration> ApplicationConfigurations { get; }
@@ -70,6 +71,13 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
 
     public Guid? TenantId => _currentUserService.TenantId;
 
+    /// <summary>
+    /// The workspace chosen in the Studio switcher for this request (set by WorkspaceContextMiddleware),
+    /// already checked to belong to the caller's tenant. New workspace-scoped rows are created in it.
+    /// Null outside a Studio request, where new rows go to the tenant's default workspace.
+    /// </summary>
+    public Guid? ActiveWorkspaceId { get; set; }
+
     public IQueryable<T> Query<T>() where T : class => Set<T>();
 
     public ApplicationDbContext(
@@ -88,6 +96,7 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<Department> Departments => Set<Department>();
+    public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<ConnectedApplication> Applications => Set<ConnectedApplication>();
     public DbSet<ApplicationApi> ApplicationApis => Set<ApplicationApi>();
     public DbSet<ApplicationConfiguration> ApplicationConfigurations => Set<ApplicationConfiguration>();
@@ -180,6 +189,8 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        await AssignDefaultWorkspacesAsync(cancellationToken);
+
         var utcNow = _dateTimeService.UtcNow;
 
         foreach (var entry in ChangeTracker.Entries<BaseEntity<Guid>>())
@@ -293,6 +304,48 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
                 correlationId: _currentUserService.CorrelationId);
 
             AuditLogs.Add(auditLog);
+        }
+    }
+
+    /// <summary>
+    /// Puts every newly added workspace-scoped row that has no workspace into its tenant's default
+    /// workspace, creating that workspace if the tenant has none yet. Done here, once, so no create
+    /// path (handlers, seeding, discovery, background jobs) can leave a resource outside every
+    /// workspace. Looked up by the row's own TenantId with filters off: background paths run without
+    /// an ambient tenant.
+    /// </summary>
+    private async Task AssignDefaultWorkspacesAsync(CancellationToken cancellationToken)
+    {
+        var unassigned = ChangeTracker.Entries<IWorkspaceScoped>()
+            .Where(e => e.State == EntityState.Added && e.Entity.WorkspaceId is null)
+            .Select(e => e.Entity)
+            .ToList();
+        if (unassigned.Count == 0) return;
+
+        foreach (var tenantId in unassigned.Select(e => e.TenantId).Distinct())
+        {
+            if (ActiveWorkspaceId is { } activeId && tenantId == TenantId)
+            {
+                foreach (var entity in unassigned.Where(e => e.TenantId == tenantId))
+                    entity.MoveToWorkspace(activeId);
+                continue;
+            }
+
+            var defaultWorkspace =
+                ChangeTracker.Entries<Workspace>()
+                    .Select(e => e.Entity)
+                    .FirstOrDefault(w => w.TenantId == tenantId && w.IsDefault && !w.IsDeleted)
+                ?? await Workspaces.IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(w => w.TenantId == tenantId && w.IsDefault && !w.IsDeleted, cancellationToken);
+
+            if (defaultWorkspace is null)
+            {
+                defaultWorkspace = Workspace.CreateDefault(tenantId);
+                Workspaces.Add(defaultWorkspace);
+            }
+
+            foreach (var entity in unassigned.Where(e => e.TenantId == tenantId))
+                entity.MoveToWorkspace(defaultWorkspace.Id);
         }
     }
 

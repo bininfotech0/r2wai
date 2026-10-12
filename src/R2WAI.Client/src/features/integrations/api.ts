@@ -21,10 +21,6 @@ export function listIntegrations(page: number, pageSize: number, search: string,
   return fetchJson<PagedResult<IntegrationDto>>(`/integrations?${params.toString()}`)
 }
 
-export function getIntegration(id: string) {
-  return fetchJson<IntegrationDto>(`/integrations/${id}`)
-}
-
 export function getIntegrationCatalog() {
   return fetchJson<IntegrationCatalogEntryDto[]>('/integrations/catalog')
 }

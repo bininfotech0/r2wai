@@ -2,33 +2,38 @@ import { createTheme, type ThemeOptions } from '@mui/material/styles'
 import type {} from '@mui/x-data-grid/themeAugmentation'
 
 /**
- * R2WAI Studio token set — purple/indigo primary, per the reference dashboard
- * mockups. Supersedes the old Blazor/MudBlazor blue (#2563EB) palette.
- * See: C:\Users\LENOVO\.claude\plans\not-use-blazor-server-mudblazor-serialized-plum.md
+ * R2WAI Studio tokens, in the Copilot Studio / Fluent 2 visual language: a neutral grey canvas
+ * with white surfaces, 1px neutral borders instead of shadows, 8px corners on surfaces and 4–6px
+ * on controls, Segoe UI, and compact 32px controls. The brand colour stays R2WAI's own purple;
+ * only layout and density follow Fluent. Touch screens still get 44px targets (touchTarget/touchRow).
+ *
+ * shape.borderRadius is the unit `sx` multiplies numeric radii by, so lowering it to 8 flattens
+ * every component's `borderRadius: 2`-style value in proportion.
  */
 const fontFamily = [
+  '"Segoe UI Variable Text"',
+  '"Segoe UI"',
   'Inter',
   '-apple-system',
   'BlinkMacSystemFont',
-  '"Segoe UI"',
   'Roboto',
   'sans-serif',
 ].join(',')
 
-const shape = { borderRadius: 10 }
+const shape = { borderRadius: 8 }
 
 const typography: ThemeOptions['typography'] = {
   fontFamily,
-  h1: { fontWeight: 720, letterSpacing: '-0.04em', lineHeight: 1.12 },
-  h2: { fontWeight: 700, letterSpacing: '-0.035em', lineHeight: 1.18 },
-  h3: { fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.2 },
-  h4: { fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.22 },
-  h5: { fontWeight: 650, letterSpacing: '-0.02em', lineHeight: 1.28 },
-  h6: { fontWeight: 650, letterSpacing: '-0.01em', lineHeight: 1.35 },
+  h1: { fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15 },
+  h2: { fontWeight: 600, letterSpacing: '-0.015em', lineHeight: 1.2 },
+  h3: { fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.25 },
+  h4: { fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.28 },
+  h5: { fontWeight: 600, letterSpacing: 0, lineHeight: 1.33 },
+  h6: { fontWeight: 600, letterSpacing: 0, lineHeight: 1.4 },
   subtitle1: { fontWeight: 600, lineHeight: 1.45 },
   subtitle2: { fontWeight: 600, lineHeight: 1.45 },
-  body1: { lineHeight: 1.55 },
-  body2: { lineHeight: 1.55 },
+  body1: { lineHeight: 1.5 },
+  body2: { fontSize: '0.875rem', lineHeight: 1.43 },
   button: { fontWeight: 600, textTransform: 'none', letterSpacing: 0 },
   overline: { fontWeight: 700, letterSpacing: 0.9, lineHeight: 1.5 },
   caption: { lineHeight: 1.45 },
@@ -36,7 +41,7 @@ const typography: ThemeOptions['typography'] = {
 
 /** Soft, low-spread shadows — replaces MUI's default heavier/darker elevation stack. */
 function buildShadows(isDark: boolean): ThemeOptions['shadows'] {
-  const alpha = isDark ? 0.45 : 0.08
+  const alpha = isDark ? 0.4 : 0.06
   const soft = `0 1px 2px rgba(15, 17, 21, ${alpha * 0.6}), 0 1px 3px rgba(15, 17, 21, ${alpha})`
   const raised = `0 2px 4px rgba(15, 17, 21, ${alpha * 0.7}), 0 4px 10px rgba(15, 17, 21, ${alpha})`
   const overlay = `0 8px 16px rgba(15, 17, 21, ${alpha * 0.8}), 0 12px 28px rgba(15, 17, 21, ${alpha * 1.3})`
@@ -50,8 +55,16 @@ function buildShadows(isDark: boolean): ThemeOptions['shadows'] {
   return shadows
 }
 
+/**
+ * Touch screens only (`pointer: coarse`): lift controls to the 44px minimum tap target.
+ * Mouse layouts keep their compact density untouched.
+ */
+const coarsePointer = '@media (pointer: coarse)'
+const touchTarget = { [coarsePointer]: { minWidth: 44, minHeight: 44 } }
+const touchRow = { [coarsePointer]: { minHeight: 44 } }
+
 function buildComponents(isDark: boolean): ThemeOptions['components'] {
-  const borderColor = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(100,116,139,0.16)'
+  const borderColor = isDark ? '#3D3D3D' : '#E0E0E0'
   return {
     MuiCssBaseline: {
       styleOverrides: {
@@ -88,10 +101,11 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
       defaultProps: { disableElevation: true },
       styleOverrides: {
         root: {
-          minHeight: 40,
-          borderRadius: 10,
-          paddingInline: 16,
+          minHeight: 32,
+          borderRadius: 6,
+          paddingInline: 12,
           fontWeight: 600,
+          ...touchRow,
           transition: 'background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease',
           '&:focus-visible': {
             outline: `3px solid ${isDark ? 'rgba(165,180,252,.42)' : 'rgba(99,102,241,.3)'}`,
@@ -99,42 +113,44 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
           },
           '&:active:not(:disabled)': { transform: 'translateY(1px)' },
         },
-        sizeSmall: { minHeight: 34, paddingInline: 12 },
-        sizeMedium: { paddingBlock: 8 },
+        sizeSmall: { minHeight: 28, paddingInline: 10, ...touchRow },
+        sizeMedium: { paddingBlock: 4 },
+        sizeLarge: { minHeight: 40, paddingInline: 16 },
         contained: {
-          '&:hover': { filter: 'brightness(.97)', boxShadow: '0 5px 14px rgba(15,23,42,.12)' },
+          '&:hover': { filter: 'brightness(.95)', boxShadow: 'none' },
           '&:disabled': { opacity: 0.52 },
         },
         outlined: {
-          borderColor,
-          '&:hover': { borderColor: isDark ? 'rgba(165,180,252,.5)' : 'rgba(99,102,241,.42)' },
+          borderColor: isDark ? '#666666' : '#D1D1D1',
+          '&:hover': { borderColor: isDark ? '#ADADAD' : '#C7C7C7', backgroundColor: isDark ? '#3D3D3D' : '#F5F5F5' },
         },
       },
     },
     MuiIconButton: {
       styleOverrides: {
         root: {
-          borderRadius: 10,
+          borderRadius: 6,
           transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
           '&:focus-visible': {
             outline: `3px solid ${isDark ? 'rgba(165,180,252,.42)' : 'rgba(99,102,241,.3)'}`,
             outlineOffset: 1,
           },
           '&:active:not(:disabled)': { transform: 'scale(.96)' },
+          ...touchTarget,
         },
       },
     },
     MuiPaper: {
       styleOverrides: {
         root: { backgroundImage: 'none' },
-        rounded: { borderRadius: 16 },
-        outlined: { borderColor, borderRadius: 16 },
+        rounded: { borderRadius: 8 },
+        outlined: { borderColor, borderRadius: 8 },
       },
     },
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 16,
+          borderRadius: 8,
           border: `1px solid ${borderColor}`,
           transition: 'box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease',
         },
@@ -145,8 +161,8 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
         root: {
           '&:hover': {
             boxShadow: isDark
-              ? '0 4px 14px rgba(0,0,0,0.4)'
-              : '0 4px 14px rgba(15,17,21,0.1)',
+              ? '0 2px 8px rgba(0,0,0,0.35)'
+              : '0 2px 8px rgba(0,0,0,0.08)',
           },
         },
       },
@@ -156,9 +172,18 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
         root: {
           boxShadow: 'none',
           borderBottom: `1px solid ${borderColor}`,
-          backdropFilter: 'blur(16px)',
-          backgroundColor: isDark ? 'rgba(23,25,35,.9)' : 'rgba(255,255,255,.9)',
+          backgroundColor: isDark ? '#292929' : '#FFFFFF',
         },
+      },
+    },
+    // The top bar spans the full width above the nav rail (MainLayout), one layer above
+    // zIndex.drawer. Overlay drawers (Settings, Test pane, tool picker, run inspector) must open
+    // above it or their title and close button sit under the bar. The permanent rail sets its own.
+    MuiDrawer: {
+      styleOverrides: {
+        root: ({ ownerState, theme }) => (ownerState.variant === 'temporary' || ownerState.variant === undefined
+          ? { zIndex: theme.zIndex.modal }
+          : {}),
       },
     },
     MuiBreadcrumbs: {
@@ -187,7 +212,7 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
       styleOverrides: {
         root: {
           '&:hover': {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.04)',
+            backgroundColor: isDark ? '#2E2E2E' : '#F5F5F5',
           },
         },
       },
@@ -199,15 +224,15 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
           fontSize: '0.75rem',
           letterSpacing: '.035em',
           color: isDark ? 'rgba(255,255,255,0.68)' : 'rgba(15,17,21,0.64)',
-          backgroundColor: isDark ? 'rgba(255,255,255,.025)' : 'rgba(15,23,42,.018)',
+          backgroundColor: isDark ? '#2E2E2E' : '#FAFAFA',
         },
-        root: { borderColor, paddingBlock: 12 },
+        root: { borderColor, paddingBlock: 8 },
       },
     },
     MuiOutlinedInput: {
       styleOverrides: {
         root: {
-          borderRadius: 10,
+          borderRadius: 6,
           transition: 'box-shadow 140ms ease',
           '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: isDark ? 'rgba(165,180,252,.52)' : 'rgba(99,102,241,.45)' },
           '&.Mui-focused': {
@@ -226,22 +251,23 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
     MuiListItemButton: {
       styleOverrides: {
         root: {
-          borderRadius: 8,
+          borderRadius: 6,
           transition: 'background-color 120ms ease',
+          ...touchRow,
         },
       },
     },
     MuiDialog: {
       styleOverrides: {
         paper: {
-          borderRadius: 18,
+          borderRadius: 12,
           border: `1px solid ${borderColor}`,
-          boxShadow: isDark ? '0 24px 70px rgba(0,0,0,.48)' : '0 24px 70px rgba(15,23,42,.18)',
+          boxShadow: isDark ? '0 16px 48px rgba(0,0,0,.48)' : '0 16px 48px rgba(0,0,0,.14)',
         },
       },
     },
     MuiDialogTitle: {
-      styleOverrides: { root: { fontWeight: 700, letterSpacing: '-.02em', padding: '22px 24px 10px' } },
+      styleOverrides: { root: { fontWeight: 600, letterSpacing: 0, padding: '20px 24px 8px' } },
     },
     MuiDialogActions: {
       styleOverrides: { root: { padding: '12px 24px 22px', gap: 8 } },
@@ -250,24 +276,24 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
       styleOverrides: {
         paper: {
           border: `1px solid ${borderColor}`,
-          borderRadius: 14,
-          boxShadow: isDark ? '0 12px 32px rgba(0,0,0,.36)' : '0 12px 32px rgba(15,23,42,.14)',
+          borderRadius: 8,
+          boxShadow: isDark ? '0 8px 24px rgba(0,0,0,.4)' : '0 8px 24px rgba(0,0,0,.12)',
         },
       },
     },
     MuiMenuItem: {
-      styleOverrides: { root: { minHeight: 40, borderRadius: 8, marginInline: 6, paddingInline: 10 } },
+      styleOverrides: { root: { minHeight: 36, borderRadius: 4, marginInline: 4, paddingInline: 10, ...touchRow } },
     },
     MuiAlert: {
       styleOverrides: {
-        root: { borderRadius: 12, alignItems: 'flex-start' },
+        root: { borderRadius: 8, alignItems: 'flex-start' },
         message: { lineHeight: 1.5 },
       },
     },
     MuiDataGrid: {
       styleOverrides: {
         root: { border: 0, borderRadius: 0 },
-        columnHeaders: { borderBottom: `1px solid ${borderColor}`, backgroundColor: isDark ? 'rgba(255,255,255,.025)' : 'rgba(15,23,42,.018)' },
+        columnHeaders: { borderBottom: `1px solid ${borderColor}`, backgroundColor: isDark ? '#2E2E2E' : '#FAFAFA' },
         columnHeaderTitle: { fontWeight: 650, fontSize: '0.75rem', letterSpacing: '.025em' },
         cell: { borderColor, fontSize: '0.875rem' },
         footerContainer: { minHeight: 56, borderTop: `1px solid ${borderColor}` },
@@ -275,7 +301,7 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
     },
     MuiTooltip: {
       styleOverrides: {
-        tooltip: { borderRadius: 6, fontWeight: 500 },
+        tooltip: { borderRadius: 4, fontWeight: 500 },
       },
     },
   }
@@ -284,14 +310,15 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
 const lightOptions: ThemeOptions = {
   palette: {
     mode: 'light',
-    primary: { main: '#6366F1', light: '#818CF8', dark: '#4F46E5' },
+    // Light-mode mains are tuned to clear WCAG AA (4.5:1) as text on both paper and the page background.
+    primary: { main: '#5558E3', light: '#818CF8', dark: '#4F46E5' },
     secondary: { main: '#7C3AED' },
-    success: { main: '#16A34A' },
-    warning: { main: '#D97706' },
+    success: { main: '#15803D' },
+    warning: { main: '#B45309' },
     error: { main: '#DC2626' },
-    text: { primary: '#171B28', secondary: '#687386', disabled: '#9AA3B2' },
-    background: { default: '#F6F8FC', paper: '#FFFFFF' },
-    divider: 'rgba(100,116,139,0.16)',
+    text: { primary: '#242424', secondary: '#616161', disabled: '#9E9E9E' },
+    background: { default: '#F5F5F5', paper: '#FFFFFF' },
+    divider: '#E0E0E0',
   },
   typography,
   shape,
@@ -307,9 +334,9 @@ const darkOptions: ThemeOptions = {
     success: { main: '#22C55E' },
     warning: { main: '#F59E0B' },
     error: { main: '#EF4444' },
-    text: { primary: '#F1F3F8', secondary: '#A7B0C0', disabled: '#6F7888' },
-    background: { default: '#0D1118', paper: '#151A23' },
-    divider: 'rgba(255,255,255,0.08)',
+    text: { primary: '#FFFFFF', secondary: '#ADADAD', disabled: '#757575' },
+    background: { default: '#1F1F1F', paper: '#292929' },
+    divider: '#3D3D3D',
   },
   typography,
   shape,

@@ -11,7 +11,7 @@ const STATUS_COLOR: Record<StatusHubNodeStatus, string> = {
   failed: '#EF4444',
 }
 
-export function StepNode({ data, selected }: NodeProps & { data: BuilderNodeData & { status?: StatusHubNodeStatus } }) {
+function StepNode({ data, selected }: NodeProps & { data: BuilderNodeData & { status?: StatusHubNodeStatus } }) {
   const isBookend = data.kind !== 'step'
   const status = data.status ?? 'idle'
 
@@ -34,7 +34,7 @@ export function StepNode({ data, selected }: NodeProps & { data: BuilderNodeData
         {data.label}
       </Typography>
       {!isBookend && data.stepType && (
-        <Chip label={data.stepType} size="small" variant="outlined" sx={{ mt: 0.5, height: 18, fontSize: '0.65rem' }} />
+        <Chip label={data.stepType} size="small" variant="outlined" sx={{ mt: 0.5, height: 20, fontSize: '0.75rem' }} />
       )}
       {data.kind !== 'end' && <Handle type="source" position={Position.Bottom} />}
     </Paper>

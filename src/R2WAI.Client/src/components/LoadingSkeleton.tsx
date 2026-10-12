@@ -18,10 +18,18 @@ interface LoadingSkeletonProps {
  * Deliberately skeleton-only: it never stands in for data, and callers pair it with
  * ErrorState when `query.error` is set rather than showing one in place of the other.
  */
+const srOnly = { position: 'absolute', width: 1, height: 1, p: 0, m: '-1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 } as const
+
+/** Screen-reader status for every skeleton variant — announced politely, invisible on screen. */
+function LoadingAnnouncement() {
+  return <Box component="span" sx={srOnly}>Loading…</Box>
+}
+
 export function LoadingSkeleton({ count = 6, variant = 'card', rows = 5, height }: LoadingSkeletonProps) {
   if (variant === 'text') {
     return (
-      <Stack spacing={1} aria-busy="true" aria-label="Loading">
+      <Stack spacing={1} role="status" aria-busy="true">
+        <LoadingAnnouncement />
         {Array.from({ length: count }).map((_, i) => (
           <Skeleton key={i} variant="text" height={height} />
         ))}
@@ -31,7 +39,8 @@ export function LoadingSkeleton({ count = 6, variant = 'card', rows = 5, height 
 
   if (variant === 'table') {
     return (
-      <Stack spacing={1} aria-busy="true" aria-label="Loading">
+      <Stack spacing={1} role="status" aria-busy="true">
+        <LoadingAnnouncement />
         <Skeleton variant="rounded" height={40} />
         {Array.from({ length: rows }).map((_, i) => (
           <Skeleton key={i} variant="rounded" height={48} />
@@ -41,7 +50,8 @@ export function LoadingSkeleton({ count = 6, variant = 'card', rows = 5, height 
   }
 
   return (
-    <Grid container spacing={2} aria-busy="true" aria-label="Loading">
+    <Grid container spacing={2} role="status" aria-busy="true">
+      <LoadingAnnouncement />
       {Array.from({ length: count }).map((_, i) => (
         <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
           <Card variant="outlined" sx={{ height: '100%' }}>
@@ -61,17 +71,5 @@ export function LoadingSkeleton({ count = 6, variant = 'card', rows = 5, height 
         </Grid>
       ))}
     </Grid>
-  )
-}
-
-/**
- * A single wide block, for detail pages waiting on one record. Kept separate from the
- * card grid so detail screens do not have to render a grid of one.
- */
-export function DetailSkeleton({ height = 240 }: { height?: number }) {
-  return (
-    <Box aria-busy="true" aria-label="Loading">
-      <Skeleton variant="rounded" height={height} />
-    </Box>
   )
 }

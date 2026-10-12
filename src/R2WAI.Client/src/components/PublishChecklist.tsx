@@ -84,7 +84,7 @@ export function PublishChecklist({
               </Typography>
               <Stack sx={{ mt: 0.5 }}>
                 {channels.map((c) => (
-                  <Typography key={c.label} variant="body2" color={c.enabled ? 'text.primary' : 'text.disabled'}>
+                  <Typography key={c.label} variant="body2" color={c.enabled ? 'text.primary' : 'text.secondary'}>
                     {c.enabled ? '☑' : '☐'} {c.label}
                   </Typography>
                 ))}

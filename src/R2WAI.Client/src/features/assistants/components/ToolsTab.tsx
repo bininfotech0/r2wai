@@ -22,17 +22,8 @@ import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { CapabilityFlowDiagram } from '../../../components/CapabilityFlowDiagram'
 import { EmptyState } from '../../../components/EmptyState'
 import { buildFullUpdatePayload, type AssistantDto } from '../types'
+import { parseEnabledIds } from '../toolsJson'
 import type { CapabilityDto, PagedResult } from '../../tools/types'
-
-function parseEnabledIds(toolsJson: string | null): string[] {
-  if (!toolsJson) return []
-  try {
-    const parsed = JSON.parse(toolsJson) as unknown
-    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
-  } catch {
-    return []
-  }
-}
 
 /**
  * What can this assistant do? Enabled tools are stored as a JSON array of
@@ -128,6 +119,7 @@ export function ToolsTab({ assistantId, toolsJson }: { assistantId: string; tool
             fullWidth
             size="small"
             placeholder="Search tools…"
+            slotProps={{ htmlInput: { 'aria-label': 'Search tools' } }}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             sx={{ mb: 1 }}

@@ -3,9 +3,10 @@ using R2WAI.Domain.Enums;
 
 namespace R2WAI.Domain.Entities;
 
-public sealed class KnowledgeBase : BaseEntity<Guid>
+public sealed class KnowledgeBase : BaseEntity<Guid>, IWorkspaceScoped
 {
     public Guid TenantId { get; private set; }
+    public Guid? WorkspaceId { get; private set; }
     public Guid? ApplicationId { get; private set; }
     public Guid UserId { get; private set; }
     public string Name { get; private set; }
@@ -93,6 +94,12 @@ public sealed class KnowledgeBase : BaseEntity<Guid>
     public void SetDataClassification(DataClassification classification)
     {
         DataClassification = classification;
+        MarkAsModified();
+    }
+
+    public void MoveToWorkspace(Guid workspaceId)
+    {
+        WorkspaceId = workspaceId;
         MarkAsModified();
     }
 }

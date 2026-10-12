@@ -1,7 +1,6 @@
 // Talks directly to ChatbotsController's [AllowAnonymous] routes — no embed
 // token exists server-side (see ChatbotEmbedDialog's warning to admins), the
-// chatbot's id in the URL is the only "credential". Mirrors the working
-// reference implementation at src/R2WAI.Web/Components/Pages/ChatbotWidget.razor.
+// chatbot's id in the URL is the only "credential".
 
 import type { Citation } from './citations'
 

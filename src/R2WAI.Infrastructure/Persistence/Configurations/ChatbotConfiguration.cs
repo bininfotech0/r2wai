@@ -79,6 +79,7 @@ public class ChatbotConfiguration : IEntityTypeConfiguration<Chatbot>
             .HasForeignKey(c => c.PublishedAssistantVersionId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.HasIndex(c => new { c.TenantId, c.WorkspaceId });
         builder.HasIndex(c => new { c.TenantId, c.Name });
         builder.HasIndex(c => c.AssistantId);
     }

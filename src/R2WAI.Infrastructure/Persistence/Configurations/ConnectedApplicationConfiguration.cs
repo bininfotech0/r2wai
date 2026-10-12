@@ -75,6 +75,7 @@ public class ConnectedApplicationConfiguration : IEntityTypeConfiguration<Connec
             .IsUnique()
             .HasFilter("\"IsDeleted\" = false");
 
+        builder.HasIndex(a => new { a.TenantId, a.WorkspaceId });
         builder.HasIndex(a => new { a.TenantId, a.Code })
             .IsUnique()
             .HasFilter("\"DepartmentId\" IS NULL AND \"IsDeleted\" = false")

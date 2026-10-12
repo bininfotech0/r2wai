@@ -183,9 +183,9 @@ file sealed class RecordingVectorStore : IVectorStoreService
     public static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, int> DeleteSourceCalls = new();
 
     public Task CreateCollectionAsync(string collectionName, int? vectorSize = null, CancellationToken ct = default) => Task.CompletedTask;
-    public Task DeleteCollectionAsync(string collectionName, CancellationToken ct = default) => Task.CompletedTask;
+    public Task DeleteCollectionAsync(Guid tenantId, string collectionName, CancellationToken ct = default) => Task.CompletedTask;
 
-    public Task UpsertVectorsAsync(string collectionName, List<(Guid Id, float[] Vector, Dictionary<string, object> Payload)> points, CancellationToken ct = default)
+    public Task UpsertVectorsAsync(Guid tenantId, string collectionName, List<(Guid Id, float[] Vector, Dictionary<string, object> Payload)> points, CancellationToken ct = default)
     {
         // collectionName is "kb_{id:N}" (KnowledgeBaseService.CreateKnowledgeBaseAsync's own
         // convention) — parse the id back out so the test can key its assertion by KB id.
@@ -195,13 +195,13 @@ file sealed class RecordingVectorStore : IVectorStoreService
         return Task.CompletedTask;
     }
 
-    public Task<List<VectorSearchResult>> SearchVectorsAsync(string collectionName, float[] queryVector, int limit = 10, CancellationToken ct = default) =>
+    public Task<List<VectorSearchResult>> SearchVectorsAsync(Guid tenantId, string collectionName, float[] queryVector, int limit = 10, CancellationToken ct = default) =>
         Task.FromResult(new List<VectorSearchResult>());
-    public Task<List<VectorSearchResult>> HybridSearchAsync(string collectionName, float[] queryVector, string queryText, int limit = 10, float vectorWeight = 0.7f, float minRelevance = 0f, CancellationToken ct = default) =>
+    public Task<List<VectorSearchResult>> HybridSearchAsync(Guid tenantId, string collectionName, float[] queryVector, string queryText, int limit = 10, float vectorWeight = 0.7f, float minRelevance = 0f, CancellationToken ct = default) =>
         Task.FromResult(new List<VectorSearchResult>());
-    public Task DeleteVectorsAsync(string collectionName, List<Guid> pointIds, CancellationToken ct = default) => Task.CompletedTask;
+    public Task DeleteVectorsAsync(Guid tenantId, string collectionName, List<Guid> pointIds, CancellationToken ct = default) => Task.CompletedTask;
 
-    public Task DeleteVectorsBySourceAsync(string collectionName, Guid sourceId, CancellationToken ct = default)
+    public Task DeleteVectorsBySourceAsync(Guid tenantId, string collectionName, Guid sourceId, CancellationToken ct = default)
     {
         // Recorded, not silently swallowed: this fake used to no-op every delete, which is precisely
         // why a document/KB delete that left its vectors behind was invisible to CI — a genuine fix

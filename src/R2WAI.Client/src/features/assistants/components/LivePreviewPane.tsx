@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Chip, Paper, Stack, TextField, Typography } from '@mui/material'
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined'
@@ -27,6 +28,11 @@ interface LivePreviewPaneProps {
    * pane exposing its internal state shape. Optional; existing callers are unaffected.
    */
   onToolCallEvents?: (events: ToolCallProgressEvent[]) => void
+  /** Header text; Assistant Studio calls it "Test your agent", as Copilot Studio does. */
+  title?: string
+  subtitle?: string
+  /** Rendered at the end of the header row, e.g. a close button. */
+  headerAction?: ReactNode
 }
 
 /**
@@ -41,7 +47,7 @@ interface LivePreviewPaneProps {
  * mount it with `key={assistantId}` so switching assistants remounts a fresh
  * conversation instead of carrying the old one over.
  */
-export function LivePreviewPane({ assistantId, onToolCallEvents }: LivePreviewPaneProps) {
+export function LivePreviewPane({ assistantId, onToolCallEvents, title = 'Live preview', subtitle = 'Assistant conversation', headerAction }: LivePreviewPaneProps) {
   const [messages, setMessages] = useState<PreviewMessage[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -120,10 +126,11 @@ export function LivePreviewPane({ assistantId, onToolCallEvents }: LivePreviewPa
           <SmartToyOutlinedIcon fontSize="small" />
         </Box>
         <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Live preview</Typography>
-          <Typography variant="caption" color="text.secondary">Assistant conversation</Typography>
+          <Typography variant="subtitle2" component="h2" sx={{ fontWeight: 700 }}>{title}</Typography>
+          <Typography variant="caption" color="text.secondary">{subtitle}</Typography>
         </Box>
         {streaming && <Chip label="streaming" size="small" color="primary" variant="outlined" />}
+        {headerAction}
       </Stack>
 
       <Box sx={{ flexGrow: 1, p: 2, overflowY: 'auto' }}>
@@ -201,6 +208,7 @@ export function LivePreviewPane({ assistantId, onToolCallEvents }: LivePreviewPa
             fullWidth
             size="small"
             placeholder="Ask something…"
+            slotProps={{ htmlInput: { 'aria-label': 'Message' } }}
             value={input}
             disabled={streaming}
             onChange={(e) => setInput(e.target.value)}

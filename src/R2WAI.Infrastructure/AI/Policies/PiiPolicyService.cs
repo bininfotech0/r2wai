@@ -1,4 +1,5 @@
 using R2WAI.Application.Common.Interfaces;
+using R2WAI.Application.Common.Security;
 using R2WAI.Domain.Entities;
 using R2WAI.Domain.Interfaces;
 

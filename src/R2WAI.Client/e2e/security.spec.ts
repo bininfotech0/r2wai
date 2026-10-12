@@ -14,9 +14,9 @@ test.describe('Security & Policies', () => {
     // the rest collapsed but their summary row (title + stat) is always visible.
     await expect(page.getByRole('button', { name: /^Authentication/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /^RBAC/ })).toBeVisible()
-    await expect(page.getByText('Tool Security')).toBeVisible()
-    await expect(page.getByText('AI Governance')).toBeVisible()
-    await expect(page.getByText('Data Security')).toBeVisible()
+    await expect(page.getByText('Tool Security', { exact: true })).toBeVisible() // exact: 'Loading tool security…' also matches while loading
+    await expect(page.getByText('AI Governance', { exact: true })).toBeVisible() // exact: 'Loading ai governance…' also matches while loading
+    await expect(page.getByText('Data Security', { exact: true })).toBeVisible() // exact: 'Loading data security…' also matches while loading
     await expect(page.getByRole('button', { name: /^Secrets/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /^Audit/ })).toBeVisible()
 

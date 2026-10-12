@@ -25,12 +25,13 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
         <Typography
           variant="h4"
           component="h1"
-          sx={{ fontSize: { xs: '1.55rem', sm: '1.85rem', lg: '2.1rem' }, fontWeight: 750, letterSpacing: '-0.035em', lineHeight: 1.15 }}
+          // Copilot Studio page titles: 24px semibold, no tight tracking.
+          sx={{ fontSize: { xs: '1.375rem', sm: '1.5rem' }, fontWeight: 600, letterSpacing: 0, lineHeight: 1.3 }}
         >
           {title}
         </Typography>
         {description && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.65, maxWidth: 760 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 760 }}>
             {description}
           </Typography>
         )}

@@ -3,9 +3,10 @@ using R2WAI.Domain.Enums;
 
 namespace R2WAI.Domain.Entities;
 
-public sealed class AssistantDefinition : BaseEntity<Guid>
+public sealed class AssistantDefinition : BaseEntity<Guid>, IWorkspaceScoped
 {
     public Guid TenantId { get; private set; }
+    public Guid? WorkspaceId { get; private set; }
     public Guid? ApplicationId { get; private set; }
     public string Name { get; private set; }
     public string? Description { get; private set; }
@@ -176,6 +177,12 @@ public sealed class AssistantDefinition : BaseEntity<Guid>
     public void AssignApplication(Guid? applicationId)
     {
         ApplicationId = applicationId;
+        MarkAsModified();
+    }
+
+    public void MoveToWorkspace(Guid workspaceId)
+    {
+        WorkspaceId = workspaceId;
         MarkAsModified();
     }
 }

@@ -1,9 +1,6 @@
 /**
- * sessionStorage schema — must stay byte-compatible with Blazor's
- * TokenStorageService (src/R2WAI.Web/Services/TokenStorageService.cs) so a
- * session survives navigating between not-yet-migrated Blazor pages and
- * already-cut-over React pages on the same origin during the strangler-fig
- * migration (see Phase 3 of the migration plan).
+ * sessionStorage schema. The key names are what already-open browser sessions
+ * hold, so renaming them signs every user out on the next deploy.
  */
 const TOKEN_KEY = 'r2wai_token'
 const REFRESH_TOKEN_KEY = 'r2wai_refresh_token'

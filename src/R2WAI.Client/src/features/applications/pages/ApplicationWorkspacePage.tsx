@@ -187,7 +187,7 @@ export function ApplicationWorkspacePage() {
     mutationFn: () => deleteApplication(id!),
     onSuccess: () => {
       notify('Connected system deleted', 'success')
-      navigate('/workspaces')
+      navigate('/connections')
     },
     onError: () => notify('Failed to delete connected system', 'error'),
   })
@@ -263,7 +263,7 @@ export function ApplicationWorkspacePage() {
   if (query.isLoading) {
     return (
       <Stack spacing={2} sx={{ maxWidth: 800 }} role="status" aria-label="Loading connected system">
-        <Button component={RouterLink} to="/workspaces" startIcon={<ArrowBackIcon />} size="small" sx={{ alignSelf: 'flex-start' }}>
+        <Button component={RouterLink} to="/connections" startIcon={<ArrowBackIcon />} size="small" sx={{ alignSelf: 'flex-start' }}>
           Connected Systems
         </Button>
         <Skeleton variant="text" width="45%" height={44} />
@@ -276,7 +276,7 @@ export function ApplicationWorkspacePage() {
   if (query.isError) {
     return (
       <Stack spacing={2}>
-        <Button component={RouterLink} to="/workspaces" startIcon={<ArrowBackIcon />} size="small" sx={{ alignSelf: 'flex-start' }}>
+        <Button component={RouterLink} to="/connections" startIcon={<ArrowBackIcon />} size="small" sx={{ alignSelf: 'flex-start' }}>
           Connected Systems
         </Button>
         <ErrorState
@@ -293,7 +293,7 @@ export function ApplicationWorkspacePage() {
         title="Connected system not found"
         description="It may have been removed, or you may not have access to it."
         actionLabel="Back to connected systems"
-        onAction={() => navigate('/workspaces')}
+        onAction={() => navigate('/connections')}
       />
     )
   }
@@ -305,7 +305,7 @@ export function ApplicationWorkspacePage() {
 
   return (
     <Box sx={{ maxWidth: 1520, mx: 'auto', pb: 3 }}>
-      <Button component={RouterLink} to="/workspaces" startIcon={<ArrowBackIcon />} size="small" sx={{ mb: 2 }}>
+      <Button component={RouterLink} to="/connections" startIcon={<ArrowBackIcon />} size="small" sx={{ mb: 2 }}>
         All connections
       </Button>
       <Paper variant="outlined" sx={{ overflow: 'hidden', mb: 3, borderRadius: 3 }}>
@@ -318,7 +318,7 @@ export function ApplicationWorkspacePage() {
               <Box sx={{ minWidth: 0 }}>
                 <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 1.1 }}>CONNECTED SYSTEM</Typography>
                 <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', mb: 0.5, flexWrap: 'wrap' }}>
-                  <Typography variant="h4" sx={{ fontWeight: 750, letterSpacing: '-0.035em', overflowWrap: 'anywhere' }}>{app.name}</Typography>
+                  <Typography variant="h4" component="h1" sx={{ fontWeight: 750, letterSpacing: '-0.035em', overflowWrap: 'anywhere' }}>{app.name}</Typography>
                   <Chip label={app.status} size="small" color={STATUS_COLOR[app.status] ?? 'default'} variant="outlined" />
                 </Stack>
                 <Typography color="text.secondary" sx={{ maxWidth: 760 }}>{app.description || 'Manage the APIs and access settings for this connected system.'}</Typography>

@@ -8,7 +8,7 @@ test.describe('Monitor', () => {
 
     // Seed an assistant to attach a test case to.
     await page.goto('/assistants')
-    await page.getByRole('button', { name: 'New Assistant' }).click()
+    await page.getByRole('button', { name: 'New agent' }).click()
     await page.getByRole('button', { name: /configure manually/i }).click()
     const assistantName = `E2E Monitor Assistant ${Date.now()}`
     cleanup.add('assistant', assistantName)
@@ -95,8 +95,10 @@ test.describe('Monitor', () => {
     await expect(page.getByText('Test case deleted')).toBeVisible()
 
     await page.goto(`/assistants/${assistantId}`)
-    await page.getByRole('button', { name: 'Delete' }).click()
-    await page.getByRole('button', { name: 'Delete' }).last().click()
-    await expect(page.getByText('Assistant deleted')).toBeVisible()
+    await page.getByRole('button', { name: 'Settings' }).click()
+    await page.getByRole('tab', { name: 'Advanced' }).click()
+    await page.getByRole('button', { name: 'Delete agent' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
+    await expect(page.getByText('Agent deleted')).toBeVisible()
   })
 })

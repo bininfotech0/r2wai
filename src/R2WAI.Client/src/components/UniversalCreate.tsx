@@ -42,18 +42,28 @@ export function UniversalCreate({ open, onClose, onSelect, onTemplate }: Univers
             return (
               <Grid key={option.kind} size={6}>
                 <Paper
+                  component="button"
+                  type="button"
                   variant="outlined"
                   onClick={() => onSelect(option.kind)}
                   sx={{
                     p: 2,
                     cursor: 'pointer',
                     height: '100%',
+                    width: '100%',
+                    display: 'block',
+                    textAlign: 'left',
+                    font: 'inherit',
+                    color: 'inherit',
+                    bgcolor: 'background.paper',
+                    transition: 'background-color 140ms ease, border-color 140ms ease',
                     '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+                    '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.light', outlineOffset: 2 },
                   }}
                 >
                   <Icon color="primary" sx={{ mb: 1 }} />
                   <Typography variant="subtitle2">{option.label}</Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                     {option.description}
                   </Typography>
                 </Paper>

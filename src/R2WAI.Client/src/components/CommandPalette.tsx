@@ -45,7 +45,7 @@ export function CommandPalette({ open, onClose, isDark, onToggleTheme, onToggleC
             autoFocus
             value={search}
             onValueChange={setSearch}
-            placeholder="Search assistants, knowledge, tools…"
+            placeholder="Search agents, knowledge, tools…"
             className="command-palette-input"
           />
         </Box>

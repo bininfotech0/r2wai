@@ -28,7 +28,7 @@ public class GetChatbotsQueryHandlerTests
 
         var cacheMock = new Mock<ICacheService>();
         var handler = new GetChatbotsQueryHandler(
-            repoMock.Object, currentUserMock.Object, cacheMock.Object, mapperMock.Object);
+            repoMock.Object, currentUserMock.Object, Mock.Of<IWorkspaceContext>(), cacheMock.Object, mapperMock.Object);
 
         var query = new GetChatbotsQuery { Page = 1, PageSize = 20 };
         var result = await handler.Handle(query, CancellationToken.None);

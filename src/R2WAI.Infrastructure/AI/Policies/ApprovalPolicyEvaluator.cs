@@ -12,7 +12,7 @@ namespace R2WAI.Infrastructure.AI.Policies;
 /// AiFunctionAuditFilter), on top of (never instead of) that per-tool flag and the separate
 /// "ToolExecution" hard ceiling. The rank comparison itself is identical to ToolExecution's, so this
 /// deliberately reuses ToolExecutionPolicyEvaluator.ExceedsCeiling rather than duplicating the
-/// Low/Medium/High rank table.
+/// Low/Medium/High/Critical rank table.
 /// </summary>
 public static class ApprovalPolicyEvaluator
 {

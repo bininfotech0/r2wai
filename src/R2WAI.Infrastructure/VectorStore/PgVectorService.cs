@@ -44,6 +44,7 @@ public class PgVectorService : IVectorStoreService
         var sql = $"""
             CREATE TABLE IF NOT EXISTS vector_embeddings (
                 id UUID PRIMARY KEY,
+                tenant_id UUID,
                 collection_name TEXT NOT NULL,
                 embedding vector({resolvedVectorSize}),
                 payload JSONB,
@@ -59,6 +60,18 @@ public class PgVectorService : IVectorStoreService
             """;
 
         await _context.Database.ExecuteSqlRawAsync(idxSql, ct);
+
+        // A table created before tenant_id existed gets it from migration
+        // AddVectorEmbeddingTenantId; this covers a database where that migration ran before the
+        // table did (the migration skips a missing table). Nullable on purpose: unmapped legacy
+        // rows stay unreachable rather than blocking the ALTER. Every query filters on it.
+        var tenantSql = """
+            ALTER TABLE vector_embeddings ADD COLUMN IF NOT EXISTS tenant_id UUID;
+            CREATE INDEX IF NOT EXISTS idx_ve_tenant_collection
+                ON vector_embeddings (tenant_id, collection_name);
+            """;
+
+        await _context.Database.ExecuteSqlRawAsync(tenantSql, ct);
 
         // Every search does a plain `ORDER BY embedding <=> $1` over the whole collection, and
         // CreateCollectionAsync is the only place the table shape is guaranteed to be in one place.
@@ -117,14 +130,15 @@ public class PgVectorService : IVectorStoreService
         _logger.LogInformation("Ensured vector_embeddings table with size {Size} for collection {Collection}", resolvedVectorSize, collectionName);
     }
 
-    public async Task DeleteCollectionAsync(string collectionName, CancellationToken ct = default)
+    public async Task DeleteCollectionAsync(Guid tenantId, string collectionName, CancellationToken ct = default)
     {
-        var sql = "DELETE FROM vector_embeddings WHERE collection_name = {0}";
-        await _context.Database.ExecuteSqlRawAsync(sql, [collectionName], ct);
+        var sql = "DELETE FROM vector_embeddings WHERE tenant_id = {0} AND collection_name = {1}";
+        await _context.Database.ExecuteSqlRawAsync(sql, [tenantId, collectionName], ct);
         _logger.LogInformation("Deleted vectors for collection {Collection}", collectionName);
     }
 
     public async Task UpsertVectorsAsync(
+        Guid tenantId,
         string collectionName,
         List<(Guid Id, float[] Vector, Dictionary<string, object> Payload)> points,
         CancellationToken ct = default)
@@ -145,8 +159,8 @@ public class PgVectorService : IVectorStoreService
         // would abort the whole batch on the first duplicate. Vectors therefore travel as their
         // pgvector text form ("[1,0,0]") and are cast server-side.
         var sql = """
-            INSERT INTO vector_embeddings (id, collection_name, embedding, payload)
-            SELECT u.id, u.collection_name, u.embedding::vector, u.payload::jsonb
+            INSERT INTO vector_embeddings (id, tenant_id, collection_name, embedding, payload)
+            SELECT u.id, {4}, u.collection_name, u.embedding::vector, u.payload::jsonb
             FROM unnest({0}::uuid[], {1}::text[], {2}::text[], {3}::text[])
                  AS u(id, collection_name, embedding, payload)
             ON CONFLICT (id) DO UPDATE SET
@@ -156,19 +170,25 @@ public class PgVectorService : IVectorStoreService
                 -- re-provisioned, a source moved between KBs) must therefore be moved too — leaving
                 -- this column out silently keeps the old copy in the old collection and drops the
                 // new one entirely.
+                tenant_id = EXCLUDED.tenant_id,
                 collection_name = EXCLUDED.collection_name,
                 embedding = EXCLUDED.embedding,
                 payload   = EXCLUDED.payload
+            -- Never move a point out of another tenant. A NULL owner is a legacy row whose collection
+            -- had no KnowledgeBases row at backfill; re-indexing it under its real tenant claims it.
+            WHERE vector_embeddings.tenant_id IS NULL OR vector_embeddings.tenant_id = EXCLUDED.tenant_id
             """;
 
+        int written;
         try
         {
-            await _context.Database.ExecuteSqlRawAsync(sql, new object[]
+            written = await _context.Database.ExecuteSqlRawAsync(sql, new object[]
             {
                 ArrayParam(NpgsqlDbType.Uuid, points.Select(p => p.Id).ToArray()),
                 ArrayParam(NpgsqlDbType.Text, Enumerable.Repeat(collectionName, points.Count).ToArray()),
                 ArrayParam(NpgsqlDbType.Text, points.Select(p => ToPgVectorText(p.Vector)).ToArray()),
                 ArrayParam(NpgsqlDbType.Text, points.Select(p => JsonSerializer.Serialize(p.Payload)).ToArray()),
+                tenantId,
             }, ct);
 
             _logger.LogInformation("Upserted {Count} vectors to {Collection}", points.Count, collectionName);
@@ -185,16 +205,20 @@ public class PgVectorService : IVectorStoreService
                 try
                 {
                     var rowSql = """
-                        INSERT INTO vector_embeddings (id, collection_name, embedding, payload)
-                        VALUES ({0}, {1}, {2}::vector, {3}::jsonb)
+                        INSERT INTO vector_embeddings (id, tenant_id, collection_name, embedding, payload)
+                        VALUES ({0}, {4}, {1}, {2}::vector, {3}::jsonb)
                         ON CONFLICT (id) DO UPDATE SET
+                            tenant_id = EXCLUDED.tenant_id,
                             collection_name = EXCLUDED.collection_name,
                             embedding = EXCLUDED.embedding,
                             payload   = EXCLUDED.payload
+                        WHERE vector_embeddings.tenant_id IS NULL OR vector_embeddings.tenant_id = EXCLUDED.tenant_id
                         """;
 
-                    await _context.Database.ExecuteSqlRawAsync(rowSql,
-                        [id, collectionName, ToPgVectorText(vector), JsonSerializer.Serialize(payload)], ct);
+                    var rowWritten = await _context.Database.ExecuteSqlRawAsync(rowSql,
+                        [id, collectionName, ToPgVectorText(vector), JsonSerializer.Serialize(payload), tenantId], ct);
+                    if (rowWritten == 0)
+                        throw new InvalidOperationException($"Vector {id} belongs to another tenant.");
                 }
                 catch (Exception ex2)
                 {
@@ -211,7 +235,14 @@ public class PgVectorService : IVectorStoreService
                 throw new InvalidOperationException(
                     $"Vector upsert into '{collectionName}' failed for {failures.Count} of {points.Count} points.",
                     new AggregateException(failures));
+            return;
         }
+
+        // A conflicting id owned by another tenant is skipped by the WHERE above, so it shows up
+        // only as a short row count. Callers mark the source Indexed with the count they asked for.
+        if (written < points.Count)
+            throw new InvalidOperationException(
+                $"Vector upsert into '{collectionName}' skipped {points.Count - written} of {points.Count} points whose ids belong to another tenant.");
     }
 
     private static NpgsqlParameter ArrayParam(NpgsqlDbType elementType, Array value)
@@ -223,6 +254,7 @@ public class PgVectorService : IVectorStoreService
         => "[" + string.Join(",", vector.Select(v => v.ToString("R", CultureInfo.InvariantCulture))) + "]";
 
     public async Task<List<VectorSearchResult>> SearchVectorsAsync(
+        Guid tenantId,
         string collectionName,
         float[] queryVector,
         int limit = 10,
@@ -233,13 +265,13 @@ public class PgVectorService : IVectorStoreService
             var sql = """
                 SELECT id, 1 - (embedding <=> {0}::vector) AS score, payload
                 FROM vector_embeddings
-                WHERE collection_name = {1}
+                WHERE tenant_id = {3} AND collection_name = {1}
                 ORDER BY embedding <=> {0}::vector
                 LIMIT {2}
                 """;
 
             var query = _context.Database.SqlQueryRaw<VectorSearchDbResult>(
-                sql, new object[] { queryVector, collectionName, limit });
+                sql, new object[] { queryVector, collectionName, limit, tenantId });
             var results = await query.ToListAsync(ct);
 
             return results.Select(r => new VectorSearchResult
@@ -258,15 +290,16 @@ public class PgVectorService : IVectorStoreService
         }
     }
 
-    public async Task DeleteVectorsAsync(string collectionName, List<Guid> pointIds, CancellationToken ct = default)
+    public async Task DeleteVectorsAsync(Guid tenantId, string collectionName, List<Guid> pointIds, CancellationToken ct = default)
     {
         if (pointIds.Count == 0) return;
 
         try
         {
-            var sql = "DELETE FROM vector_embeddings WHERE collection_name = @collectionName AND id = ANY(@ids)";
+            var sql = "DELETE FROM vector_embeddings WHERE tenant_id = @tenantId AND collection_name = @collectionName AND id = ANY(@ids)";
             await _context.Database.ExecuteSqlRawAsync(
                 sql,
+                new NpgsqlParameter("@tenantId", tenantId),
                 new NpgsqlParameter("@collectionName", collectionName),
                 new NpgsqlParameter("@ids", pointIds.ToArray()),
                 ct);
@@ -279,6 +312,7 @@ public class PgVectorService : IVectorStoreService
     }
 
     public async Task<List<VectorSearchResult>> HybridSearchAsync(
+        Guid tenantId,
         string collectionName,
         float[] queryVector,
         string queryText,
@@ -295,7 +329,7 @@ public class PgVectorService : IVectorStoreService
                 WITH vector_results AS (
                     SELECT id, 1 - (embedding <=> {0}::vector) AS vector_score, payload
                     FROM vector_embeddings
-                    WHERE collection_name = {1}
+                    WHERE tenant_id = {6} AND collection_name = {1}
                     ORDER BY embedding <=> {0}::vector
                     LIMIT {2} * 4
                 ),
@@ -305,7 +339,7 @@ public class PgVectorService : IVectorStoreService
                                    plainto_tsquery('english', {3})) AS text_score,
                            payload
                     FROM vector_embeddings
-                    WHERE collection_name = {1}
+                    WHERE tenant_id = {6} AND collection_name = {1}
                       AND to_tsvector('english', COALESCE(payload->>'content', ''))
                           @@ plainto_tsquery('english', {3})
                     LIMIT {2} * 4
@@ -326,7 +360,7 @@ public class PgVectorService : IVectorStoreService
                 """;
 
             var query = _context.Database.SqlQueryRaw<VectorSearchDbResult>(
-                sql, new object[] { queryVector, collectionName, limit, queryText, vectorWeight, minRelevance });
+                sql, new object[] { queryVector, collectionName, limit, queryText, vectorWeight, minRelevance, tenantId });
             var results = await query.ToListAsync(ct);
 
             return results.Select(r => new VectorSearchResult
@@ -341,14 +375,14 @@ public class PgVectorService : IVectorStoreService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Hybrid search failed, falling back to vector-only search");
-            var fallback = await SearchVectorsAsync(collectionName, queryVector, limit, ct);
+            var fallback = await SearchVectorsAsync(tenantId, collectionName, queryVector, limit, ct);
             return minRelevance > 0f
                 ? fallback.Where(r => r.Score >= minRelevance).ToList()
                 : fallback;
         }
     }
 
-    public async Task DeleteVectorsBySourceAsync(string collectionName, Guid sourceId, CancellationToken ct = default)
+    public async Task DeleteVectorsBySourceAsync(Guid tenantId, string collectionName, Guid sourceId, CancellationToken ct = default)
     {
         try
         {            // A "source" of chunks is either a KnowledgeBaseSource or a Document, and the two
@@ -359,10 +393,10 @@ public class PgVectorService : IVectorStoreService
             // source with more chunks than the scan limit leaked the remainder.
             var sql = """
                 DELETE FROM vector_embeddings
-                WHERE collection_name = {0}
+                WHERE tenant_id = {2} AND collection_name = {0}
                   AND (payload->>'sourceId' = {1} OR payload->>'documentId' = {1})
                 """;
-            var deleted = await _context.Database.ExecuteSqlRawAsync(sql, [collectionName, sourceId.ToString()], ct);
+            var deleted = await _context.Database.ExecuteSqlRawAsync(sql, [collectionName, sourceId.ToString(), tenantId], ct);
             _logger.LogInformation("Deleted {Count} vectors for source {SourceId} from {Collection}", deleted, sourceId, collectionName);
         }
         catch (Exception ex)

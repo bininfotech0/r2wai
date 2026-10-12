@@ -89,7 +89,7 @@ public class DocumentService : IDocumentService
             var text = await ExtractTextAsync(document, ct);
 
             var chunks = ChunkText(text, 1000, 200);
-            var piiTypes = PiiScanner.Scan(text);
+            var piiTypes = PiiDetector.FindTypes(text);
             if (piiTypes.Count > 0)
             {
                 _logger.LogWarning("Document {DocumentId} contains possible PII ({PiiTypes}) — review before external sharing",
@@ -135,7 +135,7 @@ public class DocumentService : IDocumentService
                         // Re-indexing replaces rather than appends — see DeterministicChunkId. The
                         // prior copy still has to go first, because a document that shrank leaves
                         // stale high-index chunks the upsert can no longer overwrite.
-                        await DeleteSourceVectorsQuietlyAsync(kb.VectorCollectionName, document.Id, indexingCts.Token);
+                        await DeleteSourceVectorsQuietlyAsync(kb.TenantId, kb.VectorCollectionName, document.Id, indexingCts.Token);
 
                         var embeddings = await _aiService.GenerateEmbeddingsAsync(chunks, indexingCts.Token);
                         var vectors = new List<(Guid Id, float[] Vector, Dictionary<string, object> Payload)>();
@@ -160,7 +160,7 @@ public class DocumentService : IDocumentService
 
                         if (vectors.Count > 0)
                         {
-                            await _vectorStore.UpsertVectorsAsync(kb.VectorCollectionName, vectors, indexingCts.Token);
+                            await _vectorStore.UpsertVectorsAsync(kb.TenantId, kb.VectorCollectionName, vectors, indexingCts.Token);
                             _logger.LogInformation("Indexed {ChunkCount} chunks from document {DocumentId} into {Collection}",
                                 vectors.Count, document.Id, kb.VectorCollectionName);
                         }
@@ -207,24 +207,24 @@ public class DocumentService : IDocumentService
         // unlike the background indexing path).
         if (document.KnowledgeBaseId is { } kbId)
         {
-            var collectionName = await _context.KnowledgeBases
+            var kb = await _context.KnowledgeBases
                 .Where(k => k.Id == kbId)
-                .Select(k => k.VectorCollectionName)
+                .Select(k => new { k.TenantId, k.VectorCollectionName })
                 .FirstOrDefaultAsync(ct);
 
-            if (!string.IsNullOrEmpty(collectionName))
-                await DeleteSourceVectorsQuietlyAsync(collectionName, document.Id, ct);
+            if (!string.IsNullOrEmpty(kb?.VectorCollectionName))
+                await DeleteSourceVectorsQuietlyAsync(kb.TenantId, kb.VectorCollectionName, document.Id, ct);
         }
 
         document.SoftDelete();
         await _context.SaveChangesAsync(ct);
     }
 
-    private async Task DeleteSourceVectorsQuietlyAsync(string collectionName, Guid sourceId, CancellationToken ct)
+    private async Task DeleteSourceVectorsQuietlyAsync(Guid tenantId, string collectionName, Guid sourceId, CancellationToken ct)
     {
         try
         {
-            await _vectorStore.DeleteVectorsBySourceAsync(collectionName, sourceId, ct);
+            await _vectorStore.DeleteVectorsBySourceAsync(tenantId, collectionName, sourceId, ct);
         }
         catch (Exception ex)
         {

@@ -35,11 +35,11 @@ export function NotFoundPage() {
           <Button variant="contained" onClick={() => navigate('/')}>
             Go to Home
           </Button>
-          <Button component={RouterLink} to="/workspaces" variant="outlined">
+          <Button component={RouterLink} to="/connections" variant="outlined">
             Connected Systems
           </Button>
           <Button component={RouterLink} to="/assistants" variant="text">
-            AI Assistants
+            Agents
           </Button>
         </Stack>
       </Paper>
