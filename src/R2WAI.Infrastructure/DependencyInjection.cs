@@ -100,6 +100,7 @@ public static class DependencyInjection
         services.AddScoped<RAGPlugin>();
         services.AddScoped<WorkflowPlugin>();
         services.AddScoped<AssistantPlugin>();
+        services.AddScoped<AgentDelegationPlugin>();
         services.AddScoped<IChatTraceCollector, ChatTraceCollector>();
         services.AddScoped<IChatStreamContext, AI.ChatStreamContext>();
         services.AddScoped<IEnabledToolScope, AI.EnabledToolScope>();

@@ -11,6 +11,7 @@ public class AssistantDto
     public Guid? ModelConfigurationId { get; init; }
     public Guid? KnowledgeBaseId { get; init; }
     public string? Tools { get; init; }
+    public string? DelegatableAssistantIds { get; init; }
     public string? Settings { get; init; }
     public bool IsActive { get; init; }
     public string PublishStatus { get; init; } = "Draft";

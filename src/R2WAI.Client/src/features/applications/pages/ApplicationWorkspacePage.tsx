@@ -28,16 +28,18 @@ import EditIcon from '@mui/icons-material/Edit'
 import RestoreIcon from '@mui/icons-material/Restore'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined'
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined'
 import { ConfirmDeleteDialog } from '../../../components/dialogs/ConfirmDeleteDialog'
 import { ErrorState } from '../../../components/ErrorState'
 import { EmptyState } from '../../../components/EmptyState'
+import { StatusBadge } from '../../../components/StatusBadge'
 import { apiErrorMessage, describeApiError } from '../../../lib/api/fetchJson'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { TooltipIconButton as IconButton } from '../../../components/TooltipIconButton'
 import { listAssistants } from '../../assistants/api'
 import { listKnowledgeBases } from '../../knowledge/api'
 import { listWorkflows } from '../../automations/api'
-import { listCapabilities } from '../../tools/api'
+import { listCapabilities, setCapabilityStatus } from '../../tools/api'
 import {
   changeApplicationStatus,
   createApplicationApi,
@@ -260,6 +262,17 @@ export function ApplicationWorkspacePage() {
     onError: () => notify('Failed to roll back', 'error'),
   })
 
+  // Discovery lands new capabilities inactive (method-derived risk, no approval) until reviewed —
+  // this is that review action, right where an admin already looks after running Discover.
+  const activateToolMutation = useMutation({
+    mutationFn: (toolId: string) => setCapabilityStatus(toolId, true),
+    onSuccess: () => {
+      notify('Tool activated — it can now be called', 'success')
+      void queryClient.invalidateQueries({ queryKey: ['capabilities-for-resources', id] })
+    },
+    onError: () => notify('Failed to activate tool', 'error'),
+  })
+
   if (query.isLoading) {
     return (
       <Stack spacing={2} sx={{ maxWidth: 800 }} role="status" aria-label="Loading connected system">
@@ -302,6 +315,7 @@ export function ApplicationWorkspacePage() {
   const linkedWorkflows = (workflowsQuery.data?.items ?? []).filter((w) => w.applicationId === id)
   const linkedKnowledgeBases = knowledgeBasesQuery.data?.items ?? []
   const linkedTools = capabilitiesQuery.data?.items ?? []
+  const inactiveToolCount = linkedTools.filter((t) => !t.isActive).length
 
   return (
     <Box sx={{ maxWidth: 1520, mx: 'auto', pb: 3 }}>
@@ -662,12 +676,35 @@ export function ApplicationWorkspacePage() {
             </Stack>
           </Paper>
           <Paper variant="outlined" sx={{ p: 2 }}>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Tools ({linkedTools.length})
-            </Typography>
-            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
+              <Typography variant="subtitle2">
+                Tools ({linkedTools.length})
+              </Typography>
+              {inactiveToolCount > 0 && (
+                <Chip label={`${inactiveToolCount} awaiting review`} size="small" color="warning" variant="outlined" />
+              )}
+            </Stack>
+            <Stack spacing={1}>
               {linkedTools.map((t) => (
-                <Chip key={t.id} label={t.name} size="small" variant="outlined" onClick={() => navigate(`/tools/${t.id}`)} />
+                <Stack key={t.id} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <Chip
+                    label={t.name}
+                    size="small"
+                    variant="outlined"
+                    onClick={() => navigate(`/tools/${t.id}`)}
+                  />
+                  <StatusBadge status={t.isActive ? 'Active' : 'Inactive'} />
+                  {!t.isActive && (
+                    <IconButton
+                      tooltip="Activate — makes this capability callable by assistants"
+                      size="small"
+                      onClick={() => activateToolMutation.mutate(t.id)}
+                      disabled={activateToolMutation.isPending}
+                    >
+                      <CheckCircleOutlineIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </Stack>
               ))}
               {linkedTools.length === 0 && (
                 <Typography variant="body2" color="text.secondary">

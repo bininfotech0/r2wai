@@ -22,6 +22,7 @@ public record UpdateAssistantCommand : IRequest<AssistantDto>
     public Guid? KnowledgeBaseId { get; init; }
     public bool UnlinkKnowledgeBase { get; init; }
     public string? Tools { get; init; }
+    public string? DelegatableAssistantIds { get; init; }
     public string? Settings { get; init; }
     public bool? IsActive { get; init; }
     public string? Tags { get; init; }
@@ -69,7 +70,7 @@ public class UpdateAssistantCommandHandler(
 
         assistant.UpdateDetails(command.Name, command.Description,
             command.SystemPrompt, command.Tools, command.Settings,
-            command.Tags, command.AvatarUrl);
+            command.Tags, command.AvatarUrl, command.DelegatableAssistantIds);
 
         if (command.UnlinkModelConfiguration)
             assistant.UnlinkModelConfiguration();

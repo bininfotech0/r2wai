@@ -9,7 +9,12 @@ namespace R2WAI.Domain.Entities;
 /// Scoped deliberately to gateway calls (Semantic Kernel, Agent Framework, MCP, and confirmed
 /// calls resumed after approval); automation/workflow steps are NOT covered — see
 /// docs/architecture/EXECUTION-AND-WORKFLOWS.md for why that half still needs custom Elsa activities.
-/// <see cref="IdempotencyKey"/> is reserved for the doc's Prepare step and is not populated yet.
+/// <see cref="IdempotencyKey"/> is populated as <c>"approval:{approvalRequestId}"</c> for the one
+/// path that has a stable, caller-independent dedup boundary today — resuming an approved AI tool
+/// call. A live AI turn's direct calls don't get one: the model may legitimately call the same tool
+/// with the same arguments twice in one conversation, so there is no safe key to derive without a
+/// caller-supplied scope. See <c>DeferredToolCallExecutor.TryExecuteAsync</c>'s resume-lookup for
+/// how this is used to make it safe to call more than once for the same approval.
 /// </summary>
 public sealed class ToolExecution : BaseEntity<Guid>
 {
@@ -54,13 +59,19 @@ public sealed class ToolExecution : BaseEntity<Guid>
         new(tenantId, userId, toolDefinitionId, plugin, function, ToolExecutionStatus.AwaitingApproval)
         {
             ApprovalRequestId = approvalRequestId,
+            IdempotencyKey = ApprovalIdempotencyKey(approvalRequestId),
         };
 
     public static ToolExecution Prepared(Guid tenantId, Guid? userId, Guid? toolDefinitionId, string plugin, string function, Guid? approvalRequestId = null) =>
         new(tenantId, userId, toolDefinitionId, plugin, function, ToolExecutionStatus.Prepared)
         {
             ApprovalRequestId = approvalRequestId,
+            IdempotencyKey = approvalRequestId is { } id ? ApprovalIdempotencyKey(id) : null,
         };
+
+    /// <summary>The one stable, caller-independent dedup boundary this ledger has today — see the
+    /// class doc comment on <see cref="IdempotencyKey"/>.</summary>
+    public static string ApprovalIdempotencyKey(Guid approvalRequestId) => $"approval:{approvalRequestId}";
 
     /// <summary>An approved call is about to run: AwaitingApproval → Prepared.</summary>
     public void PrepareAfterApproval()

@@ -50,7 +50,10 @@ public class DeferredToolCallExecutor : IDeferredToolCallExecutor
             return "The tool this approval was for no longer exists.";
         }
 
-        var executionId = await PrepareLedgerAsync(request, toolDef);
+        var prepared = await PrepareLedgerAsync(request, toolDef);
+        if (prepared.ShortCircuitMessage is not null)
+            return prepared.ShortCircuitMessage;
+        var executionId = prepared.ExecutionId;
 
         // The Include's target navigation depends on ToolType, and GenericRepository's string-path
         // Include only supports one navigation per query — so re-fetch with the right one now that
@@ -105,26 +108,59 @@ public class DeferredToolCallExecutor : IDeferredToolCallExecutor
 
     // The gateway wrote an AwaitingApproval row when it paused this call; move it to Prepared. A
     // request paused before the ledger existed has no row, so one is created for it here.
-    private async Task<Guid> PrepareLedgerAsync(ApprovalRequest request, ToolDefinition toolDef)
+    //
+    // Looked up by ApprovalRequestId regardless of status (not just AwaitingApproval) so a second
+    // call for the same approval — there's no retry path that reaches this today (ApproveAsync's
+    // atomic Pending/Escalated->Approved claim means the one known caller can't re-enter for an
+    // already-decided request), but TryExecuteAsync is public on an interface, and the ledger's own
+    // IdempotencyKey column exists specifically so a future caller (a reconcile sweep, a manual
+    // retry) doesn't have to re-derive this safety check — never re-executes the external call.
+    private async Task<LedgerPrepareResult> PrepareLedgerAsync(ApprovalRequest request, ToolDefinition toolDef)
     {
         using var scope = _scopeFactory.CreateScope();
         var executions = scope.ServiceProvider.GetRequiredService<IRepository<ToolExecution>>();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var execution = await executions.FirstOrDefaultAsync(
-            e => e.ApprovalRequestId == request.Id && e.Status == ToolExecutionStatus.AwaitingApproval);
-        if (execution is null)
+        var execution = await executions.FirstOrDefaultAsync(e => e.ApprovalRequestId == request.Id);
+
+        // Exhaustive over every ToolExecutionStatus a found row could be in, not just the two this
+        // was first written for — Denied/Unknown would otherwise fall into the "proceed" branch
+        // below and throw out of PrepareAfterApproval's EnsureStatus guard instead of denying
+        // gracefully (caught by the one current caller today, but not something to rely on).
+        switch (execution?.Status)
         {
-            execution = ToolExecution.Prepared(request.TenantId, request.RequesterId, toolDef.Id, "Approved", toolDef.Name, request.Id);
-            await executions.AddAsync(execution);
+            case ToolExecutionStatus.Succeeded:
+            case ToolExecutionStatus.Failed:
+            case ToolExecutionStatus.Denied:
+                _logger.LogInformation(
+                    "Approval {RequestId} was already resumed (ledger status {Status}) — not re-executing", request.Id, execution!.Status);
+                return new LedgerPrepareResult(Guid.Empty, $"This approval was already decided (result: {execution.Status}).");
+
+            case ToolExecutionStatus.Prepared:
+            case ToolExecutionStatus.Unknown:
+                _logger.LogWarning(
+                    "Approval {RequestId}'s prior execution attempt never reached a terminal state — refusing to blindly retry", request.Id);
+                return new LedgerPrepareResult(Guid.Empty,
+                    "A previous execution attempt for this approval did not complete cleanly. Manual verification is required before retrying.");
+
+            case ToolExecutionStatus.AwaitingApproval:
+                execution!.PrepareAfterApproval();
+                executions.Update(execution);
+                break;
+
+            case null:
+                execution = ToolExecution.Prepared(request.TenantId, request.RequesterId, toolDef.Id, "Approved", toolDef.Name, request.Id);
+                await executions.AddAsync(execution);
+                break;
         }
-        else
-        {
-            execution.PrepareAfterApproval();
-            executions.Update(execution);
-        }
+
         await unitOfWork.SaveChangesAsync();
-        return execution.Id;
+        return new LedgerPrepareResult(execution!.Id, ShortCircuitMessage: null);
     }
+
+    /// <summary><paramref name="ShortCircuitMessage"/> set means the caller must return it as-is and
+    /// never invoke the tool — <paramref name="ExecutionId"/> is meaningless (<see cref="Guid.Empty"/>)
+    /// in that case.</summary>
+    private sealed record LedgerPrepareResult(Guid ExecutionId, string? ShortCircuitMessage);
 
     // The approved call already ran, so a ledger failure must not stop its result and audit row from
     // being recorded — same rule as ToolGateway.CompleteExecutionAsync. The row stays Prepared.

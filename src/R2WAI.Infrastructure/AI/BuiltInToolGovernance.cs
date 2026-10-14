@@ -43,6 +43,8 @@ public static class BuiltInToolGovernance
         ["ask_document"] = new(Guid.Parse("00000000-0000-0000-0000-000000000412"), "Low", "Ask a question about a document"),
         ["get_assistant_context"] = new(Guid.Parse("00000000-0000-0000-0000-000000000413"), "Low", "Get the context and configuration for an assistant"),
         ["get_knowledge_base_context"] = new(Guid.Parse("00000000-0000-0000-0000-000000000414"), "Low", "Get context from a knowledge base for answering questions"),
+        ["delegate_to_agent"] = new(Guid.Parse("00000000-0000-0000-0000-000000000415"), "Medium", "Hand a task off to another specialist agent"),
+        ["delegate_to_agents"] = new(Guid.Parse("00000000-0000-0000-0000-000000000416"), "Medium", "Fan a task out to several specialist agents in parallel"),
     };
 
     public static IReadOnlyCollection<string> KnownFunctionNames => Defaults.Keys;

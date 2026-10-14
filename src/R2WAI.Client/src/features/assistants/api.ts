@@ -3,6 +3,7 @@ import { ApiRequestError, fetchJson, postJson as sharedPostJson } from '../../li
 import type {
   AssistantDto,
   AssistantsPagedResult,
+  AssistantVersionDto,
   CreateAssistantInput,
   GeneratedAssistantConfig,
   UpdateAssistantInput,
@@ -75,4 +76,16 @@ export async function unpublishAssistant(id: string) {
 
 export function cloneAssistant(id: string) {
   return postJson<AssistantDto>(`/assistants/${id}/clone`, {})
+}
+
+export function listAssistantVersions(id: string) {
+  return fetchJson<AssistantVersionDto[]>(`/assistants/${id}/versions`)
+}
+
+export function createAssistantVersion(id: string, note: string, publish: boolean) {
+  return postJson<AssistantVersionDto>(`/assistants/${id}/versions`, { note: note || undefined, publish })
+}
+
+export function rollbackAssistantVersion(id: string, versionId: string) {
+  return postJson<AssistantVersionDto>(`/assistants/${id}/versions/${versionId}/rollback`, {})
 }

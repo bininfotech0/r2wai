@@ -235,6 +235,7 @@ public class ChatWithAssistantCommandHandler(
                 enableTools: true,
                 modelConfig: modelConfig,
                 enabledToolIds: assistant.GetEnabledToolIds(),
+                delegatableAssistantIds: assistant.GetDelegatableAssistantIds(),
                 ct: cancellationToken);
             tokensUsed = usage.TotalTokens;
         }

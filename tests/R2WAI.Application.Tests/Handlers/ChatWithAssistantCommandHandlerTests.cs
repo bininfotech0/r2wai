@@ -31,8 +31,8 @@ public class ChatWithAssistantCommandHandlerTests
         string? capturedSystemPrompt = null;
         var aiServiceMock = new Mock<IAIService>();
         aiServiceMock
-            .Setup(a => a.ChatAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<ResolvedModelConfig?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
-            .Callback<string, string?, string?, bool, ResolvedModelConfig?, IReadOnlyCollection<Guid>?, CancellationToken>((_, _, sysPrompt, _, _, _, _) => capturedSystemPrompt = sysPrompt)
+            .Setup(a => a.ChatAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<ResolvedModelConfig?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string?, string?, bool, ResolvedModelConfig?, IReadOnlyCollection<Guid>?, IReadOnlyCollection<Guid>?, CancellationToken>((_, _, sysPrompt, _, _, _, _, _) => capturedSystemPrompt = sysPrompt)
             .ReturnsAsync("AI reply");
 
         var promptTemplateServiceMock = new Mock<IPromptTemplateService>();
@@ -94,8 +94,8 @@ public class ChatWithAssistantCommandHandlerTests
         string? capturedSystemPrompt = null;
         var aiServiceMock = new Mock<IAIService>();
         aiServiceMock
-            .Setup(a => a.ChatAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<ResolvedModelConfig?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
-            .Callback<string, string?, string?, bool, ResolvedModelConfig?, IReadOnlyCollection<Guid>?, CancellationToken>((_, _, sysPrompt, _, _, _, _) => capturedSystemPrompt = sysPrompt)
+            .Setup(a => a.ChatAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<ResolvedModelConfig?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<IReadOnlyCollection<Guid>?>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string?, string?, bool, ResolvedModelConfig?, IReadOnlyCollection<Guid>?, IReadOnlyCollection<Guid>?, CancellationToken>((_, _, sysPrompt, _, _, _, _, _) => capturedSystemPrompt = sysPrompt)
             .ReturnsAsync("AI reply");
 
         var promptTemplateServiceMock = new Mock<IPromptTemplateService>();

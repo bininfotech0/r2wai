@@ -15,6 +15,11 @@ public sealed class AssistantDefinition : BaseEntity<Guid>, IWorkspaceScoped
     public Guid? ModelConfigurationId { get; private set; }
     public Guid? KnowledgeBaseId { get; private set; }
     public string? Tools { get; private set; }
+    // JSON-encoded Guid[] of other assistants this one may hand a task off to via
+    // AgentDelegationPlugin — unlike Tools, null/unset means NO delegation (fail closed): there is
+    // no prior "every assistant" behavior to stay compatible with, since delegation didn't exist
+    // before this field. An admin opts an assistant into specific delegates explicitly.
+    public string? DelegatableAssistantIds { get; private set; }
     public string? Settings { get; private set; }
     public bool IsActive { get; private set; }
     public PublishStatus PublishStatus { get; private set; } = PublishStatus.Draft;
@@ -45,13 +50,15 @@ public sealed class AssistantDefinition : BaseEntity<Guid>, IWorkspaceScoped
 
     public void UpdateDetails(string name, string? description, string? systemPrompt,
                                string? tools, string? settings,
-                               string? tags = null, string? avatarUrl = null)
+                               string? tags = null, string? avatarUrl = null,
+                               string? delegatableAssistantIds = null)
     {
         Name = name;
         Description = description;
         SystemPrompt = systemPrompt;
         Tools = tools;
         Settings = settings;
+        DelegatableAssistantIds = delegatableAssistantIds;
         if (tags is not null) Tags = tags;
         if (avatarUrl is not null) AvatarUrl = avatarUrl;
         MarkAsModified();
@@ -83,6 +90,22 @@ public sealed class AssistantDefinition : BaseEntity<Guid>, IWorkspaceScoped
         catch (System.Text.Json.JsonException)
         {
             return null;
+        }
+    }
+
+    // Deliberately the opposite null-handling from GetEnabledToolIds: delegation is a new,
+    // privileged capability, so "not configured" must mean deny-all, not allow-all.
+    public IReadOnlyCollection<Guid> GetDelegatableAssistantIds()
+    {
+        if (DelegatableAssistantIds is null) return [];
+        try
+        {
+            var ids = System.Text.Json.JsonSerializer.Deserialize<List<Guid>>(DelegatableAssistantIds);
+            return ids ?? [];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
         }
     }
 

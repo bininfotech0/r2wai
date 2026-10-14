@@ -39,7 +39,7 @@ public class CloneAssistantCommandHandler(
         // edited, including a null Tools (legacy "all tools") if that's what the source has —
         // silently narrowing that on clone would be a surprising, undocumented behavior change.
         clone.UpdateDetails(source.Name + " (Copy)", source.Description, source.SystemPrompt,
-            source.Tools, source.Settings, source.Tags, source.AvatarUrl);
+            source.Tools, source.Settings, source.Tags, source.AvatarUrl, source.DelegatableAssistantIds);
 
         if (source.ApplicationId.HasValue)
             clone.AssignApplication(source.ApplicationId);

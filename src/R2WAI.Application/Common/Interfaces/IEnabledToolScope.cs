@@ -12,4 +12,11 @@ namespace R2WAI.Application.Common.Interfaces;
 public interface IEnabledToolScope
 {
     IReadOnlyCollection<Guid>? EnabledToolIds { get; set; }
+
+    /// <summary>The calling assistant's own allow-list of assistants it may hand a task off to via
+    /// AgentDelegationPlugin — set alongside <see cref="EnabledToolIds"/> wherever a chat turn
+    /// starts. Unlike EnabledToolIds, never null-means-all: an empty collection (including the
+    /// default, unset value) means no delegation is allowed, since this is a new capability with no
+    /// prior "every assistant" behavior to preserve.</summary>
+    IReadOnlyCollection<Guid> DelegatableAssistantIds { get; set; }
 }

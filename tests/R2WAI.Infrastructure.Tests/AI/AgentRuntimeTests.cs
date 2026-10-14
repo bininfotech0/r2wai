@@ -25,7 +25,7 @@ public class AgentRuntimeTests
         private readonly ChatTraceCollector _traceCollector;
         public FakeAiService(ChatTraceCollector traceCollector) => _traceCollector = traceCollector;
 
-        public Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default)
+        public Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default)
         {
             LastMessage = message;
             LastHistory = conversationHistory;
@@ -36,7 +36,7 @@ public class AgentRuntimeTests
             return Task.FromResult("invoke-result");
         }
 
-        public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, [EnumeratorCancellation] CancellationToken ct = default)
+        public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, [EnumeratorCancellation] CancellationToken ct = default)
         {
             LastMessage = message;
             LastHistory = conversationHistory;

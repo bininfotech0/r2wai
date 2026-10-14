@@ -6,9 +6,18 @@ import {
   Avatar,
   Box,
   Button,
+  Checkbox,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Drawer,
+  FormControlLabel,
   IconButton,
+  List,
+  ListItem,
+  ListItemText,
   MenuItem,
   Paper,
   Skeleton,
@@ -31,22 +40,33 @@ import { Link as RouterLink } from 'react-router-dom'
 import { LivePreviewPane } from '../components/LivePreviewPane'
 import { AgentSettingsDrawer } from '../components/AgentSettingsDrawer'
 import { AgentChannelsTab } from '../components/AgentChannelsTab'
+import { DelegatesTab } from '../components/DelegatesTab'
 import { parseEnabledIds } from '../toolsJson'
 import { PublishChecklist } from '../../../components/PublishChecklist'
 import { SectionCard } from '../../../components/SectionCard'
 import { ConfirmDeleteDialog } from '../../../components/dialogs/ConfirmDeleteDialog'
 import { EmptyState } from '../../../components/EmptyState'
 import { ErrorState } from '../../../components/ErrorState'
+import { LoadingSkeleton } from '../../../components/LoadingSkeleton'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { fetchJson } from '../../../lib/api/fetchJson'
-import { deleteAssistant, getAssistant, getAssistantPublishReadiness, publishAssistant, updateAssistant } from '../api'
+import {
+  createAssistantVersion,
+  deleteAssistant,
+  getAssistant,
+  getAssistantPublishReadiness,
+  listAssistantVersions,
+  publishAssistant,
+  rollbackAssistantVersion,
+  updateAssistant,
+} from '../api'
 import { buildFullUpdatePayload, GENERATABLE_TYPES, type AssistantDto, type AssistantType } from '../types'
 import type { KnowledgeBaseDto } from '../../knowledge/types'
 import { CapabilitiesTab } from '../../capabilities/components/CapabilitiesTab'
 import { listModels } from '../../admin/api'
 import { describePromptPlaceholders } from '../../../lib/prompts/promptPlaceholders'
 
-const TABS = ['Overview', 'Knowledge', 'Tools', 'Channels', 'Analytics'] as const
+const TABS = ['Overview', 'Knowledge', 'Tools', 'Channels', 'Versions', 'Analytics'] as const
 type StudioTab = (typeof TABS)[number]
 
 // Copilot Studio keeps "Test your agent" beside every tab; remember whether it was closed.
@@ -77,6 +97,9 @@ export function AssistantStudioPage() {
   const [publishOpen, setPublishOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [versionDialogOpen, setVersionDialogOpen] = useState(false)
+  const [versionNote, setVersionNote] = useState('')
+  const [versionPublish, setVersionPublish] = useState(true)
   // Docked (large screens): open unless the user closed it. Overlay (smaller): opened on demand.
   const [dockedTestOpen, setDockedTestOpen] = useState(readTestPaneOpen)
   const [overlayTestOpen, setOverlayTestOpen] = useState(false)
@@ -142,6 +165,11 @@ export function AssistantStudioPage() {
   const modelsQuery = useQuery({ queryKey: ['admin', 'models'], queryFn: listModels, enabled: tab === 'Overview' })
   const activeModels = (modelsQuery.data?.items ?? []).filter((m) => m.isActive)
   const kbQuery = useQuery({ ...knowledgeBasesQuery, enabled: tab === 'Overview' })
+  const versionsQuery = useQuery({
+    queryKey: ['assistant-versions', id],
+    queryFn: () => listAssistantVersions(id!),
+    enabled: !!id && tab === 'Versions',
+  })
 
   const saveOverview = useMutation({
     mutationFn: () =>
@@ -184,6 +212,26 @@ export function AssistantStudioPage() {
       navigate('/assistants')
     },
     onError: () => notify('Failed to delete agent', 'error'),
+  })
+
+  const createVersionMutation = useMutation({
+    mutationFn: () => createAssistantVersion(id!, versionNote, versionPublish),
+    onSuccess: () => {
+      notify('Version created', 'success')
+      setVersionDialogOpen(false)
+      setVersionNote('')
+      void queryClient.invalidateQueries({ queryKey: ['assistant-versions', id] })
+    },
+    onError: () => notify('Failed to create version', 'error'),
+  })
+
+  const rollbackVersionMutation = useMutation({
+    mutationFn: (versionId: string) => rollbackAssistantVersion(id!, versionId),
+    onSuccess: () => {
+      notify('Rolled back — a new version was created', 'success')
+      void queryClient.invalidateQueries({ queryKey: ['assistant-versions', id] })
+    },
+    onError: () => notify('Failed to roll back', 'error'),
   })
 
   if (query.isError) {
@@ -438,9 +486,99 @@ export function AssistantStudioPage() {
             </SectionCard>
           )}
 
-          {tab === 'Tools' && <CapabilitiesTab assistantId={assistant.id} toolsJson={assistant.tools} />}
+          {tab === 'Tools' && (
+            <Stack spacing={3}>
+              <CapabilitiesTab assistantId={assistant.id} toolsJson={assistant.tools} />
+              <SectionCard
+                title="Delegates to other agents"
+                description="Real multi-agent delegation — this agent can hand part of a request to another specialist agent instead of answering it directly."
+              >
+                <DelegatesTab assistantId={assistant.id} delegatableAssistantIds={assistant.delegatableAssistantIds} />
+              </SectionCard>
+            </Stack>
+          )}
 
           {tab === 'Channels' && <AgentChannelsTab assistant={assistant} />}
+
+          {tab === 'Versions' && (
+            <Paper variant="outlined" sx={{ p: 2, maxWidth: 700 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'center' }, mb: 1.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Snapshots of this agent's configuration, newest first.
+                </Typography>
+                <Button size="small" onClick={() => setVersionDialogOpen(true)}>
+                  Create Version
+                </Button>
+              </Stack>
+              {versionsQuery.isLoading ? (
+                <LoadingSkeleton variant="text" count={3} height={48} />
+              ) : versionsQuery.isError ? (
+                <ErrorState title="Unable to load agent versions" onRetry={() => void versionsQuery.refetch()} />
+              ) : (
+                <List dense>
+                  {(versionsQuery.data ?? [])
+                    .slice()
+                    .sort((a, b) => b.versionNumber - a.versionNumber)
+                    .map((v) => (
+                      <ListItem
+                        key={v.id}
+                        divider
+                        secondaryAction={
+                          !v.isPublished && (
+                            <Button size="small" onClick={() => rollbackVersionMutation.mutate(v.id)} disabled={rollbackVersionMutation.isPending}>
+                              Roll back
+                            </Button>
+                          )
+                        }
+                      >
+                        <ListItemText
+                          primary={
+                            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                              <span>Version {v.versionNumber}</span>
+                              {v.isPublished && <Chip label="Published" size="small" color="default" variant="outlined" />}
+                            </Stack>
+                          }
+                          secondary={`${v.note || 'No note'} · ${new Date(v.createdAt).toLocaleString()}`}
+                        />
+                      </ListItem>
+                    ))}
+                </List>
+              )}
+              {!versionsQuery.isLoading && !versionsQuery.isError && (versionsQuery.data ?? []).length === 0 && (
+                <EmptyState title="No versions yet" />
+              )}
+
+              <Dialog open={versionDialogOpen} onClose={() => setVersionDialogOpen(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Create Version</DialogTitle>
+                <DialogContent>
+                  <Stack spacing={2} sx={{ pt: 1 }}>
+                    <TextField
+                      label="Note"
+                      value={versionNote}
+                      onChange={(e) => setVersionNote(e.target.value)}
+                      fullWidth
+                      multiline
+                      minRows={2}
+                    />
+                    <FormControlLabel
+                      control={<Checkbox checked={versionPublish} onChange={(e) => setVersionPublish(e.target.checked)} />}
+                      label="Publish immediately"
+                    />
+                  </Stack>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                  <Button onClick={() => setVersionDialogOpen(false)}>Cancel</Button>
+                  <Button
+                    variant="contained"
+                    onClick={() => createVersionMutation.mutate()}
+                    disabled={createVersionMutation.isPending}
+                  >
+                    Create
+                  </Button>
+                </DialogActions>
+              </Dialog>
+            </Paper>
+          )}
 
           {tab === 'Analytics' && (
             <SectionCard title="Analytics" description="Usage of this agent across every channel.">

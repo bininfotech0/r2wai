@@ -35,6 +35,9 @@ public class AssistantDefinitionConfiguration : IEntityTypeConfiguration<Assista
         builder.Property(a => a.Tools)
             .HasColumnType("jsonb");
 
+        builder.Property(a => a.DelegatableAssistantIds)
+            .HasColumnType("jsonb");
+
         builder.Property(a => a.Settings)
             .HasColumnType("jsonb");
 

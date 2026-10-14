@@ -23,7 +23,7 @@ public class AgentRuntime : IAgentRuntime
 
         var text = await _aiService.ChatAsync(
             request.Message, request.ConversationHistory, request.SystemPrompt,
-            enableTools: true, modelConfig: null, request.EnabledToolIds, ct);
+            enableTools: true, modelConfig: null, request.EnabledToolIds, request.DelegatableAssistantIds, ct);
 
         var toolCallsMade = _traceCollector.GetTrace().Select(t => t.Function).ToList();
         return new AgentRuntimeResult(text, request.CorrelationId ?? Guid.NewGuid(), toolCallsMade);
@@ -33,7 +33,7 @@ public class AgentRuntime : IAgentRuntime
     {
         await foreach (var chunk in _aiService.StreamChatAsync(
             request.Message, request.ConversationHistory, request.SystemPrompt,
-            enableTools: true, modelConfig: null, request.EnabledToolIds, ct))
+            enableTools: true, modelConfig: null, request.EnabledToolIds, request.DelegatableAssistantIds, ct))
             yield return chunk;
     }
 }

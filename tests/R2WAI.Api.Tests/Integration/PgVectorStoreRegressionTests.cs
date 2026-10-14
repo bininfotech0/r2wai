@@ -770,8 +770,8 @@ public class PgVectorStoreRegressionTests : IAsyncLifetime
         public Task<string> ExtractDataAsync(string text, string schema, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<string> CompareDocumentsAsync(string sourceText, string targetText, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<string> AnswerQuestionAsync(string question, string context, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default) => throw new NotSupportedException();
-        public IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default) => throw new NotSupportedException();
+        public IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private sealed class CountingHttpClientFactory : IHttpClientFactory

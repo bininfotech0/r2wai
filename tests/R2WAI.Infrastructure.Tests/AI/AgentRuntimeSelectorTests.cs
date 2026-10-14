@@ -24,9 +24,9 @@ public class AgentRuntimeSelectorTests
 {
     private sealed class FakeAiService : IAIService
     {
-        public Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default) =>
+        public Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default) =>
             Task.FromResult("sk-reply");
-        public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, [EnumeratorCancellation] CancellationToken ct = default)
+        public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, [EnumeratorCancellation] CancellationToken ct = default)
         {
             yield return "sk-chunk";
             await Task.CompletedTask;

@@ -25,10 +25,11 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return (await response.json()) as T
 }
 
-export function listCapabilities(page: number, pageSize: number, search: string, applicationId?: string) {
+export function listCapabilities(page: number, pageSize: number, search: string, applicationId?: string, isActive?: boolean) {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
   if (search) params.set('search', search)
   if (applicationId) params.set('applicationId', applicationId)
+  if (isActive !== undefined) params.set('isActive', String(isActive))
   return fetchJson<PagedResult<CapabilityDto>>(`/capabilities?${params.toString()}`)
 }
 

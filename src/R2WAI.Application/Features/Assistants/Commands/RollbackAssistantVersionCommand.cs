@@ -39,7 +39,8 @@ public class RollbackAssistantVersionCommandHandler(
         // Type is deliberately not restored — see AssistantVersionSnapshotService's doc comment,
         // there is no setter and the live value can never have diverged.
         assistant.UpdateDetails(snapshot.Name, snapshot.Description, snapshot.SystemPrompt,
-            snapshot.Tools, snapshot.Settings, snapshot.Tags, snapshot.AvatarUrl);
+            snapshot.Tools, snapshot.Settings, snapshot.Tags, snapshot.AvatarUrl,
+            snapshot.DelegatableAssistantIds);
 
         if (snapshot.ModelConfigurationId.HasValue)
             assistant.LinkModelConfiguration(snapshot.ModelConfigurationId.Value);

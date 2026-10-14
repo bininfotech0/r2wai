@@ -340,6 +340,90 @@ public class DeferredToolCallExecutorTests
     }
 
     [Fact]
+    public async Task TryExecuteAsync_CalledTwiceForTheSameApproval_OnlyInvokesTheToolOnce()
+    {
+        // The known caller (ApprovalsController.Approve) can't actually re-enter for an
+        // already-decided request today — ApproveAsync's atomic claim guards that. This proves the
+        // ledger-level safety net works anyway, for any future caller (a reconcile sweep, a manual
+        // retry) that calls TryExecuteAsync a second time for the same approval.
+        var callCount = 0;
+        var fakeTool = new FakeTool { OnExecute = () => callCount++ };
+        var tenantId = Guid.NewGuid();
+        var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, "Create Order", ToolType.Http, "desc", "https://api.example.com");
+        var sut = CreateSut(fakeTool, toolDef);
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolDef.Id, "{}").ToJson());
+
+        var first = await sut.TryExecuteAsync(request);
+        var second = await sut.TryExecuteAsync(request);
+
+        Assert.Equal(1, callCount);
+        Assert.Equal("ok", first);
+        Assert.Contains("already decided", second);
+        Assert.Contains("Succeeded", second);
+    }
+
+    [Fact]
+    public async Task TryExecuteAsync_PriorAttemptLeftInPreparedState_RefusesToBlindlyRetry()
+    {
+        // A row stuck in Prepared means a previous call crashed between sending and recording the
+        // outcome — the external effect's own state is unknown, so this must not re-send.
+        var fakeTool = new FakeTool();
+        var tenantId = Guid.NewGuid();
+        var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, "Create Order", ToolType.Http, "desc", "https://api.example.com");
+        var sut = CreateSut(fakeTool, toolDef);
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolDef.Id, "{}").ToJson());
+        _executions.Add(ToolExecution.Prepared(tenantId, request.RequesterId, toolDef.Id, "Approved", toolDef.Name, request.Id));
+
+        var result = await sut.TryExecuteAsync(request);
+
+        Assert.Contains("did not complete cleanly", result);
+        Assert.Null(fakeTool.LastContext);
+    }
+
+    [Fact]
+    public async Task TryExecuteAsync_PriorAttemptLeftInUnknownState_RefusesToBlindlyRetry()
+    {
+        // Same ambiguous-outcome reasoning as Prepared — Unknown means the call was sent but its
+        // result (timeout/cancellation) was never confirmed, not that it's safe to resend.
+        var fakeTool = new FakeTool();
+        var tenantId = Guid.NewGuid();
+        var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, "Create Order", ToolType.Http, "desc", "https://api.example.com");
+        var sut = CreateSut(fakeTool, toolDef);
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolDef.Id, "{}").ToJson());
+        var stuck = ToolExecution.Prepared(tenantId, request.RequesterId, toolDef.Id, "Approved", toolDef.Name, request.Id);
+        stuck.MarkUnknown(5000, "timed out");
+        _executions.Add(stuck);
+
+        var result = await sut.TryExecuteAsync(request);
+
+        Assert.Contains("did not complete cleanly", result);
+        Assert.Null(fakeTool.LastContext);
+    }
+
+    [Fact]
+    public async Task TryExecuteAsync_PriorAttemptWasDenied_DoesNotThrow_AndDoesNotReExecute()
+    {
+        // Not reachable via the one real caller today (ApproveAsync's atomic claim means a
+        // rejected request can't reach Approve again) — but PrepareLedgerAsync must handle every
+        // ToolExecutionStatus a found row could be in, not just the ones first anticipated, or this
+        // falls into PrepareAfterApproval's EnsureStatus guard and throws instead of denying.
+        var fakeTool = new FakeTool();
+        var tenantId = Guid.NewGuid();
+        var toolDef = new ToolDefinition(Guid.NewGuid(), tenantId, "Create Order", ToolType.Http, "desc", "https://api.example.com");
+        var sut = CreateSut(fakeTool, toolDef);
+        var request = CreateStandaloneRequest(tenantId, new DeferredToolCallPayload(toolDef.Id, "{}").ToJson());
+        var denied = ToolExecution.AwaitingApproval(tenantId, request.RequesterId, toolDef.Id, "Approved", toolDef.Name, request.Id);
+        denied.RejectApproval("confirmation rejected");
+        _executions.Add(denied);
+
+        var result = await sut.TryExecuteAsync(request);
+
+        Assert.Contains("already decided", result);
+        Assert.Contains("Denied", result);
+        Assert.Null(fakeTool.LastContext);
+    }
+
+    [Fact]
     public async Task RecordRejectionAsync_ClosesThePausedRowAsDenied_AndIgnoresNonToolApprovals()
     {
         var tenantId = Guid.NewGuid();

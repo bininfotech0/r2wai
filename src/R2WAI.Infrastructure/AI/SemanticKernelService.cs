@@ -157,15 +157,15 @@ public class SemanticKernelService : IAIService
         return result.ToString();
     }
 
-    public async Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default)
+    public async Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default)
     {
-        var kernel = await GetOrCreateKernelAsync(enableTools, modelConfig, enabledToolIds, ct);
+        var kernel = await GetOrCreateKernelAsync(enableTools, modelConfig, enabledToolIds, delegatableAssistantIds, ct);
         var chatCompletion = kernel.Services.GetService<IChatCompletionService>();
         var provider = modelConfig?.Provider ?? _configuration["AI:Provider"] ?? "unknown";
 
         if (chatCompletion is null)
         {
-            var (fallbackKernel, fallbackProvider) = await GetFallbackKernelAsync(provider, enableTools, modelConfig, enabledToolIds, ct);
+            var (fallbackKernel, fallbackProvider) = await GetFallbackKernelAsync(provider, enableTools, modelConfig, enabledToolIds, delegatableAssistantIds, ct);
             if (fallbackKernel is null)
             {
                 _logger.LogWarning("No AI chat completion service is configured. Configure AI:OpenAI:ApiKey or AI:Provider=ollama.");
@@ -195,7 +195,7 @@ public class SemanticKernelService : IAIService
         {
             // Retried at most once, against a provider set via "AI:FallbackProvider" -- never
             // recurses further, so a failing fallback just propagates its own exception.
-            var (fallbackKernel, fallbackProvider) = await GetFallbackKernelAsync(provider, enableTools, modelConfig, enabledToolIds, ct);
+            var (fallbackKernel, fallbackProvider) = await GetFallbackKernelAsync(provider, enableTools, modelConfig, enabledToolIds, delegatableAssistantIds, ct);
             if (fallbackKernel is null)
                 throw;
 
@@ -251,7 +251,7 @@ public class SemanticKernelService : IAIService
     // (e.g. Ollama/Z.ai without their required endpoint/key) throws ConfigurationException
     // synchronously from Configure -- caught here so a broken fallback never masks the original
     // failure it was meant to recover from.
-    private async Task<(Kernel? Kernel, string? Provider)> GetFallbackKernelAsync(string primaryProvider, bool enableTools, ResolvedModelConfig? modelConfig, IReadOnlyCollection<Guid>? enabledToolIds, CancellationToken ct)
+    private async Task<(Kernel? Kernel, string? Provider)> GetFallbackKernelAsync(string primaryProvider, bool enableTools, ResolvedModelConfig? modelConfig, IReadOnlyCollection<Guid>? enabledToolIds, IReadOnlyCollection<Guid>? delegatableAssistantIds, CancellationToken ct)
     {
         var fallbackProvider = _modelGateway.FallbackProviderName;
         if (string.IsNullOrWhiteSpace(fallbackProvider) || string.Equals(fallbackProvider, primaryProvider, StringComparison.OrdinalIgnoreCase))
@@ -260,7 +260,7 @@ public class SemanticKernelService : IAIService
         try
         {
             var fallbackConfig = new ResolvedModelConfig(fallbackProvider, null, null, null, modelConfig?.MaxTokens, modelConfig?.Temperature, modelConfig?.TopP);
-            var kernel = await GetOrCreateKernelAsync(enableTools, fallbackConfig, enabledToolIds, ct);
+            var kernel = await GetOrCreateKernelAsync(enableTools, fallbackConfig, enabledToolIds, delegatableAssistantIds, ct);
             return kernel.Services.GetService<IChatCompletionService>() is null ? (null, null) : (kernel, fallbackProvider);
         }
         catch (Exception ex)
@@ -287,15 +287,15 @@ public class SemanticKernelService : IAIService
         R2WAI.Application.Common.AI.AiTokenUsageScope.Report(usage.TotalTokenCount);
     }
 
-    public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, [EnumeratorCancellation] CancellationToken ct = default)
+    public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var kernel = await GetOrCreateKernelAsync(enableTools, modelConfig, enabledToolIds, ct);
+        var kernel = await GetOrCreateKernelAsync(enableTools, modelConfig, enabledToolIds, delegatableAssistantIds, ct);
         var chatCompletion = kernel.Services.GetService<IChatCompletionService>();
         var provider = modelConfig?.Provider ?? _configuration["AI:Provider"] ?? "unknown";
 
         if (chatCompletion is null)
         {
-            var (fallbackKernel, fallbackProvider) = await GetFallbackKernelAsync(provider, enableTools, modelConfig, enabledToolIds, ct);
+            var (fallbackKernel, fallbackProvider) = await GetFallbackKernelAsync(provider, enableTools, modelConfig, enabledToolIds, delegatableAssistantIds, ct);
             if (fallbackKernel is null)
             {
                 _logger.LogWarning("No AI chat completion service is configured for streaming.");
@@ -330,7 +330,7 @@ public class SemanticKernelService : IAIService
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested && !streamedAny)
                 {
-                    var (fallbackKernel, fallbackProvider) = await GetFallbackKernelAsync(provider, enableTools, modelConfig, enabledToolIds, ct);
+                    var (fallbackKernel, fallbackProvider) = await GetFallbackKernelAsync(provider, enableTools, modelConfig, enabledToolIds, delegatableAssistantIds, ct);
                     if (fallbackKernel is null)
                         throw;
 
@@ -568,7 +568,7 @@ public class SemanticKernelService : IAIService
             : text[..MaxInputChars] + "\n...[truncated]";
     }
 
-    private async Task<Kernel> GetOrCreateKernelAsync(bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default)
+    private async Task<Kernel> GetOrCreateKernelAsync(bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default)
     {
         var baseKernel = GetOrCreateBaseKernel(modelConfig);
 
@@ -612,7 +612,9 @@ public class SemanticKernelService : IAIService
             // Defense-in-depth: record the same enabledToolIds this method just used to decide which
             // plugins/functions to attach, so AiFunctionAuditFilter can independently re-check
             // membership at call time — see IEnabledToolScope's doc comment.
-            _serviceProvider.GetRequiredService<IEnabledToolScope>().EnabledToolIds = enabledToolIds;
+            var toolScope = _serviceProvider.GetRequiredService<IEnabledToolScope>();
+            toolScope.EnabledToolIds = enabledToolIds;
+            toolScope.DelegatableAssistantIds = delegatableAssistantIds ?? [];
 
             var workflowPlugin = _serviceProvider.GetRequiredService<AI.Plugins.WorkflowPlugin>();
             AddFilteredPlugin(kernel, workflowPlugin, enabledNames);
@@ -625,6 +627,16 @@ public class SemanticKernelService : IAIService
 
             var assistantPlugin = _serviceProvider.GetRequiredService<AI.Plugins.AssistantPlugin>();
             AddFilteredPlugin(kernel, assistantPlugin, enabledNames);
+
+            // Not routed through AddFilteredPlugin/enabledNames: that filter is keyed off the Tools
+            // tab's ToolDefinition selection, a completely separate concept from delegation's own
+            // "Delegates to" allow-list. Gated on whether there's anyone to delegate to at all —
+            // the per-target allow-list check still happens at call time in the plugin itself.
+            if (delegatableAssistantIds is { Count: > 0 })
+            {
+                var delegationPlugin = _serviceProvider.GetRequiredService<AI.Plugins.AgentDelegationPlugin>();
+                kernel.Plugins.AddFromObject(delegationPlugin);
+            }
 
             // Tenant-registered API tools (Integrations/Tools & APIs UI) — the Tool/Integration
             // Registry bridge. Optional (a tenant with none registered gets no extra plugin).

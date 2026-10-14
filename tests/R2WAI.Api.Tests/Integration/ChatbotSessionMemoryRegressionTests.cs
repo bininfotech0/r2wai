@@ -418,7 +418,7 @@ file sealed class ContextRecordingAiService : IAIService
     public static string? LastContextFor(string message) => ContextByMessage.GetValueOrDefault(message);
 
     public async Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null,
-        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default)
+        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default)
     {
         ContextByMessage[message] = conversationHistory;
         await Task.Delay(Delay, ct);
@@ -426,7 +426,7 @@ file sealed class ContextRecordingAiService : IAIService
     }
 
     public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null,
-        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null,
+        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
         ContextByMessage[message] = conversationHistory;

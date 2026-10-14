@@ -386,7 +386,7 @@ public class AssistantsController(
 
         try
         {
-            await foreach (var chunk in aiService.StreamChatAsync(effectiveMessage, context, systemPrompt, enableTools: true, modelConfig: modelConfig, enabledToolIds: assistant.GetEnabledToolIds(), ct: streamCt))
+            await foreach (var chunk in aiService.StreamChatAsync(effectiveMessage, context, systemPrompt, enableTools: true, modelConfig: modelConfig, enabledToolIds: assistant.GetEnabledToolIds(), delegatableAssistantIds: assistant.GetDelegatableAssistantIds(), ct: streamCt))
             {
                 await WriteSseEventAsync("chunk", new { content = chunk }, streamCt);
             }

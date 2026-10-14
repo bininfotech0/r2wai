@@ -12,7 +12,8 @@ public sealed record AgentRuntimeRequest(
     string? ConversationHistory = null,
     string? SystemPrompt = null,
     IReadOnlyCollection<Guid>? EnabledToolIds = null,
-    Guid? CorrelationId = null);
+    Guid? CorrelationId = null,
+    IReadOnlyCollection<Guid>? DelegatableAssistantIds = null);
 
 /// <summary><paramref name="ToolCallsMade"/> is the display name of each tool the runtime actually
 /// invoked during this turn (via the shared <see cref="IToolGateway"/> — see

@@ -12,6 +12,7 @@ const baseAssistant: AssistantDto = {
   modelConfigurationId: null,
   knowledgeBaseId: 'kb1',
   tools: '["cap1","cap2"]',
+  delegatableAssistantIds: null,
   settings: '{"responseStyle":"Friendly"}',
   isActive: true,
   publishStatus: 'Published',

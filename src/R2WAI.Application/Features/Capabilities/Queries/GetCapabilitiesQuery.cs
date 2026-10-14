@@ -6,6 +6,7 @@ public record GetCapabilitiesQuery : IRequest<PagedResult<CapabilityDto>>
     public int PageSize { get; init; } = 20;
     public string? Search { get; init; }
     public Guid? ApplicationId { get; init; }
+    public bool? IsActive { get; init; }
 }
 
 public class GetCapabilitiesQueryHandler(
@@ -21,7 +22,8 @@ public class GetCapabilitiesQueryHandler(
         var filtered = await capabilityRepo.FindAsync(
             t => t.TenantId == tenantId && !t.IsDeleted
               && (string.IsNullOrEmpty(searchTerm) || t.Name.ToLower().Contains(searchTerm))
-              && (!query.ApplicationId.HasValue || t.ApplicationId == query.ApplicationId),
+              && (!query.ApplicationId.HasValue || t.ApplicationId == query.ApplicationId)
+              && (!query.IsActive.HasValue || t.IsActive == query.IsActive),
             "ApplicationApi",
             cancellationToken);
 

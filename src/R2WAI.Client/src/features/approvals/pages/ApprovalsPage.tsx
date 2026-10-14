@@ -59,6 +59,39 @@ function parseDataSummary(data: string | null): Array<[string, string]> | string
   return data
 }
 
+// Shared between the list card and the decision dialog so the exact payload a reviewer is about to
+// approve/reject is visible at the moment of decision, not just while browsing the list.
+function ApprovalDataPreview({ data }: { data: string | null }) {
+  const summary = parseDataSummary(data)
+  if (!summary) return null
+  if (typeof summary === 'string') {
+    return (
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontFamily: 'monospace' }} noWrap>
+        {summary}
+      </Typography>
+    )
+  }
+  return (
+    <Stack spacing={0.25} sx={{ mb: 1 }}>
+      {summary.slice(0, 4).map(([k, v]) => (
+        <Stack key={k} direction="row" spacing={1} sx={{ justifyContent: 'space-between' }}>
+          <Typography variant="caption" color="text.secondary">
+            {k}
+          </Typography>
+          <Typography variant="caption" noWrap sx={{ maxWidth: '60%' }}>
+            {v}
+          </Typography>
+        </Stack>
+      ))}
+      {summary.length > 4 && (
+        <Typography variant="caption" color="text.secondary">
+          +{summary.length - 4} more
+        </Typography>
+      )}
+    </Stack>
+  )
+}
+
 // Null for a request that was not raised by a workflow step: there is no run to open.
 function toRunItem(a: PendingApprovalDto): RunItem | null {
   if (!a.workflowInstanceId) return null
@@ -163,36 +196,7 @@ export function ApprovalsPage() {
                   <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
                     <Chip label={`App: ${a.applicationName ?? '—'}`} size="small" variant="outlined" />
                   </Stack>
-                  {(() => {
-                    const summary = parseDataSummary(a.data)
-                    if (!summary) return null
-                    if (typeof summary === 'string') {
-                      return (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontFamily: 'monospace' }} noWrap>
-                          {summary}
-                        </Typography>
-                      )
-                    }
-                    return (
-                      <Stack spacing={0.25} sx={{ mb: 1 }}>
-                        {summary.slice(0, 4).map(([k, v]) => (
-                          <Stack key={k} direction="row" spacing={1} sx={{ justifyContent: 'space-between' }}>
-                            <Typography variant="caption" color="text.secondary">
-                              {k}
-                            </Typography>
-                            <Typography variant="caption" noWrap sx={{ maxWidth: '60%' }}>
-                              {v}
-                            </Typography>
-                          </Stack>
-                        ))}
-                        {summary.length > 4 && (
-                          <Typography variant="caption" color="text.secondary">
-                            +{summary.length - 4} more
-                          </Typography>
-                        )}
-                      </Stack>
-                    )
-                  })()}
+                  <ApprovalDataPreview data={a.data} />
                   <Stack direction="row" spacing={1}>
                     <Button
                       size="small"
@@ -267,6 +271,14 @@ export function ApprovalsPage() {
           <DialogContentText>
             {acting && <><strong>{approvalTitle(acting.item)}</strong><br />Requested by {requesterName(acting.item)}{acting.item.applicationName ? ` · ${acting.item.applicationName}` : ''}</>}
           </DialogContentText>
+          {acting && parseDataSummary(acting.item.data) && (
+            <Box sx={{ mt: 1, mb: 1, p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
+              <Typography variant="overline" color="text.secondary" sx={{ display: 'block' }}>
+                What this will {acting.action === 'approve' ? 'run' : 'cancel'}
+              </Typography>
+              <ApprovalDataPreview data={acting.item.data} />
+            </Box>
+          )}
           <TextField
             label={acting?.action === 'reject' ? 'Reason (optional)' : 'Comments (optional)'}
             fullWidth

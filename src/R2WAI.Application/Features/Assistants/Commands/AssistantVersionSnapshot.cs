@@ -11,6 +11,7 @@ internal class AssistantConfigSnapshot
     public Guid? ModelConfigurationId { get; init; }
     public Guid? KnowledgeBaseId { get; init; }
     public string? Tools { get; init; }
+    public string? DelegatableAssistantIds { get; init; }
     public string? Settings { get; init; }
     public string? Tags { get; init; }
     public string? AvatarUrl { get; init; }
@@ -38,6 +39,7 @@ internal static class AssistantVersionSnapshotService
             ModelConfigurationId = assistant.ModelConfigurationId,
             KnowledgeBaseId = assistant.KnowledgeBaseId,
             Tools = assistant.Tools,
+            DelegatableAssistantIds = assistant.DelegatableAssistantIds,
             Settings = assistant.Settings,
             Tags = assistant.Tags,
             AvatarUrl = assistant.AvatarUrl,
@@ -65,6 +67,22 @@ internal static class AssistantVersionSnapshotService
         catch (JsonException)
         {
             return null;
+        }
+    }
+
+    /// <summary>Same deny-by-default semantics as AssistantDefinition.GetDelegatableAssistantIds(),
+    /// applied to a snapshot's string instead of the live entity's.</summary>
+    public static IReadOnlyCollection<Guid> ParseDelegatableAssistantIds(string? delegatableAssistantIds)
+    {
+        if (delegatableAssistantIds is null) return [];
+        try
+        {
+            var ids = JsonSerializer.Deserialize<List<Guid>>(delegatableAssistantIds);
+            return ids ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
         }
     }
 

@@ -30,9 +30,10 @@ public class CapabilitiesController(IMediator mediator) : ControllerBase
         [FromQuery] int pageSize = 20,
         [FromQuery] string? search = null,
         [FromQuery] Guid? applicationId = null,
+        [FromQuery] bool? isActive = null,
         CancellationToken ct = default)
     {
-        var query = new GetCapabilitiesQuery { Page = page, PageSize = pageSize, Search = search, ApplicationId = applicationId };
+        var query = new GetCapabilitiesQuery { Page = page, PageSize = pageSize, Search = search, ApplicationId = applicationId, IsActive = isActive };
         var result = await mediator.Send(query, ct);
         return Ok(result);
     }

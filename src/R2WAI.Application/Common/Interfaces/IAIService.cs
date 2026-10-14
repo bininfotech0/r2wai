@@ -31,9 +31,16 @@ public interface IAIService
     /// behavior — an empty (non-null) collection means "explicitly configured to zero tools" and
     /// attaches none. Ignored when <paramref name="enableTools"/> is false.
     /// </param>
-    Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default);
+    /// <param name="delegatableAssistantIds">
+    /// The calling assistant's own allow-list of other assistants it may delegate a task to via
+    /// AgentDelegationPlugin. Unlike <paramref name="enabledToolIds"/>, null/empty means NO
+    /// delegation is allowed — there is no "every assistant" default to preserve for a capability
+    /// this new. Ignored when <paramref name="enableTools"/> is false.
+    /// </param>
+    Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default);
     /// <param name="enabledToolIds">See <see cref="ChatAsync"/>.</param>
-    IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default);
+    /// <param name="delegatableAssistantIds">See <see cref="ChatAsync"/>.</param>
+    IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null, bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default);
     Task<IReadOnlyList<float>> GenerateEmbeddingAsync(string text, CancellationToken ct = default);
     Task<IReadOnlyList<IReadOnlyList<float>>> GenerateEmbeddingsAsync(IEnumerable<string> texts, CancellationToken ct = default);
     /// <param name="modelConfig">Routes the call through this tenant-scoped model instead of the process-wide default. See <see cref="GenerateResponseAsync"/>.</param>

@@ -28,6 +28,7 @@ export interface AssistantDto {
   modelConfigurationId: string | null
   knowledgeBaseId: string | null
   tools: string | null // JSON-encoded string[] of enabled capability ids
+  delegatableAssistantIds: string | null // JSON-encoded string[] of assistant ids this one may delegate to
   settings: string | null // JSON-encoded behavior settings, see BehaviorSettings below
   isActive: boolean
   publishStatus: 'Draft' | 'Published' | 'Archived'
@@ -36,6 +37,19 @@ export interface AssistantDto {
   tags: string | null
   avatarUrl: string | null
   usageCount: number
+  createdAt: string
+}
+
+// Mirrors R2WAI.Application.Features.Assistants.DTOs.AssistantVersionDto (camelCase).
+export interface AssistantVersionDto {
+  id: string
+  assistantDefinitionId: string
+  versionNumber: number
+  configSnapshot: string
+  isPublished: boolean
+  note: string | null
+  publishedByUserId: string | null
+  publishedAt: string | null
   createdAt: string
 }
 
@@ -73,6 +87,7 @@ export interface UpdateAssistantInput {
   // "explicit null" once JSON-bound, so detaching needs its own explicit signal.
   unlinkKnowledgeBase?: boolean
   tools?: string
+  delegatableAssistantIds?: string
   settings?: string
   isActive?: boolean
   tags?: string
@@ -99,6 +114,7 @@ export function buildFullUpdatePayload(
     systemPrompt: assistant.systemPrompt ?? undefined,
     knowledgeBaseId: assistant.knowledgeBaseId ?? undefined,
     tools: assistant.tools ?? undefined,
+    delegatableAssistantIds: assistant.delegatableAssistantIds ?? undefined,
     settings: assistant.settings ?? undefined,
     tags: assistant.tags ?? undefined,
     avatarUrl: assistant.avatarUrl ?? undefined,

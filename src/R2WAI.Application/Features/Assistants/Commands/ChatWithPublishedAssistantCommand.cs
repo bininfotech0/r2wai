@@ -214,6 +214,7 @@ public class ChatWithPublishedAssistantCommandHandler(
                 enableTools: true,
                 modelConfig: modelConfig,
                 enabledToolIds: AssistantVersionSnapshotService.ParseEnabledToolIds(snapshot.Tools),
+                delegatableAssistantIds: AssistantVersionSnapshotService.ParseDelegatableAssistantIds(snapshot.DelegatableAssistantIds),
                 ct: cancellationToken);
             tokensUsed = usage.TotalTokens;
         }

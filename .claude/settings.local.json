@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "mcp__visualize__show_widget"
+      "mcp__visualize__show_widget",
+      "Bash(dotnet build *)"
     ]
   }
 }

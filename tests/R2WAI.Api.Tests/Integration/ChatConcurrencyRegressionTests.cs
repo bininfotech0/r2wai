@@ -219,7 +219,7 @@ public class FakeToolDenialAiService : IAIService
     }
 
     public async Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null,
-        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default)
+        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default)
     {
         // FunctionInvocationContext has no accessible public constructor, so the only way to exercise
         // the real filter is through the real SK pipeline: register it on a Kernel and invoke a trivial
@@ -245,7 +245,7 @@ public class FakeToolDenialAiService : IAIService
     public Task<string> CompareDocumentsAsync(string sourceText, string targetText, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
     public IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null,
-        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default)
+        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default)
         => throw new NotImplementedException();
     public Task<IReadOnlyList<float>> GenerateEmbeddingAsync(string text, CancellationToken ct = default)
         => throw new NotImplementedException();

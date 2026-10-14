@@ -232,7 +232,7 @@ public class FakeSummarizingAiService : IAIService
     public int SummarizeCallCount => _summarizeCallCount;
 
     public async IAsyncEnumerable<string> StreamChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null,
-        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
         await Task.Yield();
         yield return CannedReply;
@@ -245,7 +245,7 @@ public class FakeSummarizingAiService : IAIService
     }
 
     public Task<string> ChatAsync(string message, string? conversationHistory = null, string? systemPrompt = null,
-        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, CancellationToken ct = default) => Task.FromResult(CannedReply);
+        bool enableTools = false, ResolvedModelConfig? modelConfig = null, IReadOnlyCollection<Guid>? enabledToolIds = null, IReadOnlyCollection<Guid>? delegatableAssistantIds = null, CancellationToken ct = default) => Task.FromResult(CannedReply);
     public Task<string> GenerateResponseAsync(string prompt, string? systemPrompt = null, string? context = null, ResolvedModelConfig? modelConfig = null, int? maxTokens = null, double? temperature = null, CancellationToken ct = default)
         => Task.FromResult(CannedReply);
     public Task<string> ExtractDataAsync(string text, string schema, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default)
