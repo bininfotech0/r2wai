@@ -65,7 +65,7 @@ test.describe('Playground', () => {
     // Clean up the automation created for this scenario.
     await page.goto('/automations')
     await page.getByPlaceholder('Search automations…').fill(uniqueName)
-    await page.getByRole('gridcell', { name: uniqueName }).click()
+    await page.getByRole('gridcell', { name: uniqueName }).first().click()
     await page.getByRole('button', { name: 'Delete' }).click()
     await page.getByRole('button', { name: 'Delete' }).last().click()
     await expect(page.getByText('Automation deleted')).toBeVisible()

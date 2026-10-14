@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Box, Chip, Grid, Paper, Stack, Typography } from '@mui/material'
+import { Box, Chip, Grid, Paper, Stack, Typography, useTheme } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined'
 import TrendingUpOutlined from '@mui/icons-material/TrendingUpOutlined'
@@ -58,6 +58,7 @@ function HealthRow({
 }
 
 export function OverviewTab() {
+  const { palette } = useTheme()
   const metricsQuery = useQuery({ queryKey: ['monitor', 'metrics'], queryFn: getMetrics })
   const trendQuery = useQuery({ queryKey: ['monitor', 'daily-trend'], queryFn: () => getDailyTrend(14) })
   const approvalsQuery = useQuery({ queryKey: ['monitor', 'approval-backlog'], queryFn: () => listPendingApprovals(1, HEALTH_FETCH_SIZE) })
@@ -176,9 +177,9 @@ export function OverviewTab() {
                 total={errorTotal}
                 centerLabel="Errors"
                 segments={[
-                  { label: 'API', value: metrics?.apiErrors ?? 0, color: '#f59e0b' },
-                  { label: 'AI', value: metrics?.aiErrors ?? 0, color: '#ef4444' },
-                  { label: 'Workflow', value: metrics?.workflowErrors ?? 0, color: '#6d28d9' },
+                  { label: 'API', value: metrics?.apiErrors ?? 0, color: palette.warning.main },
+                  { label: 'AI', value: metrics?.aiErrors ?? 0, color: palette.error.main },
+                  { label: 'Workflow', value: metrics?.workflowErrors ?? 0, color: palette.primary.main },
                 ]}
               />
             ) : (

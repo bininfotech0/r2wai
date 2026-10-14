@@ -6,9 +6,9 @@ export type StatusHubNodeStatus = 'idle' | 'started' | 'completed' | 'failed'
 
 const STATUS_COLOR: Record<StatusHubNodeStatus, string> = {
   idle: 'transparent',
-  started: '#F59E0B',
-  completed: '#22C55E',
-  failed: '#EF4444',
+  started: 'warning.main',
+  completed: 'success.main',
+  failed: 'error.main',
 }
 
 function StepNode({ data, selected }: NodeProps & { data: BuilderNodeData & { status?: StatusHubNodeStatus } }) {

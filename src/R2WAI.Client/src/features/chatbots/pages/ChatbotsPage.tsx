@@ -3,9 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box, Button } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
+import ForumOutlined from '@mui/icons-material/ForumOutlined'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useNavigate } from 'react-router-dom'
 import { DataTable } from '../../../components/data/DataTable'
+import { NameCell } from '../../../components/data/NameCell'
+import { RowActionsMenu } from '../../../components/data/RowActionsMenu'
+import { queryKeys } from '../../../lib/api/queryKeys'
+import { listAssistants } from '../../assistants/api'
 import { StatusBadge } from '../../../components/StatusBadge'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { createChatbot, listChatbots } from '../api'
@@ -39,13 +44,39 @@ export function ChatbotsPage() {
     onError: () => notify('Failed to create chatbot', 'error'),
   })
 
+  // Chatbots carry only the agent's id; names come from the agent list (same bounded query the
+  // Knowledge page uses for its "Used by" column).
+  const agentsQuery = useQuery({
+    queryKey: queryKeys.assistants.forUsageCount,
+    queryFn: () => listAssistants(1, 200, ''),
+  })
+  const agentName = new Map((agentsQuery.data?.items ?? []).map((a) => [a.id, a.name]))
+
   const columns: GridColDef<ChatbotDto>[] = [
-    { field: 'name', headerName: 'Name', flex: 1 },
+    {
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 240,
+      renderCell: ({ row }) => (
+        <NameCell
+          icon={ForumOutlined}
+          name={row.name}
+          secondary={row.assistantId ? `Answers as ${agentName.get(row.assistantId) ?? 'a linked agent'}` : 'No agent linked'}
+        />
+      ),
+    },
     {
       field: 'status',
       headerName: 'Status',
       width: 120,
       renderCell: (params) => <StatusBadge status={params.value} toneMap={{ Paused: 'warning' }} />,
+    },
+    {
+      field: 'assistantId',
+      headerName: 'Agent',
+      width: 200,
+      valueGetter: (_, row) => (row.assistantId ? agentName.get(row.assistantId) ?? 'Linked' : '—'),
     },
     {
       field: 'voiceEnabled',
@@ -54,31 +85,20 @@ export function ChatbotsPage() {
       renderCell: (params) => (params.value ? 'Enabled' : '—'),
     },
     {
-      field: 'assistantId',
-      headerName: 'Assistant',
-      width: 130,
-      renderCell: (params) => (params.value ? 'Linked' : '—'),
-    },
-    {
-      field: 'id',
-      headerName: 'Website widget',
-      width: 170,
+      field: 'actions',
+      headerName: '',
+      width: 56,
       sortable: false,
-      // Labelled "Website widget" here rather than reusing the channel name from the
-      // deployment overview, so this row action reads as an action rather than as a second
-      // navigation entry for the same destination.
-      renderCell: (params) => (
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={(event) => {
-            // DataTable treats a row click as "open this record"; stop this from also firing.
-            event.stopPropagation()
-            navigate(`/deploy/widget/${params.id as string}`)
-          }}
-        >
-          Configure
-        </Button>
+      disableColumnMenu: true,
+      renderCell: ({ row }) => (
+        <RowActionsMenu
+          label={row.name}
+          actions={[
+            { label: 'Open', onSelect: () => navigate(`/chatbots/${row.id}`) },
+            { label: 'Website widget', onSelect: () => navigate(`/deploy/widget/${row.id}`) },
+            { label: 'WhatsApp', onSelect: () => navigate(`/deploy/whatsapp/${row.id}`) },
+          ]}
+        />
       ),
     },
   ]
@@ -87,7 +107,7 @@ export function ChatbotsPage() {
     <Box>
       <PageHeader
         title="Publish"
-        description="Embeddable chat surfaces for assistants — publishable to a website via a script tag."
+        description="Chatbots put a published agent on your website, WhatsApp or any system through a webhook."
         actions={
           <>
             {/* Distribution lives under Chatbots rather than in its own nav section, so this is

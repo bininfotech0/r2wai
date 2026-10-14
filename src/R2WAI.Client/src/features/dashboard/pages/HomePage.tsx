@@ -337,7 +337,7 @@ export function HomePage() {
             ) : pendingApprovals.data?.totalCount ? (
               <Stack component={RouterLink} to="/approvals" direction="row" spacing={1.5} sx={linkRowSx}>
                 <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', bgcolor: (t) => (t.palette.mode === 'dark' ? 'warning.dark' : '#FEF3C7'), color: 'warning.main' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', bgcolor: (t) => (t.palette.mode === 'dark' ? 'warning.dark' : '#FFEBE2'), color: 'warning.main' }}>
                     <CircleIcon sx={{ fontSize: 10 }} />
                   </Box>
                   <Typography variant="body2">

@@ -41,6 +41,9 @@ interface MultiSeriesChartProps {
  */
 export function MultiSeriesChart({ data, series, height = 240, integerAxis = true }: MultiSeriesChartProps) {
   const theme = useTheme()
+  // Brand order for series without an explicit colour; palette mains are AA-tuned per mode.
+  const { primary, info, secondary, success, warning } = theme.palette
+  const seriesColors = [primary.main, info.main, secondary.main, success.main, warning.main]
 
   if (data.length === 0) {
     return (
@@ -73,13 +76,13 @@ export function MultiSeriesChart({ data, series, height = 240, integerAxis = tru
           }}
         />
         {series.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
-        {series.map((s) => (
+        {series.map((s, i) => (
           <Line
             key={s.key}
             type="monotone"
             dataKey={s.key}
             name={s.label}
-            stroke={s.color ?? theme.palette.primary.main}
+            stroke={s.color ?? seriesColors[i % seriesColors.length]}
             strokeWidth={2}
             dot={false}
             connectNulls

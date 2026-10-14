@@ -70,7 +70,7 @@ test('Approvals: a real pending approval shows Application/Capability chips and 
   // Clean up by deleting the automation directly -- the approval is left Pending, which is fine:
   // nothing in the workflow-delete path depends on its approvals being resolved first.
   await page.goto('/automations')
-  await page.getByRole('gridcell', { name: uniqueName }).click()
+  await page.getByRole('gridcell', { name: uniqueName }).first().click()
   await page.getByRole('button', { name: 'Delete' }).click()
   await page.getByRole('button', { name: 'Delete' }).last().click()
   await expect(page.getByText('Automation deleted')).toBeVisible()

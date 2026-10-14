@@ -4,8 +4,8 @@ import type {} from '@mui/x-data-grid/themeAugmentation'
 /**
  * R2WAI Studio tokens, in the Copilot Studio / Fluent 2 visual language: a neutral grey canvas
  * with white surfaces, 1px neutral borders instead of shadows, 8px corners on surfaces and 4–6px
- * on controls, Segoe UI, and compact 32px controls. The brand colour stays R2WAI's own purple;
- * only layout and density follow Fluent. Touch screens still get 44px targets (touchTarget/touchRow).
+ * on controls, Segoe UI, and compact 32px controls. Colour comes from the R2WAI brand palette
+ * (`brand` below); only layout and density follow Fluent. Touch screens still get 44px targets (touchTarget/touchRow).
  *
  * shape.borderRadius is the unit `sx` multiplies numeric radii by, so lowering it to 8 flattens
  * every component's `borderRadius: 2`-style value in proportion.
@@ -21,6 +21,20 @@ const fontFamily = [
 ].join(',')
 
 const shape = { borderRadius: 8 }
+
+/**
+ * R2WAI brand palette, exact values, for marks and illustrations (the favicon uses them too).
+ * For text, UI state and chart series use the theme palette instead: it maps purple→primary,
+ * pink→secondary, cyan→info, lime→success, orange→warning and darkens/lightens each per mode
+ * just enough to clear WCAG AA (4.5:1).
+ */
+export const brand = {
+  pink: '#EE5091',
+  cyan: '#199FD7',
+  lime: '#99BD3C',
+  orange: '#FC7942',
+  purple: '#8A50D8',
+} as const
 
 const typography: ThemeOptions['typography'] = {
   fontFamily,
@@ -78,7 +92,7 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
         },
         '#root': { minHeight: '100vh' },
         '::selection': {
-          backgroundColor: isDark ? 'rgba(165,180,252,.28)' : 'rgba(99,102,241,.18)',
+          backgroundColor: isDark ? 'rgba(167,124,226,.28)' : 'rgba(138,80,216,.18)',
         },
         '*': { scrollbarWidth: 'thin' },
         '*::-webkit-scrollbar': { width: 8, height: 8 },
@@ -108,7 +122,7 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
           ...touchRow,
           transition: 'background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease',
           '&:focus-visible': {
-            outline: `3px solid ${isDark ? 'rgba(165,180,252,.42)' : 'rgba(99,102,241,.3)'}`,
+            outline: `3px solid ${isDark ? 'rgba(167,124,226,.42)' : 'rgba(138,80,216,.3)'}`,
             outlineOffset: 2,
           },
           '&:active:not(:disabled)': { transform: 'translateY(1px)' },
@@ -132,7 +146,7 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
           borderRadius: 6,
           transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
           '&:focus-visible': {
-            outline: `3px solid ${isDark ? 'rgba(165,180,252,.42)' : 'rgba(99,102,241,.3)'}`,
+            outline: `3px solid ${isDark ? 'rgba(167,124,226,.42)' : 'rgba(138,80,216,.3)'}`,
             outlineOffset: 1,
           },
           '&:active:not(:disabled)': { transform: 'scale(.96)' },
@@ -234,9 +248,9 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
         root: {
           borderRadius: 6,
           transition: 'box-shadow 140ms ease',
-          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: isDark ? 'rgba(165,180,252,.52)' : 'rgba(99,102,241,.45)' },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: isDark ? 'rgba(167,124,226,.52)' : 'rgba(138,80,216,.45)' },
           '&.Mui-focused': {
-            boxShadow: `0 0 0 3px ${isDark ? 'rgba(165,180,252,.12)' : 'rgba(99,102,241,.09)'}`,
+            boxShadow: `0 0 0 3px ${isDark ? 'rgba(167,124,226,.12)' : 'rgba(138,80,216,.09)'}`,
           },
         },
         notchedOutline: { borderColor, transition: 'border-color 140ms ease' },
@@ -310,11 +324,13 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
 const lightOptions: ThemeOptions = {
   palette: {
     mode: 'light',
-    // Light-mode mains are tuned to clear WCAG AA (4.5:1) as text on both paper and the page background.
-    primary: { main: '#5558E3', light: '#818CF8', dark: '#4F46E5' },
-    secondary: { main: '#7C3AED' },
-    success: { main: '#15803D' },
-    warning: { main: '#B45309' },
+    // Light-mode mains clear WCAG AA (4.5:1) as text on both paper and the page background; where
+    // the brand hex itself falls short it moves to `light` and `main` is the same hue, darkened.
+    primary: { main: brand.purple, light: '#A77CE2', dark: '#6E3FB0' },
+    secondary: { main: '#BE4074', light: brand.pink, dark: '#9A3460' },
+    info: { main: '#1377A1', light: brand.cyan, dark: '#0F6085' },
+    success: { main: '#607726', light: brand.lime, dark: '#4C5E1E' },
+    warning: { main: '#B0552E', light: brand.orange, dark: '#8E4425' },
     error: { main: '#DC2626' },
     text: { primary: '#242424', secondary: '#616161', disabled: '#9E9E9E' },
     background: { default: '#F5F5F5', paper: '#FFFFFF' },
@@ -329,10 +345,11 @@ const lightOptions: ThemeOptions = {
 const darkOptions: ThemeOptions = {
   palette: {
     mode: 'dark',
-    primary: { main: '#818CF8', light: '#A5B4FC', dark: '#6366F1' },
-    secondary: { main: '#A78BFA' },
-    success: { main: '#22C55E' },
-    warning: { main: '#F59E0B' },
+    primary: { main: '#A77CE2', light: '#C2A5EB', dark: brand.purple },
+    secondary: { main: '#EF5997', light: '#F48BB6', dark: brand.pink },
+    info: { main: brand.cyan, light: '#5EBBE3', dark: '#1377A1' },
+    success: { main: brand.lime, light: '#B8D277', dark: '#7A9730' },
+    warning: { main: brand.orange, light: '#FDA17B', dark: '#C9612F' },
     error: { main: '#EF4444' },
     text: { primary: '#FFFFFF', secondary: '#ADADAD', disabled: '#757575' },
     background: { default: '#1F1F1F', paper: '#292929' },

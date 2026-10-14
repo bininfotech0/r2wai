@@ -569,8 +569,11 @@ public class AdminController(
         var totalApprovals = await dbContext.ApprovalRequests.CountAsync(a => a.CreatedAt >= since, ct);
         var approvedApprovals = await dbContext.ApprovalRequests.CountAsync(
             a => a.Status == Domain.Enums.ApprovalStatus.Approved && a.CreatedAt >= since, ct);
+        // Same window as Total/Approved: the client draws these as one donut, so Pending must be a
+        // subset of Total. The all-time backlog lives on Home and the Monitor overview instead.
         var pendingApprovals = await dbContext.ApprovalRequests.CountAsync(
-            a => a.Status == Domain.Enums.ApprovalStatus.Pending || a.Status == Domain.Enums.ApprovalStatus.Escalated, ct);
+            a => (a.Status == Domain.Enums.ApprovalStatus.Pending || a.Status == Domain.Enums.ApprovalStatus.Escalated)
+                && a.CreatedAt >= since, ct);
         var totalDocuments = await dbContext.Documents.CountAsync(d => d.CreatedAt >= since, ct);
 
         return Ok(new

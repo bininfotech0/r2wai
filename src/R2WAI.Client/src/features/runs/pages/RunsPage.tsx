@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Box, Button, FormControlLabel, Switch, Tooltip, Typography } from '@mui/material'
+import { Alert, Box, Button, FormControlLabel, Switch, Tooltip } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { DataTable } from '../../../components/data/DataTable'
+import { NameCell } from '../../../components/data/NameCell'
+import SmartToyOutlined from '@mui/icons-material/SmartToyOutlined'
+import AccountTreeOutlined from '@mui/icons-material/AccountTreeOutlined'
+import BuildOutlined from '@mui/icons-material/BuildOutlined'
 import { FilterBar, type FilterBarField, type FilterBarOption } from '../../../components/FilterBar'
 import { PageHeader } from '../../../components/PageHeader'
 import { StatusBadge } from '../../../components/StatusBadge'
@@ -15,7 +19,7 @@ const PAGE_SIZE = 25
 const TYPE_OPTIONS: FilterBarOption[] = [
   { value: 'all', label: 'All types' },
   { value: 'Automation', label: 'Automation' },
-  { value: 'Assistant', label: 'Assistant' },
+  { value: 'Assistant', label: 'Agent' },
   { value: 'ToolCall', label: 'Tool call' },
 ]
 const STATUS_OPTIONS: FilterBarOption[] = [
@@ -98,28 +102,31 @@ export function RunsPage() {
     { key: 'type', label: 'Type', value: typeFilter, options: TYPE_OPTIONS, onChange: (value) => { setTypeFilter(value); setPage(1) } },
     { key: 'status', label: 'Status', value: statusFilter, options: STATUS_OPTIONS, onChange: (value) => { setStatusFilter(value); setPage(1) } },
     { key: 'application', label: 'Application', value: applicationFilter, options: [{ value: 'all', label: 'Any application' }, ...applications.map((option) => ({ value: option.id, label: option.label }))], onChange: (value) => { setApplicationFilter(value); setPage(1) } },
-    { key: 'assistant', label: 'Assistant', value: assistantFilter, options: [{ value: 'all', label: 'Any assistant' }, ...assistants.map((option) => ({ value: option.id, label: option.label }))], onChange: (value) => { setAssistantFilter(value); setPage(1) } },
+    { key: 'assistant', label: 'Agent', value: assistantFilter, options: [{ value: 'all', label: 'Any agent' }, ...assistants.map((option) => ({ value: option.id, label: option.label }))], onChange: (value) => { setAssistantFilter(value); setPage(1) } },
     { key: 'user', label: 'User', value: userFilter, options: [{ value: 'all', label: 'Any user' }, ...users.map((option) => ({ value: option.id, label: option.label }))], onChange: (value) => { setUserFilter(value); setPage(1) } },
     { key: 'date', label: 'Started', value: dateFilter, options: DATE_RANGES, onChange: (value) => { setDateFilter(value); setPage(1) } },
   ]
 
   const columns: GridColDef<RunItem>[] = [
     {
-      field: 'id',
-      headerName: 'Run ID',
-      width: 110,
-      renderCell: (params) => (
-        <Tooltip title={params.value}>
-          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-            {params.value.slice(0, 8)}…
-          </Typography>
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 240,
+      renderCell: ({ row }) => (
+        <Tooltip title={`Run ${row.id}`} placement="top-start" describeChild>
+          <Box sx={{ height: '100%', minWidth: 0 }}>
+            <NameCell
+              icon={row.type === 'Automation' ? AccountTreeOutlined : row.type === 'ToolCall' ? BuildOutlined : SmartToyOutlined}
+              name={row.name}
+              secondary={`${row.type === 'ToolCall' ? 'Tool call' : row.type === 'Assistant' ? 'Agent' : row.type} · ${row.id.slice(0, 8)}`}
+            />
+          </Box>
         </Tooltip>
       ),
     },
-    { field: 'type', headerName: 'Type', width: 110, valueFormatter: (value: string) => (value === 'ToolCall' ? 'Tool call' : value) },
-    { field: 'name', headerName: 'Name', flex: 1 },
     { field: 'applicationName', headerName: 'Application', width: 160, valueFormatter: (value: string | null) => value ?? '—' },
-    { field: 'linkedName', headerName: 'Assistant / Capability', width: 180, valueFormatter: (value: string | null) => value ?? '—' },
+    { field: 'linkedName', headerName: 'Agent / tool', width: 180, valueFormatter: (value: string | null) => value ?? '—' },
     { field: 'status', headerName: 'Status', width: 130, renderCell: (params) => <StatusBadge status={params.value} /> },
     { field: 'startedAt', headerName: 'Started', width: 180, valueFormatter: (value: string) => new Date(value).toLocaleString() },
     { field: 'duration', headerName: 'Duration', width: 100, sortable: false, valueGetter: (_value, row) => durationLabel(row.startedAt, row.completedAt) },
@@ -129,8 +136,8 @@ export function RunsPage() {
   return (
     <Box>
       <PageHeader
-        title="Executions"
-        description="Search and review automation runs, assistant conversations, and the tools your AI called."
+        title="Activity"
+        description="Every agent conversation, automation run and tool call, with what happened and who approved it."
         actions={<FormControlLabel control={<Switch checked={live} onChange={(e) => setLive(e.target.checked)} />} label="Live" />}
       />
 
@@ -158,7 +165,7 @@ export function RunsPage() {
         onPageChange={setPage}
         search={search}
         onSearchChange={(value) => { setSearch(value); setPage(1) }}
-        searchPlaceholder="Search runs, assistants, applications, users, correlation IDs…"
+        searchPlaceholder="Search runs, agents, applications, users, correlation IDs…"
         onRowClick={(id) => setSelected(query.data?.items.find((run) => run.id === id) ?? null)}
       />
 

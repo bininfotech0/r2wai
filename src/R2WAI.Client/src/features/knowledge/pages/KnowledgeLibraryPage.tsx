@@ -2,12 +2,13 @@ import { queryKeys } from '../../../lib/api/queryKeys'
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box, Button, Paper } from '@mui/material'
-import { TooltipIconButton as IconButton } from '../../../components/TooltipIconButton'
 import AddIcon from '@mui/icons-material/Add'
-import DeleteIcon from '@mui/icons-material/Delete'
+import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useNavigate } from 'react-router-dom'
 import { DataTable } from '../../../components/data/DataTable'
+import { NameCell } from '../../../components/data/NameCell'
+import { RowActionsMenu } from '../../../components/data/RowActionsMenu'
 import { StatusBadge } from '../../../components/StatusBadge'
 import { PageHeader } from '../../../components/PageHeader'
 import { EmptyState } from '../../../components/EmptyState'
@@ -85,27 +86,12 @@ export function KnowledgeLibraryPage() {
   }
 
   const columns: GridColDef<KnowledgeBaseDto>[] = [
-    { field: 'name', headerName: 'Name', flex: 1 },
     {
-      field: 'sources',
-      headerName: 'Sources',
-      width: 100,
-      valueGetter: (_value, row) => row.sources.length,
-    },
-    { field: 'documentCount', headerName: 'Items', width: 90 },
-    {
-      field: 'usedBy',
-      headerName: 'Used By',
-      width: 130,
-      sortable: false,
-      description: 'Assistant usage is unavailable if the assistant list could not be loaded completely.',
-      valueGetter: (_value, row) => assistantUsageUnavailable ? null : usageByKbId.get(row.id) ?? 0,
-      renderCell: (params) =>
-        params.value == null
-          ? 'Unavailable'
-          : params.value > 0
-            ? `${params.value} assistant${params.value === 1 ? '' : 's'}`
-            : 'None',
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 240,
+      renderCell: ({ row }) => <NameCell icon={MenuBookOutlined} name={row.name} secondary={row.description || 'No description'} />,
     },
     {
       field: 'status',
@@ -114,21 +100,41 @@ export function KnowledgeLibraryPage() {
       renderCell: (params) => <StatusBadge status={params.value} toneMap={{ Creating: 'warning' }} />,
     },
     {
+      field: 'sources',
+      headerName: 'Sources',
+      width: 100,
+      type: 'number',
+      valueGetter: (_value, row) => row.sources.length,
+    },
+    { field: 'documentCount', headerName: 'Documents', width: 110, type: 'number' },
+    {
+      field: 'usedBy',
+      headerName: 'Used by',
+      width: 130,
+      sortable: false,
+      description: 'Agent usage is unavailable if the agent list could not be loaded completely.',
+      valueGetter: (_value, row) => assistantUsageUnavailable ? null : usageByKbId.get(row.id) ?? 0,
+      renderCell: (params) =>
+        params.value == null
+          ? 'Unavailable'
+          : params.value > 0
+            ? `${params.value} agent${params.value === 1 ? '' : 's'}`
+            : 'None',
+    },
+    {
       field: 'actions',
       headerName: '',
-      width: 70,
+      width: 56,
       sortable: false,
-      renderCell: (params) => (
-        <IconButton
-          size="small"
-          aria-label="Delete"
-          onClick={(e) => {
-            e.stopPropagation()
-            setDeleting(params.row)
-          }}
-        >
-          <DeleteIcon fontSize="small" />
-        </IconButton>
+      disableColumnMenu: true,
+      renderCell: ({ row }) => (
+        <RowActionsMenu
+          label={row.name}
+          actions={[
+            { label: 'Open', onSelect: () => navigate(`/knowledge/${row.id}`) },
+            { label: 'Delete', destructive: true, onSelect: () => setDeleting(row) },
+          ]}
+        />
       ),
     },
   ]
@@ -137,10 +143,10 @@ export function KnowledgeLibraryPage() {
     <Box>
       <PageHeader
         title="Knowledge"
-        description="Documents and sources assistants search to ground their answers."
+        description="Documents, websites and other sources your agents search to ground their answers."
         actions={
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-            New Knowledge Base
+            New knowledge base
           </Button>
         }
       />
@@ -149,8 +155,8 @@ export function KnowledgeLibraryPage() {
         <Paper variant="outlined">
           <EmptyState
             title="No knowledge bases yet"
-            description="Create a knowledge base to organize trusted sources for your assistants."
-            actionLabel="New Knowledge Base"
+            description="Create a knowledge base to organize trusted sources for your agents."
+            actionLabel="New knowledge base"
             onAction={() => setCreateOpen(true)}
           />
         </Paper>
@@ -187,7 +193,7 @@ export function KnowledgeLibraryPage() {
         open={!!deleting}
         onClose={() => setDeleting(null)}
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
-        title="Delete Knowledge Base"
+        title="Delete knowledge base"
         message={`Delete "${deleting?.name}"? This removes all its sources and documents. This cannot be undone.`}
         isDeleting={deleteMutation.isPending}
       />

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Grid, Paper, Stack, Typography } from '@mui/material'
+import { Grid, Paper, Stack, Typography, useTheme } from '@mui/material'
 import SmartToyOutlined from '@mui/icons-material/SmartToyOutlined'
 import ForumOutlined from '@mui/icons-material/ForumOutlined'
 import DescriptionOutlined from '@mui/icons-material/DescriptionOutlined'
@@ -8,6 +8,7 @@ import { StatCard } from '../../../components/StatCard'
 import { getUsageAnalytics } from '../api'
 
 export function UsageAnalyticsTab() {
+  const { palette } = useTheme()
   const query = useQuery({ queryKey: ['monitor', 'usage-analytics'], queryFn: () => getUsageAnalytics(30) })
   const data = query.data
 
@@ -64,12 +65,12 @@ export function UsageAnalyticsTab() {
                 total={data.workflows.executions}
                 centerLabel="Executions"
                 segments={[
-                  { label: 'Completed', value: data.workflows.completed, color: '#22c55e' },
-                  { label: 'Failed', value: data.workflows.failed, color: '#ef4444' },
+                  { label: 'Completed', value: data.workflows.completed, color: palette.success.main },
+                  { label: 'Failed', value: data.workflows.failed, color: palette.error.main },
                   {
                     label: 'Other',
                     value: Math.max(0, data.workflows.executions - data.workflows.completed - data.workflows.failed),
-                    color: '#94a3b8',
+                    color: palette.text.disabled,
                   },
                 ]}
               />
@@ -90,12 +91,12 @@ export function UsageAnalyticsTab() {
                 total={data.approvals.total}
                 centerLabel="Requests"
                 segments={[
-                  { label: 'Approved', value: data.approvals.approved, color: '#22c55e' },
-                  { label: 'Pending', value: data.approvals.pending, color: '#f59e0b' },
+                  { label: 'Approved', value: data.approvals.approved, color: palette.success.main },
+                  { label: 'Pending', value: data.approvals.pending, color: palette.warning.main },
                   {
                     label: 'Other',
                     value: Math.max(0, data.approvals.total - data.approvals.approved - data.approvals.pending),
-                    color: '#94a3b8',
+                    color: palette.text.disabled,
                   },
                 ]}
               />

@@ -15,7 +15,7 @@ test.describe('Knowledge', () => {
     await expect(page.getByRole('heading', { name: 'Knowledge' })).toBeVisible()
 
     const uniqueName = `E2E Knowledge Base ${Date.now()}`
-    await page.getByRole('button', { name: 'New Knowledge Base' }).click()
+    await page.getByRole('button', { name: 'New knowledge base' }).click()
     const createDialog = page.getByRole('dialog')
     await createDialog.getByLabel('Name').fill(uniqueName)
     await createDialog.getByLabel('Description').fill('Created by Playwright')

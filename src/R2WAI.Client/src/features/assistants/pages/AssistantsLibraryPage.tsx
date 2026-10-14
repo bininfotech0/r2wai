@@ -7,6 +7,7 @@ import {
   Button,
   Grid,
   InputAdornment,
+  MenuItem,
   Pagination,
   Stack,
   TextField,
@@ -21,13 +22,15 @@ import ClearIcon from '@mui/icons-material/Close'
 import ViewModuleIcon from '@mui/icons-material/ViewModule'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import SmartToyOutlined from '@mui/icons-material/SmartToyOutlined'
+import CheckIcon from '@mui/icons-material/Check'
 import { DataTable } from '../../../components/data/DataTable'
 import { StatusBadge } from '../../../components/StatusBadge'
 import { EmptyState } from '../../../components/EmptyState'
 import { ErrorState } from '../../../components/ErrorState'
 import { LoadingSkeleton } from '../../../components/LoadingSkeleton'
 import { AgentCard, type AgentCardAction } from '../../../components/AgentCard'
-import { FilterBar, type FilterBarField } from '../../../components/FilterBar'
+import { RowActionsMenu } from '../../../components/data/RowActionsMenu'
+import { NameCell } from '../../../components/data/NameCell'
 import { ConfirmDialog } from '../../../components/dialogs/ConfirmDialog'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { describeApiError } from '../../../lib/api/fetchJson'
@@ -44,6 +47,16 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { PageHeader } from '../../../components/PageHeader'
 
 const CARD_PAGE_SIZE = 12
+
+// Table first, as in Copilot Studio; the choice is remembered per browser.
+const VIEW_KEY = 'r2wai.agents.view'
+function readView(): 'card' | 'list' {
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === 'card' ? 'card' : 'list'
+  } catch {
+    return 'list'
+  }
+}
 
 /**
  * Assistant/agent library.
@@ -65,7 +78,7 @@ export function AssistantsLibraryPage() {
   const queryClient = useQueryClient()
   const { notify } = useSnackbar()
 
-  const [view, setView] = useState<'card' | 'list'>('card')
+  const [view, setView] = useState<'card' | 'list'>(readView)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<AssistantStatusFilter>('All')
   const [sort, setSort] = useState<AssistantSortKey>('recent')
@@ -85,10 +98,10 @@ export function AssistantsLibraryPage() {
     mutationFn: (id: string) => publishAssistant(id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.assistants.all })
-      notify('Assistant published')
+      notify('Agent published')
     },
     onError: (error) => {
-      const described = describeApiError(error, 'Could not publish this assistant.')
+      const described = describeApiError(error, 'Could not publish this agent.')
       notify(`${described.title} ${described.description ?? ''}`.trim(), 'error')
     },
   })
@@ -97,10 +110,10 @@ export function AssistantsLibraryPage() {
     mutationFn: (id: string) => unpublishAssistant(id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.assistants.all })
-      notify('Assistant moved back to draft', 'info')
+      notify('Agent moved back to draft', 'info')
     },
     onError: (error) => {
-      const described = describeApiError(error, 'Could not unpublish this assistant.')
+      const described = describeApiError(error, 'Could not unpublish this agent.')
       notify(`${described.title} ${described.description ?? ''}`.trim(), 'error')
     },
   })
@@ -113,7 +126,7 @@ export function AssistantsLibraryPage() {
       navigate(`/assistants/${created.id}`)
     },
     onError: (error) => {
-      const described = describeApiError(error, 'Could not duplicate this assistant.')
+      const described = describeApiError(error, 'Could not duplicate this agent.')
       notify(`${described.title} ${described.description ?? ''}`.trim(), 'error')
     },
   })
@@ -146,43 +159,49 @@ export function AssistantsLibraryPage() {
     ]
   }
 
-  const filterFields: FilterBarField[] = [
-    {
-      key: 'status',
-      label: 'Status',
-      value: status,
-      onChange: (v) => {
-        setStatus(v as AssistantStatusFilter)
-        setPage(1)
-      },
-      options: [
-        { value: 'All', label: `All (${counts.All})` },
-        ...ASSISTANT_STATUSES.map((s) => ({ value: s, label: `${s} (${counts[s]})` })),
-      ],
-    },
-    {
-      key: 'sort',
-      label: 'Sort by',
-      value: sort,
-      onChange: (v) => {
-        setSort(v as AssistantSortKey)
-        setPage(1)
-      },
-      options: ASSISTANT_SORTS.map((s) => ({ value: s.value, label: s.label })),
-    },
-  ]
-
   const columns: GridColDef<AssistantDto>[] = [
-    { field: 'name', headerName: 'Name', flex: 1 },
-    { field: 'type', headerName: 'Type', width: 130 },
+    {
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 240,
+      renderCell: ({ row }) => <NameCell icon={SmartToyOutlined} name={row.name} secondary={row.description || 'No description'} />,
+    },
     {
       field: 'publishStatus',
       headerName: 'Status',
-      width: 120,
-      renderCell: (params) => <StatusBadge status={params.value} />,
+      width: 150,
+      renderCell: ({ row }) => (
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', height: '100%' }}>
+          <StatusBadge status={row.publishStatus} />
+          {row.publishStatus === 'Published' && <Typography variant="caption" color="text.secondary">v{row.publishedVersion}</Typography>}
+        </Stack>
+      ),
     },
-    { field: 'usageCount', headerName: 'Used', width: 90 },
-    { field: 'createdAt', headerName: 'Created', width: 150, valueFormatter: (v: string) => new Date(v).toLocaleDateString() },
+    { field: 'type', headerName: 'Type', width: 120 },
+    {
+      field: 'knowledgeBaseId',
+      headerName: 'Knowledge',
+      width: 110,
+      sortable: false,
+      renderCell: ({ row }) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+          {row.knowledgeBaseId
+            ? <CheckIcon fontSize="small" color="success" titleAccess="Knowledge linked" />
+            : <Typography variant="caption" color="text.secondary">—</Typography>}
+        </Box>
+      ),
+    },
+    { field: 'usageCount', headerName: 'Conversations', width: 130, type: 'number' },
+    { field: 'createdAt', headerName: 'Created', width: 130, valueFormatter: (v: string) => new Date(v).toLocaleDateString() },
+    {
+      field: 'actions',
+      headerName: '',
+      width: 56,
+      sortable: false,
+      disableColumnMenu: true,
+      renderCell: ({ row }) => <RowActionsMenu label={row.name} actions={actionsFor(row)} />,
+    },
   ]
 
   const isFiltered = status !== 'All' || search.trim() !== ''
@@ -191,7 +210,7 @@ export function AssistantsLibraryPage() {
     <Box>
       <PageHeader
         title="Agents"
-        description="Build assistants that answer questions and perform enterprise tasks."
+        description="Agents answer questions from your knowledge and take action in your connected systems."
         actions={
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
             New agent
@@ -199,7 +218,7 @@ export function AssistantsLibraryPage() {
         }
       />
 
-      <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Stack direction="row" spacing={1.5} useFlexGap sx={{ mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <TextField
           size="small"
           placeholder="Search agents…"
@@ -229,8 +248,35 @@ export function AssistantsLibraryPage() {
             },
             htmlInput: { 'aria-label': 'Search agents' },
           }}
-          sx={{ width: { xs: '100%', sm: 320 } }}
+          sx={{ width: { xs: '100%', sm: 300 } }}
         />
+        <TextField
+          select
+          size="small"
+          label="Status"
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value as AssistantStatusFilter)
+            setPage(1)
+          }}
+          sx={{ width: 170 }}
+        >
+          <MenuItem value="All">All ({counts.All})</MenuItem>
+          {ASSISTANT_STATUSES.map((s) => <MenuItem key={s} value={s}>{s} ({counts[s]})</MenuItem>)}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Sort by"
+          value={sort}
+          onChange={(e) => {
+            setSort(e.target.value as AssistantSortKey)
+            setPage(1)
+          }}
+          sx={{ width: 190 }}
+        >
+          {ASSISTANT_SORTS.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
+        </TextField>
         <Box sx={{ flexGrow: 1 }} />
         <ToggleButtonGroup
           size="small"
@@ -240,23 +286,26 @@ export function AssistantsLibraryPage() {
             if (!v) return
             setView(v)
             setPage(1)
+            try {
+              window.localStorage.setItem(VIEW_KEY, v)
+            } catch {
+              // Preference only.
+            }
           }}
-          aria-label="Assistant view"
+          aria-label="Agent view"
         >
-          <ToggleButton value="card" aria-label="Card view">
-            <ViewModuleIcon fontSize="small" />
-          </ToggleButton>
           <ToggleButton value="list" aria-label="List view">
             <ViewListIcon fontSize="small" />
+          </ToggleButton>
+          <ToggleButton value="card" aria-label="Card view">
+            <ViewModuleIcon fontSize="small" />
           </ToggleButton>
         </ToggleButtonGroup>
       </Stack>
 
-      <FilterBar filters={filterFields} />
-
       {query.isError ? (
         <ErrorState
-          {...describeApiError(query.error, 'Could not load your assistants.')}
+          {...describeApiError(query.error, 'Could not load your agents.')}
           onRetry={() => void query.refetch()}
         />
       ) : view === 'list' ? (
@@ -275,14 +324,23 @@ export function AssistantsLibraryPage() {
             setPage(1)
           }}
           onRowClick={(id) => navigate(`/assistants/${id}`)}
+          emptyState={
+            <EmptyState
+              icon={SmartToyOutlined}
+              title={isFiltered ? 'No agents match these filters' : 'No agents yet'}
+              description={isFiltered ? 'Try clearing the search or status filter.' : 'Create your first agent to get started.'}
+              actionLabel={isFiltered ? undefined : 'New agent'}
+              onAction={isFiltered ? undefined : () => setCreateOpen(true)}
+            />
+          }
         />
       ) : query.isLoading ? (
         <LoadingSkeleton count={6} />
       ) : visible.length === 0 ? (
         <EmptyState
           icon={SmartToyOutlined}
-          title={isFiltered ? 'No assistants match these filters' : 'No assistants yet'}
-          description={isFiltered ? 'Try clearing the search or status filter.' : 'Create your first assistant to get started.'}
+          title={isFiltered ? 'No agents match these filters' : 'No agents yet'}
+          description={isFiltered ? 'Try clearing the search or status filter.' : 'Create your first agent to get started.'}
           actionLabel={isFiltered ? undefined : 'New agent'}
           onAction={isFiltered ? undefined : () => setCreateOpen(true)}
         />
@@ -313,7 +371,7 @@ export function AssistantsLibraryPage() {
               sx={{ alignItems: 'center', justifyContent: 'space-between', mt: 3 }}
             >
               <Typography variant="body2" color="text.secondary">
-                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalCount)} of {totalCount} assistants
+                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalCount)} of {totalCount} agents
               </Typography>
               <Pagination
                 count={pageCount}
@@ -321,7 +379,7 @@ export function AssistantsLibraryPage() {
                 onChange={(_, nextPage) => setPage(nextPage)}
                 color="primary"
                 size="small"
-                aria-label="Assistant pages"
+                aria-label="Agent pages"
               />
             </Stack>
           )}
@@ -339,7 +397,7 @@ export function AssistantsLibraryPage() {
 
       <ConfirmDialog
         open={!!publishTarget}
-        title="Publish this assistant?"
+        title="Publish this agent?"
         message={
           publishTarget
             ? `“${publishTarget.name}” becomes available to every channel it is deployed to. Anyone who can reach those channels can talk to it.`

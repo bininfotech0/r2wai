@@ -29,10 +29,11 @@ export function FilterBar({ filters }: FilterBarProps) {
     <Box
       role="group"
       aria-label="Filters"
+      // A compact wrapping row (Copilot Studio list pages), not full-width boxes.
       sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(auto-fit, minmax(160px, 1fr))' },
-        gap: 1.25,
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 1,
         mb: 2,
       }}
     >
@@ -44,7 +45,7 @@ export function FilterBar({ filters }: FilterBarProps) {
           label={f.label}
           value={f.value}
           onChange={(e) => f.onChange(e.target.value)}
-          fullWidth
+          sx={{ width: { xs: 'calc(50% - 4px)', sm: 180 } }}
           slotProps={{ select: { inputProps: { 'aria-label': f.label } } }}
         >
           {f.options.map((o) => (

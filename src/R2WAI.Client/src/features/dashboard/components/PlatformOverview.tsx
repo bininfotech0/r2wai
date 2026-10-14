@@ -1,7 +1,7 @@
 import { queryKeys } from '../../../lib/api/queryKeys'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Box, Paper, Skeleton, Stack, Typography } from '@mui/material'
+import { Box, Paper, Skeleton, Stack, Typography, useTheme } from '@mui/material'
 import SmartToyOutlined from '@mui/icons-material/SmartToyOutlined'
 import AccountTreeOutlined from '@mui/icons-material/AccountTreeOutlined'
 import ForumOutlined from '@mui/icons-material/ForumOutlined'
@@ -29,6 +29,7 @@ const statGrid = (columns: Record<string, string>) => ({
  * on Activity → Monitor, unchanged. Every tile and chart plots exactly what its endpoint returns.
  */
 export function PlatformOverview() {
+  const { palette } = useTheme()
   const metrics = useQuery({
     queryKey: ['operations', 'metrics'],
     queryFn: () => fetchJson<MetricsDto>('/operations/metrics'),
@@ -101,7 +102,7 @@ export function PlatformOverview() {
               data={trendPoints}
               series={[
                 { key: 'Conversations', label: 'Conversations' },
-                { key: 'Executions', label: 'Executions', color: '#0EA5E9' },
+                { key: 'Executions', label: 'Executions', color: palette.info.main },
               ]}
             />
           )}

@@ -1,17 +1,19 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Alert, Box, Button, Chip } from '@mui/material'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Box, Button, Stack, Typography } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import AccountTreeOutlined from '@mui/icons-material/AccountTreeOutlined'
-import PlayCircleOutlineOutlined from '@mui/icons-material/PlayCircleOutlineOutlined'
-import TodayOutlined from '@mui/icons-material/TodayOutlined'
 import { useNavigate } from 'react-router-dom'
 import type { GridColDef } from '@mui/x-data-grid'
 import { DataTable } from '../../../components/data/DataTable'
+import { NameCell } from '../../../components/data/NameCell'
+import { RowActionsMenu } from '../../../components/data/RowActionsMenu'
 import { EmptyState } from '../../../components/EmptyState'
-import { StatCard } from '../../../components/StatCard'
+import { StatusBadge } from '../../../components/StatusBadge'
+import { ConfirmDeleteDialog } from '../../../components/dialogs/ConfirmDeleteDialog'
 import { fetchJson } from '../../../lib/api/fetchJson'
-import { listWorkflows } from '../api'
+import { useSnackbar } from '../../../lib/notifications/useSnackbar'
+import { deleteWorkflow, listWorkflows } from '../api'
 import { CreateAutomationDialog } from '../dialogs/CreateAutomationDialog'
 import type { WorkflowDto } from '../types'
 import type { MetricsDto } from '../../dashboard/types'
@@ -19,45 +21,85 @@ import { PageHeader } from '../../../components/PageHeader'
 
 export function AutomationsListPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { notify } = useSnackbar()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [deleting, setDeleting] = useState<WorkflowDto | null>(null)
 
   const query = useQuery({
     queryKey: ['workflows', page, pageSize, search],
     queryFn: () => listWorkflows(page, pageSize, search),
   })
 
+  // A one-line summary instead of stat tiles (Copilot Studio list pages carry none); the full
+  // figures live on Activity → Monitor.
   const metricsQuery = useQuery({
     queryKey: ['operations', 'metrics'],
     queryFn: () => fetchJson<MetricsDto>('/operations/metrics'),
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteWorkflow(id),
+    onSuccess: () => {
+      notify('Automation deleted', 'success')
+      setDeleting(null)
+      void queryClient.invalidateQueries({ queryKey: ['workflows'] })
+    },
+    onError: () => notify('Failed to delete automation', 'error'),
+  })
+
   const columns: GridColDef<WorkflowDto>[] = [
-    { field: 'name', headerName: 'Name', flex: 1 },
-    { field: 'trigger', headerName: 'Trigger', width: 160, valueGetter: (_, row) => row.trigger ?? '—' },
+    {
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
+      minWidth: 240,
+      renderCell: ({ row }) => <NameCell icon={AccountTreeOutlined} name={row.name} secondary={row.description || 'No description'} />,
+    },
     {
       field: 'versionStatus',
       headerName: 'Status',
       width: 130,
-      renderCell: (params) => (
-        <Chip
-          label={params.value}
-          size="small"
-          color={params.value === 'Published' ? 'success' : params.value === 'Archived' ? 'default' : 'warning'}
-          variant="outlined"
+      renderCell: (params) => <StatusBadge status={params.value} />,
+    },
+    { field: 'trigger', headerName: 'Trigger', width: 160, valueGetter: (_, row) => row.trigger ?? '—' },
+    { field: 'version', headerName: 'Version', width: 100, valueFormatter: (v: number) => `v${v}` },
+    {
+      field: 'modifiedAt',
+      headerName: 'Modified',
+      width: 130,
+      valueGetter: (_, row) => row.modifiedAt ?? row.createdAt,
+      valueFormatter: (v: string) => new Date(v).toLocaleDateString(),
+    },
+    {
+      field: 'actions',
+      headerName: '',
+      width: 56,
+      sortable: false,
+      disableColumnMenu: true,
+      renderCell: ({ row }) => (
+        <RowActionsMenu
+          label={row.name}
+          actions={[
+            { label: 'Open', onSelect: () => navigate(`/automations/${row.id}`) },
+            { label: 'Open builder', onSelect: () => navigate(`/automations/${row.id}/builder`) },
+            { label: 'Delete', destructive: true, onSelect: () => setDeleting(row) },
+          ]}
         />
       ),
     },
-    { field: 'version', headerName: 'Version', width: 100 },
   ]
+
+  const metrics = metricsQuery.data
 
   return (
     <Box>
       <PageHeader
         title="Automations"
-        description="Automate repeatable work across your enterprise systems."
+        description="Multi-step flows that run on a trigger or when an agent calls them, across your connected systems."
         actions={
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
             New Automation
@@ -65,49 +107,12 @@ export function AutomationsListPage() {
         }
       />
 
-      {metricsQuery.isError ? (
-        <Alert
-          severity="error"
-          sx={{ mb: 2 }}
-          action={
-            <Button color="inherit" size="small" onClick={() => void metricsQuery.refetch()}>
-              Retry
-            </Button>
-          }
-        >
-          Automation metrics could not be loaded.
-        </Alert>
-      ) : (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))' },
-            gap: 2,
-            mb: 2,
-          }}
-        >
-          <StatCard
-            label="Total"
-            value={metricsQuery.data?.totalWorkflows ?? 0}
-            icon={AccountTreeOutlined}
-            color="primary"
-            loading={metricsQuery.isLoading}
-          />
-          <StatCard
-            label="In progress"
-            value={metricsQuery.data?.activeWorkflows ?? 0}
-            icon={PlayCircleOutlineOutlined}
-            color="success"
-            loading={metricsQuery.isLoading}
-          />
-          <StatCard
-            label="Runs today"
-            value={metricsQuery.data?.completedToday ?? 0}
-            icon={TodayOutlined}
-            color="info"
-            loading={metricsQuery.isLoading}
-          />
-        </Box>
+      {metrics && (
+        <Stack direction="row" spacing={2} sx={{ mb: 1.5, color: 'text.secondary', flexWrap: 'wrap' }} aria-label="Automation summary">
+          <Typography variant="body2"><strong>{metrics.totalWorkflows}</strong> total</Typography>
+          <Typography variant="body2"><strong>{metrics.activeWorkflows}</strong> runs in progress</Typography>
+          <Typography variant="body2"><strong>{metrics.completedToday}</strong> runs today</Typography>
+        </Stack>
       )}
 
       <DataTable
@@ -162,6 +167,15 @@ export function AutomationsListPage() {
           setCreateOpen(false)
           navigate(`/automations/${id}`)
         }}
+      />
+
+      <ConfirmDeleteDialog
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+        title="Delete automation"
+        message={`Delete "${deleting?.name}"? Its run history stays in Activity. This cannot be undone.`}
+        isDeleting={deleteMutation.isPending}
       />
     </Box>
   )

@@ -23,7 +23,7 @@ const ROUTES: { path: string; expect: RegExp | string }[] = [
   { path: '/knowledge', expect: /Knowledge/i },
   { path: '/integrations', expect: /Integration/i },
   { path: '/playground', expect: /Playground/i },
-  { path: '/runs', expect: /Execution|Runs/i },
+  { path: '/runs', expect: /Activity/i },
   { path: '/approvals', expect: /Confirmation|Approval/i },
   { path: '/monitor', expect: /Monitor/i },
   { path: '/workspaces', expect: /Workspaces/i },

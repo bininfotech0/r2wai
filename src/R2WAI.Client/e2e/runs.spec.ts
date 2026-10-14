@@ -38,7 +38,7 @@ test('Runs: an executed automation appears in the unified list with a real step 
   await page.waitForTimeout(3000)
 
   await page.goto('/runs')
-  await expect(page.getByRole('heading', { name: 'Executions' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible()
   await expect(page.getByRole('gridcell', { name: uniqueName })).toBeVisible()
 
   // Phase 7: the new columns render real values for this row — Application is honestly "—"
@@ -57,7 +57,7 @@ test('Runs: an executed automation appears in the unified list with a real step 
   await statusFilter.click()
   await page.getByRole('option', { name: 'Any status' }).click()
 
-  await page.getByRole('gridcell', { name: uniqueName }).click()
+  await page.getByRole('gridcell', { name: uniqueName }).first().click()
   const drawer = page.getByRole('dialog').filter({ hasText: 'Timeline' })
   await expect(drawer.getByText('Log Something')).toBeVisible()
 
@@ -67,7 +67,7 @@ test('Runs: an executed automation appears in the unified list with a real step 
 
   // Clean up.
   await page.goto(`/automations`)
-  await page.getByRole('gridcell', { name: uniqueName }).click()
+  await page.getByRole('gridcell', { name: uniqueName }).first().click()
   await page.getByRole('button', { name: 'Delete' }).click()
   await page.getByRole('button', { name: 'Delete' }).last().click()
   await expect(page.getByText('Automation deleted')).toBeVisible()
