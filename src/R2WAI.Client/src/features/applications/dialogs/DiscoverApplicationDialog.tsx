@@ -51,7 +51,7 @@ export function DiscoverApplicationDialog({ open, applicationId, onClose, onDisc
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth aria-label="Discover from OpenAPI Spec">
       <DialogTitle>Discover from OpenAPI Spec</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -101,7 +101,7 @@ export function DiscoverApplicationDialog({ open, applicationId, onClose, onDisc
           variant="contained"
           disabled={(sourceTab === 'url' ? !url : !fileContent) || discoverMutation.isPending}
           onClick={() => discoverMutation.mutate()}
-        >
+         loading={discoverMutation.isPending}>
           {discoverMutation.isPending ? 'Discovering…' : 'Discover'}
         </Button>
       </DialogActions>

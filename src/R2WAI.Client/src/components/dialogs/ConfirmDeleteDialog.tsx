@@ -18,7 +18,7 @@ export function ConfirmDeleteDialog({
   isDeleting,
 }: ConfirmDeleteDialogProps) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth aria-label={title}>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         <DialogContentText>{message}</DialogContentText>
@@ -27,8 +27,8 @@ export function ConfirmDeleteDialog({
         <Button onClick={onClose} disabled={isDeleting}>
           Cancel
         </Button>
-        <Button onClick={onConfirm} color="error" variant="contained" disabled={isDeleting}>
-          {isDeleting ? 'Deleting…' : 'Delete'}
+        <Button onClick={onConfirm} color="error" variant="contained" loading={isDeleting}>
+          Delete
         </Button>
       </DialogActions>
     </Dialog>

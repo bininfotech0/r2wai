@@ -274,7 +274,7 @@ export function ProfilePage() {
         </Grid>
       </Grid>
 
-      <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="xs" fullWidth aria-label="Edit profile">
         <DialogTitle>Edit profile</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
@@ -314,7 +314,7 @@ export function ProfilePage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={pwOpen} onClose={() => setPwOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={pwOpen} onClose={() => setPwOpen(false)} maxWidth="xs" fullWidth aria-label="Change password">
         <DialogTitle>Change password</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>

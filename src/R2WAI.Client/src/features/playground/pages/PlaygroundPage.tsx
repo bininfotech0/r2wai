@@ -5,6 +5,9 @@ import { useNavigate } from 'react-router-dom'
 import { Box, Chip, Grid, MenuItem, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
 import ScienceOutlinedIcon from '@mui/icons-material/ScienceOutlined'
 import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined'
+import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined'
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
+import ExtensionOutlinedIcon from '@mui/icons-material/ExtensionOutlined'
 import { LivePreviewPane } from '../../assistants/components/LivePreviewPane'
 import { listAssistants } from '../../assistants/api'
 import { listWorkflows } from '../../automations/api'
@@ -19,6 +22,8 @@ import { reduceToolCallSteps } from '../../../lib/chat/toolCallProgress'
 import type { ToolCallProgressEvent } from '../../../lib/chat/types'
 import type { WorkflowInstanceDto, WorkflowStepExecutionDto } from '../../runs/types'
 import type { TestConnectionResult } from '../../tools/types'
+import { useAuth } from '../../../lib/auth/useAuth'
+import { getPersona } from '../../../lib/nav/roleNav'
 
 const PANEL_HEIGHT = 600
 
@@ -30,6 +35,11 @@ const PANEL_HEIGHT = 600
  */
 export function PlaygroundPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const persona = getPersona(user)
+  const canManageAgents = persona === 'Admin' || persona === 'SuperAdmin'
+  const canManageAutomations = canManageAgents
+  const canManageTools = persona === 'SuperAdmin'
   const [mode, setMode] = useState<PlaygroundMode>('Assistant')
   // Only tracks an explicit user pick per mode — the effective selection falls back to the
   // first loaded item, derived during render rather than synced via an effect.
@@ -72,9 +82,9 @@ export function PlaygroundPage() {
   const workflows = workflowsQuery.data?.items ?? []
   const capabilities = capabilitiesQuery.data?.items ?? []
 
-  const assistantId = selectedAssistantId ?? assistants[0]?.id ?? ''
-  const workflowId = selectedWorkflowId ?? workflows[0]?.id ?? ''
-  const capabilityId = selectedCapabilityId ?? capabilities[0]?.id ?? ''
+  const assistantId = assistants.find((assistant) => assistant.id === selectedAssistantId)?.id ?? assistants[0]?.id ?? ''
+  const workflowId = workflows.find((workflow) => workflow.id === selectedWorkflowId)?.id ?? workflows[0]?.id ?? ''
+  const capabilityId = capabilities.find((capability) => capability.id === selectedCapabilityId)?.id ?? capabilities[0]?.id ?? ''
   const selectedTargetName = mode === 'Assistant'
     ? assistants.find((assistant) => assistant.id === assistantId)?.name
     : mode === 'Automation'
@@ -82,7 +92,7 @@ export function PlaygroundPage() {
       : capabilities.find((capability) => capability.id === capabilityId)?.name
   const targetCount = mode === 'Assistant' ? assistants.length : mode === 'Automation' ? workflows.length : capabilities.length
   const targetLabel = mode === 'Assistant'
-    ? (targetCount === 1 ? 'assistant' : 'assistants')
+    ? (targetCount === 1 ? 'agent' : 'agents')
     : mode === 'Automation'
       ? (targetCount === 1 ? 'automation' : 'automations')
       : (targetCount === 1 ? 'tool' : 'tools')
@@ -121,7 +131,12 @@ export function PlaygroundPage() {
           <Paper variant="outlined" sx={{ height: '100%', borderRadius: 3, overflow: 'hidden' }}>
             <Tabs
               value={mode}
-              onChange={(_, v: PlaygroundMode) => setMode(v)}
+              onChange={(_, v: PlaygroundMode) => {
+                setMode(v)
+                setToolCallEvents([])
+                setAutomationInspector(null)
+                setCapabilityInspector(null)
+              }}
               variant="scrollable"
               allowScrollButtonsMobile
               aria-label="Playground mode"
@@ -132,7 +147,7 @@ export function PlaygroundPage() {
                 '& .MuiTab-root': { minHeight: 48, fontWeight: 650, textTransform: 'none' },
               }}
             >
-              <Tab label="Assistant" value="Assistant" />
+              <Tab label="Agent" value="Assistant" />
               <Tab label="Automation" value="Automation" />
               <Tab label="Tool/API" value="Capability" />
             </Tabs>
@@ -160,9 +175,12 @@ export function PlaygroundPage() {
                   select
                   fullWidth
                   size="small"
-                  label="Assistant"
+                  label="Agent"
                   value={assistantId}
-                  onChange={(e) => setSelectedAssistantId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedAssistantId(e.target.value)
+                    setToolCallEvents([])
+                  }}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                 >
                   {assistants.map((a) => (
@@ -191,7 +209,10 @@ export function PlaygroundPage() {
                   size="small"
                   label="Automation"
                   value={workflowId}
-                  onChange={(e) => setSelectedWorkflowId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedWorkflowId(e.target.value)
+                    setAutomationInspector(null)
+                  }}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                 >
                   {workflows.map((w) => (
@@ -220,7 +241,10 @@ export function PlaygroundPage() {
                   size="small"
                   label="Tool / API"
                   value={capabilityId}
-                  onChange={(e) => setSelectedCapabilityId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedCapabilityId(e.target.value)
+                    setCapabilityInspector(null)
+                  }}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
                 >
                   {capabilities.map((c) => (
@@ -232,26 +256,35 @@ export function PlaygroundPage() {
               )}
               {mode === 'Assistant' && assistants.length === 0 && !assistantsQuery.isLoading && !assistantsQuery.isError && (
                 <EmptyState
-                  title="No assistants yet"
-                  description="Create an assistant to start testing conversations here."
-                  actionLabel="Go to assistants"
-                  onAction={() => navigate('/assistants')}
+                  icon={SmartToyOutlinedIcon}
+                  title={canManageAgents ? 'No agents yet' : 'No agents available'}
+                  description={canManageAgents
+                    ? 'Create and publish an agent to test conversations here.'
+                    : 'Ask an administrator to publish an agent for your account.'}
+                  actionLabel={canManageAgents ? 'Go to Agents' : undefined}
+                  onAction={canManageAgents ? () => navigate('/assistants') : undefined}
                 />
               )}
               {mode === 'Automation' && workflows.length === 0 && !workflowsQuery.isLoading && !workflowsQuery.isError && (
                 <EmptyState
-                  title="No automations yet"
-                  description="Create an automation to run a test from the Playground."
-                  actionLabel="Go to automations"
-                  onAction={() => navigate('/automations')}
+                  icon={AccountTreeOutlinedIcon}
+                  title={canManageAutomations ? 'No automations yet' : 'No automations available'}
+                  description={canManageAutomations
+                    ? 'Create an automation to run a test from the Playground.'
+                    : 'Ask an administrator to make an automation available for testing.'}
+                  actionLabel={canManageAutomations ? 'Go to Automations' : undefined}
+                  onAction={canManageAutomations ? () => navigate('/automations') : undefined}
                 />
               )}
               {mode === 'Capability' && capabilities.length === 0 && !capabilitiesQuery.isLoading && !capabilitiesQuery.isError && (
                 <EmptyState
-                  title="No tools yet"
-                  description="Add a capability or API before testing it here."
-                  actionLabel="Go to tools"
-                  onAction={() => navigate('/tools')}
+                  icon={ExtensionOutlinedIcon}
+                  title={canManageTools ? 'No tools yet' : 'No tools available'}
+                  description={canManageTools
+                    ? 'Add a capability or API before testing it here.'
+                    : 'Ask a system administrator to configure a tool before testing.'}
+                  actionLabel={canManageTools ? 'Go to Tools & APIs' : undefined}
+                  onAction={canManageTools ? () => navigate('/tools') : undefined}
                 />
               )}
               {selectedTargetName && (
@@ -271,15 +304,17 @@ export function PlaygroundPage() {
                 <LivePreviewPane
                   key={assistantId}
                   assistantId={assistantId}
+                  title="Agent chat"
+                  subtitle={selectedTargetName ? `Testing ${selectedTargetName}` : 'Test an agent conversation'}
                   onToolCallEvents={setToolCallEvents}
                 />
               ) : (
                 <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>
                   {assistantsQuery.isError
-                    ? 'Assistant data could not be loaded. Retry from the selector panel.'
+                    ? 'Agent data could not be loaded. Retry from the selector panel.'
                     : assistantsQuery.isLoading
-                      ? 'Loading assistants…'
-                      : 'Choose an assistant to test a conversation.'}
+                      ? 'Loading agents…'
+                      : 'Choose an agent to test a conversation.'}
                 </Typography>
               ))}
             {mode === 'Automation' &&

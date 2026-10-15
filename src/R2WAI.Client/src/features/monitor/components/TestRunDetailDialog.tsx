@@ -31,7 +31,7 @@ interface TestRunDetailDialogProps {
 // inventing a new /monitor/test-runs/:id route with no real UI precedent.
 export function TestRunDetailDialog({ run, onClose }: TestRunDetailDialogProps) {
   return (
-    <Dialog open={!!run} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={!!run} onClose={onClose} maxWidth="sm" fullWidth aria-label="Test Run details">
       <DialogTitle>
         Test Run{' '}
         {run && (

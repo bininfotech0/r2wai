@@ -31,7 +31,7 @@ export function CreateEditWebhookDialog({ open, onClose, onSubmit, webhook, isSu
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth aria-label={isEdit ? 'Edit Webhook' : 'New Webhook'}>
       <DialogTitle>{isEdit ? 'Edit Webhook' : 'New Webhook'}</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -52,7 +52,7 @@ export function CreateEditWebhookDialog({ open, onClose, onSubmit, webhook, isSu
           <Button onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting || !name}>
+          <Button type="submit" variant="contained" disabled={isSubmitting || !name} loading={isSubmitting}>
             {isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create'}
           </Button>
         </DialogActions>

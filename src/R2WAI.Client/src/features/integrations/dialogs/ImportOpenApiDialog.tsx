@@ -84,7 +84,7 @@ export function ImportOpenApiDialog({ open, onClose }: ImportOpenApiDialogProps)
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth aria-label="Import from OpenAPI Spec">
       <DialogTitle>Import from OpenAPI Spec</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -161,7 +161,7 @@ export function ImportOpenApiDialog({ open, onClose }: ImportOpenApiDialogProps)
             variant="contained"
             disabled={(sourceTab === 'url' ? !url : !fileContent) || analyzeMutation.isPending}
             onClick={() => analyzeMutation.mutate()}
-          >
+           loading={analyzeMutation.isPending}>
             {analyzeMutation.isPending ? 'Analyzing…' : 'Analyze'}
           </Button>
         ) : (
@@ -169,7 +169,7 @@ export function ImportOpenApiDialog({ open, onClose }: ImportOpenApiDialogProps)
             variant="contained"
             disabled={selected.size === 0 || commitMutation.isPending}
             onClick={() => commitMutation.mutate()}
-          >
+           loading={commitMutation.isPending}>
             {commitMutation.isPending
               ? 'Importing…'
               : `Import ${selected.size || ''} Tool${selected.size === 1 ? '' : 's'}`}

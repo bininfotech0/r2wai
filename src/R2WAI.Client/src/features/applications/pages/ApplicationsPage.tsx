@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Box, Button, Chip } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined'
 import type { GridColDef } from '@mui/x-data-grid'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { DataTable } from '../../../components/data/DataTable'
 import { EmptyState } from '../../../components/EmptyState'
 import { PageHeader } from '../../../components/PageHeader'
@@ -27,6 +27,7 @@ const STATUS_COLOR: Record<string, 'success' | 'warning' | 'default' | 'error'> 
 }
 
 export function ApplicationsPage() {
+  const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { notify } = useSnackbar()
@@ -35,6 +36,14 @@ export function ApplicationsPage() {
   const [pageSize, setPageSize] = useState(20)
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+
+  useEffect(() => {
+    const state = location.state as { openCreate?: boolean } | null
+    if (!state?.openCreate) return
+
+    setCreateOpen(true)
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location.key, location.pathname, location.search, location.state, navigate])
 
   const query = useQuery({
     queryKey: [QUERY_KEY, page, pageSize, search],

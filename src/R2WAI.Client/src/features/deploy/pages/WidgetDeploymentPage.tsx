@@ -23,6 +23,7 @@ import LanguageIcon from '@mui/icons-material/Language'
 import DevicesIcon from '@mui/icons-material/Devices'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined'
 import { PageHeader } from '../../../components/PageHeader'
 import { ErrorState } from '../../../components/ErrorState'
 import { EmptyState } from '../../../components/EmptyState'
@@ -50,7 +51,7 @@ import {
   type WidgetAppearanceConfig,
 } from '../types'
 
-const HEX_COLOR_HELPER = 'Hex colour, e.g. #6d28d9'
+const HEX_COLOR_HELPER = 'Hex colour, e.g. #6d28d9. Widget text adjusts for contrast.'
 
 function isExactWebOrigin(value: string) {
   try {
@@ -270,7 +271,7 @@ export function WidgetDeploymentPage() {
         title={`Widget · ${chatbot.name}`}
         description="Configure the widget, preview it, then copy one script tag into your site."
         actions={
-          <Button variant="contained" onClick={handleSave} disabled={saveMutation.isPending || !colorValid || invalidOrigins.length > 0}>
+          <Button variant="contained" onClick={handleSave} disabled={saveMutation.isPending || !colorValid || invalidOrigins.length > 0} loading={saveMutation.isPending}>
             {saveMutation.isPending ? 'Saving…' : 'Save settings'}
           </Button>
         }
@@ -596,11 +597,13 @@ export function WidgetDeploymentPage() {
 }
 
 function StatusRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+  const StatusIcon = ok ? CheckCircleIcon : WarningAmberOutlinedIcon
+
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-      <CheckCircleIcon
+      <StatusIcon
         fontSize="small"
-        sx={{ color: ok ? 'success.main' : 'text.disabled', mt: 0.25, flexShrink: 0 }}
+        sx={{ color: ok ? 'success.main' : 'warning.main', mt: 0.25, flexShrink: 0 }}
       />
       <Box sx={{ minWidth: 0 }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }}>

@@ -55,10 +55,10 @@ export function ConfirmDialog({
           onClick={onConfirm}
           color={destructive ? 'error' : 'primary'}
           variant="contained"
-          disabled={busy}
+          loading={busy}
           autoFocus
         >
-          {busy ? 'Working…' : confirmLabel}
+          {confirmLabel}
         </Button>
       </DialogActions>
     </Dialog>

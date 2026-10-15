@@ -70,7 +70,7 @@ export function UsageAnalyticsTab() {
                   {
                     label: 'Other',
                     value: Math.max(0, data.workflows.executions - data.workflows.completed - data.workflows.failed),
-                    color: palette.text.disabled,
+                    color: palette.text.secondary,
                   },
                 ]}
               />
@@ -96,7 +96,7 @@ export function UsageAnalyticsTab() {
                   {
                     label: 'Other',
                     value: Math.max(0, data.approvals.total - data.approvals.approved - data.approvals.pending),
-                    color: palette.text.disabled,
+                    color: palette.text.secondary,
                   },
                 ]}
               />

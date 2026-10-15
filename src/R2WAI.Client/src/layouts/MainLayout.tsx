@@ -1,11 +1,13 @@
 import { createElement, useEffect, useMemo, useState } from 'react'
 import {
   AppBar,
+  Alert,
   Avatar,
   BottomNavigation,
   BottomNavigationAction,
   Box,
   Breadcrumbs,
+  Button,
   ButtonBase,
   Chip,
   Divider,
@@ -39,7 +41,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import CircleIcon from '@mui/icons-material/Circle'
 import { Link as RouterLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router-dom'
 import { useAuth } from '../lib/auth/useAuth'
-import { getBottomNavItems, getBreadcrumbs, getHomeNavItem, getPersona, getPersonaLabel, getRailLayout, getSectionTabs, type NavItem, type NavSection } from '../lib/nav/roleNav'
+import { canAccessPath, getBottomNavItems, getBreadcrumbs, getHomeNavItem, getPersona, getPersonaLabel, getRailLayout, getSectionTabs, type NavItem, type NavSection } from '../lib/nav/roleNav'
 import { getNavIcon } from '../lib/nav/navIcons'
 import { useThemeMode } from '../theme/ThemeModeProvider'
 import { CommandPalette } from '../components/CommandPalette'
@@ -94,7 +96,7 @@ function RailButton({ icon, label, active, ...rest }: {
         color: active ? 'primary.main' : 'text.secondary',
         '&:hover': { color: 'text.primary' },
         '&:hover .rail-pill': { bgcolor: active ? activePillBg : 'action.hover' },
-        '&.Mui-focusVisible .rail-pill': { outline: '2px solid', outlineColor: 'primary.main' },
+        '&.Mui-focusVisible .rail-pill': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
       }}
     >
       <Box
@@ -106,7 +108,7 @@ function RailButton({ icon, label, active, ...rest }: {
           height: 30,
           borderRadius: 999,
           bgcolor: active ? activePillBg : 'transparent',
-          transition: (t) => t.transitions.create('background-color', { duration: 140, easing: 'ease' }),
+          transition: (t) => t.transitions.create('background-color'),
         }}
       >
         {createElement(getNavIcon(icon), { sx: { fontSize: 20 } })}
@@ -211,6 +213,7 @@ export function MainLayout() {
   const bottomNavItems = useMemo(() => getBottomNavItems(persona), [persona])
   // Workspaces scope admin resources; a plain user only sees what is shared with them.
   const showWorkspaceSwitcher = persona === 'Admin' || persona === 'SuperAdmin'
+  const canAccessCurrentRoute = canAccessPath(location.pathname, persona)
 
   useEffect(() => {
     let cancelled = false
@@ -369,7 +372,7 @@ export function MainLayout() {
               color: 'text.secondary',
               font: 'inherit',
               cursor: 'pointer',
-              transition: (t) => t.transitions.create(['border-color', 'background-color'], { duration: 140, easing: 'ease' }),
+              transition: (t) => t.transitions.create(['border-color', 'background-color']),
               '&:hover': { borderColor: 'text.secondary', bgcolor: 'action.selected' },
             }}
           >
@@ -472,9 +475,11 @@ export function MainLayout() {
             <MenuItem component={RouterLink} to="/inbox" onClick={() => setUserMenuAnchor(null)}>
               Inbox
             </MenuItem>
-            <MenuItem component={RouterLink} to="/settings" onClick={() => setUserMenuAnchor(null)}>
-              Settings
-            </MenuItem>
+            {showWorkspaceSwitcher && (
+              <MenuItem component={RouterLink} to="/settings" onClick={() => setUserMenuAnchor(null)}>
+                Settings
+              </MenuItem>
+            )}
             <Divider />
             <MenuItem onClick={() => void handleLogout()}>Sign out</MenuItem>
           </Menu>
@@ -555,7 +560,19 @@ export function MainLayout() {
             ))}
           </Tabs>
         )}
-        {navigation.state === 'loading' ? <LoadingSkeleton variant="text" count={8} /> : <Outlet />}
+        {!canAccessCurrentRoute ? (
+          <Alert
+            severity="info"
+            action={<Button component={RouterLink} to="/" size="small" color="inherit">Return home</Button>}
+          >
+            <Typography component="span" variant="subtitle2" sx={{ display: 'block', fontWeight: 700 }}>
+              This page isn’t available to your account
+            </Typography>
+            <Typography component="span" variant="body2">
+              Ask your administrator if you need access to this area.
+            </Typography>
+          </Alert>
+        ) : navigation.state === 'loading' ? <LoadingSkeleton variant="text" count={8} /> : <Outlet />}
       </Box>
 
       {isMobile && (
@@ -564,13 +581,14 @@ export function MainLayout() {
           sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: (t) => t.zIndex.drawer + 1, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}
         >
           <BottomNavigation
+            component="nav"
+            aria-label="Primary navigation"
             // '/' prefix-matches every path, so it's checked last/explicitly rather than via
             // the same startsWith scan the other (mutually non-overlapping) item paths use.
             value={
               bottomNavItems.find((item) => item.path !== '/' && location.pathname.startsWith(item.path))?.path ??
               (location.pathname === '/' ? '/' : false)
             }
-            onChange={(_, value: string) => navigate(value)}
             showLabels
           >
             {bottomNavItems.map((item) => {
@@ -579,6 +597,8 @@ export function MainLayout() {
               return (
                 <BottomNavigationAction
                   key={item.path}
+                  component={RouterLink}
+                  to={item.path}
                   label={item.label}
                   value={item.path}
                   icon={<Icon fontSize="small" />}

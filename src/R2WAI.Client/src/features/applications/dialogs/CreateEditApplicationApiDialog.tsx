@@ -69,7 +69,7 @@ export function CreateEditApplicationApiDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label={isEdit ? 'Edit API' : 'New API'}>
       <DialogTitle>{isEdit ? 'Edit API' : 'New API'}</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -157,7 +157,7 @@ export function CreateEditApplicationApiDialog({
               !baseUrl ||
               (authScheme === 'ApiKey' && !!credentialSecret && !credentialHeaderName)
             }
-          >
+           loading={isSubmitting}>
             {isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create'}
           </Button>
         </DialogActions>

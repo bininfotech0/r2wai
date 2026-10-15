@@ -53,7 +53,7 @@ export function CreateEditMcpConnectionDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label={isEdit ? 'Edit MCP Server' : 'Connect MCP Server'}>
       <DialogTitle>{isEdit ? 'Edit MCP Server' : 'Connect MCP Server'}</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -96,7 +96,7 @@ export function CreateEditMcpConnectionDialog({
           <Button onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting || !name.trim() || !isHttpEndpoint(endpointUrl.trim()) || credentialNeedsHeader}>
+          <Button type="submit" variant="contained" disabled={isSubmitting || !name.trim() || !isHttpEndpoint(endpointUrl.trim()) || credentialNeedsHeader} loading={isSubmitting}>
             {isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Connect'}
           </Button>
         </DialogActions>

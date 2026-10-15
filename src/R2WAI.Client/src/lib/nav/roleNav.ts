@@ -268,6 +268,24 @@ function matchesRoute(pattern: string, pathname: string): boolean {
   )
 }
 
+/**
+ * Client-side route visibility follows the same registry as navigation. Unknown paths remain
+ * reachable so the application can render its normal not-found page. This is a UX guard only;
+ * API authorization remains the security boundary.
+ */
+export function canAccessPath(pathname: string, persona: RolePersona): boolean {
+  const candidates = NAVIGATION.filter((entry) => {
+    if (entry.path === '/') return false
+    return matchesRoute(entry.path, pathname) || pathname.startsWith(`${entry.path}/`)
+  })
+  if (candidates.length === 0) return true
+
+  const longestPath = Math.max(...candidates.map((entry) => entry.path.length))
+  return candidates
+    .filter((entry) => entry.path.length === longestPath)
+    .some((entry) => isVisibleTo(entry, persona) || Boolean(entry.bottomNav?.[persona]))
+}
+
 function routeEntry(pathname: string, persona: RolePersona): NavigationEntry | undefined {
   return NAVIGATION
     .filter((entry) => entry.routeLabel && isVisibleTo(entry, persona) && matchesRoute(entry.path, pathname))

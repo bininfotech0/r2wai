@@ -29,7 +29,7 @@ export function AssignRolesDialog({ open, onClose, onSubmit, user, roles, isSubm
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth aria-label={user?.fullName ? `Roles for ${user.fullName}` : 'Roles'}>
       <DialogTitle>Roles for {user?.fullName}</DialogTitle>
       <DialogContent>
         <Stack spacing={0.5} sx={{ mt: 1 }}>
@@ -46,7 +46,7 @@ export function AssignRolesDialog({ open, onClose, onSubmit, user, roles, isSubm
         <Button onClick={onClose} disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button variant="contained" disabled={isSubmitting} onClick={() => void onSubmit([...selected])}>
+        <Button variant="contained" disabled={isSubmitting} onClick={() => void onSubmit([...selected])} loading={isSubmitting}>
           {isSubmitting ? 'Saving…' : 'Save'}
         </Button>
       </DialogActions>

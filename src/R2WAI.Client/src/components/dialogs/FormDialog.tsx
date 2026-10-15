@@ -30,7 +30,7 @@ export function FormDialog({
   maxWidth = 'sm',
 }: FormDialogProps) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth={maxWidth} fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth={maxWidth} fullWidth aria-label={title}>
       <DialogTitle>{title}</DialogTitle>
       <Box component="form" onSubmit={onSubmit} noValidate>
         <DialogContent>
@@ -40,8 +40,8 @@ export function FormDialog({
           <Button onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? 'Saving…' : submitLabel}
+          <Button type="submit" variant="contained" loading={isSubmitting}>
+            {submitLabel}
           </Button>
         </DialogActions>
       </Box>

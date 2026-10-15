@@ -2,10 +2,12 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { connectNotificationHub, type HubNotification } from '../signalr/notificationHub'
 import { useAuth } from '../auth/useAuth'
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from './api'
+import { useSnackbar } from './useSnackbar'
 
 export interface FeedNotification extends HubNotification {
   id: string
   read: boolean
+  link: string | null
 }
 
 interface NotificationFeedContextValue {
@@ -34,6 +36,7 @@ const MAX_NOTIFICATIONS = 50
  */
 export function NotificationFeedProvider({ children }: { children: ReactNode }) {
   const { status } = useAuth()
+  const { notify } = useSnackbar()
   const [notifications, setNotifications] = useState<FeedNotification[]>([])
   const [historyState, setHistoryState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [historyAttempt, setHistoryAttempt] = useState(0)
@@ -60,6 +63,7 @@ export function NotificationFeedProvider({ children }: { children: ReactNode }) 
             type: item.type,
             timestamp: new Date(item.createdAt).getTime(),
             read: item.isRead,
+            link: item.link,
           })),
         )
         setHistoryState('ready')
@@ -80,7 +84,7 @@ export function NotificationFeedProvider({ children }: { children: ReactNode }) 
         const id = n.id ?? `${n.timestamp}-${Math.random().toString(36).slice(2, 8)}`
         if (seenIds.current.has(id)) return
         seenIds.current.add(id)
-        setNotifications((prev) => [{ ...n, id, read: false }, ...prev].slice(0, MAX_NOTIFICATIONS))
+        setNotifications((prev) => [{ ...n, id, read: false, link: null }, ...prev].slice(0, MAX_NOTIFICATIONS))
       },
     })
     connectionRef.current = connection
@@ -102,14 +106,30 @@ export function NotificationFeedProvider({ children }: { children: ReactNode }) 
     setHistoryAttempt((attempt) => attempt + 1)
   }
 
-  function markAllRead() {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-    void markAllNotificationsRead()
+  async function markAllRead() {
+    const unreadIds = new Set(notifications.filter((n) => !n.read).map((n) => n.id))
+    if (unreadIds.size === 0) return
+
+    setNotifications((prev) => prev.map((n) => (unreadIds.has(n.id) ? { ...n, read: true } : n)))
+    try {
+      await markAllNotificationsRead()
+    } catch {
+      setNotifications((prev) => prev.map((n) => (unreadIds.has(n.id) ? { ...n, read: false } : n)))
+      notify('Could not mark notifications as read. Try again.', 'error')
+    }
   }
 
-  function markRead(id: string) {
+  async function markRead(id: string) {
+    const notification = notifications.find((n) => n.id === id)
+    if (!notification || notification.read) return
+
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
-    void markNotificationRead(id)
+    try {
+      await markNotificationRead(id)
+    } catch {
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: false } : n)))
+      notify('Could not update this notification. Try again.', 'error')
+    }
   }
 
   return (

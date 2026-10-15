@@ -11,6 +11,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import CircleIcon from '@mui/icons-material/Circle'
 import SmartToyOutlined from '@mui/icons-material/SmartToyOutlined'
@@ -46,9 +47,9 @@ const linkRowSx = {
   borderRadius: 1.5,
   color: 'inherit',
   textDecoration: 'none',
-  transition: 'background-color 140ms ease',
+  transition: (theme: Theme) => theme.transitions.create('background-color'),
   '&:hover': { bgcolor: 'action.hover' },
-  '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.light', outlineOffset: 1 },
+  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
 } as const
 
 /**
@@ -82,9 +83,10 @@ const TEMPLATES: { title: string; blurb: string; icon: SvgIconComponent; descrip
   },
 ]
 
-function useRecentWork() {
+function useRecentWork(enabled: boolean) {
   return useQuery({
     queryKey: ['dashboard', 'recent-work'],
+    enabled,
     queryFn: async (): Promise<RecentWorkItem[]> => {
       const [assistants, workflows] = await Promise.all([
         fetchJson<PagedResult<AssistantSummary>>('/assistants?page=1&pageSize=5'),
@@ -111,9 +113,10 @@ function useRecentWork() {
   })
 }
 
-function usePendingApprovalsCount() {
+function usePendingApprovalsCount(enabled: boolean) {
   return useQuery({
     queryKey: ['approvals', 'pending-count'],
+    enabled,
     queryFn: () => fetchJson<PagedResult<unknown>>('/approvals/pending?page=1&pageSize=1'),
   })
 }
@@ -132,8 +135,8 @@ export function HomePage() {
   const { user } = useAuth()
   const persona = getPersona(user)
   const isAdmin = persona === 'Admin' || persona === 'SuperAdmin'
-  const recentWork = useRecentWork()
-  const pendingApprovals = usePendingApprovalsCount()
+  const recentWork = useRecentWork(isAdmin)
+  const pendingApprovals = usePendingApprovalsCount(isAdmin)
   const [prompt, setPrompt] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   // A template or the typed prompt; whichever opened the dialog seeds its description.
@@ -144,15 +147,15 @@ export function HomePage() {
     setPickerOpen(false)
     if (kind === 'assistant') setAssistantSeed(prompt)
     else if (kind === 'automation') setCreateAutomationOpen(true)
-    else if (kind === 'knowledge') navigate('/knowledge')
-    else navigate('/connections')
+    else if (kind === 'knowledge') navigate('/knowledge', { state: { openCreate: true } })
+    else navigate('/connections', { state: { openCreate: true } })
   }
 
   const firstName = user?.displayName?.split(' ')[0]
 
   return (
     <Stack spacing={4}>
-      {/* Hero: one box, one question. */}
+      {/* Keep the landing action aligned with the user's role. */}
       {/* alignSelf, not mx:auto: Stack resets its children's margins. */}
       <Box sx={{ maxWidth: 880, width: '100%', alignSelf: 'center', pt: { xs: 1, md: 3 }, textAlign: 'center' }}>
         <Typography variant="body1" color="text.secondary">
@@ -163,10 +166,10 @@ export function HomePage() {
           component="h1"
           sx={{ fontWeight: 700, letterSpacing: '-0.02em', mt: 0.5, mb: 2.5, fontSize: { xs: '1.6rem', md: '2.1rem' } }}
         >
-          What would you like to build?
+          {isAdmin ? 'What would you like to build?' : 'What would you like help with?'}
         </Typography>
 
-        <Paper
+        {isAdmin ? <Paper
           component="form"
           variant="outlined"
           onSubmit={(e) => {
@@ -177,7 +180,7 @@ export function HomePage() {
             p: 1.5,
             textAlign: 'left',
             borderRadius: 3,
-            transition: (t) => t.transitions.create(['border-color', 'box-shadow'], { duration: 140, easing: 'ease' }),
+            transition: (t) => t.transitions.create(['border-color', 'box-shadow']),
             '&:focus-within': {
               borderColor: 'primary.main',
               boxShadow: (t) => `0 0 0 3px color-mix(in srgb, ${t.palette.primary.main} 14%, transparent)`,
@@ -209,18 +212,27 @@ export function HomePage() {
               Create
             </Button>
           </Stack>
-        </Paper>
+        </Paper> : (
+          <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto' }}>
+            Ask your AI assistant a question, or open your knowledge library to find trusted information.
+          </Typography>
+        )}
 
         <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', justifyContent: 'center', rowGap: 1 }}>
-          <Button variant="outlined" size="small" onClick={() => setAssistantSeed(prompt)}>+ Agent</Button>
-          <Button variant="outlined" size="small" onClick={() => setCreateAutomationOpen(true)}>+ Automation</Button>
-          <Button variant="outlined" size="small" onClick={() => navigate('/knowledge')}>+ Knowledge</Button>
-          <Button variant="outlined" size="small" onClick={() => navigate('/connections')}>+ Connection</Button>
+          {isAdmin ? <>
+            <Button variant="outlined" size="small" onClick={() => setAssistantSeed(prompt)}>+ Agent</Button>
+            <Button variant="outlined" size="small" onClick={() => setCreateAutomationOpen(true)}>+ Automation</Button>
+            <Button variant="outlined" size="small" onClick={() => navigate('/knowledge', { state: { openCreate: true } })}>+ Knowledge</Button>
+            <Button variant="outlined" size="small" onClick={() => navigate('/connections', { state: { openCreate: true } })}>+ Connection</Button>
+          </> : <>
+            <Button component={RouterLink} to="/playground" variant="contained">Open AI assistant</Button>
+            <Button component={RouterLink} to="/knowledge" variant="outlined">Knowledge library</Button>
+          </>}
         </Stack>
       </Box>
 
-      <UniversalCreate open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={handleCreateKind} />
-      {assistantSeed !== null && (
+      {isAdmin && <UniversalCreate open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={handleCreateKind} />}
+      {isAdmin && assistantSeed !== null && (
         <CreateAssistantDialog
           open
           initialDescription={assistantSeed}
@@ -232,7 +244,7 @@ export function HomePage() {
           }}
         />
       )}
-      {createAutomationOpen && (
+      {isAdmin && createAutomationOpen && (
         <CreateAutomationDialog
           open={createAutomationOpen}
           initialDescription={prompt}
@@ -245,10 +257,10 @@ export function HomePage() {
         />
       )}
 
-      <OnboardingChecklist />
+      {isAdmin && <OnboardingChecklist />}
 
       {/* Templates */}
-      <Box component="section" aria-labelledby="templates-heading">
+      {isAdmin && <Box component="section" aria-labelledby="templates-heading">
         <Typography id="templates-heading" variant="h6" component="h2" sx={{ fontWeight: 650, mb: 1.5 }}>
           Start from a template
         </Typography>
@@ -266,7 +278,7 @@ export function HomePage() {
                 border: '1px solid',
                 borderColor: 'divider',
                 bgcolor: 'background.paper',
-                transition: (t) => t.transitions.create(['border-color', 'transform', 'box-shadow'], { duration: 160, easing: 'ease' }),
+                transition: (t) => t.transitions.create(['border-color', 'transform', 'box-shadow']),
                 '&:hover': { borderColor: 'primary.main', transform: 'translateY(-2px)', boxShadow: 2 },
               }}
             >
@@ -278,9 +290,9 @@ export function HomePage() {
             </ButtonBase>
           ))}
         </Box>
-      </Box>
+      </Box>}
 
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 3fr) minmax(0, 2fr)' } }}>
+      {isAdmin ? <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 3fr) minmax(0, 2fr)' } }}>
         <SectionCard
           title="Recent"
           action={<Button size="small" component={RouterLink} to="/assistants">All agents</Button>}
@@ -367,7 +379,21 @@ export function HomePage() {
             </Stack>
           )}
         </Stack>
-      </Box>
+      </Box> : (
+        <SectionCard title="Your workspace">
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+            <Button component={RouterLink} to="/playground" startIcon={<SmartToyOutlined />} variant="contained">
+              Start a conversation
+            </Button>
+            <Button component={RouterLink} to="/knowledge" startIcon={<DescriptionOutlined />} variant="outlined">
+              Browse knowledge
+            </Button>
+            <Button component={RouterLink} to="/runs" startIcon={<InsightsOutlined />} variant="text">
+              View my activity
+            </Button>
+          </Stack>
+        </SectionCard>
+      )}
     </Stack>
   )
 }

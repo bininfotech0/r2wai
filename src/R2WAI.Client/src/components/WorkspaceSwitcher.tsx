@@ -84,7 +84,7 @@ export function WorkspaceSwitcher() {
           borderColor: 'divider',
           borderRadius: 1,
           color: 'text.primary',
-          transition: (t) => t.transitions.create(['border-color', 'background-color'], { duration: 140, easing: 'ease' }),
+          transition: (t) => t.transitions.create(['border-color', 'background-color']),
           '&:hover': { bgcolor: 'action.hover', borderColor: 'text.secondary' },
         }}
       >

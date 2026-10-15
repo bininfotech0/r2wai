@@ -38,7 +38,7 @@ export function CommandPalette({ open, onClose, isDark, onToggleTheme, onToggleC
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth slotProps={{ paper: { sx: { overflow: 'hidden' } } }}>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label="Command palette" slotProps={{ paper: { sx: { overflow: 'hidden' } } }}>
       <Command shouldFilter label="Command palette">
         <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Command.Input

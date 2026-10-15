@@ -55,7 +55,7 @@ export function ReportsTab() {
             variant="outlined"
             onClick={() => generateMutation.mutate(g.type)}
             disabled={generateMutation.isPending}
-          >
+           loading={generateMutation.isPending}>
             Generate {g.label}
           </Button>
         ))}

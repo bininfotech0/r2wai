@@ -5,7 +5,7 @@ import { Box, Button, Paper } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined'
 import type { GridColDef } from '@mui/x-data-grid'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { DataTable } from '../../../components/data/DataTable'
 import { NameCell } from '../../../components/data/NameCell'
 import { RowActionsMenu } from '../../../components/data/RowActionsMenu'
@@ -22,6 +22,7 @@ import type { KnowledgeBaseDto } from '../types'
 const QUERY_KEY = 'knowledgebases'
 
 export function KnowledgeLibraryPage() {
+  const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { notify } = useSnackbar()
@@ -31,6 +32,14 @@ export function KnowledgeLibraryPage() {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [deleting, setDeleting] = useState<KnowledgeBaseDto | null>(null)
+
+  useEffect(() => {
+    const state = location.state as { openCreate?: boolean } | null
+    if (!state?.openCreate) return
+
+    setCreateOpen(true)
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location.key, location.pathname, location.search, location.state, navigate])
 
   const query = useQuery({
     queryKey: [QUERY_KEY, page, pageSize, search],

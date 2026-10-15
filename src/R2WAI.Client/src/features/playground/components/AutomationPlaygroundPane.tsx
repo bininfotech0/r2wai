@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Alert, Button, Chip, CircularProgress, Stack, Typography } from '@mui/material'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import { describeApiError } from '../../../lib/api/fetchJson'
 import { executeWorkflow, getWorkflow } from '../../automations/api'
 import { getWorkflowInstance, getWorkflowInstanceSteps } from '../../runs/api'
 import type { WorkflowInstanceDto, WorkflowStepExecutionDto } from '../../runs/types'
@@ -53,6 +54,8 @@ export function AutomationPlaygroundPane({ workflowId, onInspectorData }: Automa
     queryFn: () => getWorkflow(workflowId),
     enabled: !!workflowId,
   })
+  const runError = executeMutation.isError ? describeApiError(executeMutation.error, 'Could not start this automation.') : null
+  const statusError = instanceQuery.isError ? describeApiError(instanceQuery.error, 'Could not load this run status.') : null
 
   useEffect(() => {
     onInspectorData?.({
@@ -80,13 +83,44 @@ export function AutomationPlaygroundPane({ workflowId, onInspectorData }: Automa
           startIcon={<PlayArrowIcon />}
           disabled={!workflowId || executeMutation.isPending}
           onClick={() => executeMutation.mutate()}
-        >
+         loading={executeMutation.isPending}>
           {executeMutation.isPending ? 'Starting…' : 'Run Test'}
         </Button>
       </Stack>
 
       <Stack sx={{ flexGrow: 1, p: 2, overflowY: 'auto' }} spacing={2}>
-        {executeMutation.isError && <Alert severity="error">Failed to start the run.</Alert>}
+        {runError && (
+          <Alert
+            severity="error"
+            action={<Button color="inherit" size="small" onClick={() => executeMutation.mutate()}>Retry</Button>}
+          >
+            {runError.title} {runError.description}
+          </Alert>
+        )}
+        {statusError && (
+          <Alert
+            severity="warning"
+            action={<Button color="inherit" size="small" onClick={() => void instanceQuery.refetch()}>Retry status</Button>}
+          >
+            {statusError.title} {statusError.description}
+          </Alert>
+        )}
+        {stepsQuery.isError && (
+          <Alert
+            severity="warning"
+            action={<Button color="inherit" size="small" onClick={() => void stepsQuery.refetch()}>Retry steps</Button>}
+          >
+            Run step details could not be loaded.
+          </Alert>
+        )}
+        {workflowQuery.isError && (
+          <Alert
+            severity="info"
+            action={<Button color="inherit" size="small" onClick={() => void workflowQuery.refetch()}>Retry</Button>}
+          >
+            Automation details could not be loaded. You can still start a test run.
+          </Alert>
+        )}
         {!instanceId ? (
           <Typography variant="body2" color="text.secondary">
             Run an automation to see its live step-by-step execution here. Status updates by polling — there's no
@@ -98,7 +132,9 @@ export function AutomationPlaygroundPane({ workflowId, onInspectorData }: Automa
             {instanceQuery.data && (
               <Chip label={instanceQuery.data.status} size="small" color={STATUS_COLOR[instanceQuery.data.status] ?? 'default'} variant="outlined" />
             )}
-            {instanceQuery.data && !TERMINAL_STATUSES.has(instanceQuery.data.status) && <CircularProgress size={16} />}
+            {(instanceQuery.isLoading || (instanceQuery.data && !TERMINAL_STATUSES.has(instanceQuery.data.status))) && (
+              <CircularProgress size={16} aria-label="Loading run status" />
+            )}
           </Stack>
         )}
       </Stack>

@@ -117,7 +117,7 @@ export function CreateEditIntegrationDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label={isEdit ? 'Edit Integration' : 'New Integration'}>
       <DialogTitle>{isEdit ? 'Edit Integration' : 'New Integration'}</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -229,7 +229,7 @@ export function CreateEditIntegrationDialog({
                   variant="outlined"
                   onClick={() => testMutation.mutate()}
                   disabled={testMutation.isPending}
-                >
+                 loading={testMutation.isPending}>
                   {testMutation.isPending ? 'Testing…' : 'Test connection'}
                 </Button>
                 {testMutation.data && (
@@ -254,7 +254,7 @@ export function CreateEditIntegrationDialog({
             type="submit"
             variant="contained"
             disabled={isSubmitting || !name || (authType === 'ApiKey' && !!apiKey && !apiKeyHeaderName)}
-          >
+           loading={isSubmitting}>
             {isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create'}
           </Button>
         </DialogActions>

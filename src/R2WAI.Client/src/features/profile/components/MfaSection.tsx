@@ -111,7 +111,7 @@ export function MfaSection() {
           color={enabled ? 'error' : 'primary'}
           disabled={busy}
           onClick={() => (enabled ? setPhase('disabling') : void handleStartEnroll())}
-        >
+         loading={busy}>
           {enabled ? 'Disable 2FA' : 'Enable 2FA'}
         </Button>
       )}
@@ -131,7 +131,7 @@ export function MfaSection() {
             sx={{ maxWidth: 160 }}
           />
           <Stack direction="row" spacing={1}>
-            <Button size="small" variant="contained" disabled={busy || code.length < 6} onClick={() => void handleConfirmEnable()}>
+            <Button size="small" variant="contained" disabled={busy || code.length < 6} onClick={() => void handleConfirmEnable()} loading={busy}>
               Confirm & enable
             </Button>
             <Button
@@ -161,7 +161,7 @@ export function MfaSection() {
             sx={{ maxWidth: 160 }}
           />
           <Stack direction="row" spacing={1}>
-            <Button size="small" color="error" variant="contained" disabled={busy || code.length < 6} onClick={() => void handleConfirmDisable()}>
+            <Button size="small" color="error" variant="contained" disabled={busy || code.length < 6} onClick={() => void handleConfirmDisable()} loading={busy}>
               Confirm & disable
             </Button>
             <Button

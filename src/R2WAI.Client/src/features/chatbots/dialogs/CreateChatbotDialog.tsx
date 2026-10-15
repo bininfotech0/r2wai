@@ -64,7 +64,7 @@ export function CreateChatbotDialog({ open, onClose, onSubmit, isSubmitting }: C
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth aria-label="New Chatbot">
       <DialogTitle>New Chatbot</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -115,7 +115,7 @@ export function CreateChatbotDialog({ open, onClose, onSubmit, isSubmitting }: C
           <Button onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting || !name}>
+          <Button type="submit" variant="contained" disabled={isSubmitting || !name} loading={isSubmitting}>
             {isSubmitting ? 'Creating…' : 'Create'}
           </Button>
         </DialogActions>

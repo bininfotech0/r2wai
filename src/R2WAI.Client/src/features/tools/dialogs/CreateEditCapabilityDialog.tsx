@@ -68,7 +68,7 @@ export function CreateEditCapabilityDialog({ open, onClose, onSubmit, tool, isSu
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label={isEdit ? 'Edit Tool' : 'New Tool'}>
       <DialogTitle>{isEdit ? 'Edit Tool' : 'New Tool'}</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -124,7 +124,7 @@ export function CreateEditCapabilityDialog({ open, onClose, onSubmit, tool, isSu
           <Button onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting || !name}>
+          <Button type="submit" variant="contained" disabled={isSubmitting || !name} loading={isSubmitting}>
             {isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create'}
           </Button>
         </DialogActions>

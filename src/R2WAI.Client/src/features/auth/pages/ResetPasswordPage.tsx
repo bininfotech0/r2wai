@@ -156,7 +156,7 @@ export function ResetPasswordPage() {
               }}
               {...register('confirmPassword')}
             />
-            <Button type="submit" variant="contained" size="large" fullWidth disabled={isSubmitting}>
+            <Button type="submit" variant="contained" size="large" fullWidth disabled={isSubmitting} loading={isSubmitting}>
               {isSubmitting ? 'Resetting…' : 'Reset password'}
             </Button>
           </Stack>

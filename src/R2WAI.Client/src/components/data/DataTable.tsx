@@ -19,6 +19,8 @@ interface DataTableProps<T extends { id: string }> {
   search?: string
   onSearchChange?: (search: string) => void
   searchPlaceholder?: string
+  /** Accessible name for the grid. Defaults to the search target or first column. */
+  ariaLabel?: string
   toolbarActions?: React.ReactNode
   emptyState?: React.ReactNode
   onRowClick?: (id: string) => void
@@ -47,6 +49,7 @@ export function DataTable<T extends { id: string }>({
   search,
   onSearchChange,
   searchPlaceholder = 'Search…',
+  ariaLabel,
   toolbarActions,
   emptyState,
   onRowClick,
@@ -55,6 +58,8 @@ export function DataTable<T extends { id: string }>({
   paginationMode = 'server',
 }: DataTableProps<T>) {
   const isEmpty = !loading && rows.length === 0
+  const searchTarget = searchPlaceholder.replace(/^Search\b/i, '').replace(/[.…]+$/g, '').trim()
+  const gridLabel = ariaLabel ?? `${searchTarget && searchTarget.toLowerCase() !== 'this list' ? searchTarget : columns[0]?.headerName ?? 'Data'} results`
   const emptyContent = emptyState ?? (
     <EmptyState
       title="No results"
@@ -104,6 +109,7 @@ export function DataTable<T extends { id: string }>({
         </Box>
       ) : (
       <DataGrid
+        aria-label={gridLabel}
         rows={rows as unknown as GridRowsProp}
         columns={columns as GridColDef[]}
         loading={loading}
@@ -124,7 +130,7 @@ export function DataTable<T extends { id: string }>({
           border: 'none',
           '& .MuiDataGrid-row': {
             cursor: onRowClick ? 'pointer' : 'default',
-            transition: 'background-color 120ms ease',
+            transition: (theme) => theme.transitions.create('background-color'),
             borderBottom: '1px solid',
             borderColor: 'divider',
           },

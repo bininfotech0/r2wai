@@ -6,7 +6,12 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import MicNoneRoundedIcon from '@mui/icons-material/MicNoneRounded'
 import SendRoundedIcon from '@mui/icons-material/SendRounded'
 import VolumeUpRoundedIcon from '@mui/icons-material/VolumeUpRounded'
-import { WIDGET_DEFAULT_COLOR, type WidgetAppearanceConfig } from '../types'
+import {
+  getWidgetContrastTextColor,
+  getWidgetTextAccentColor,
+  WIDGET_DEFAULT_COLOR,
+  type WidgetAppearanceConfig,
+} from '../types'
 
 interface WidgetPreviewProps {
   appearance: WidgetAppearanceConfig
@@ -37,6 +42,8 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
   const [draft, setDraft] = useState('')
 
   const color = appearance.color.trim() || WIDGET_DEFAULT_COLOR
+  const onAccentColor = getWidgetContrastTextColor(color)
+  const textAccentColor = getWidgetTextAccentColor(color)
   const title = appearance.title.trim() || 'Chat'
   const isRight = appearance.position === 'bottom-right'
 
@@ -99,7 +106,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
               px: 2.25,
               py: 1.75,
               bgcolor: color,
-              color: '#fff',
+              color: onAccentColor,
             }}
           >
             <Box sx={{ width: 38, height: 38, display: 'grid', placeItems: 'center', flex: '0 0 38px', borderRadius: '13px', bgcolor: 'rgba(255,255,255,.17)', border: '1px solid rgba(255,255,255,.24)' }}>
@@ -107,13 +114,13 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
             </Box>
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography noWrap sx={{ fontSize: 15, lineHeight: 1.25, fontWeight: 650 }}>{title}</Typography>
-              <Typography sx={{ mt: 0.4, color: 'rgba(255,255,255,.82)', fontSize: 12, lineHeight: 1 }}>AI assistant</Typography>
+              <Typography sx={{ mt: 0.4, color: onAccentColor, fontSize: 12, lineHeight: 1 }}>AI assistant</Typography>
             </Box>
             <IconButton
               onClick={() => setOpen(false)}
               aria-label="Close chat"
               size="small"
-              sx={{ width: 34, height: 34, flex: '0 0 34px', border: '1px solid rgba(255,255,255,.2)', borderRadius: '11px', color: '#fff', bgcolor: 'rgba(255,255,255,.12)', '&:hover': { bgcolor: 'rgba(255,255,255,.22)' } }}
+              sx={{ width: 34, height: 34, flex: '0 0 34px', border: '1px solid color-mix(in srgb, currentColor 24%, transparent)', borderRadius: '11px', color: onAccentColor, bgcolor: 'color-mix(in srgb, currentColor 12%, transparent)', '&:hover': { bgcolor: 'color-mix(in srgb, currentColor 22%, transparent)' } }}
             >
               <CloseRoundedIcon fontSize="small" />
             </IconButton>
@@ -130,7 +137,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
             }}
           >
             {messages.length === 0 && (
-              <Typography variant="caption" sx={{ color: '#6b7280' }}>
+              <Typography variant="caption" sx={{ color: '#566173' }}>
                 No welcome message set.
               </Typography>
             )}
@@ -152,7 +159,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
                   borderBottomLeftRadius: i % 2 === 0 ? '6px' : '17px',
                   borderBottomRightRadius: i % 2 === 0 ? '17px' : '6px',
                   bgcolor: i % 2 === 0 ? '#f4f5f8' : color,
-                  color: i % 2 === 0 ? '#1a1a1a' : '#fff',
+                  color: i % 2 === 0 ? '#1a1a1a' : onAccentColor,
                 }}
               >
                 {m}
@@ -160,7 +167,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
             ))}
             {suggestedQuestions.length > 0 && messages.length <= 1 && (
               <Stack spacing={0.875} sx={{ alignSelf: 'flex-start', maxWidth: '94%', mt: 0.5 }}>
-                <Typography sx={{ ml: 0.4, color: '#6b7280', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+                <Typography sx={{ ml: 0.4, color: '#566173', fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase' }}>
                   Suggested questions
                 </Typography>
                 {suggestedQuestions.map((q) => (
@@ -171,7 +178,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
                     onClick={() => send(q)}
                     sx={{
                       bgcolor: '#fff',
-                      color,
+                      color: textAccentColor,
                       border: '1px solid #e3e6ec',
                       borderRadius: '14px',
                       px: 1.6,
@@ -181,8 +188,8 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
                       cursor: 'pointer',
                       fontFamily: 'inherit',
                       boxShadow: '0 1px 2px rgba(15,23,42,.025)',
-                      transition: 'transform 130ms ease, border-color 130ms ease, background-color 130ms ease',
-                      '&:hover': { bgcolor: `color-mix(in srgb, ${color} 6%, white)`, color, borderColor: `color-mix(in srgb, ${color} 35%, #e3e6ec)`, transform: 'translateY(-1px)' },
+                      transition: (theme) => theme.transitions.create(['transform', 'border-color', 'background-color']),
+                      '&:hover': { bgcolor: '#f8f7fc', color: textAccentColor, borderColor: `color-mix(in srgb, ${color} 35%, #e3e6ec)`, transform: 'translateY(-1px)' },
                     }}
                   >
                     {q}
@@ -209,7 +216,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
                   send(draft)
                 }
               }}
-              sx={{ flex: 1, '& .MuiInputBase-root': { fontSize: 13.5, lineHeight: 1.5 }, '& .MuiInputBase-input': { py: '2px', color: '#202431' }, '& .MuiInputBase-input::placeholder': { color: '#6b7280', opacity: 1 } }}
+              sx={{ flex: 1, '& .MuiInputBase-root': { fontSize: 13.5, lineHeight: 1.5 }, '& .MuiInputBase-input': { py: '2px', color: '#202431' }, '& .MuiInputBase-input::placeholder': { color: '#566173', opacity: 1 } }}
             />
             <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
               <Stack direction="row" spacing={0.5}>
@@ -225,13 +232,13 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
                 onClick={() => send(draft)}
                 disabled={!draft.trim()}
                 aria-label="Send"
-                sx={{ minWidth: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, px: 1.5, color: '#fff', bgcolor: color, border: 0, borderRadius: '12px', fontFamily: 'inherit', fontSize: 12, fontWeight: 650, cursor: draft.trim() ? 'pointer' : 'default', opacity: draft.trim() ? 1 : 0.48, boxShadow: `0 3px 8px color-mix(in srgb, ${color} 25%, transparent)`, '&:hover': { bgcolor: color, filter: 'brightness(1.04)' } }}
+                sx={{ minWidth: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.75, px: 1.5, color: onAccentColor, bgcolor: color, border: 0, borderRadius: '12px', fontFamily: 'inherit', fontSize: 12, fontWeight: 650, cursor: draft.trim() ? 'pointer' : 'default', opacity: draft.trim() ? 1 : 0.48, boxShadow: `0 3px 8px color-mix(in srgb, ${color} 25%, transparent)`, '&:hover': { bgcolor: color, filter: 'brightness(1.04)' } }}
               >
                 Send <SendRoundedIcon sx={{ fontSize: 16 }} />
               </Box>
             </Stack>
             </Stack>
-            <Typography sx={{ pt: 1, color: '#6b7280', textAlign: 'center', fontSize: 12, lineHeight: 1.3 }}>
+            <Typography sx={{ pt: 1, color: '#566173', textAlign: 'center', fontSize: 12, lineHeight: 1.3 }}>
               Enter to send · Shift + Enter for a new line
             </Typography>
           </Box>
@@ -251,7 +258,7 @@ export function WidgetPreview({ appearance, welcomeMessage, suggestedQuestions, 
           height: 56,
           borderRadius: '50%',
           bgcolor: color,
-          color: '#fff',
+          color: onAccentColor,
           border: 'none',
           cursor: 'pointer',
           boxShadow: '0 4px 14px rgba(0,0,0,0.25)',

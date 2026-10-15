@@ -3,10 +3,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
+  Alert,
   Box,
   Button,
+  Fade,
   Grid,
   InputAdornment,
+  LinearProgress,
   MenuItem,
   Pagination,
   Stack,
@@ -14,11 +17,13 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Typography,
+  useMediaQuery,
 } from '@mui/material'
 import { TooltipIconButton as IconButton } from '../../../components/TooltipIconButton'
 import AddIcon from '@mui/icons-material/Add'
 import SearchIcon from '@mui/icons-material/Search'
 import ClearIcon from '@mui/icons-material/Close'
+import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import ViewModuleIcon from '@mui/icons-material/ViewModule'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import SmartToyOutlined from '@mui/icons-material/SmartToyOutlined'
@@ -77,9 +82,11 @@ export function AssistantsLibraryPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { notify } = useSnackbar()
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
 
   const [view, setView] = useState<'card' | 'list'>(readView)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [status, setStatus] = useState<AssistantStatusFilter>('All')
   const [sort, setSort] = useState<AssistantSortKey>('recent')
   const [page, setPage] = useState(1)
@@ -89,9 +96,15 @@ export function AssistantsLibraryPage() {
   const [publishTarget, setPublishTarget] = useState<AssistantDto | null>(null)
   const [unpublishTarget, setUnpublishTarget] = useState<AssistantDto | null>(null)
 
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
+    return () => window.clearTimeout(timeout)
+  }, [search])
+
   const query = useQuery({
-    queryKey: queryKeys.assistants.list(page, pageSize, search, status, sort),
-    queryFn: () => listAssistants(page, pageSize, search, status, sort),
+    queryKey: queryKeys.assistants.list(page, pageSize, debouncedSearch, status, sort),
+    queryFn: () => listAssistants(page, pageSize, debouncedSearch, status, sort),
+    placeholderData: (previousData) => previousData,
   })
 
   const publishMutation = useMutation({
@@ -144,6 +157,8 @@ export function AssistantsLibraryPage() {
 
   const totalCount = query.data?.totalCount ?? 0
   const pageCount = Math.ceil(totalCount / pageSize)
+  const resultStart = totalCount === 0 ? 0 : (page - 1) * pageSize + 1
+  const resultEnd = Math.min(page * pageSize, totalCount)
 
   useEffect(() => {
     if (pageCount > 0 && page > pageCount) setPage(pageCount)
@@ -205,6 +220,26 @@ export function AssistantsLibraryPage() {
   ]
 
   const isFiltered = status !== 'All' || search.trim() !== ''
+  const isSearchSettling = search.trim() !== debouncedSearch
+  const resultsSummary = (
+    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+      <Typography variant="body2" color="text.secondary" aria-live="polite">
+        Showing {resultStart}–{resultEnd} of {totalCount} {totalCount === 1 ? 'agent' : 'agents'}
+      </Typography>
+      {isFiltered && (
+        <Button size="small" startIcon={<RestartAltIcon />} onClick={clearFilters}>
+          Clear filters
+        </Button>
+      )}
+    </Stack>
+  )
+
+  function clearFilters() {
+    setSearch('')
+    setDebouncedSearch('')
+    setStatus('All')
+    setPage(1)
+  }
 
   return (
     <Box>
@@ -259,7 +294,7 @@ export function AssistantsLibraryPage() {
             setStatus(e.target.value as AssistantStatusFilter)
             setPage(1)
           }}
-          sx={{ width: 170 }}
+          sx={{ width: { xs: 'calc(50% - 8px)', sm: 170 } }}
         >
           <MenuItem value="All">All ({counts.All})</MenuItem>
           {ASSISTANT_STATUSES.map((s) => <MenuItem key={s} value={s}>{s} ({counts[s]})</MenuItem>)}
@@ -273,7 +308,7 @@ export function AssistantsLibraryPage() {
             setSort(e.target.value as AssistantSortKey)
             setPage(1)
           }}
-          sx={{ width: 190 }}
+          sx={{ width: { xs: 'calc(50% - 8px)', sm: 190 } }}
         >
           {ASSISTANT_SORTS.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
         </TextField>
@@ -294,74 +329,94 @@ export function AssistantsLibraryPage() {
           }}
           aria-label="Agent view"
         >
-          <ToggleButton value="list" aria-label="List view">
+          <ToggleButton value="list" aria-label="List view" title="List view">
             <ViewListIcon fontSize="small" />
           </ToggleButton>
-          <ToggleButton value="card" aria-label="Card view">
+          <ToggleButton value="card" aria-label="Card view" title="Card view">
             <ViewModuleIcon fontSize="small" />
           </ToggleButton>
         </ToggleButtonGroup>
       </Stack>
 
-      {query.isError ? (
+      {query.isError && query.data && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 1.5 }}
+          action={<Button color="inherit" size="small" onClick={() => void query.refetch()}>Retry</Button>}
+        >
+          Refresh failed. Showing the last loaded agent results.
+        </Alert>
+      )}
+
+      {(query.isFetching || isSearchSettling) && query.data && (
+        <LinearProgress aria-label="Refreshing agents" sx={{ mb: 1.5, borderRadius: 999 }} />
+      )}
+
+      {query.isError && !query.data ? (
         <ErrorState
           {...describeApiError(query.error, 'Could not load your agents.')}
           onRetry={() => void query.refetch()}
         />
       ) : view === 'list' ? (
-        <DataTable
-          rows={visible}
-          columns={columns}
-          loading={query.isLoading}
-          error={query.error}
-          onRetry={() => void query.refetch()}
-          rowCount={query.data?.totalCount ?? 0}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={(nextPageSize) => {
-            setListPageSize(nextPageSize)
-            setPage(1)
-          }}
-          onRowClick={(id) => navigate(`/assistants/${id}`)}
-          emptyState={
-            <EmptyState
-              icon={SmartToyOutlined}
-              title={isFiltered ? 'No agents match these filters' : 'No agents yet'}
-              description={isFiltered ? 'Try clearing the search or status filter.' : 'Create your first agent to get started.'}
-              actionLabel={isFiltered ? undefined : 'New agent'}
-              onAction={isFiltered ? undefined : () => setCreateOpen(true)}
-            />
-          }
-        />
+        <>
+          {query.data && resultsSummary}
+          <DataTable
+            rows={visible}
+            columns={columns}
+            loading={query.isFetching && !query.data}
+            error={query.data ? undefined : query.error}
+            onRetry={() => void query.refetch()}
+            rowCount={query.data?.totalCount ?? 0}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(nextPageSize) => {
+              setListPageSize(nextPageSize)
+              setPage(1)
+            }}
+            onRowClick={(id) => navigate(`/assistants/${id}`)}
+            emptyState={
+              <EmptyState
+                icon={SmartToyOutlined}
+                title={isFiltered ? 'No agents match these filters' : 'No agents yet'}
+                description={isFiltered ? 'Try a different search or status, or clear your filters.' : 'Create your first agent to get started.'}
+                actionLabel={isFiltered ? 'Clear filters' : 'New agent'}
+                onAction={isFiltered ? clearFilters : () => setCreateOpen(true)}
+              />
+            }
+          />
+        </>
       ) : query.isLoading ? (
         <LoadingSkeleton count={6} />
       ) : visible.length === 0 ? (
         <EmptyState
           icon={SmartToyOutlined}
           title={isFiltered ? 'No agents match these filters' : 'No agents yet'}
-          description={isFiltered ? 'Try clearing the search or status filter.' : 'Create your first agent to get started.'}
-          actionLabel={isFiltered ? undefined : 'New agent'}
-          onAction={isFiltered ? undefined : () => setCreateOpen(true)}
+          description={isFiltered ? 'Try a different search or status, or clear your filters.' : 'Create your first agent to get started.'}
+          actionLabel={isFiltered ? 'Clear filters' : 'New agent'}
+          onAction={isFiltered ? clearFilters : () => setCreateOpen(true)}
         />
       ) : (
         <>
+          {resultsSummary}
           <Grid container spacing={2}>
             {visible.map((assistant) => (
-              <Grid key={assistant.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                <AgentCard
-                  name={assistant.name}
-                  description={assistant.description}
-                  status={assistant.publishStatus}
-                  type={assistant.type}
-                  avatarUrl={assistant.avatarUrl}
-                  usageCount={assistant.usageCount}
-                  publishedVersion={assistant.publishedVersion}
-                  hasKnowledge={!!assistant.knowledgeBaseId}
-                  actions={actionsFor(assistant)}
-                  onOpen={() => navigate(`/assistants/${assistant.id}`)}
-                />
-              </Grid>
+              <Fade key={assistant.id} in timeout={reduceMotion ? 0 : 180}>
+                <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                  <AgentCard
+                    name={assistant.name}
+                    description={assistant.description}
+                    status={assistant.publishStatus}
+                    type={assistant.type}
+                    avatarUrl={assistant.avatarUrl}
+                    usageCount={assistant.usageCount}
+                    publishedVersion={assistant.publishedVersion}
+                    hasKnowledge={!!assistant.knowledgeBaseId}
+                    actions={actionsFor(assistant)}
+                    onOpen={() => navigate(`/assistants/${assistant.id}`)}
+                  />
+                </Grid>
+              </Fade>
             ))}
           </Grid>
           {pageCount > 1 && (
@@ -371,7 +426,7 @@ export function AssistantsLibraryPage() {
               sx={{ alignItems: 'center', justifyContent: 'space-between', mt: 3 }}
             >
               <Typography variant="body2" color="text.secondary">
-                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalCount)} of {totalCount} agents
+                Showing {resultStart}–{resultEnd} of {totalCount} agents
               </Typography>
               <Pagination
                 count={pageCount}

@@ -219,13 +219,15 @@ function WorkspaceCard({ workspace, canManage, isCurrent, onOpen, onEdit, onDele
           </Box>
           {canManage && (
             <>
-              <IconButton
-                size="small"
-                aria-label={`Actions for ${workspace.name}`}
-                onClick={(event) => setMenuAnchor(event.currentTarget)}
-              >
-                <MoreVertIcon fontSize="small" />
-              </IconButton>
+              <Tooltip title={`Actions for ${workspace.name}`}>
+                <IconButton
+                  size="small"
+                  aria-label={`Actions for ${workspace.name}`}
+                  onClick={(event) => setMenuAnchor(event.currentTarget)}
+                >
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
               <Menu anchorEl={menuAnchor} open={menuAnchor !== null} onClose={() => setMenuAnchor(null)}>
                 <MenuItem
                   onClick={() => {

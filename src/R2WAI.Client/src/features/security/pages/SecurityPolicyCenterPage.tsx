@@ -163,7 +163,7 @@ export function SecurityPolicyCenterPage() {
                     : `${authStatusQuery.data?.mfaEnabledUsers ?? 0} of ${authStatusQuery.data?.totalUsers ?? 0} users have MFA enabled`}
               </Typography>
               <Tooltip title="MFA is per-user opt-in (Profile > Security) unless the Auth policy below sets requireMfa.">
-                <InfoOutlined fontSize="small" color="disabled" />
+                <InfoOutlined fontSize="small" sx={{ color: 'text.secondary' }} />
               </Tooltip>
             </Stack>
             <Chip
@@ -275,7 +275,7 @@ export function SecurityPolicyCenterPage() {
                   : `${sensitiveModelCount} AI model${sensitiveModelCount === 1 ? '' : 's'} and ${sensitiveKbCount} knowledge base${sensitiveKbCount === 1 ? '' : 's'} classified Confidential or Restricted.`}
             </Typography>
             <Tooltip title="DataClassification is enforced on both AI Models (external-provider boundary) and Knowledge Bases (RAG context boundary, gated by the Knowledge policy above).">
-              <InfoOutlined fontSize="small" color="disabled" />
+              <InfoOutlined fontSize="small" sx={{ color: 'text.secondary' }} />
             </Tooltip>
           </Stack>
         </AccordionDetails>

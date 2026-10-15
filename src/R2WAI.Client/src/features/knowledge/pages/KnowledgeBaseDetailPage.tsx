@@ -245,7 +245,7 @@ export function KnowledgeBaseDetailPage() {
             startIcon={<RefreshIcon />}
             onClick={() => reindexMutation.mutate()}
             disabled={reindexMutation.isPending}
-          >
+           loading={reindexMutation.isPending}>
             {reindexMutation.isPending ? 'Reindexing…' : 'Reindex'}
           </Button>
           <Button size="small" color="error" onClick={() => setDeleteKbOpen(true)}>
@@ -499,7 +499,7 @@ export function KnowledgeBaseDetailPage() {
         isDeleting={deleteDocMutation.isPending}
       />
 
-      <Dialog open={!!viewingDoc} onClose={() => setViewingDoc(null)} maxWidth="sm" fullWidth>
+      <Dialog open={!!viewingDoc} onClose={() => setViewingDoc(null)} maxWidth="sm" fullWidth aria-label={viewingDoc?.name ?? 'Document preview'}>
         <DialogTitle>{viewingDoc?.name}</DialogTitle>
         <DialogContent>
           {contentQuery.isLoading ? (

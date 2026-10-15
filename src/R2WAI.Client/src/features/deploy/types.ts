@@ -38,6 +38,65 @@ export function isValidWidgetColor(value: string): boolean {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())
 }
 
+type Rgb = readonly [number, number, number]
+
+const WHITE_RGB: Rgb = [255, 255, 255]
+const INK_RGB: Rgb = [31, 41, 55]
+const MIN_TEXT_CONTRAST = 4.5
+
+function parseWidgetRgb(value: string): Rgb | null {
+  if (!isValidWidgetColor(value)) return null
+  const digits = value.trim().slice(1)
+  const hex = digits.length === 3 ? [...digits].map((digit) => `${digit}${digit}`).join('') : digits
+  return [
+    Number.parseInt(hex.slice(0, 2), 16),
+    Number.parseInt(hex.slice(2, 4), 16),
+    Number.parseInt(hex.slice(4, 6), 16),
+  ]
+}
+
+function relativeLuminance([red, green, blue]: Rgb): number {
+  const linear = (channel: number) => {
+    const value = channel / 255
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+}
+
+function contrastRatio(first: Rgb, second: Rgb): number {
+  const [lighter, darker] = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+function rgbToHex([red, green, blue]: Rgb): string {
+  return `#${[red, green, blue].map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
+}
+
+/** Text colour for labels placed directly on the configured widget accent. */
+export function getWidgetContrastTextColor(color: string): string {
+  const rgb = parseWidgetRgb(color) ?? parseWidgetRgb(WIDGET_DEFAULT_COLOR)!
+  const whiteContrast = contrastRatio(rgb, WHITE_RGB)
+  const inkContrast = contrastRatio(rgb, INK_RGB)
+  if (Math.max(whiteContrast, inkContrast) < MIN_TEXT_CONTRAST) return '#000000'
+  return whiteContrast >= inkContrast ? '#ffffff' : '#1f2937'
+}
+
+/** A readable accent shade for links and controls drawn on the widget's white surfaces. */
+export function getWidgetTextAccentColor(color: string): string {
+  const source = parseWidgetRgb(color) ?? parseWidgetRgb(WIDGET_DEFAULT_COLOR)!
+  if (contrastRatio(source, WHITE_RGB) >= MIN_TEXT_CONTRAST) return rgbToHex(source)
+
+  for (let amount = 0.01; amount <= 1; amount += 0.01) {
+    const darker: Rgb = [
+      Math.round(source[0] * (1 - amount)),
+      Math.round(source[1] * (1 - amount)),
+      Math.round(source[2] * (1 - amount)),
+    ]
+    if (contrastRatio(darker, WHITE_RGB) >= MIN_TEXT_CONTRAST) return rgbToHex(darker)
+  }
+  return '#000000'
+}
+
 /** Parses a persisted `Chatbot.WidgetSettings` value back into form state. Malformed or
  * absent JSON (never saved yet, or a hand-edited row) falls back to the bundle's own
  * defaults rather than failing the page load. */

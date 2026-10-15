@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -25,6 +26,8 @@ import { ErrorState } from '../../../components/ErrorState'
 import { LoadingSkeleton } from '../../../components/LoadingSkeleton'
 import { PageHeader } from '../../../components/PageHeader'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
+import { ApiRequestError } from '../../../lib/api/fetchJson'
+import { useAuth } from '../../../lib/auth/useAuth'
 import { RunInspectorDrawer } from '../../runs/components/RunInspectorDrawer'
 import type { RunItem } from '../../runs/types'
 import { approveRequest, listApprovalHistory, listPendingApprovals, rejectRequest } from '../api'
@@ -40,6 +43,10 @@ function escalationColor(level: number) {
 function requesterName(a: PendingApprovalDto) {
   const name = [a.requesterFirstName, a.requesterLastName].filter(Boolean).join(' ')
   return name || 'Unknown requester'
+}
+
+function isCurrentUserRequester(a: PendingApprovalDto, userId: string | undefined) {
+  return !!userId && a.requesterId.toLowerCase() === userId.toLowerCase()
 }
 
 // The Data field is an arbitrary string set by whoever configured the Approval step in the
@@ -118,6 +125,7 @@ function toRunItem(a: PendingApprovalDto): RunItem | null {
 export function ApprovalsPage() {
   const queryClient = useQueryClient()
   const { notify } = useSnackbar()
+  const { user } = useAuth()
   const [tab, setTab] = useState<'Pending' | 'Approved' | 'Rejected'>('Pending')
   const [page, setPage] = useState(1)
   const [acting, setActing] = useState<{ item: PendingApprovalDto; action: 'approve' | 'reject' } | null>(null)
@@ -136,16 +144,25 @@ export function ApprovalsPage() {
   })
 
   const actionMutation = useMutation({
-    mutationFn: () =>
-      acting!.action === 'approve' ? approveRequest(acting!.item.id, comments) : rejectRequest(acting!.item.id, comments),
-    onSuccess: () => {
-      notify(acting?.action === 'approve' ? 'Request approved' : 'Request rejected', 'success')
+    mutationFn: (decision: { item: PendingApprovalDto; action: 'approve' | 'reject'; comments: string }) =>
+      decision.action === 'approve'
+        ? approveRequest(decision.item.id, decision.comments)
+        : rejectRequest(decision.item.id, decision.comments),
+    onSuccess: (_, decision) => {
+      notify(decision.action === 'approve' ? 'Request approved' : 'Request rejected', 'success')
       setActing(null)
       setComments('')
       setPage(1)
       void queryClient.invalidateQueries({ queryKey: ['approvals'] })
     },
-    onError: () => notify('Failed to submit decision', 'error'),
+    onError: (error) => {
+      const message = error instanceof ApiRequestError && error.status === 403
+        ? 'You are not allowed to decide this request. It may need a different approver.'
+        : error instanceof ApiRequestError && error.status === 409
+          ? 'This request has already been decided. Refresh the list to see its current status.'
+          : 'Failed to submit decision. Please try again.'
+      notify(message, 'error')
+    },
   })
 
   const pending = pendingQuery.data?.items ?? []
@@ -197,23 +214,33 @@ export function ApprovalsPage() {
                     <Chip label={`App: ${a.applicationName ?? '—'}`} size="small" variant="outlined" />
                   </Stack>
                   <ApprovalDataPreview data={a.data} />
-                  <Stack direction="row" spacing={1}>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => setActing({ item: a, action: 'approve' })}
-                    >
-                      Approve
-                    </Button>
-                    <Button size="small" color="error" onClick={() => setActing({ item: a, action: 'reject' })}>
-                      Reject
-                    </Button>
-                    {hasWorkflowRun(a) && (
-                      <Button size="small" onClick={() => setViewingRun(toRunItem(a))}>
-                        View Details
+                  {isCurrentUserRequester(a, user?.id) ? (
+                    <Alert severity="info" sx={{ mt: 1 }}>
+                      You submitted this request. A different approver must review it.
+                    </Alert>
+                  ) : (
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => { setComments(''); setActing({ item: a, action: 'approve' }) }}
+                      >
+                        Approve
                       </Button>
-                    )}
-                  </Stack>
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={() => { setComments(''); setActing({ item: a, action: 'reject' }) }}
+                      >
+                        Reject
+                      </Button>
+                    </Stack>
+                  )}
+                  {hasWorkflowRun(a) && (
+                    <Button size="small" sx={{ mt: isCurrentUserRequester(a, user?.id) ? 0 : 1 }} onClick={() => setViewingRun(toRunItem(a))}>
+                      View Details
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             </Grid>
@@ -265,7 +292,7 @@ export function ApprovalsPage() {
         </Stack>
       )}
 
-      <Dialog open={!!acting} onClose={() => { if (!actionMutation.isPending) setActing(null) }} maxWidth="xs" fullWidth>
+      <Dialog open={!!acting} onClose={() => { if (!actionMutation.isPending) setActing(null) }} maxWidth="xs" fullWidth aria-label={`${acting?.action === 'approve' ? 'Approve' : 'Reject'} Request`}>
         <DialogTitle>{acting?.action === 'approve' ? 'Approve' : 'Reject'} Request</DialogTitle>
         <DialogContent>
           <DialogContentText>
@@ -296,10 +323,10 @@ export function ApprovalsPage() {
           <Button
             variant="contained"
             color={acting?.action === 'reject' ? 'error' : 'primary'}
-            onClick={() => actionMutation.mutate()}
-            disabled={actionMutation.isPending}
+            onClick={() => acting && actionMutation.mutate({ item: acting.item, action: acting.action, comments })}
+            loading={actionMutation.isPending}
           >
-            {actionMutation.isPending ? 'Submitting…' : acting?.action === 'approve' ? 'Approve' : 'Reject'}
+            {acting?.action === 'approve' ? 'Approve' : 'Reject'}
           </Button>
         </DialogActions>
       </Dialog>

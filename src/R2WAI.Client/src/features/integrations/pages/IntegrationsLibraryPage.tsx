@@ -507,7 +507,7 @@ export function IntegrationsLibraryPage() {
 
       <ImportOpenApiDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
-      <Dialog open={!!advancedFor} onClose={() => setAdvancedFor(null)} maxWidth="sm" fullWidth>
+      <Dialog open={!!advancedFor} onClose={() => setAdvancedFor(null)} maxWidth="sm" fullWidth aria-label={`Advanced settings for ${advancedFor?.name ?? 'integration'}`}>
         <DialogTitle>Advanced — {advancedFor?.name}</DialogTitle>
         <DialogContent>
           {advancedFor && (

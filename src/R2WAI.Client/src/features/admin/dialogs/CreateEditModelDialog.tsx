@@ -76,7 +76,7 @@ export function CreateEditModelDialog({ open, onClose, onSubmit, model, isSubmit
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label={isEdit ? 'Edit Model' : 'New Model'}>
       <DialogTitle>{isEdit ? 'Edit Model' : 'New Model'}</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -171,7 +171,7 @@ export function CreateEditModelDialog({ open, onClose, onSubmit, model, isSubmit
           <Button onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting || !name.trim() || !modelId.trim() || formInvalid}>
+          <Button type="submit" variant="contained" disabled={isSubmitting || !name.trim() || !modelId.trim() || formInvalid} loading={isSubmitting}>
             {isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create'}
           </Button>
         </DialogActions>

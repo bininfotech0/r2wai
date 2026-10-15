@@ -141,7 +141,7 @@ export function McpConnectionsPage() {
                         size="small"
                         onClick={() => testMutation.mutate(c.id)}
                         disabled={testMutation.isPending}
-                      >
+                       loading={testMutation.isPending}>
                         Test
                       </Button>
                     </span>

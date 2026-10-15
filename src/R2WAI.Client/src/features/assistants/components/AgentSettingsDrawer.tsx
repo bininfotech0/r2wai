@@ -5,7 +5,6 @@ import {
   Button,
   Divider,
   Drawer,
-  IconButton,
   MenuItem,
   Stack,
   Switch,
@@ -21,6 +20,7 @@ import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { updateAssistant } from '../api'
 import { buildFullUpdatePayload, type AssistantDto, type BehaviorSettings } from '../types'
 import { AssistantApiAccessSection } from './AssistantApiAccessSection'
+import { TooltipIconButton as IconButton } from '../../../components/TooltipIconButton'
 
 const RESPONSE_STYLES: NonNullable<BehaviorSettings['responseStyle']>[] = ['Professional', 'Friendly', 'Concise', 'Detailed']
 const ANSWER_LENGTHS: NonNullable<BehaviorSettings['answerLength']>[] = ['Brief', 'Balanced', 'Thorough']
@@ -219,7 +219,7 @@ function GenerativeAiSettings({ assistant, onSaved }: { assistant: AssistantDto;
       )}
 
       <Box>
-        <Button variant="contained" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+        <Button variant="contained" disabled={mutation.isPending} onClick={() => mutation.mutate()} loading={mutation.isPending}>
           {mutation.isPending ? 'Saving…' : 'Save settings'}
         </Button>
       </Box>

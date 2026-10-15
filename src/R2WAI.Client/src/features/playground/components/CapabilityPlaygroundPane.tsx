@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
-import { ApiRequestError } from '../../../lib/api/fetchJson'
+import { ApiRequestError, describeApiError } from '../../../lib/api/fetchJson'
 import { getCapability, testCapability } from '../../tools/api'
 import type { TestConnectionResult } from '../../tools/types'
 
@@ -25,8 +25,12 @@ interface CapabilityPlaygroundPaneProps {
  */
 export function CapabilityPlaygroundPane({ capabilityId, onInspectorData }: CapabilityPlaygroundPaneProps) {
   const [result, setResult] = useState<TestConnectionResult | null>(null)
+  const [testedAt, setTestedAt] = useState<string | null>(null)
 
-  useEffect(() => setResult(null), [capabilityId])
+  useEffect(() => {
+    setResult(null)
+    setTestedAt(null)
+  }, [capabilityId])
 
   const capabilityQuery = useQuery({
     queryKey: ['playground-capability', capabilityId],
@@ -36,20 +40,27 @@ export function CapabilityPlaygroundPane({ capabilityId, onInspectorData }: Capa
 
   const testMutation = useMutation({
     mutationFn: () => testCapability(capabilityId),
-    onSuccess: (r) => setResult(r),
-    onError: (err) => setResult({ success: false, message: err instanceof ApiRequestError ? err.message : 'Test request failed.' }),
+    onSuccess: (r) => {
+      setResult(r)
+      setTestedAt(new Date().toISOString())
+    },
+    onError: (err) => {
+      setResult({ success: false, message: err instanceof ApiRequestError ? err.message : 'Test request failed.' })
+      setTestedAt(new Date().toISOString())
+    },
   })
+  const loadError = capabilityQuery.isError ? describeApiError(capabilityQuery.error, 'Could not load tool details.') : null
 
   useEffect(() => {
     onInspectorData?.({
       result,
       isPending: testMutation.isPending,
-      testedAt: capabilityQuery.data?.lastTestedAt ?? null,
+      testedAt: testedAt ?? capabilityQuery.data?.lastTestedAt ?? null,
       riskLevel: capabilityQuery.data?.riskLevel ?? null,
       requiredRole: capabilityQuery.data?.requiredRole ?? null,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result, testMutation.isPending, capabilityQuery.data])
+  }, [result, testedAt, testMutation.isPending, capabilityQuery.data])
 
   return (
     <Stack sx={{ height: '100%' }}>
@@ -67,12 +78,25 @@ export function CapabilityPlaygroundPane({ capabilityId, onInspectorData }: Capa
           startIcon={<PlayArrowIcon />}
           disabled={!capabilityId || testMutation.isPending}
           onClick={() => testMutation.mutate()}
-        >
+         loading={testMutation.isPending}>
           {testMutation.isPending ? 'Testing…' : 'Run Test'}
         </Button>
       </Stack>
 
       <Stack sx={{ flexGrow: 1, p: 2, overflowY: 'auto' }} spacing={2}>
+        {loadError && (
+          <Alert
+            severity="warning"
+            action={<Button color="inherit" size="small" onClick={() => void capabilityQuery.refetch()}>Retry</Button>}
+          >
+            {loadError.title} {loadError.description}
+          </Alert>
+        )}
+        {capabilityQuery.isLoading && (
+          <Typography variant="body2" color="text.secondary" role="status">
+            Loading tool details…
+          </Typography>
+        )}
         <Typography variant="caption" color="text.secondary">
           Sends a real request to the configured endpoint through the same governance gate (role, risk, approval)
           an AI agent's own call goes through — not a bypass, not a mock.

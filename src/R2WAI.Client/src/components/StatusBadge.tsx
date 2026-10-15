@@ -19,18 +19,18 @@ const DEFAULT_STATUS_TONES: Record<string, StatusTone> = {
   Published: 'success',
   Healthy: 'success',
 
-  Pending: 'default',
+  Pending: 'info',
   Draft: 'default',
-  Started: 'default',
+  Started: 'info',
   Inactive: 'default',
   Disabled: 'default',
   Cancelled: 'default',
   Skipped: 'default',
 
-  Running: 'warning',
+  Running: 'info',
   Suspended: 'warning',
   Escalated: 'warning',
-  Creating: 'warning',
+  Creating: 'info',
   Overdue: 'warning',
 
   Failed: 'error',

@@ -9,14 +9,72 @@ export interface WidgetConfig {
   position?: 'bottom-right' | 'bottom-left'
 }
 
+type Rgb = readonly [number, number, number]
+
+const DEFAULT_WIDGET_COLOR = '#6d28d9'
+const WHITE_RGB: Rgb = [255, 255, 255]
+const INK_RGB: Rgb = [31, 41, 55]
+
+function parseHexRgb(value: string): Rgb | null {
+  if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())) return null
+  const digits = value.trim().slice(1)
+  const hex = digits.length === 3 ? [...digits].map((digit) => `${digit}${digit}`).join('') : digits
+  return [
+    Number.parseInt(hex.slice(0, 2), 16),
+    Number.parseInt(hex.slice(2, 4), 16),
+    Number.parseInt(hex.slice(4, 6), 16),
+  ]
+}
+
+function relativeLuminance([red, green, blue]: Rgb): number {
+  const linear = (channel: number) => {
+    const value = channel / 255
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+}
+
+function contrastRatio(first: Rgb, second: Rgb): number {
+  const [lighter, darker] = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+function rgbToHex([red, green, blue]: Rgb): string {
+  return `#${[red, green, blue].map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
+}
+
+function getWidgetColors(color: string): { accent: string; onAccent: string; textAccent: string } {
+  const rgb = parseHexRgb(color) ?? parseHexRgb(DEFAULT_WIDGET_COLOR)!
+  const accent = rgbToHex(rgb)
+  const whiteContrast = contrastRatio(rgb, WHITE_RGB)
+  const inkContrast = contrastRatio(rgb, INK_RGB)
+  const onAccent = Math.max(whiteContrast, inkContrast) < 4.5
+    ? '#000000'
+    : whiteContrast >= inkContrast ? '#ffffff' : '#1f2937'
+
+  if (whiteContrast >= 4.5) return { accent, onAccent, textAccent: accent }
+  for (let amount = 0.01; amount <= 1; amount += 0.01) {
+    const darker: Rgb = [
+      Math.round(rgb[0] * (1 - amount)),
+      Math.round(rgb[1] * (1 - amount)),
+      Math.round(rgb[2] * (1 - amount)),
+    ]
+    if (contrastRatio(darker, WHITE_RGB) >= 4.5) {
+      return { accent, onAccent, textAccent: rgbToHex(darker) }
+    }
+  }
+  return { accent, onAccent, textAccent: '#000000' }
+}
+
 const STYLE = `
   :host { all: initial; }
   * { box-sizing: border-box; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   button, textarea { font: inherit; }
-  button:focus-visible, textarea:focus-visible { outline: 3px solid color-mix(in srgb, var(--r2wai-color, #6d28d9) 30%, transparent); outline-offset: 2px; }
+  button:focus-visible, textarea:focus-visible { outline: 3px solid var(--r2wai-text-accent, #6d28d9); outline-offset: 2px; }
+  .launcher:focus-visible, .header button:focus-visible, .sendBtn:focus-visible { outline-color: var(--r2wai-on-color, #fff); }
   .launcher {
     position: fixed; bottom: 24px; width: 56px; height: 56px; border-radius: 50%;
-    background: var(--r2wai-color, #6d28d9); color: #fff; border: none; cursor: pointer;
+    background: var(--r2wai-color, #6d28d9); color: var(--r2wai-on-color, #fff); border: none; cursor: pointer;
     box-shadow: 0 8px 24px color-mix(in srgb, var(--r2wai-color, #6d28d9) 35%, transparent), 0 2px 6px rgba(15,23,42,.16);
     display: grid; place-items: center; z-index: 2147483000;
     transition: transform 160ms ease, box-shadow 160ms ease;
@@ -34,7 +92,7 @@ const STYLE = `
   .panel.right { right: 24px; } .panel.left { left: 24px; }
   .panel.hidden, .launcher.hidden { display: none; }
   .header {
-    position: relative; background: var(--r2wai-color, #6d28d9); color: #fff; padding: 18px 18px 17px;
+    position: relative; background: var(--r2wai-color, #6d28d9); color: var(--r2wai-on-color, #fff); padding: 18px 18px 17px;
     display: flex; align-items: center; gap: 12px; font-size: 14px; flex: 0 0 auto;
   }
   .brandMark {
@@ -44,12 +102,13 @@ const STYLE = `
   .brandMark svg { width: 20px; height: 20px; }
   .headerCopy { min-width: 0; flex: 1; }
   .headerTitle { display: block; font-size: 15px; font-weight: 650; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .headerSubtitle { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: rgba(255,255,255,.82); font-size: 12px; line-height: 1; }
+  .headerSubtitle { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--r2wai-on-color, #fff); font-size: 12px; line-height: 1; }
   .header button {
     display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; margin-left: auto;
-    border: 1px solid rgba(255,255,255,.2); border-radius: 11px; color: #fff; background: rgba(255,255,255,.12); cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--r2wai-on-color, #fff) 24%, transparent); border-radius: 11px;
+    color: var(--r2wai-on-color, #fff); background: color-mix(in srgb, var(--r2wai-on-color, #fff) 12%, transparent); cursor: pointer;
   }
-  .header button:hover { background: rgba(255,255,255,.22); }
+  .header button:hover { background: color-mix(in srgb, var(--r2wai-on-color, #fff) 22%, transparent); }
   .header button svg { width: 17px; height: 17px; }
   .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 11px; scroll-behavior: smooth; }
   .bubble {
@@ -57,10 +116,10 @@ const STYLE = `
     font-size: 13.5px; line-height: 1.52; white-space: pre-wrap; overflow-wrap: anywhere;
     animation: r2wai-message-in 160ms ease both;
   }
-  .bubble.user { align-self: flex-end; color: #fff; background: var(--r2wai-color, #6d28d9); border-bottom-right-radius: 6px; }
+  .bubble.user { align-self: flex-end; color: var(--r2wai-on-color, #fff); background: var(--r2wai-color, #6d28d9); border-bottom-right-radius: 6px; }
   .bubble.bot { align-self: flex-start; color: #202431; background: #f4f5f8; border-color: #eceef2; border-bottom-left-radius: 6px; }
   .bubble.error { align-self: flex-start; color: #991b1b; background: #fff4f2; border-color: #fee2e2; }
-  .cite { font-size: .72em; color: var(--r2wai-color, #6d28d9); cursor: help; }
+  .cite { font-size: .72em; color: var(--r2wai-text-accent, #6d28d9); cursor: help; }
   .sources { margin: 8px 0 0; padding: 7px 0 0 18px; border-top: 1px solid #e3e6ec; font-size: 12px; color: #5b6170; white-space: normal; }
   .inputRow { flex: 0 0 auto; padding: 12px 14px 10px; border-top: 1px solid #eef0f4; background: #fff; }
   .composer {
@@ -82,12 +141,12 @@ const STYLE = `
     display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0;
     color: #667085; background: transparent; border: 0; border-radius: 11px;
   }
-  .toolBtn:hover:not(:disabled) { color: var(--r2wai-color, #6d28d9); background: color-mix(in srgb, var(--r2wai-color, #6d28d9) 8%, white); }
+  .toolBtn:hover:not(:disabled) { color: var(--r2wai-text-accent, #6d28d9); background: color-mix(in srgb, var(--r2wai-color, #6d28d9) 8%, white); }
   .toolBtn svg { width: 18px; height: 18px; }
   .toolBtn.hidden { display: none; }
   .sendBtn {
     display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 38px; height: 38px; padding: 0 13px;
-    color: #fff; background: var(--r2wai-color, #6d28d9); border: 0; border-radius: 12px; font-size: 12px; font-weight: 650;
+    color: var(--r2wai-on-color, #fff); background: var(--r2wai-color, #6d28d9); border: 0; border-radius: 12px; font-size: 12px; font-weight: 650;
     box-shadow: 0 3px 8px color-mix(in srgb, var(--r2wai-color, #6d28d9) 25%, transparent);
   }
   .sendBtn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.04); }
@@ -95,7 +154,7 @@ const STYLE = `
   .composerHint { padding: 8px 3px 0; color: #6b7280; text-align: center; font-size: 12px; line-height: 1.3; }
   .fileInput { display: none !important; }
   .micBtn.listening { color: #dc2626; background: #fff1f2; animation: r2wai-pulse 1.2s ease-in-out infinite; }
-  .speakerBtn.enabled { color: var(--r2wai-color, #6d28d9); background: color-mix(in srgb, var(--r2wai-color, #6d28d9) 9%, white); }
+  .speakerBtn.enabled { color: var(--r2wai-text-accent, #6d28d9); background: color-mix(in srgb, var(--r2wai-color, #6d28d9) 9%, white); }
   @keyframes r2wai-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.12); } 50% { box-shadow: 0 0 0 5px rgba(220,38,38,.08); } }
   @keyframes r2wai-panel-in { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
   @keyframes r2wai-message-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
@@ -106,16 +165,16 @@ const STYLE = `
     border-radius: 14px; padding: 9px 13px; font-size: 12px; text-align: left; cursor: pointer;
     box-shadow: 0 1px 2px rgba(15,23,42,.025); transition: border-color 130ms ease, background-color 130ms ease, color 130ms ease, transform 130ms ease;
   }
-  .suggestion-chip:hover { background: color-mix(in srgb, var(--r2wai-color, #6d28d9) 6%, white); color: var(--r2wai-color, #6d28d9); border-color: color-mix(in srgb, var(--r2wai-color, #6d28d9) 35%, #e3e6ec); transform: translateY(-1px); }
+  .suggestion-chip:hover { background: #f8f7fc; color: var(--r2wai-text-accent, #6d28d9); border-color: color-mix(in srgb, var(--r2wai-color, #6d28d9) 35%, #e3e6ec); transform: translateY(-1px); }
   .suggestion-chip:disabled { opacity: 0.5; cursor: default; }
   .feedbackRow { display: flex; gap: 5px; align-self: flex-start; margin-top: -5px; }
   .feedbackRow button {
     background: #fff; border: 1px solid #e8eaf0; cursor: pointer; font-size: 12px; padding: 4px 7px;
     color: #7b8493; border-radius: 9px; line-height: 1;
   }
-  .feedbackRow button:hover { color: var(--r2wai-color, #6d28d9); background: #f8f7fc; border-color: #d9d5e7; }
+  .feedbackRow button:hover { color: var(--r2wai-text-accent, #6d28d9); background: #f8f7fc; border-color: #d9d5e7; }
   .feedbackRow button:disabled { cursor: default; }
-  .feedbackRow button.selected { color: var(--r2wai-color, #6d28d9); border-color: color-mix(in srgb, var(--r2wai-color, #6d28d9) 30%, white); background: color-mix(in srgb, var(--r2wai-color, #6d28d9) 7%, white); }
+  .feedbackRow button.selected { color: var(--r2wai-text-accent, #6d28d9); border-color: color-mix(in srgb, var(--r2wai-color, #6d28d9) 30%, white); background: color-mix(in srgb, var(--r2wai-color, #6d28d9) 7%, white); }
   .feedbackRow.hidden { display: none; }
   .feedbackThanks { font-size: 12px; color: #6b7280; align-self: flex-start; margin-top: -5px; }
   @media (max-width: 480px) {
@@ -185,9 +244,10 @@ function createWidget(config: WidgetConfig) {
   style.textContent = STYLE
   shadow.appendChild(style)
 
-  if (config.color) {
-    host.style.setProperty('--r2wai-color', config.color)
-  }
+  const widgetColors = getWidgetColors(config.color ?? DEFAULT_WIDGET_COLOR)
+  host.style.setProperty('--r2wai-color', widgetColors.accent)
+  host.style.setProperty('--r2wai-on-color', widgetColors.onAccent)
+  host.style.setProperty('--r2wai-text-accent', widgetColors.textAccent)
 
   const launcher = document.createElement('button')
   launcher.className = `launcher ${position}`

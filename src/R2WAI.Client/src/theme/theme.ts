@@ -22,6 +22,30 @@ const fontFamily = [
 
 const shape = { borderRadius: 8 }
 
+const motion = {
+  fast: '150ms',
+  standard: '160ms',
+  easing: 'cubic-bezier(0.2, 0, 0, 1)',
+} as const
+
+const transitions: ThemeOptions['transitions'] = {
+  duration: {
+    shortest: 150,
+    shorter: 150,
+    short: 150,
+    standard: 160,
+    complex: 180,
+    enteringScreen: 180,
+    leavingScreen: 160,
+  },
+  easing: {
+    easeInOut: motion.easing,
+    easeOut: motion.easing,
+    easeIn: 'cubic-bezier(0.4, 0, 1, 1)',
+    sharp: 'cubic-bezier(0.4, 0, 0.6, 1)',
+  },
+}
+
 /**
  * R2WAI brand palette, exact values, for marks and illustrations (the favicon uses them too).
  * For text, UI state and chart series use the theme palette instead: it maps purple→primary,
@@ -112,7 +136,7 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
       },
     },
     MuiButton: {
-      defaultProps: { disableElevation: true },
+      defaultProps: { disableElevation: true, loadingPosition: 'start' },
       styleOverrides: {
         root: {
           minHeight: 32,
@@ -120,9 +144,9 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
           paddingInline: 12,
           fontWeight: 600,
           ...touchRow,
-          transition: 'background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease',
+          transition: `background-color ${motion.standard} ${motion.easing}, border-color ${motion.standard} ${motion.easing}, box-shadow ${motion.standard} ${motion.easing}, transform ${motion.standard} ${motion.easing}`,
           '&:focus-visible': {
-            outline: `3px solid ${isDark ? 'rgba(167,124,226,.42)' : 'rgba(138,80,216,.3)'}`,
+            outline: `2px solid ${isDark ? '#A77CE2' : brand.purple}`,
             outlineOffset: 2,
           },
           '&:active:not(:disabled)': { transform: 'translateY(1px)' },
@@ -144,14 +168,17 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
       styleOverrides: {
         root: {
           borderRadius: 6,
-          transition: 'background-color 140ms ease, color 140ms ease, transform 140ms ease',
+          minWidth: 36,
+          minHeight: 36,
+          transition: `background-color ${motion.standard} ${motion.easing}, color ${motion.standard} ${motion.easing}, transform ${motion.fast} ${motion.easing}`,
           '&:focus-visible': {
-            outline: `3px solid ${isDark ? 'rgba(167,124,226,.42)' : 'rgba(138,80,216,.3)'}`,
+            outline: `2px solid ${isDark ? '#A77CE2' : brand.purple}`,
             outlineOffset: 1,
           },
           '&:active:not(:disabled)': { transform: 'scale(.96)' },
           ...touchTarget,
         },
+        sizeSmall: { minWidth: 32, minHeight: 32, padding: 6, ...touchTarget },
       },
     },
     MuiPaper: {
@@ -166,7 +193,7 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
         root: {
           borderRadius: 8,
           border: `1px solid ${borderColor}`,
-          transition: 'box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease',
+          transition: `box-shadow ${motion.standard} ${motion.easing}, border-color ${motion.standard} ${motion.easing}, transform ${motion.standard} ${motion.easing}`,
         },
       },
     },
@@ -208,7 +235,11 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
     },
     MuiTabs: {
       styleOverrides: {
-        indicator: { borderRadius: 3, height: 3 },
+        indicator: {
+          borderRadius: 3,
+          height: 3,
+          transition: `left ${motion.standard} ${motion.easing}, width ${motion.standard} ${motion.easing}`,
+        },
       },
     },
     MuiTab: {
@@ -218,7 +249,11 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
     },
     MuiChip: {
       styleOverrides: {
-        root: { borderRadius: 999, fontWeight: 600 },
+        root: {
+          borderRadius: 999,
+          fontWeight: 600,
+          transition: `background-color ${motion.standard} ${motion.easing}, border-color ${motion.standard} ${motion.easing}, color ${motion.standard} ${motion.easing}`,
+        },
         sizeSmall: { fontSize: '0.75rem' },
       },
     },
@@ -247,13 +282,13 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
       styleOverrides: {
         root: {
           borderRadius: 6,
-          transition: 'box-shadow 140ms ease',
+          transition: `box-shadow ${motion.standard} ${motion.easing}`,
           '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: isDark ? 'rgba(167,124,226,.52)' : 'rgba(138,80,216,.45)' },
           '&.Mui-focused': {
-            boxShadow: `0 0 0 3px ${isDark ? 'rgba(167,124,226,.12)' : 'rgba(138,80,216,.09)'}`,
+            boxShadow: `0 0 0 3px ${isDark ? '#A77CE2' : brand.purple}`,
           },
         },
-        notchedOutline: { borderColor, transition: 'border-color 140ms ease' },
+        notchedOutline: { borderColor, transition: `border-color ${motion.standard} ${motion.easing}` },
       },
     },
     MuiInputLabel: {
@@ -266,7 +301,7 @@ function buildComponents(isDark: boolean): ThemeOptions['components'] {
       styleOverrides: {
         root: {
           borderRadius: 6,
-          transition: 'background-color 120ms ease',
+          transition: `background-color ${motion.standard} ${motion.easing}`,
           ...touchRow,
         },
       },
@@ -338,6 +373,7 @@ const lightOptions: ThemeOptions = {
   },
   typography,
   shape,
+  transitions,
   shadows: buildShadows(false),
   components: buildComponents(false),
 }
@@ -350,13 +386,14 @@ const darkOptions: ThemeOptions = {
     info: { main: brand.cyan, light: '#5EBBE3', dark: '#1377A1' },
     success: { main: brand.lime, light: '#B8D277', dark: '#7A9730' },
     warning: { main: brand.orange, light: '#FDA17B', dark: '#C9612F' },
-    error: { main: '#EF4444' },
+    error: { main: '#F87171' },
     text: { primary: '#FFFFFF', secondary: '#ADADAD', disabled: '#757575' },
     background: { default: '#1F1F1F', paper: '#292929' },
     divider: '#3D3D3D',
   },
   typography,
   shape,
+  transitions,
   shadows: buildShadows(true),
   components: buildComponents(true),
 }

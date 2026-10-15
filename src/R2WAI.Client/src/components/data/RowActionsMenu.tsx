@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { IconButton, ListItemText, Menu, MenuItem } from '@mui/material'
+import { ListItemText, Menu, MenuItem } from '@mui/material'
+import { TooltipIconButton as IconButton } from '../TooltipIconButton'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 
 export interface RowAction {

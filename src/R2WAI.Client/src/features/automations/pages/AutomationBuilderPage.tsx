@@ -236,13 +236,13 @@ function BuilderCanvas() {
           {connectionState !== 'connected' && (
             <Chip size="small" label={`Live updates: ${connectionState}`} color="warning" variant="outlined" />
           )}
-          <Button onClick={() => testMutation.mutate()} disabled={testMutation.isPending || isDirty}>
+          <Button onClick={() => testMutation.mutate()} disabled={testMutation.isPending || isDirty} loading={testMutation.isPending}>
             {testMutation.isPending ? 'Starting…' : 'Test'}
           </Button>
-          <Button variant="outlined" disabled={!isDirty || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+          <Button variant="outlined" disabled={!isDirty || saveMutation.isPending} onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
             {saveMutation.isPending ? 'Saving…' : 'Save'}
           </Button>
-          <Button variant="contained" onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending || isDirty}>
+          <Button variant="contained" onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending || isDirty} loading={publishMutation.isPending}>
             Publish
           </Button>
         </Stack>

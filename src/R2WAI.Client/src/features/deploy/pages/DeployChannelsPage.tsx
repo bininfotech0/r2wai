@@ -191,7 +191,7 @@ function ChatbotChannelsCard({ chatbot }: { chatbot: ChatbotDto }) {
           return (
             <Grid key={channel} size={{ xs: 12, sm: 6, md: 3 }}>
               <ChannelTile
-                icon={<ForumIcon fontSize="small" color="disabled" />}
+                icon={<ForumIcon fontSize="small" sx={{ color: 'text.secondary' }} />}
                 title={channel}
                 description={CHANNEL_CAPABILITIES[channel].note}
                 status={state.label}

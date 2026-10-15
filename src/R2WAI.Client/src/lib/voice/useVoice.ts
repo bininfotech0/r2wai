@@ -33,11 +33,13 @@ export interface UseVoiceResult {
   sttSupported: boolean
   ttsSupported: boolean
   isListening: boolean
+  isSpeaking: boolean
   interimTranscript: string
   error: string | null
   startListening: (lang?: string) => void
   stopListening: () => void
   speak: (text: string, lang?: string) => void
+  stopSpeaking: () => void
 }
 
 /** Speech-to-text + text-to-speech via the browser's native Web Speech API. */
@@ -47,6 +49,7 @@ export function useVoice(onFinalTranscript: (transcript: string) => void): UseVo
   const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
 
   const [isListening, setIsListening] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
   const [interimTranscript, setInterimTranscript] = useState('')
   const [error, setError] = useState<string | null>(null)
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
@@ -59,6 +62,9 @@ export function useVoice(onFinalTranscript: (transcript: string) => void): UseVo
   useEffect(() => {
     return () => {
       recognitionRef.current?.stop()
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
     }
   }, [])
 
@@ -112,13 +118,30 @@ export function useVoice(onFinalTranscript: (transcript: string) => void): UseVo
 
   const speak = useCallback(
     (text: string, lang = 'en-US') => {
-      if (!ttsSupported) return
-      const utterance = new SpeechSynthesisUtterance(text)
+      const spokenText = text
+        .replace(/```[\s\S]*?```/g, 'Code block omitted.')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/^\s{0,3}#{1,6}\s?/gm, '')
+        .replace(/[*_~]/g, '')
+        .trim()
+      if (!ttsSupported || !spokenText) return
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(spokenText)
       utterance.lang = lang
+      utterance.onstart = () => setIsSpeaking(true)
+      utterance.onend = () => setIsSpeaking(false)
+      utterance.onerror = () => setIsSpeaking(false)
       window.speechSynthesis.speak(utterance)
     },
     [ttsSupported],
   )
 
-  return { sttSupported, ttsSupported, isListening, interimTranscript, error, startListening, stopListening, speak }
+  const stopSpeaking = useCallback(() => {
+    if (ttsSupported) window.speechSynthesis.cancel()
+    setIsSpeaking(false)
+  }, [ttsSupported])
+
+  return { sttSupported, ttsSupported, isListening, isSpeaking, interimTranscript, error, startListening, stopListening, speak, stopSpeaking }
 }

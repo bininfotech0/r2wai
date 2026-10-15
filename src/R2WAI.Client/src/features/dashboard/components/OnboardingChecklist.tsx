@@ -95,7 +95,7 @@ export function OnboardingChecklist() {
               {item.isComplete ? (
                 <CheckCircleIcon fontSize="small" sx={{ color: 'success.main' }} />
               ) : (
-                <RadioButtonUncheckedIcon fontSize="small" sx={{ color: 'text.disabled' }} />
+                <RadioButtonUncheckedIcon fontSize="small" sx={{ color: 'text.secondary' }} />
               )}
             </Box>
             <Box sx={{ minWidth: 0, flexGrow: 1 }}>

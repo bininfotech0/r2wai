@@ -68,7 +68,7 @@ export function CreateAssistantDialog({ open, onClose, onCreated, initialDescrip
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label="Create AI Assistant">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Create AI Assistant
         <IconButton size="small" onClick={onClose} aria-label="Close">
@@ -116,7 +116,7 @@ export function CreateAssistantDialog({ open, onClose, onCreated, initialDescrip
             </TextField>
             <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
               <Button onClick={() => setManualMode(false)}>Back</Button>
-              <Button variant="contained" disabled={!manualName.trim() || isCreating} onClick={() => void handleManualCreate()}>
+              <Button variant="contained" disabled={!manualName.trim() || isCreating} onClick={() => void handleManualCreate()} loading={isCreating}>
                 {isCreating ? 'Creating…' : 'Create'}
               </Button>
             </Stack>

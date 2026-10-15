@@ -1,14 +1,19 @@
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Chip, Paper, Stack, TextField, Typography } from '@mui/material'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { Box, Button, Chip, Paper, Stack, TextField, Typography } from '@mui/material'
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined'
 import { TooltipIconButton as IconButton } from '../../../components/TooltipIconButton'
 import SendIcon from '@mui/icons-material/Send'
+import StopIcon from '@mui/icons-material/Stop'
+import ReplayIcon from '@mui/icons-material/Replay'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineRounded'
 import MenuBookOutlined from '@mui/icons-material/MenuBookOutlined'
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer'
 import { ResponseCard } from '../../../components/ResponseCard'
 import { Timeline } from '../../../components/Timeline'
 import { VoiceOrb } from '../../../components/VoiceOrb'
+import { ChatTypingIndicator } from '../../../components/ChatTypingIndicator'
+import { ChatResponseActions } from '../../../components/ChatResponseActions'
 import { chatWithAssistant, streamAssistantChat } from '../../../lib/chat/streamAssistantChat'
 import { reduceToolCallSteps } from '../../../lib/chat/toolCallProgress'
 import type { Citation, ResponseCardData, ToolCallProgressEvent } from '../../../lib/chat/types'
@@ -16,6 +21,7 @@ import type { Citation, ResponseCardData, ToolCallProgressEvent } from '../../..
 interface PreviewMessage {
   isUser: boolean
   content: string
+  interrupted?: boolean
   citations?: Citation[]
   cards?: ResponseCardData[]
 }
@@ -53,23 +59,33 @@ export function LivePreviewPane({ assistantId, onToolCallEvents, title = 'Live p
   const [streaming, setStreaming] = useState(false)
   const [streamBuffer, setStreamBuffer] = useState('')
   const [toolCallEvents, setToolCallEvents] = useState<ToolCallProgressEvent[]>([])
+  const [retryMessage, setRetryMessage] = useState<string | null>(null)
   const conversationIdRef = useRef<string | undefined>(undefined)
+  const activeControllerRef = useRef<AbortController | null>(null)
+  const requestIdRef = useRef(0)
   const toolCallSteps = useMemo(() => reduceToolCallSteps(toolCallEvents), [toolCallEvents])
 
   useEffect(() => {
     onToolCallEvents?.(toolCallEvents)
   }, [toolCallEvents, onToolCallEvents])
 
-  async function handleSend() {
-    const userMsg = input.trim()
+  useEffect(() => () => {
+    requestIdRef.current += 1
+    activeControllerRef.current?.abort()
+  }, [])
+
+  async function sendMessage(userMsg: string) {
     if (!userMsg || streaming) return
 
     setMessages((prev) => [...prev, { isUser: true, content: userMsg }])
-    setInput('')
+    setRetryMessage(null)
     setStreaming(true)
     setStreamBuffer('')
     setToolCallEvents([])
 
+    const requestId = ++requestIdRef.current
+    const controller = new AbortController()
+    activeControllerRef.current = controller
     let bufferSnapshot = ''
     let citationsSnapshot: Citation[] = []
     let cardsSnapshot: ResponseCardData[] = []
@@ -90,28 +106,96 @@ export function LivePreviewPane({ assistantId, onToolCallEvents, title = 'Live p
           },
           onDone: resolve,
           onError: (message) => reject(new Error(message)),
-        }).catch(reject)
+        }, controller.signal).catch(reject)
       })
+      if (requestId !== requestIdRef.current) return
       setMessages((prev) => [...prev, { isUser: false, content: bufferSnapshot, citations: citationsSnapshot, cards: cardsSnapshot }])
-    } catch {
+    } catch (error) {
+      if (requestId !== requestIdRef.current) return
+      if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+        setMessages((prev) => [...prev, {
+          isUser: false,
+          content: bufferSnapshot || 'Response stopped.',
+          citations: citationsSnapshot,
+          cards: cardsSnapshot,
+          interrupted: true,
+        }])
+        setRetryMessage(userMsg)
+        return
+      }
       if (bufferSnapshot) {
         setMessages((prev) => [...prev, { isUser: false, content: bufferSnapshot, citations: citationsSnapshot, cards: cardsSnapshot }])
+        setRetryMessage(userMsg)
       } else {
         try {
-          const result = await chatWithAssistant(assistantId, userMsg, conversationIdRef.current)
+          const result = await chatWithAssistant(assistantId, userMsg, conversationIdRef.current, controller.signal)
+          if (requestId !== requestIdRef.current) return
           conversationIdRef.current = result.conversationId
           setMessages((prev) => [...prev, { isUser: false, content: result.reply, citations: result.citations }])
         } catch {
+          if (requestId !== requestIdRef.current) return
+          if (controller.signal.aborted) {
+            setMessages((prev) => [...prev, { isUser: false, content: 'Response stopped.', interrupted: true }])
+            setRetryMessage(userMsg)
+            return
+          }
           setMessages((prev) => [
             ...prev,
             { isUser: false, content: 'Sorry, something went wrong. Please try again.' },
           ])
+          setRetryMessage(userMsg)
         }
       }
     } finally {
-      setStreaming(false)
-      setStreamBuffer('')
-      setToolCallEvents([])
+      if (requestId === requestIdRef.current) {
+        activeControllerRef.current = null
+        setStreaming(false)
+        setStreamBuffer('')
+        setToolCallEvents([])
+      }
+    }
+  }
+
+  function handleSend() {
+    const userMsg = input.trim()
+    if (!userMsg || streaming) return
+    setInput('')
+    void sendMessage(userMsg)
+  }
+
+  function handleRetry() {
+    if (!retryMessage || streaming) return
+    const messageToRetry = retryMessage
+    setMessages((prev) => {
+      const next = [...prev]
+      if (next.at(-1)?.isUser === false) next.pop()
+      if (next.at(-1)?.isUser && next.at(-1)?.content === messageToRetry) next.pop()
+      return next
+    })
+    void sendMessage(messageToRetry)
+  }
+
+  function handleStop() {
+    activeControllerRef.current?.abort()
+  }
+
+  function handleClear() {
+    requestIdRef.current += 1
+    activeControllerRef.current?.abort()
+    activeControllerRef.current = null
+    conversationIdRef.current = undefined
+    setMessages([])
+    setInput('')
+    setRetryMessage(null)
+    setStreaming(false)
+    setStreamBuffer('')
+    setToolCallEvents([])
+  }
+
+  function handleComposerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Enter' && !event.shiftKey && !streaming) {
+      event.preventDefault()
+      handleSend()
     }
   }
 
@@ -129,7 +213,7 @@ export function LivePreviewPane({ assistantId, onToolCallEvents, title = 'Live p
           <Typography variant="subtitle2" component="h2" sx={{ fontWeight: 700 }}>{title}</Typography>
           <Typography variant="caption" color="text.secondary">{subtitle}</Typography>
         </Box>
-        {streaming && <Chip label="streaming" size="small" color="primary" variant="outlined" />}
+        {streaming && <Chip label="Responding" size="small" color="info" variant="outlined" />}
         {headerAction}
       </Stack>
 
@@ -149,7 +233,7 @@ export function LivePreviewPane({ assistantId, onToolCallEvents, title = 'Live p
         ) : (
           <Stack spacing={1.5}>
             {messages.map((msg, i) => (
-              <Box key={i} sx={{ display: 'flex', justifyContent: msg.isUser ? 'flex-end' : 'flex-start' }}>
+              <Box key={i} className="r2wai-chat-message" sx={{ display: 'flex', justifyContent: msg.isUser ? 'flex-end' : 'flex-start' }}>
                 <Paper
                   variant={msg.isUser ? 'elevation' : 'outlined'}
                   sx={{
@@ -164,9 +248,17 @@ export function LivePreviewPane({ assistantId, onToolCallEvents, title = 'Live p
                       {msg.content}
                     </Typography>
                   ) : (
-                    <MarkdownRenderer content={msg.content} />
+                    <>
+                      <MarkdownRenderer content={msg.content} />
+                      {msg.interrupted && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                          Response stopped
+                        </Typography>
+                      )}
+                    </>
                   )}
                   {!msg.isUser && msg.cards?.map((card, ci) => <ResponseCard key={ci} card={card} />)}
+                  {!msg.isUser && <ChatResponseActions content={msg.content} />}
                   {!msg.isUser && msg.citations && msg.citations.length > 0 && (
                     <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
                       <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mb: 0.5 }}>
@@ -186,7 +278,7 @@ export function LivePreviewPane({ assistantId, onToolCallEvents, title = 'Live p
               </Box>
             ))}
             {streaming && (
-              <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <Box className="r2wai-chat-message" sx={{ display: 'flex', justifyContent: 'flex-start' }}>
                 <Paper variant="outlined" sx={{ p: 1.25, maxWidth: '85%' }}>
                   {toolCallSteps.length > 0 && (
                     <Box sx={{ mb: streamBuffer ? 1 : 0 }}>
@@ -194,7 +286,7 @@ export function LivePreviewPane({ assistantId, onToolCallEvents, title = 'Live p
                     </Box>
                   )}
                   {streamBuffer && <MarkdownRenderer content={streamBuffer} />}
-                  {!streamBuffer && toolCallSteps.length === 0 && <MarkdownRenderer content="…" />}
+                  {!streamBuffer && toolCallSteps.length === 0 && <ChatTypingIndicator />}
                 </Paper>
               </Box>
             )}
@@ -203,6 +295,20 @@ export function LivePreviewPane({ assistantId, onToolCallEvents, title = 'Live p
       </Box>
 
       <Box sx={{ p: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+        {(retryMessage || messages.length > 0) && (
+          <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end', mb: 1 }}>
+            {retryMessage && !streaming && (
+              <Button size="small" startIcon={<ReplayIcon />} onClick={handleRetry}>
+                Retry last message
+              </Button>
+            )}
+            {messages.length > 0 && (
+              <Button size="small" color="inherit" startIcon={<DeleteOutlineIcon />} onClick={handleClear}>
+                Clear conversation
+              </Button>
+            )}
+          </Stack>
+        )}
         <Stack direction="row" spacing={1}>
           <TextField
             fullWidth
@@ -212,18 +318,22 @@ export function LivePreviewPane({ assistantId, onToolCallEvents, title = 'Live p
             value={input}
             disabled={streaming}
             onChange={(e) => setInput(e.target.value)}
-            onKeyUp={(e) => {
-              if (e.key === 'Enter' && !streaming) void handleSend()
-            }}
+            onKeyDown={handleComposerKeyDown}
           />
           <VoiceOrb
             disabled={streaming}
             onTranscript={(text) => setInput((prev) => (prev ? `${prev} ${text}` : text))}
             speakText={[...messages].reverse().find((m) => !m.isUser)?.content}
           />
-          <IconButton color="primary" aria-label="Send message" disabled={streaming || !input.trim()} onClick={() => void handleSend()}>
-            <SendIcon />
-          </IconButton>
+          {streaming ? (
+            <Button variant="outlined" color="error" startIcon={<StopIcon />} onClick={handleStop}>
+              Stop
+            </Button>
+          ) : (
+            <IconButton color="primary" aria-label="Send message" disabled={!input.trim()} onClick={handleSend}>
+              <SendIcon />
+            </IconButton>
+          )}
         </Stack>
       </Box>
     </Stack>

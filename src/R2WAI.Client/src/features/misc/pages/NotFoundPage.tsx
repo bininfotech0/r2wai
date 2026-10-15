@@ -1,12 +1,16 @@
 import { Box, Button, Paper, Stack, Typography } from '@mui/material'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import { useDocumentTitle } from '../../../lib/useDocumentTitle'
+import { useAuth } from '../../../lib/auth/useAuth'
+import { getPersona } from '../../../lib/nav/roleNav'
 
 /** Product 404 for unmatched routes. */
 export function NotFoundPage() {
   useDocumentTitle('Page not found · R2WAI Studio')
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const { user } = useAuth()
+  const isAdmin = ['Admin', 'SuperAdmin'].includes(getPersona(user))
 
   return (
     <Box sx={{ maxWidth: 720, mx: 'auto', py: { xs: 3, sm: 6, md: 10 } }}>
@@ -35,12 +39,18 @@ export function NotFoundPage() {
           <Button variant="contained" onClick={() => navigate('/')}>
             Go to Home
           </Button>
-          <Button component={RouterLink} to="/connections" variant="outlined">
-            Connected Systems
-          </Button>
-          <Button component={RouterLink} to="/assistants" variant="text">
-            Agents
-          </Button>
+          {isAdmin ? <>
+            <Button component={RouterLink} to="/connections" variant="outlined">
+              Connected Systems
+            </Button>
+            <Button component={RouterLink} to="/assistants" variant="text">
+              Agents
+            </Button>
+          </> : (
+            <Button component={RouterLink} to="/playground" variant="outlined">
+              AI Assistant
+            </Button>
+          )}
         </Stack>
       </Paper>
     </Box>

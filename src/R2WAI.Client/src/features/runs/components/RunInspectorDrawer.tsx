@@ -156,7 +156,7 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
                   <Alert
                     severity="warning"
                     action={
-                      <Button size="small" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending}>
+                      <Button size="small" onClick={() => retryMutation.mutate()} disabled={retryMutation.isPending} loading={retryMutation.isPending}>
                         {retryMutation.isPending ? 'Retrying…' : 'Retry'}
                       </Button>
                     }

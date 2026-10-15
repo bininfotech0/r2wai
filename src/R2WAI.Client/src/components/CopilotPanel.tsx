@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Box, Chip, Drawer, Paper, Stack, TextField, Typography, useMediaQuery, useTheme } from '@mui/material'
+import { Box, Chip, CircularProgress, Drawer, Paper, Stack, TextField, Typography, useMediaQuery, useTheme } from '@mui/material'
 import { TooltipIconButton as IconButton } from './TooltipIconButton'
 import CloseIcon from '@mui/icons-material/Close'
 import SendIcon from '@mui/icons-material/Send'
@@ -8,6 +8,8 @@ import { MarkdownRenderer } from './MarkdownRenderer'
 import { ResponseCard } from './ResponseCard'
 import { Timeline } from './Timeline'
 import { VoiceOrb } from './VoiceOrb'
+import { ChatTypingIndicator } from './ChatTypingIndicator'
+import { ChatResponseActions } from './ChatResponseActions'
 import { useChatSession } from '../lib/chat/useChatSession'
 import { authFetch } from '../lib/auth/authClient'
 import { parseContentBlocks } from '../lib/chat/types'
@@ -120,7 +122,7 @@ export function CopilotPanel({ open, onClose }: CopilotPanelProps) {
           ) : (
             <Stack spacing={1.5}>
               {messages.map((msg, i) => (
-                <Box key={i} sx={{ display: 'flex', justifyContent: msg.isUser ? 'flex-end' : 'flex-start' }}>
+                <Box key={i} className="r2wai-chat-message" sx={{ display: 'flex', justifyContent: msg.isUser ? 'flex-end' : 'flex-start' }}>
                   <Paper
                     variant={msg.isUser ? 'elevation' : 'outlined'}
                     sx={{
@@ -138,11 +140,12 @@ export function CopilotPanel({ open, onClose }: CopilotPanelProps) {
                       <MarkdownRenderer content={msg.content} />
                     )}
                     {!msg.isUser && !msg.isError && msg.cards?.map((card, ci) => <ResponseCard key={ci} card={card} />)}
+                    {!msg.isUser && !msg.isError && <ChatResponseActions content={msg.content} />}
                   </Paper>
                 </Box>
               ))}
-              {isStreaming && (
-                <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+              {busy && (
+                <Box className="r2wai-chat-message" sx={{ display: 'flex', justifyContent: 'flex-start' }}>
                   <Paper variant="outlined" sx={{ p: 1.25, maxWidth: '85%' }}>
                     {toolCallSteps.length > 0 && (
                       <Box sx={{ mb: streamingText ? 1 : 0 }}>
@@ -150,7 +153,7 @@ export function CopilotPanel({ open, onClose }: CopilotPanelProps) {
                       </Box>
                     )}
                     {streamingText && <MarkdownRenderer content={streamingText} />}
-                    {!streamingText && toolCallSteps.length === 0 && <MarkdownRenderer content="…" />}
+                    {!streamingText && toolCallSteps.length === 0 && <ChatTypingIndicator />}
                   </Paper>
                 </Box>
               )}
@@ -168,8 +171,11 @@ export function CopilotPanel({ open, onClose }: CopilotPanelProps) {
               value={input}
               disabled={busy}
               onChange={(e) => setInput(e.target.value)}
-              onKeyUp={(e) => {
-                if (e.key === 'Enter' && !busy) void handleSend()
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !busy) {
+                  e.preventDefault()
+                  void handleSend()
+                }
               }}
             />
             <VoiceOrb
@@ -177,8 +183,14 @@ export function CopilotPanel({ open, onClose }: CopilotPanelProps) {
               onTranscript={(text) => setInput((prev) => (prev ? `${prev} ${text}` : text))}
               speakText={[...messages].reverse().find((m) => !m.isUser && !m.isError)?.content}
             />
-            <IconButton color="primary" aria-label="Send message" disabled={busy || !input.trim()} onClick={() => void handleSend()}>
-              <SendIcon />
+            <IconButton
+              color="primary"
+              aria-label={busy ? 'Assistant is responding' : 'Send message'}
+              aria-busy={busy}
+              disabled={busy || !input.trim()}
+              onClick={() => void handleSend()}
+            >
+              {busy ? <CircularProgress size={18} color="inherit" /> : <SendIcon />}
             </IconButton>
           </Stack>
         </Box>

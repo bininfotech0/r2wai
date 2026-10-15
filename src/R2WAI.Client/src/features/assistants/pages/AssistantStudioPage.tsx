@@ -277,9 +277,11 @@ export function AssistantStudioPage() {
         title="Test your agent"
         subtitle="As users will see it"
         headerAction={(
-          <IconButton size="small" aria-label="Close test pane" onClick={toggleTest}>
-            <CloseIcon fontSize="small" />
-          </IconButton>
+          <Tooltip title="Close test pane">
+            <IconButton size="small" aria-label="Close test pane" onClick={toggleTest}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
       />
     </Paper>
@@ -314,7 +316,7 @@ export function AssistantStudioPage() {
               <Box
                 component="span"
                 aria-hidden
-                sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: assistant.publishStatus === 'Published' ? 'success.main' : 'text.disabled' }}
+                sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: assistant.publishStatus === 'Published' ? 'success.main' : 'text.secondary' }}
               />
               <Typography variant="caption" color="text.secondary">
                 {statusLabel} · {assistant.type}
@@ -525,7 +527,7 @@ export function AssistantStudioPage() {
                         divider
                         secondaryAction={
                           !v.isPublished && (
-                            <Button size="small" onClick={() => rollbackVersionMutation.mutate(v.id)} disabled={rollbackVersionMutation.isPending}>
+                            <Button size="small" onClick={() => rollbackVersionMutation.mutate(v.id)} disabled={rollbackVersionMutation.isPending} loading={rollbackVersionMutation.isPending}>
                               Roll back
                             </Button>
                           )
@@ -548,7 +550,7 @@ export function AssistantStudioPage() {
                 <EmptyState title="No versions yet" />
               )}
 
-              <Dialog open={versionDialogOpen} onClose={() => setVersionDialogOpen(false)} maxWidth="sm" fullWidth>
+              <Dialog open={versionDialogOpen} onClose={() => setVersionDialogOpen(false)} maxWidth="sm" fullWidth aria-label="Create Version">
                 <DialogTitle>Create Version</DialogTitle>
                 <DialogContent>
                   <Stack spacing={2} sx={{ pt: 1 }}>
@@ -572,7 +574,7 @@ export function AssistantStudioPage() {
                     variant="contained"
                     onClick={() => createVersionMutation.mutate()}
                     disabled={createVersionMutation.isPending}
-                  >
+                   loading={createVersionMutation.isPending}>
                     Create
                   </Button>
                 </DialogActions>
@@ -651,7 +653,7 @@ export function AssistantStudioPage() {
           >
             Discard
           </Button>
-          <Button variant="contained" disabled={saveOverview.isPending || !name.trim()} onClick={() => saveOverview.mutate()}>
+          <Button variant="contained" disabled={saveOverview.isPending || !name.trim()} onClick={() => saveOverview.mutate()} loading={saveOverview.isPending}>
             {saveOverview.isPending ? 'Saving…' : 'Save'}
           </Button>
         </Paper>

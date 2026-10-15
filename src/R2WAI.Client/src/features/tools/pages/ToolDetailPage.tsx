@@ -188,7 +188,7 @@ export function ToolDetailPage() {
         <Box sx={{ px: { xs: 2.5, md: 3.5 }, py: 1.5, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.default' }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1, sm: 4 }} useFlexGap sx={{ flexWrap: 'wrap' }}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              {tool.lastTestStatus === 'Connected' ? <CheckCircleOutlineIcon color="success" fontSize="small" /> : tool.lastTestStatus === 'Error' ? <ErrorOutlineIcon color="error" fontSize="small" /> : <ApiIcon color="disabled" fontSize="small" />}
+              {tool.lastTestStatus === 'Connected' ? <CheckCircleOutlineIcon color="success" fontSize="small" /> : tool.lastTestStatus === 'Error' ? <ErrorOutlineIcon color="error" fontSize="small" /> : <ApiIcon fontSize="small" sx={{ color: 'text.secondary' }} />}
               <Typography variant="body2" color="text.secondary">Connection</Typography>
               <Typography variant="body2" sx={{ fontWeight: 650 }}>{tool.lastTestStatus ?? 'Not tested'}</Typography>
             </Stack>
@@ -321,7 +321,7 @@ export function ToolDetailPage() {
             this tool during a live chat.
           </Typography>
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
-            <Button variant="contained" onClick={() => testMutation.mutate()} disabled={testMutation.isPending}>
+            <Button variant="contained" onClick={() => testMutation.mutate()} disabled={testMutation.isPending} loading={testMutation.isPending}>
               {testMutation.isPending ? 'Testing…' : 'Run Test'}
             </Button>
             {testMutation.data && (
@@ -387,7 +387,7 @@ export function ToolDetailPage() {
                   divider
                   secondaryAction={
                     !v.isPublished && (
-                      <Button size="small" onClick={() => rollbackVersionMutation.mutate(v.id)} disabled={rollbackVersionMutation.isPending}>
+                      <Button size="small" onClick={() => rollbackVersionMutation.mutate(v.id)} disabled={rollbackVersionMutation.isPending} loading={rollbackVersionMutation.isPending}>
                         Roll back
                       </Button>
                     )
@@ -410,7 +410,7 @@ export function ToolDetailPage() {
             <EmptyState title="No versions yet" />
           )}
 
-          <Dialog open={versionDialogOpen} onClose={() => setVersionDialogOpen(false)} maxWidth="sm" fullWidth>
+          <Dialog open={versionDialogOpen} onClose={() => setVersionDialogOpen(false)} maxWidth="sm" fullWidth aria-label="Create Version">
             <DialogTitle>Create Version</DialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ pt: 1 }}>
@@ -434,7 +434,7 @@ export function ToolDetailPage() {
                 variant="contained"
                 onClick={() => createVersionMutation.mutate()}
                 disabled={createVersionMutation.isPending}
-              >
+               loading={createVersionMutation.isPending}>
                 Create
               </Button>
             </DialogActions>

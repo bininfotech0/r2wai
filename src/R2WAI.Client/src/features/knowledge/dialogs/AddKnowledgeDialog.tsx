@@ -122,7 +122,7 @@ export function AddKnowledgeDialog({ open, onClose, knowledgeBaseId, onAdded }: 
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth aria-label="Add Knowledge">
       <DialogTitle>
         <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
           {mode !== 'picker' && (

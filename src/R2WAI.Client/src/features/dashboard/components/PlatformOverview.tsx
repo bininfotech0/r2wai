@@ -81,9 +81,9 @@ export function PlatformOverview() {
         <StatCard label="Agents" value={metrics.data?.totalAssistants ?? 0} trendPercent={metrics.data?.assistantsTrendPercent} icon={SmartToyOutlined} color="primary" loading={metrics.isLoading} />
         <StatCard label="Published" value={assistantBreakdown.isLoading ? 0 : publishedCount} icon={CheckCircleOutlineIcon} color="success" loading={assistantBreakdown.isLoading} />
         <StatCard label="Conversations" value={metrics.data?.totalConversations ?? 0} trendPercent={metrics.data?.conversationsTrendPercent} icon={ForumOutlined} color="info" loading={metrics.isLoading} />
-        <StatCard label="Tokens used" value={aiStats.data?.totalTokens?.toLocaleString() ?? '—'} icon={BoltOutlined} color="secondary" loading={aiStats.isLoading} />
-        <StatCard label="Automations" value={metrics.data?.totalWorkflows ?? 0} icon={AccountTreeOutlined} color="secondary" loading={metrics.isLoading} />
-        <StatCard label="Active users" value={metrics.data?.activeUsersByLogin ?? 0} trendPercent={metrics.data?.activeUsersTrendPercent} icon={PeopleAltOutlined} color="warning" loading={metrics.isLoading} />
+        <StatCard label="Tokens used" value={aiStats.data?.totalTokens?.toLocaleString() ?? '—'} icon={BoltOutlined} color="info" loading={aiStats.isLoading} />
+        <StatCard label="Automations" value={metrics.data?.totalWorkflows ?? 0} icon={AccountTreeOutlined} color="primary" loading={metrics.isLoading} />
+        <StatCard label="Active users" value={metrics.data?.activeUsersByLogin ?? 0} trendPercent={metrics.data?.activeUsersTrendPercent} icon={PeopleAltOutlined} color="info" loading={metrics.isLoading} />
         <StatCard label="Knowledge bases" value={metrics.data?.totalKnowledgeBases ?? 0} icon={MenuBookOutlined} color="primary" loading={metrics.isLoading} />
       </Box>
 

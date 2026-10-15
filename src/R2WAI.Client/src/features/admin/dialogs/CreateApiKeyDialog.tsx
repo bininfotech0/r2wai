@@ -31,7 +31,7 @@ export function CreateApiKeyDialog({ open, onClose, onSubmit, isSubmitting }: Cr
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth aria-label="New API Key">
       <DialogTitle>New API Key</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -45,7 +45,7 @@ export function CreateApiKeyDialog({ open, onClose, onSubmit, isSubmitting }: Cr
           <Button onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting || !name}>
+          <Button type="submit" variant="contained" disabled={isSubmitting || !name} loading={isSubmitting}>
             {isSubmitting ? 'Creating…' : 'Create'}
           </Button>
         </DialogActions>

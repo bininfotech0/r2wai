@@ -50,7 +50,7 @@ export function CreateApplicationDialog({ open, onClose, onSubmit, isSubmitting 
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth aria-label="Add Connected System">
       <DialogTitle>Add Connected System</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -93,7 +93,7 @@ export function CreateApplicationDialog({ open, onClose, onSubmit, isSubmitting 
           <Button onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting || !name || !code}>
+          <Button type="submit" variant="contained" disabled={isSubmitting || !name || !code} loading={isSubmitting}>
             {isSubmitting ? 'Creating…' : 'Create'}
           </Button>
         </DialogActions>

@@ -165,7 +165,7 @@ export function CapabilityDetailDialog({ capabilityId, assistantId, onClose }: C
   }
 
   return (
-    <Dialog open={!!capabilityId} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open={!!capabilityId} onClose={onClose} maxWidth="md" fullWidth aria-label={capability?.name ?? 'Capability'}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {capability?.name ?? 'Capability'}
         <IconButton size="small" onClick={onClose} aria-label="Close">
@@ -235,7 +235,7 @@ export function CapabilityDetailDialog({ capabilityId, assistantId, onClose }: C
                     variant="contained"
                     disabled={saveDetailsMutation.isPending || !name.trim()}
                     onClick={() => saveDetailsMutation.mutate()}
-                  >
+                   loading={saveDetailsMutation.isPending}>
                     {saveDetailsMutation.isPending ? 'Saving…' : 'Save changes'}
                   </Button>
                   <Button color="error" onClick={() => setDeleteOpen(true)}>

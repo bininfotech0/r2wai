@@ -414,7 +414,7 @@ export function LoginPage() {
             </MuiLink>
           </Box>
 
-          <Button type="submit" variant="contained" size="large" fullWidth disabled={isSubmitting}>
+          <Button type="submit" variant="contained" size="large" fullWidth disabled={isSubmitting} loading={isSubmitting}>
             {isSubmitting ? 'Signing in…' : 'Sign in'}
           </Button>
         </Stack>

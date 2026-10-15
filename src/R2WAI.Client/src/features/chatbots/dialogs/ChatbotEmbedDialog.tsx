@@ -44,7 +44,7 @@ export function ChatbotEmbedDialog({ open, onClose, chatbotId }: ChatbotEmbedDia
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label="Embed Chatbot">
       <DialogTitle>Embed Chatbot</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>

@@ -24,8 +24,8 @@ const STATE_LABEL: Record<TileState, string> = {
 const STATE_COLOR: Record<TileState, string> = {
   live: 'success.main',
   ready: 'info.main',
-  off: 'text.disabled',
-  soon: 'text.disabled',
+  off: 'text.secondary',
+  soon: 'text.secondary',
 }
 
 function ChannelTile({ icon, title, description, state, detail, action }: {
@@ -37,7 +37,7 @@ function ChannelTile({ icon, title, description, state, detail, action }: {
   action?: ReactNode
 }) {
   return (
-    <Paper variant="outlined" sx={{ p: 2.5, height: '100%', display: 'flex', flexDirection: 'column', gap: 1.5, opacity: state === 'soon' ? 0.72 : 1 }}>
+    <Paper variant="outlined" sx={{ p: 2.5, height: '100%', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Box sx={{ display: 'grid', placeItems: 'center', width: 40, height: 40, borderRadius: 2, bgcolor: 'action.hover', color: 'primary.main' }}>
         {icon}
       </Box>
@@ -106,7 +106,7 @@ export function AgentChannelsTab({ assistant }: { assistant: AssistantDto }) {
             action={primary ? (
               <Button size="small" variant="outlined" component={RouterLink} to={`/deploy/widget/${primary.id}`}>Manage</Button>
             ) : (
-              <Button size="small" variant="contained" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
+              <Button size="small" variant="contained" disabled={createMutation.isPending} onClick={() => createMutation.mutate()} loading={createMutation.isPending}>
                 {createMutation.isPending ? 'Setting up…' : 'Set up'}
               </Button>
             )}

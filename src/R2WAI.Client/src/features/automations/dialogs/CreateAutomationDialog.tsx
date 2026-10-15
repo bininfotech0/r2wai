@@ -134,6 +134,7 @@ export function CreateAutomationDialog({ open, onClose, onCreated, initialDescri
       }}
       maxWidth="sm"
       fullWidth
+      aria-label="Create Automation"
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Create Automation
@@ -167,7 +168,7 @@ export function CreateAutomationDialog({ open, onClose, onCreated, initialDescri
             />
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
               <Button onClick={() => setManualMode(false)}>Back</Button>
-              <Button variant="contained" disabled={!manualName.trim() || isCreating} onClick={() => void handleManualCreate()}>
+              <Button variant="contained" disabled={!manualName.trim() || isCreating} onClick={() => void handleManualCreate()} loading={isCreating}>
                 {isCreating ? 'Creating…' : 'Create'}
               </Button>
             </Box>

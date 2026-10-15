@@ -80,7 +80,7 @@ export function DiscoverMcpToolsDialog({ open, onClose, connection }: DiscoverMc
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth aria-label={`Discover Tools for ${connection?.name ?? 'MCP connection'}`}>
       <DialogTitle>Discover Tools — {connection?.name}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -121,7 +121,7 @@ export function DiscoverMcpToolsDialog({ open, onClose, connection }: DiscoverMc
           variant="contained"
           disabled={selected.size === 0 || commitMutation.isPending}
           onClick={() => commitMutation.mutate()}
-        >
+         loading={commitMutation.isPending}>
           {commitMutation.isPending ? 'Committing…' : `Commit ${selected.size || ''} Tool${selected.size === 1 ? '' : 's'}`}
         </Button>
       </DialogActions>

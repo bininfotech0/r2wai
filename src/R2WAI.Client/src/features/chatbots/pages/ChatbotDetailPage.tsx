@@ -224,17 +224,17 @@ export function ChatbotDetailPage() {
               variant="contained"
               disabled={statusMutation.isPending}
               onClick={() => statusMutation.mutate('Active')}
-            >
+             loading={statusMutation.isPending}>
               Publish
             </Button>
           )}
           {chatbot.status === 'Active' && (
-            <Button disabled={statusMutation.isPending} onClick={() => statusMutation.mutate('Paused')}>
+            <Button disabled={statusMutation.isPending} onClick={() => statusMutation.mutate('Paused')} loading={statusMutation.isPending}>
               Pause
             </Button>
           )}
           {chatbot.status === 'Paused' && (
-            <Button disabled={statusMutation.isPending} onClick={() => statusMutation.mutate('Draft')}>
+            <Button disabled={statusMutation.isPending} onClick={() => statusMutation.mutate('Draft')} loading={statusMutation.isPending}>
               Revert to draft
             </Button>
           )}
@@ -296,7 +296,7 @@ export function ChatbotDetailPage() {
             onChange={(e) => setAllowedOrigins(e.target.value)}
           />
           <Box>
-            <Button variant="contained" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+            <Button variant="contained" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
               {saveMutation.isPending ? 'Saving…' : 'Save'}
             </Button>
           </Box>
@@ -369,7 +369,7 @@ export function ChatbotDetailPage() {
                 ))}
               </Select>
             </FormControl>
-            <Button size="small" startIcon={<AddIcon />} onClick={() => addChannelMutation.mutate()} disabled={addChannelMutation.isPending}>
+            <Button size="small" startIcon={<AddIcon />} onClick={() => addChannelMutation.mutate()} disabled={addChannelMutation.isPending} loading={addChannelMutation.isPending}>
               Connect
             </Button>
           </Stack>
@@ -380,7 +380,7 @@ export function ChatbotDetailPage() {
         <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
           <Typography variant="subtitle2">Webhook Key</Typography>
           <Tooltip title="POST { message, sessionId } to the URL below with this key in an X-Webhook-Key header to get { reply } back. Reuse one sessionId per conversation so the bot remembers earlier turns — the same generic channel a custom integration or a provider-specific adapter (WhatsApp, Slack, Telegram) can send through.">
-            <InfoOutlined fontSize="small" color="disabled" />
+            <InfoOutlined fontSize="small" sx={{ color: 'text.secondary' }} />
           </Tooltip>
         </Stack>
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>

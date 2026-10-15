@@ -117,7 +117,7 @@ export function SettingsPage() {
             <TextField label="Slug" fullWidth value={slug} onChange={(e) => setSlug(e.target.value)} />
             <TextField label="Domain" fullWidth value={domain} onChange={(e) => setDomain(e.target.value)} />
             <Box>
-              <Button variant="contained" startIcon={<SaveOutlined />} disabled={orgMutation.isPending || !hasOrganizationChanges} onClick={() => orgMutation.mutate()}>
+              <Button variant="contained" startIcon={<SaveOutlined />} disabled={orgMutation.isPending || !hasOrganizationChanges} onClick={() => orgMutation.mutate()} loading={orgMutation.isPending}>
                 {orgMutation.isPending ? 'Saving…' : 'Save changes'}
               </Button>
             </Box>
@@ -141,7 +141,7 @@ export function SettingsPage() {
               </Stack>
             ))}
             <Box>
-              <Button variant="contained" startIcon={<SaveOutlined />} disabled={flagsMutation.isPending || !hasFeatureChanges} onClick={() => flagsMutation.mutate()}>
+              <Button variant="contained" startIcon={<SaveOutlined />} disabled={flagsMutation.isPending || !hasFeatureChanges} onClick={() => flagsMutation.mutate()} loading={flagsMutation.isPending}>
                 {flagsMutation.isPending ? 'Saving…' : 'Save changes'}
               </Button>
             </Box>
@@ -188,7 +188,7 @@ export function SettingsPage() {
               onChange={(e) => setLimits({ ...limits, maxWorkflows: Number(e.target.value) })}
             />
             <Box>
-              <Button variant="contained" startIcon={<SaveOutlined />} disabled={limitsMutation.isPending || !hasLimitChanges} onClick={() => limitsMutation.mutate()}>
+              <Button variant="contained" startIcon={<SaveOutlined />} disabled={limitsMutation.isPending || !hasLimitChanges} onClick={() => limitsMutation.mutate()} loading={limitsMutation.isPending}>
                 {limitsMutation.isPending ? 'Saving…' : 'Save changes'}
               </Button>
             </Box>

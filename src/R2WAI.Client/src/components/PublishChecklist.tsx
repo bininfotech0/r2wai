@@ -46,7 +46,7 @@ export function PublishChecklist({
   const allReady = !checksLoading && !checksError && checks.length > 0 && checks.every((c) => c.ready)
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth aria-label={`Publish ${title}`}>
       <DialogTitle>Publish {title}</DialogTitle>
       <DialogContent>
         <Stack spacing={2}>
@@ -110,10 +110,11 @@ export function PublishChecklist({
         </Button>
         <Button
           variant="contained"
-          disabled={!allReady || isPublishing}
+          disabled={!allReady}
+          loading={isPublishing}
           onClick={() => void onPublish(changeNote)}
         >
-          {isPublishing ? 'Publishing…' : `Publish ${version}`}
+          {`Publish ${version}`}
         </Button>
       </DialogActions>
     </Dialog>

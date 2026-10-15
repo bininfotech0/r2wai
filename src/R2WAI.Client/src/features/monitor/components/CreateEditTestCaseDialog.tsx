@@ -62,7 +62,7 @@ export function CreateEditTestCaseDialog({ open, onClose, onSubmit, testCase, is
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label={isEdit ? 'Edit Test Case' : 'New Test Case'}>
       <DialogTitle>{isEdit ? 'Edit Test Case' : 'New Test Case'}</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -110,7 +110,7 @@ export function CreateEditTestCaseDialog({ open, onClose, onSubmit, testCase, is
           <Button onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting || !assistantId || !name || !question}>
+          <Button type="submit" variant="contained" disabled={isSubmitting || !assistantId || !name || !question} loading={isSubmitting}>
             {isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create'}
           </Button>
         </DialogActions>

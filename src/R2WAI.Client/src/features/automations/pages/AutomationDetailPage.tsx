@@ -204,14 +204,14 @@ export function AutomationDetailPage() {
           <Button color="error" onClick={() => setDeleteOpen(true)}>
             Delete
           </Button>
-          <Button onClick={() => testMutation.mutate()} disabled={testMutation.isPending || isDirty}>
+          <Button onClick={() => testMutation.mutate()} disabled={testMutation.isPending || isDirty} loading={testMutation.isPending}>
             {testMutation.isPending ? 'Starting…' : 'Test'}
           </Button>
-          <Button variant="outlined" disabled={!isDirty || saveMutation.isPending || scheduleInvalid} onClick={() => saveMutation.mutate()}>
+          <Button variant="outlined" disabled={!isDirty || saveMutation.isPending || scheduleInvalid} onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
             {saveMutation.isPending ? 'Saving…' : 'Save Draft'}
           </Button>
           {workflow.versionStatus === 'Published' && (
-            <Button onClick={() => unpublishMutation.mutate()} disabled={unpublishMutation.isPending}>
+            <Button onClick={() => unpublishMutation.mutate()} disabled={unpublishMutation.isPending} loading={unpublishMutation.isPending}>
               {unpublishMutation.isPending ? 'Unpublishing…' : 'Unpublish'}
             </Button>
           )}
@@ -275,7 +275,7 @@ export function AutomationDetailPage() {
               <Typography variant="body2" color="text.secondary" sx={{ width: 20 }}>
                 {i + 1}
               </Typography>
-              <CheckCircleOutlineIcon fontSize="small" sx={{ color: 'text.disabled' }} />
+              <CheckCircleOutlineIcon fontSize="small" sx={{ color: 'text.secondary' }} />
               <ButtonBase
                 onClick={() => setEditingStep(step)}
                 aria-label={`Edit step ${step.name}`}

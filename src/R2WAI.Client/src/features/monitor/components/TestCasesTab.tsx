@@ -114,7 +114,7 @@ export function TestCasesTab() {
         <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setEditing(null); setDialogOpen(true) }}>
           New Test Case
         </Button>
-        <Button size="small" startIcon={<PlayArrowIcon />} onClick={() => runAllMutation.mutate()} disabled={runAllMutation.isPending}>
+        <Button size="small" startIcon={<PlayArrowIcon />} onClick={() => runAllMutation.mutate()} disabled={runAllMutation.isPending} loading={runAllMutation.isPending}>
           {runAllMutation.isPending ? 'Running…' : 'Run All'}
         </Button>
       </Stack>

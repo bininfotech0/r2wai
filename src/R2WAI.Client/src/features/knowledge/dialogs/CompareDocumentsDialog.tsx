@@ -46,7 +46,7 @@ export function CompareDocumentsDialog({ open, onClose, documents }: CompareDocu
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth aria-label="Compare Documents">
       <DialogTitle>Compare Documents</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
@@ -125,7 +125,7 @@ export function CompareDocumentsDialog({ open, onClose, documents }: CompareDocu
           variant="contained"
           disabled={!sourceId || !targetId || mutation.isPending}
           onClick={() => mutation.mutate()}
-        >
+         loading={mutation.isPending}>
           {mutation.isPending ? 'Comparing…' : 'Compare'}
         </Button>
       </DialogActions>

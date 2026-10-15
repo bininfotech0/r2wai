@@ -16,7 +16,7 @@ const SHORTCUTS: { keys: string; description: string }[] = [
 
 export function KeyboardShortcutsHelp({ open, onClose }: KeyboardShortcutsHelpProps) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth aria-label="Keyboard shortcuts">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Keyboard shortcuts
         <IconButton size="small" onClick={onClose} aria-label="Close">

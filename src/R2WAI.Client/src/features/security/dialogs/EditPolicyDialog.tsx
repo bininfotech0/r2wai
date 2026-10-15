@@ -39,7 +39,7 @@ export function EditPolicyDialog({ open, onClose, onSubmit, type, policy, isSubm
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label={`${type} Policy`}>
       <DialogTitle>{type} Policy</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -64,7 +64,7 @@ export function EditPolicyDialog({ open, onClose, onSubmit, type, policy, isSubm
           <Button onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" variant="contained" disabled={isSubmitting || !name}>
+          <Button type="submit" variant="contained" disabled={isSubmitting || !name} loading={isSubmitting}>
             {isSubmitting ? 'Saving…' : 'Save'}
           </Button>
         </DialogActions>

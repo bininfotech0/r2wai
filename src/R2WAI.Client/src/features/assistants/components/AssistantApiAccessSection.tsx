@@ -63,7 +63,7 @@ export function AssistantApiAccessSection({ assistant }: { assistant: AssistantD
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             Direct API access
           </Typography>
-          <Button size="small" startIcon={<AddIcon />} disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
+          <Button size="small" startIcon={<AddIcon />} disabled={createMutation.isPending} onClick={() => createMutation.mutate()} loading={createMutation.isPending}>
             New API key
           </Button>
         </Stack>

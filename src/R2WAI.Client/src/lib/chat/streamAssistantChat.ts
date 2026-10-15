@@ -67,7 +67,10 @@ export async function streamAssistantChat(
       }
 
       const data = line.slice(6)
-      if (data === '[DONE]') return
+      if (data === '[DONE]') {
+        callbacks.onDone()
+        return
+      }
 
       const eventType = currentEventType ?? 'chunk'
       currentEventType = null
@@ -119,11 +122,13 @@ export async function chatWithAssistant(
   assistantId: string,
   message: string,
   conversationId?: string,
+  signal?: AbortSignal,
 ): Promise<ChatWithAssistantResult> {
   const response = await authFetch(`/api/v1/assistants/${assistantId}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, conversationId }),
+    signal,
   })
   if (!response.ok) throw new Error(`Request failed (${response.status})`)
   return (await response.json()) as ChatWithAssistantResult

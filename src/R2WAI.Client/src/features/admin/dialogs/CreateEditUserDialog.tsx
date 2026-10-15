@@ -40,7 +40,7 @@ export function CreateEditUserDialog({ open, onClose, onSubmit, user, isSubmitti
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth aria-label={isEdit ? 'Edit User' : 'New User'}>
       <DialogTitle>{isEdit ? 'Edit User' : 'New User'}</DialogTitle>
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <DialogContent>
@@ -85,7 +85,7 @@ export function CreateEditUserDialog({ open, onClose, onSubmit, user, isSubmitti
             type="submit"
             variant="contained"
             disabled={isSubmitting || !firstName.trim() || !lastName.trim() || (!isEdit && (!externalId.trim() || !emailIsValid))}
-          >
+           loading={isSubmitting}>
             {isSubmitting ? 'Saving…' : isEdit ? 'Save changes' : 'Create'}
           </Button>
         </DialogActions>

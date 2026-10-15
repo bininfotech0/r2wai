@@ -81,7 +81,7 @@ export function ForgotPasswordPage() {
               helperText={errors.email?.message}
               {...register('email')}
             />
-            <Button type="submit" variant="contained" size="large" fullWidth disabled={isSubmitting}>
+            <Button type="submit" variant="contained" size="large" fullWidth disabled={isSubmitting} loading={isSubmitting}>
               {isSubmitting ? 'Sending…' : 'Send reset instructions'}
             </Button>
           </Stack>

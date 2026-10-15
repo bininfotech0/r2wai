@@ -22,14 +22,14 @@ const ICON_BY_STATUS: Record<string, ReactNode> = {
   completed: <CheckCircleOutlineOutlined fontSize="small" color="success" />,
   succeeded: <CheckCircleOutlineOutlined fontSize="small" color="success" />,
   failed: <ErrorOutlineOutlined fontSize="small" color="error" />,
-  running: <HourglassEmptyOutlined fontSize="small" color="warning" />,
-  started: <HourglassEmptyOutlined fontSize="small" color="warning" />,
-  pending: <RadioButtonUncheckedOutlined fontSize="small" color="disabled" />,
-  skipped: <RadioButtonUncheckedOutlined fontSize="small" color="disabled" />,
+  running: <HourglassEmptyOutlined fontSize="small" color="info" />,
+  started: <HourglassEmptyOutlined fontSize="small" color="info" />,
+  pending: <RadioButtonUncheckedOutlined fontSize="small" sx={{ color: 'text.secondary' }} />,
+  skipped: <RadioButtonUncheckedOutlined fontSize="small" sx={{ color: 'text.secondary' }} />,
 }
 
 function iconForStatus(status: string): ReactNode {
-  return ICON_BY_STATUS[status.toLowerCase()] ?? <RadioButtonUncheckedOutlined fontSize="small" color="disabled" />
+  return ICON_BY_STATUS[status.toLowerCase()] ?? <RadioButtonUncheckedOutlined fontSize="small" sx={{ color: 'text.secondary' }} />
 }
 
 interface TimelineProps {

@@ -211,7 +211,7 @@ export function MemoryPage() {
               startIcon={<DownloadOutlined />}
               disabled={!data || exportMutation.isPending}
               onClick={() => exportMutation.mutate()}
-            >
+             loading={exportMutation.isPending}>
               Export
             </Button>
             <Button variant="contained" startIcon={<AddIcon />} disabled={!data} onClick={() => openEditor(null)}>

@@ -8,7 +8,7 @@ interface RevealKeyDialogProps {
 
 export function RevealKeyDialog({ open, onClose, apiKey }: RevealKeyDialogProps) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth aria-label="API Key Created">
       <DialogTitle>API Key Created</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>

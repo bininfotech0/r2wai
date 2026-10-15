@@ -448,7 +448,7 @@ export function UsersPage() {
               startIcon={<PersonAddIcon />}
               onClick={() => setInviteOpen(true)}
               disabled={inviteMutation.isPending}
-            >
+             loading={inviteMutation.isPending}>
               Invite by Email
             </Button>
           </Stack>
@@ -619,7 +619,7 @@ export function UsersPage() {
         isDeleting={deleteRoleMutation.isPending}
       />
 
-      <Dialog open={inviteOpen} onClose={() => setInviteOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={inviteOpen} onClose={() => setInviteOpen(false)} maxWidth="xs" fullWidth aria-label="Invite by Email">
         <DialogTitle>Invite by Email</DialogTitle>
         <Box
           component="form"
@@ -650,7 +650,7 @@ export function UsersPage() {
               type="submit"
               variant="contained"
               disabled={!inviteEmail.trim() || inviteMutation.isPending}
-            >
+             loading={inviteMutation.isPending}>
               {inviteMutation.isPending ? 'Sending…' : 'Send Invite'}
             </Button>
           </DialogActions>

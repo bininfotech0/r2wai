@@ -415,7 +415,7 @@ export function ApplicationWorkspacePage() {
                 ))}
               </TextField>
               <Stack direction="row" sx={{ justifyContent: 'flex-end', pt: 0.5 }}>
-                <Button variant="contained" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                <Button variant="contained" disabled={saveMutation.isPending} onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
                   {saveMutation.isPending ? 'Saving…' : 'Save changes'}
                 </Button>
               </Stack>
@@ -538,7 +538,7 @@ export function ApplicationWorkspacePage() {
               onChange={(e) => setSystemPromptTemplate(e.target.value)}
             />
             <Box>
-              <Button variant="contained" disabled={saveConfigMutation.isPending} onClick={() => saveConfigMutation.mutate()}>
+              <Button variant="contained" disabled={saveConfigMutation.isPending} onClick={() => saveConfigMutation.mutate()} loading={saveConfigMutation.isPending}>
                 {saveConfigMutation.isPending ? 'Saving…' : 'Save'}
               </Button>
             </Box>
@@ -567,7 +567,7 @@ export function ApplicationWorkspacePage() {
                   variant="contained"
                   disabled={createVersionMutation.isPending}
                   onClick={() => createVersionMutation.mutate()}
-                >
+                 loading={createVersionMutation.isPending}>
                   {createVersionMutation.isPending ? 'Creating…' : 'Create Version'}
                 </Button>
               </Box>
