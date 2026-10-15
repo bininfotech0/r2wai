@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 using OpenAI;
+using OpenAI.Chat;
 using R2WAI.Application.Common.Exceptions;
 using R2WAI.Application.Common.Interfaces;
 using System.ClientModel;
@@ -40,5 +42,20 @@ public class OllamaModelProvider : IModelProvider
         builder.AddOpenAIEmbeddingGenerator(embeddingModel, ollamaClient);
 
         _logger.LogInformation("AI provider: Ollama at {Endpoint}, model: {Model}", ollamaEndpoint, ollamaModel);
+    }
+
+    public void DisableReasoning(OpenAIPromptExecutionSettings settings, string? replyJsonSchema)
+    {
+        // Ollama's OpenAI-compatible endpoint reads reasoning_effort "none" as think=false, which a
+        // hybrid model's template honours (the original qwen3 adds an empty think block). A model
+        // that always reasons (qwen3:4b, now the 2507 thinking build) ignores it and reasons in its
+        // answer instead, so the reply's schema also goes in as response_format: Ollama compiles it
+        // into a grammar, and the first token the model can produce is the JSON itself.
+        // A ChatReasoningEffortLevel, not the string: SK only converts the strings OpenAI accepts.
+#pragma warning disable OPENAI001 // Experimental in the OpenAI SDK; only its wire value matters here.
+        settings.ReasoningEffort = new ChatReasoningEffortLevel("none");
+#pragma warning restore OPENAI001
+        if (replyJsonSchema is not null)
+            settings.ResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat("reply", BinaryData.FromString(replyJsonSchema));
     }
 }

@@ -45,8 +45,13 @@ public class WorkflowBridge : IWorkflowBridge
     public async Task<(string ElsaInstanceId, Guid WorkflowInstanceId)> StartWorkflowAsync(
         Guid workflowId, Guid tenantId, Guid userId, string? data, CancellationToken ct, Guid? existingInstanceId = null)
     {
+        // IgnoreQueryFilters + explicit tenant/soft-delete predicates: the webhook trigger and the
+        // schedule sweeper start runs with no signed-in user, where the fail-closed tenant filter
+        // matches zero rows — every webhook-triggered run 404'd here (confirmed live 2026-10-15).
+        // The caller-supplied tenantId is the boundary, exactly as before.
         var workflowEntity = await _context.Workflows
-            .FirstOrDefaultAsync(w => w.Id == workflowId && w.TenantId == tenantId, ct);
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(w => w.Id == workflowId && w.TenantId == tenantId && !w.IsDeleted, ct);
 
         // NotFoundException (404), not InvalidOperationException (409): a missing workflow ID is
         // exactly what it says — nothing for the caller to "resolve a conflict" over, so it must
@@ -60,7 +65,8 @@ public class WorkflowBridge : IWorkflowBridge
         // since Elsa can execute activities synchronously up to the first bookmark.
         R2WAI.Domain.Entities.WorkflowInstance? instance = null;
         if (existingInstanceId is not null)
-            instance = await _context.WorkflowInstances.FirstOrDefaultAsync(i => i.Id == existingInstanceId, ct);
+            instance = await _context.WorkflowInstances.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(i => i.Id == existingInstanceId && i.TenantId == tenantId && !i.IsDeleted, ct);
 
         if (instance is null)
         {

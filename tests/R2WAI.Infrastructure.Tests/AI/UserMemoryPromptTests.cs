@@ -1,3 +1,4 @@
+using System.Text.Json;
 using R2WAI.Domain.Entities;
 using R2WAI.Domain.Enums;
 using R2WAI.Infrastructure.AI.Memory;
@@ -89,9 +90,38 @@ public class UserMemoryPromptTests
 
         Assert.Contains("- [Preference] preferred_language: Prefers answers in Hindi.", prompt);
         Assert.Contains("USER: I manage payroll.\nASSISTANT: Noted.", prompt);
-        Assert.Contains("Reply [] if nothing qualifies.", prompt);
+        Assert.Contains("answer false with an empty list.", prompt);
         Assert.Contains("(none)", UserMemoryPrompt.BuildLearningPrompt([], "hi", "hello"));
     }
+
+    [Fact]
+    public void LearnedJsonSchema_AsksForTheDecisionBeforeTheMemories()
+    {
+        using var schema = JsonDocument.Parse(UserMemoryPrompt.LearnedJsonSchema);
+        var properties = schema.RootElement.GetProperty("properties").EnumerateObject().Select(p => p.Name).ToList();
+
+        Assert.Equal(["user_said_something_lasting_about_themselves", "memories"], properties);
+        Assert.Equal(UserMemoryPrompt.MaxLearnedPerTurn,
+            schema.RootElement.GetProperty("properties").GetProperty("memories").GetProperty("maxItems").GetInt32());
+    }
+
+    [Fact]
+    public void ParseLearned_ReadsTheMemoriesOfTheObjectAskedFor()
+    {
+        var result = UserMemoryPrompt.ParseLearned("""
+            {"user_said_something_lasting_about_themselves": true,
+             "memories": [{"category":"Preference","key":"answer_format","content":"Prefers answers in bullet points."}]}
+            """);
+
+        Assert.Equal("answer_format", Assert.Single(result).Key);
+    }
+
+    [Fact]
+    public void ParseLearned_ModelSaidNothingAboutTheUser_DropsWhatItListedAnyway() =>
+        Assert.Empty(UserMemoryPrompt.ParseLearned("""
+            {"user_said_something_lasting_about_themselves": false,
+             "memories": [{"category":"Fact","key":"annual_leave","content":"Employees get 24 days of leave."}]}
+            """));
 
     [Fact]
     public void ParseLearned_ReadsAPlainArray()
@@ -119,6 +149,20 @@ public class UserMemoryPromptTests
         var item = Assert.Single(UserMemoryPrompt.ParseLearned(raw));
         Assert.Equal(UserMemoryCategory.Preference, item.Category);
         Assert.Equal("preferred_language", item.Key);
+    }
+
+    [Fact]
+    public void ParseLearned_IgnoresReasoningWhoseOpeningTagWasInThePrompt()
+    {
+        const string raw = """
+            We are given an exchange. The user might want [bullet points] or [tables].
+            </think>
+
+            [{"category":"Preference","key":"answer_format","content":"Prefers answers in bullet points."}]
+            """;
+
+        var item = Assert.Single(UserMemoryPrompt.ParseLearned(raw));
+        Assert.Equal("answer_format", item.Key);
     }
 
     [Theory]

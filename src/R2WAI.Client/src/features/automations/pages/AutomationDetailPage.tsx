@@ -12,7 +12,6 @@ import {
   MenuItem,
   Paper,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
 import { TooltipIconButton as IconButton } from '../../../components/TooltipIconButton'
@@ -25,13 +24,14 @@ import { PublishChecklist } from '../../../components/PublishChecklist'
 import { ConfirmDeleteDialog } from '../../../components/dialogs/ConfirmDeleteDialog'
 import { EmptyState } from '../../../components/EmptyState'
 import { ErrorState } from '../../../components/ErrorState'
+import { apiErrorMessage } from '../../../lib/api/fetchJson'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { useUnsavedChangesGuard } from '../../../lib/useUnsavedChangesGuard'
-import { deleteWorkflow, executeWorkflow, getWorkflow, publishWorkflow, updateWorkflow } from '../api'
-import { buildFullWorkflowUpdatePayload, type WorkflowStep } from '../types'
+import { deleteWorkflow, executeWorkflow, getWorkflow, publishWorkflow, unpublishWorkflow, updateWorkflow } from '../api'
+import { buildFullWorkflowUpdatePayload, isPlaceholderStep, type WorkflowStep } from '../types'
+import { looksLikeCron, parseTrigger, toSupportedTrigger } from '../trigger'
 import { DynamicStepEditorDrawer } from '../components/DynamicStepEditorDrawer'
-
-const KNOWN_TRIGGERS = ['Application Submitted', 'Application Updated', 'Payment Received', 'Form Submitted', 'Schedule', 'Webhook']
+import { TriggerEditor } from '../components/TriggerEditor'
 
 function parseSteps(stepsJson: string | null): WorkflowStep[] {
   if (!stepsJson) return []
@@ -71,13 +71,17 @@ export function AutomationDetailPage() {
     JSON.stringify(steps) !== JSON.stringify(initialSteps) || effectiveTrigger !== (workflow.trigger ?? null)
   )
   useUnsavedChangesGuard(isDirty)
+  const parsedTrigger = parseTrigger(effectiveTrigger)
+  const scheduleInvalid = parsedTrigger.kind === 'schedule' && !looksLikeCron(parsedTrigger.cron ?? '')
+  const triggerReady = !!toSupportedTrigger(effectiveTrigger) || parsedTrigger.kind === 'manual'
+  const placeholderSteps = steps.filter(isPlaceholderStep)
 
   const saveMutation = useMutation({
     mutationFn: () =>
       updateWorkflow(
         id!,
         buildFullWorkflowUpdatePayload(workflow!, {
-          trigger: effectiveTrigger,
+          trigger: toSupportedTrigger(effectiveTrigger) ?? null,
           steps: JSON.stringify(steps.map((s, i) => ({ ...s, order: i }))),
         }),
       ),
@@ -87,7 +91,7 @@ export function AutomationDetailPage() {
       setTrigger(undefined)
       void queryClient.invalidateQueries({ queryKey: ['workflows', id] })
     },
-    onError: () => notify('Failed to save draft', 'error'),
+    onError: (error) => notify(apiErrorMessage(error, 'Failed to save draft'), 'error'),
   })
 
   const testMutation = useMutation({
@@ -107,7 +111,17 @@ export function AutomationDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['workflows', id] })
       void queryClient.invalidateQueries({ queryKey: ['workflows'] })
     },
-    onError: () => notify('Failed to publish', 'error'),
+    onError: (error) => notify(apiErrorMessage(error, 'Failed to publish'), 'error'),
+  })
+
+  const unpublishMutation = useMutation({
+    mutationFn: () => unpublishWorkflow(id!),
+    onSuccess: () => {
+      notify('Automation unpublished — its schedule and webhooks no longer start runs', 'success')
+      void queryClient.invalidateQueries({ queryKey: ['workflows', id] })
+      void queryClient.invalidateQueries({ queryKey: ['workflows'] })
+    },
+    onError: (error) => notify(apiErrorMessage(error, 'Failed to unpublish'), 'error'),
   })
 
   const deleteMutation = useMutation({
@@ -193,9 +207,14 @@ export function AutomationDetailPage() {
           <Button onClick={() => testMutation.mutate()} disabled={testMutation.isPending || isDirty}>
             {testMutation.isPending ? 'Starting…' : 'Test'}
           </Button>
-          <Button variant="outlined" disabled={!isDirty || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+          <Button variant="outlined" disabled={!isDirty || saveMutation.isPending || scheduleInvalid} onClick={() => saveMutation.mutate()}>
             {saveMutation.isPending ? 'Saving…' : 'Save Draft'}
           </Button>
+          {workflow.versionStatus === 'Published' && (
+            <Button onClick={() => unpublishMutation.mutate()} disabled={unpublishMutation.isPending}>
+              {unpublishMutation.isPending ? 'Unpublishing…' : 'Unpublish'}
+            </Button>
+          )}
           <Button variant="contained" onClick={() => setPublishOpen(true)}>
             Publish
           </Button>
@@ -229,23 +248,7 @@ export function AutomationDetailPage() {
         <Typography variant="overline" color="text.secondary">
           How it starts
         </Typography>
-        <TextField
-          select
-          fullWidth
-          size="small"
-          label="Trigger"
-          value={effectiveTrigger ?? ''}
-          onChange={(e) => setTrigger(e.target.value || null)}
-          slotProps={{ select: { native: true } }}
-          sx={{ mt: 1 }}
-        >
-          <option value="">No trigger set — run manually or via Test</option>
-          {KNOWN_TRIGGERS.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </TextField>
+        <TriggerEditor value={effectiveTrigger} onChange={setTrigger} />
       </Paper>
 
       <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
@@ -255,6 +258,12 @@ export function AutomationDetailPage() {
         <Stack spacing={1}>
           {steps.length === 0 && (
             <EmptyState title="No steps yet" description="Add one below to define what this automation does." />
+          )}
+          {placeholderSteps.length > 0 && (
+            <Alert severity="warning">
+              {placeholderSteps.length === 1 ? 'One step is a placeholder' : `${placeholderSteps.length} steps are placeholders`}{' '}
+              that do nothing when run. Open each and choose a real step type before publishing.
+            </Alert>
           )}
           {steps.map((step, i) => (
             <Stack
@@ -274,7 +283,12 @@ export function AutomationDetailPage() {
               >
                 <Typography variant="body2">{step.name}</Typography>
               </ButtonBase>
-              <Chip label={step.type ?? 'Action'} size="small" variant="outlined" />
+              <Chip
+                label={isPlaceholderStep(step) ? 'Placeholder' : step.type ?? step.action}
+                size="small"
+                variant="outlined"
+                color={isPlaceholderStep(step) ? 'warning' : 'default'}
+              />
               <IconButton size="small" aria-label={`Options for step ${step.name}`} onClick={(e) => setMenuAnchor({ el: e.currentTarget, index: i })}>
                 <MoreVertIcon fontSize="small" />
               </IconButton>
@@ -347,6 +361,16 @@ export function AutomationDetailPage() {
         checks={[
           { label: 'Name configured', ready: !!workflow.name.trim() },
           { label: 'At least one step', ready: steps.length > 0 },
+          {
+            label: 'Every step does something',
+            ready: placeholderSteps.length === 0,
+            detail: placeholderSteps.length > 0 ? `Replace placeholder: ${placeholderSteps.map((s) => s.name).join(', ')}` : undefined,
+          },
+          {
+            label: 'Trigger can start it',
+            ready: triggerReady && !scheduleInvalid,
+            detail: triggerReady && !scheduleInvalid ? undefined : 'Choose Manual, Webhook or a valid schedule',
+          },
           { label: 'No unsaved changes', ready: !isDirty, detail: isDirty ? 'Save Draft first' : undefined },
         ]}
       />

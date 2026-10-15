@@ -13,6 +13,19 @@ public interface IAIService
     /// </param>
     /// <param name="temperature">Same override precedence as <paramref name="maxTokens"/>.</param>
     Task<string> GenerateResponseAsync(string prompt, string? systemPrompt = null, string? context = null, ResolvedModelConfig? modelConfig = null, int? maxTokens = null, double? temperature = null, CancellationToken ct = default);
+    /// <summary>
+    /// <see cref="GenerateResponseAsync"/> for a short structured answer (a JSON array, a label) where a
+    /// reasoning model's thinking pass only costs time: asks the provider to answer directly where it
+    /// has a way to. Best-effort — a provider without one answers as <see cref="GenerateResponseAsync"/>
+    /// would, so the caller must still tolerate a reasoning block in the reply. Never use it for chat.
+    /// </summary>
+    /// <param name="replyJsonSchema">
+    /// The JSON schema the reply must follow, if it is JSON. A provider that can constrain decoding to
+    /// it may, which also stops a model that always reasons from reasoning in its answer. Not a
+    /// validation: the caller still parses the reply defensively.
+    /// </param>
+    Task<string> GenerateResponseWithoutReasoningAsync(string prompt, string? replyJsonSchema = null, ResolvedModelConfig? modelConfig = null, int? maxTokens = null, double? temperature = null, CancellationToken ct = default)
+        => GenerateResponseAsync(prompt, modelConfig: modelConfig, maxTokens: maxTokens, temperature: temperature, ct: ct);
     /// <param name="modelConfig">Routes the call through this tenant-scoped model instead of the process-wide default. See <see cref="GenerateResponseAsync"/>.</param>
     Task<string> SummarizeTextAsync(string text, int maxLength = 500, ResolvedModelConfig? modelConfig = null, CancellationToken ct = default);
     /// <param name="modelConfig">Routes the call through this tenant-scoped model instead of the process-wide default. See <see cref="GenerateResponseAsync"/>.</param>

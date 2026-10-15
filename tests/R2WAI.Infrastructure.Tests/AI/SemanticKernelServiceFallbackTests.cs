@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 using R2WAI.Application.Common.Exceptions;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Infrastructure.AI;
@@ -198,6 +199,8 @@ sealed class FakeModelGateway : IModelGateway
         if (_configurers.TryGetValue(providerName, out var configure))
             configure(builder);
     }
+
+    public void DisableReasoning(OpenAIPromptExecutionSettings settings, string? replyJsonSchema, ResolvedModelConfig? config = null) { }
 }
 
 sealed class FakeChatCompletionService : IChatCompletionService

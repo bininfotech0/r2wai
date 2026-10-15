@@ -92,6 +92,32 @@ public class SemanticKernelService : IAIService
         return result.ToString();
     }
 
+    public async Task<string> GenerateResponseWithoutReasoningAsync(string prompt, string? replyJsonSchema = null, ResolvedModelConfig? modelConfig = null, int? maxTokens = null, double? temperature = null, CancellationToken ct = default)
+    {
+        var kernel = await GetOrCreateKernelAsync(modelConfig: modelConfig, ct: ct);
+        var chatCompletion = kernel.Services.GetService<IChatCompletionService>();
+        if (chatCompletion is null)
+        {
+            _logger.LogWarning("No AI chat completion service is configured for response generation.");
+            return "AI service is not configured. Please set up an AI provider in the application settings.";
+        }
+
+        var settings = new OpenAIPromptExecutionSettings
+        {
+            MaxTokens = maxTokens ?? modelConfig?.MaxTokens ?? 2048,
+            Temperature = temperature ?? modelConfig?.Temperature ?? 0.7,
+            TopP = modelConfig?.TopP
+        };
+        _modelGateway.DisableReasoning(settings, replyJsonSchema, modelConfig);
+
+        // A chat history rather than a prompt function, so the prompt (which may quote user text)
+        // is never parsed as a prompt template.
+        var history = new ChatHistory();
+        history.AddUserMessage(prompt);
+        var result = await chatCompletion.GetChatMessageContentAsync(history, settings, kernel, ct);
+        return result.Content ?? string.Empty;
+    }
+
     public async IAsyncEnumerable<string> GenerateStreamingResponseAsync(string prompt, string? systemPrompt = null, string? context = null, [EnumeratorCancellation] CancellationToken ct = default)
     {
         var kernel = await GetOrCreateKernelAsync(ct: ct);

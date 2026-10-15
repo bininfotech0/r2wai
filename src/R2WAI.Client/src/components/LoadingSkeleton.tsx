@@ -18,7 +18,7 @@ interface LoadingSkeletonProps {
  * Deliberately skeleton-only: it never stands in for data, and callers pair it with
  * ErrorState when `query.error` is set rather than showing one in place of the other.
  */
-const srOnly = { position: 'absolute', width: 1, height: 1, p: 0, m: '-1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 } as const
+const srOnly = { position: 'absolute', width: '1px', height: '1px', p: 0, m: '-1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 } as const
 
 /** Screen-reader status for every skeleton variant — announced politely, invisible on screen. */
 function LoadingAnnouncement() {

@@ -104,6 +104,7 @@ if (!string.IsNullOrEmpty(elsaConnectionString) && !builder.Environment.IsEnviro
 builder.Services.AddSingleton<R2WAI.Api.Hubs.IWorkflowStatusService, R2WAI.Api.Hubs.WorkflowStatusService>();
 builder.Services.AddHostedService<R2WAI.Infrastructure.Services.EscalationBackgroundService>();
 builder.Services.AddHostedService<R2WAI.Api.Services.WorkflowDelayResumeBackgroundService>();
+builder.Services.AddHostedService<R2WAI.Api.Services.ScheduledWorkflowTriggerService>();
 builder.Services.AddHostedService<R2WAI.Api.Services.DataRetentionBackgroundService>();
 
 builder.Services.AddAuthentication(options =>

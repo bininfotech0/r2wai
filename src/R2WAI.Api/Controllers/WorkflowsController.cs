@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using R2WAI.Api.Services;
+using R2WAI.Api.Workflows;
 using R2WAI.Application.Common.Interfaces;
+using R2WAI.Application.Features.Workflows;
 using R2WAI.Application.Features.Workflows.Commands;
 using R2WAI.Application.Features.Workflows.DTOs;
 using R2WAI.Application.Features.Workflows.Queries;
@@ -65,10 +67,22 @@ public class WorkflowsController(
     // .Auto() (what IAgentRuntime always enables) would let the model choose to call a tool — e.g.
     // start_workflow — instead of returning the draft, which is not a risk worth taking for a
     // suggestion the admin still has to review and click through before anything is created.
-    private static readonly string[] KnownTriggers =
-        ["Application Submitted", "Application Updated", "Payment Received", "Form Submitted", "Schedule", "Webhook"];
-    private static readonly string[] KnownActions =
-        ["Verify Documents", "Get Application Details", "Assign Officer", "Send Notification", "Update Application Status", "Create Task"];
+    //
+    // Both vocabularies are limited to what actually runs. Triggers: only these three start a run
+    // (WorkflowTriggerSpec). Actions: the executable step types (StepActivityFactory) — the old list
+    // ("Verify Documents", "Assign Officer"…) all became type "Action" steps, which only log a line.
+    private static readonly string[] KnownTriggers = ["Manual", "Webhook", "Schedule"];
+    private static readonly (string Type, string Meaning)[] StepTypes =
+    [
+        ("Approval", "a person must approve before the automation continues"),
+        ("Email", "send an email notification"),
+        ("API Call", "read, create or update a record in another system"),
+        ("AI Generate", "draft, summarize, classify or extract text with AI"),
+        ("Condition", "branch on a value"),
+        ("Transform", "reshape or map data between steps"),
+        ("Delay", "wait for a period of time"),
+    ];
+    private static readonly string[] KnownActions = StepTypes.Select(s => s.Type).ToArray();
 
     [HttpPost("draft")]
     public async Task<IActionResult> DraftFromDescription([FromBody] DraftWorkflowRequest request, CancellationToken ct = default)
@@ -81,16 +95,18 @@ public class WorkflowsController(
             var prompt =
                 "You are helping a non-technical user configure a business process automation. " +
                 "Based on their description below, pick the single best-matching trigger and the ordered " +
-                "list of actions from the fixed options given, and any simple conditions implied. " +
+                "list of steps from the fixed step types given, and any simple conditions implied. " +
                 "Return ONLY a valid JSON object — no markdown, no explanation.\n\n" +
                 $"Description: {request.Description}\n\n" +
-                $"Available triggers (pick exactly one, or null if none fit): {string.Join(", ", KnownTriggers)}\n" +
-                $"Available actions (pick zero or more, in the order they should run): {string.Join(", ", KnownActions)}\n\n" +
+                "Available triggers (pick exactly one, or null if none fit): Manual (someone runs it), " +
+                "Webhook (another system calls it), Schedule (runs at set times)\n" +
+                "Available step types (pick zero or more, in the order they should run):\n" +
+                string.Join("\n", StepTypes.Select(s => $"- {s.Type}: {s.Meaning}")) + "\n\n" +
                 "JSON format:\n" +
                 "{\n" +
                 "  \"name\": \"<short automation name, 2-6 words>\",\n" +
                 "  \"trigger\": \"<one of the triggers above, or null>\",\n" +
-                "  \"actions\": [\"<action label>\", ...],\n" +
+                "  \"steps\": [{\"type\": \"<step type>\", \"name\": \"<what this step does, 2-5 words>\"}, ...],\n" +
                 "  \"conditions\": [{\"field\": \"<field name>\", \"operator\": \"<Is equal to|Is not equal to|Contains|Greater than|Less than>\", \"value\": \"<value>\"}]\n" +
                 "}";
 
@@ -210,6 +226,16 @@ public class WorkflowsController(
     {
         var workflow = await dbContext.Workflows.FirstOrDefaultAsync(w => w.Id == id, ct);
         if (workflow is null) return NotFound();
+
+        var blockers = GetPublishBlockers(workflow);
+        if (blockers.Count > 0)
+            return UnprocessableEntity(new ValidationProblemDetails(blockers)
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "This automation can't be published yet",
+                Detail = blockers.Values.SelectMany(v => v).First(),
+            });
+
         workflow.Publish();
 
         var versionRow = await GetOrCreateVersionSnapshotAsync(workflow, ct);
@@ -222,6 +248,39 @@ public class WorkflowsController(
         logger.LogInformation("Workflow {Id} published (v{Version})", id, workflow.Version);
         return Ok(new { id, version = workflow.Version, versionStatus = workflow.VersionStatus });
     }
+
+    // A published automation runs unattended (schedule, webhook, agent tool), so it must not contain
+    // anything that silently does nothing: an unsupported trigger, or a placeholder "Action" step,
+    // which only writes a log line (ActionNodeProvider). Test runs stay allowed.
+    private static Dictionary<string, string[]> GetPublishBlockers(Workflow workflow)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (WorkflowTriggerSpec.Validate(workflow.Trigger) is { } triggerError)
+            errors["Trigger"] = [triggerError];
+
+        List<WorkflowStepDto> steps;
+        try
+        {
+            steps = JsonSerializer.Deserialize<List<WorkflowStepDto>>(workflow.Steps ?? "[]", StepJsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            errors["Steps"] = ["The steps could not be read. Open the builder and save the automation again."];
+            return errors;
+        }
+
+        var placeholders = steps
+            .Where(s => StepActivityFactory.ClassifyStepType(s) == "Action")
+            .Select(s => $"'{s.Name}'")
+            .ToList();
+        if (placeholders.Count > 0)
+            errors["Steps"] = [$"Replace the placeholder step(s) {string.Join(", ", placeholders)} — they do nothing when run. " +
+                "Use Approval, Email, API Call, AI Generate, Condition, Transform or Delay."];
+
+        return errors;
+    }
+
+    private static readonly JsonSerializerOptions StepJsonOptions = new(JsonSerializerDefaults.Web);
 
     // Snapshots the workflow's current content under its current Version number if one doesn't
     // already exist — Publish/NewVersion are the only two places a version transition happens, so

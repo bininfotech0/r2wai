@@ -2,6 +2,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
+using OpenAI.Chat;
 using R2WAI.Application.Common.Exceptions;
 using R2WAI.Infrastructure.AI.ModelGateway;
 
@@ -136,6 +138,48 @@ public class ModelGatewayTests
     {
         var gateway = BuildGateway(Config(new() { ["AI:FallbackProvider"] = "OLLAMA" }));
         Assert.Equal("ollama", gateway.FallbackProviderName);
+    }
+
+    [Fact]
+    public void DisableReasoning_Ollama_TurnsThinkingOff_AndConstrainsTheReplyToItsSchema()
+    {
+        var gateway = BuildGateway(Config(new() { ["AI:Provider"] = "ollama" }));
+        var settings = new OpenAIPromptExecutionSettings();
+
+        gateway.DisableReasoning(settings, """{"type":"array"}""");
+
+#pragma warning disable OPENAI001
+        Assert.Equal(new ChatReasoningEffortLevel("none"), settings.ReasoningEffort);
+#pragma warning restore OPENAI001
+        Assert.IsAssignableFrom<ChatResponseFormat>(settings.ResponseFormat);
+    }
+
+    [Fact]
+    public void DisableReasoning_Ollama_WithoutASchema_LeavesTheReplyFormatAlone()
+    {
+        var gateway = BuildGateway(Config(new() { ["AI:Provider"] = "ollama" }));
+        var settings = new OpenAIPromptExecutionSettings();
+
+        gateway.DisableReasoning(settings, null);
+
+        Assert.NotNull(settings.ReasoningEffort);
+        Assert.Null(settings.ResponseFormat);
+    }
+
+    [Theory]
+    [InlineData("openai")]
+    [InlineData("zai")]
+    public void DisableReasoning_ProviderWithoutASwitch_LeavesTheRequestUnchanged(string provider)
+    {
+        // OpenAI rejects reasoning_effort on non-reasoning models and a non-object root schema, so
+        // sending either would break the call rather than speed it up.
+        var gateway = BuildGateway(Config([]));
+        var settings = new OpenAIPromptExecutionSettings();
+
+        gateway.DisableReasoning(settings, """{"type":"array"}""", new(provider, "key", null, null, null, null, null));
+
+        Assert.Null(settings.ReasoningEffort);
+        Assert.Null(settings.ResponseFormat);
     }
 
     [Fact]

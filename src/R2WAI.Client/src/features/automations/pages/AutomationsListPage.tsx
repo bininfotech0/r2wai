@@ -16,6 +16,7 @@ import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { deleteWorkflow, listWorkflows } from '../api'
 import { CreateAutomationDialog } from '../dialogs/CreateAutomationDialog'
 import type { WorkflowDto } from '../types'
+import { describeTrigger } from '../trigger'
 import type { MetricsDto } from '../../dashboard/types'
 import { PageHeader } from '../../../components/PageHeader'
 
@@ -65,7 +66,7 @@ export function AutomationsListPage() {
       width: 130,
       renderCell: (params) => <StatusBadge status={params.value} />,
     },
-    { field: 'trigger', headerName: 'Trigger', width: 160, valueGetter: (_, row) => row.trigger ?? '—' },
+    { field: 'trigger', headerName: 'Trigger', width: 200, valueGetter: (_, row) => describeTrigger(row.trigger) },
     { field: 'version', headerName: 'Version', width: 100, valueFormatter: (v: number) => `v${v}` },
     {
       field: 'modifiedAt',

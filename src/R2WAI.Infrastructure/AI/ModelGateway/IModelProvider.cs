@@ -1,4 +1,5 @@
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 using R2WAI.Application.Common.Interfaces;
 
 namespace R2WAI.Infrastructure.AI.ModelGateway;
@@ -20,4 +21,12 @@ public interface IModelProvider
     /// means "use configuration entirely," byte-identical to the pre-existing behavior.
     /// </param>
     void Configure(IKernelBuilder builder, ResolvedModelConfig? config = null);
+
+    /// <summary>
+    /// Adjusts one request so a reasoning model answers directly instead of thinking first, for
+    /// <see cref="IAIService.GenerateResponseWithoutReasoningAsync"/> only, never for chat. A provider
+    /// with no way to switch reasoning off leaves the request as it is: that is the default here.
+    /// </summary>
+    /// <param name="replyJsonSchema">The reply's JSON schema, when the caller has one; see the IAIService method.</param>
+    void DisableReasoning(OpenAIPromptExecutionSettings settings, string? replyJsonSchema) { }
 }

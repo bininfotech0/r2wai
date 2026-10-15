@@ -116,4 +116,37 @@ public class WorkflowDraftParserTests
         Assert.Empty(result.Actions);
         Assert.Empty(result.Conditions);
     }
+
+    // The draft endpoint's vocabulary is now the executable step types, and the model names each step.
+    private static readonly string[] StepTypes = ["Approval", "Email", "API Call", "AI Generate", "Condition", "Transform", "Delay"];
+
+    [Fact]
+    public void Parse_StepsShape_KeepsModelNamesAndOnlyKnownTypes()
+    {
+        var raw = """
+        {"steps": [
+          {"type": "approval", "name": "Manager approves leave"},
+          {"type": "Email", "name": "  Tell HR  "},
+          {"type": "Assign Officer", "name": "Not a real step type"},
+          {"type": "Delay"}
+        ]}
+        """;
+
+        var result = WorkflowDraftParser.Parse(raw, Triggers, StepTypes);
+
+        Assert.Equal(
+            [new WorkflowDraftStep("Manager approves leave", "Approval"), new WorkflowDraftStep("Tell HR", "Email"), new WorkflowDraftStep("Delay", "Delay")],
+            result.Steps);
+        Assert.Equal(["Approval", "Email", "Delay"], result.Actions);
+    }
+
+    [Fact]
+    public void Parse_LegacyActionsShape_BecomesStepsNamedAfterTheirType()
+    {
+        var raw = """{"actions": ["Email", "Launch Nuclear Missiles", "API Call"]}""";
+
+        var result = WorkflowDraftParser.Parse(raw, Triggers, StepTypes);
+
+        Assert.Equal([new WorkflowDraftStep("Email", "Email"), new WorkflowDraftStep("API Call", "API Call")], result.Steps);
+    }
 }

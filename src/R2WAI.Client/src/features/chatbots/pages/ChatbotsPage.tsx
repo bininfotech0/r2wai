@@ -96,7 +96,6 @@ export function ChatbotsPage() {
           actions={[
             { label: 'Open', onSelect: () => navigate(`/chatbots/${row.id}`) },
             { label: 'Website widget', onSelect: () => navigate(`/deploy/widget/${row.id}`) },
-            { label: 'WhatsApp', onSelect: () => navigate(`/deploy/whatsapp/${row.id}`) },
           ]}
         />
       ),
@@ -107,7 +106,7 @@ export function ChatbotsPage() {
     <Box>
       <PageHeader
         title="Publish"
-        description="Chatbots put a published agent on your website, WhatsApp or any system through a webhook."
+        description="Chatbots put a published agent on your website, or on any system through a webhook."
         actions={
           <>
             {/* Distribution lives under Chatbots rather than in its own nav section, so this is

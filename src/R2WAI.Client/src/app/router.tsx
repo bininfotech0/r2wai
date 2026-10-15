@@ -59,7 +59,8 @@ export const router = createBrowserRouter([
               { path: '/deploy', lazy: lazyPage(() => import('../features/deploy/pages/DeployChannelsPage').then((m) => ({ default: m.DeployChannelsPage }))) },
               { path: '/deploy/widget', lazy: lazyPage(() => import('../features/deploy/pages/WidgetDeploymentPage').then((m) => ({ default: m.WidgetDeploymentPage }))) },
               { path: '/deploy/widget/:chatbotId', lazy: lazyPage(() => import('../features/deploy/pages/WidgetDeploymentPage').then((m) => ({ default: m.WidgetDeploymentPage }))) },
-              { path: '/deploy/whatsapp/:chatbotId', lazy: lazyPage(() => import('../features/deploy/pages/WhatsAppSetupPage').then((m) => ({ default: m.WhatsAppSetupPage }))) },
+              // WhatsApp setup page removed 2026-10-16: no WhatsApp adapter exists, so it only stored credentials nothing used.
+              { path: '/deploy/whatsapp/:chatbotId', element: <LegacyRedirect to={({ chatbotId }) => `/chatbots/${chatbotId}`} /> },
               // Developer hub. The nav has pointed at /developer since the Deploy section landed,
               // so this route is what makes that link resolve rather than 404. It composes the
               // existing settings DeveloperTab for keys/webhooks instead of duplicating the forms.

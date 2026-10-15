@@ -25,7 +25,7 @@ const FEATURES = [
   { name: 'Agents', description: 'Create domain-specific AI agents with configurable models, and test them in the Playground' },
   { name: 'Knowledge', description: 'Upload documents, build knowledge bases, and enable semantic search with citations' },
   { name: 'Automations', description: 'Design and run multi-step workflows across agents and connected systems' },
-  { name: 'Publish', description: 'Deploy chatbots to the website widget, WhatsApp, and other channels' },
+  { name: 'Publish', description: 'Deploy chatbots to the website widget, or to any system through a webhook or the API' },
   { name: 'Activity', description: 'Executions, confirmations, and monitoring across agents and connected systems' },
   { name: 'Settings', description: 'Users, roles, AI models, security policies, and API & SDK access' },
 ]

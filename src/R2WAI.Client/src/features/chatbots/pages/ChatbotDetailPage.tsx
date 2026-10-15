@@ -27,6 +27,7 @@ import LanguageIcon from '@mui/icons-material/Language'
 import { ConfirmDeleteDialog } from '../../../components/dialogs/ConfirmDeleteDialog'
 import { ErrorState } from '../../../components/ErrorState'
 import { TooltipIconButton } from '../../../components/TooltipIconButton'
+import { CHANNEL_CAPABILITIES } from '../../deploy/types'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import {
   addChatbotChannel,
@@ -181,7 +182,9 @@ export function ChatbotDetailPage() {
   }
 
   const connectedChannels = new Set((channelsQuery.data ?? []).map((c) => c.channel))
-  const availableChannels = CHATBOT_CHANNEL_TYPES.filter((c) => !connectedChannels.has(c))
+  // Only channels with a working provider adapter can be connected (CHANNEL_CAPABILITIES.canDeliver);
+  // none has one yet, so this is empty and the Connect form stays hidden.
+  const availableChannels = CHATBOT_CHANNEL_TYPES.filter((c) => !connectedChannels.has(c) && CHANNEL_CAPABILITIES[c].canDeliver)
 
   return (
     <Box>
@@ -316,7 +319,7 @@ export function ChatbotDetailPage() {
           {channelsQuery.isSuccess && (channelsQuery.data ?? []).map((c) => (
             <Chip
               key={c.channel}
-              label={c.channel}
+              label={CHANNEL_CAPABILITIES[c.channel]?.canDeliver ? c.channel : `${c.channel} — stored, not active`}
               size="small"
               variant="outlined"
               onDelete={() => removeChannelMutation.mutate(c.channel)}
@@ -342,12 +345,13 @@ export function ChatbotDetailPage() {
           >
             Website widget
           </Button>
-          {connectedChannels.has('WhatsApp') && (
-            <Button component={RouterLink} to={`/deploy/whatsapp/${chatbot.id}`} size="small" variant="outlined">
-              WhatsApp settings
-            </Button>
-          )}
         </Stack>
+        {channelsQuery.isSuccess && availableChannels.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Teams, Slack, WhatsApp and SMS aren&apos;t available yet. Publish with the website widget, or connect any
+            system through the webhook below.
+          </Typography>
+        )}
         {channelsQuery.isSuccess && availableChannels.length > 0 && (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             <FormControl size="small" sx={{ minWidth: 160 }}>

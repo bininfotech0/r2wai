@@ -1,4 +1,5 @@
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 using R2WAI.Application.Common.Interfaces;
 
 namespace R2WAI.Infrastructure.AI.ModelGateway;
@@ -24,4 +25,10 @@ public interface IModelGateway
     string? FallbackProviderName { get; }
 
     void ConfigureKernel(IKernelBuilder builder, ResolvedModelConfig? config = null);
+
+    /// <summary>
+    /// Hands one request to the provider <see cref="ConfigureKernel"/> would pick for the same
+    /// <paramref name="config"/>, to switch its reasoning off. See <see cref="IModelProvider.DisableReasoning"/>.
+    /// </summary>
+    void DisableReasoning(OpenAIPromptExecutionSettings settings, string? replyJsonSchema, ResolvedModelConfig? config = null);
 }

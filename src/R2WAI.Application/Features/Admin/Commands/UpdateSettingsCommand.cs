@@ -19,9 +19,8 @@ public class UpdateSettingsCommandValidator : AbstractValidator<UpdateSettingsCo
 {
     public UpdateSettingsCommandValidator()
     {
-        // Both fields are opaque JSON blobs merged into Tenant.Settings/Features (e.g. the
-        // content-moderation panel stores its rules as a "contentModeration" key inside
-        // TenantSettings). Nothing validated this before persisting — a malformed write here
+        // Both fields are opaque JSON blobs merged into Tenant.Settings/Features. Nothing validated
+        // this before persisting — a malformed write here
         // wouldn't crash on save, but would silently replace whatever valid JSON was there,
         // corrupting every other settings section for the tenant. Same class of gap as D6's
         // unvalidated cron expressions, just for tenant-wide config instead of a schedule.

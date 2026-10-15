@@ -110,7 +110,7 @@ export function CodeSnippet({ code, language, maxHeight, copyable = true }: Code
         <code>{code}</code>
       </Box>
       {/* Announces the copy result to screen readers; the icon swap alone is visual. */}
-      <Typography role="status" aria-live="polite" sx={{ position: 'absolute', width: 1, height: 1, p: 0, m: -1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' }}>
+      <Typography role="status" aria-live="polite" sx={{ position: 'absolute', width: '1px', height: '1px', p: 0, m: '-1px', overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' }}>
         {copied ? 'Copied to clipboard' : ''}
       </Typography>
     </Box>

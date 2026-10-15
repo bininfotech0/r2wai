@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  Alert,
   Box,
   Button,
   Checkbox,
@@ -43,7 +44,7 @@ export function DynamicStepEditorDrawer({
   onDelete,
 }: DynamicStepEditorDrawerProps) {
   const [name, setName] = useState('')
-  const [type, setType] = useState<StepType>('Action')
+  const [type, setType] = useState<StepType>(STEP_TYPES[0])
   const [config, setConfig] = useState<SchemaFormValue>({})
   const [nextSteps, setNextSteps] = useState<string[]>([])
   const [retryCount, setRetryCount] = useState(0)
@@ -52,7 +53,7 @@ export function DynamicStepEditorDrawer({
   useEffect(() => {
     if (!step) {
       setName('')
-      setType('Action')
+      setType(STEP_TYPES[0])
       setConfig({})
       setNextSteps([])
       setRetryCount(0)
@@ -87,16 +88,18 @@ export function DynamicStepEditorDrawer({
           <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} fullWidth autoFocus />
 
           <FormControl fullWidth size="small">
-            <InputLabel id="step-type-label">Action</InputLabel>
+            <InputLabel id="step-type-label">Step type</InputLabel>
             <Select
               labelId="step-type-label"
-              label="Action"
+              label="Step type"
               value={type}
               onChange={(e) => {
                 setType(e.target.value as StepType)
                 setConfig({})
               }}
             >
+              {/* 'Action' is a no-op placeholder: never offered, only shown for an existing one. */}
+              {type === 'Action' && <MenuItem value="Action">Placeholder (does nothing)</MenuItem>}
               {STEP_TYPES.map((t) => (
                 <MenuItem key={t} value={t}>
                   {t}
@@ -104,6 +107,12 @@ export function DynamicStepEditorDrawer({
               ))}
             </Select>
           </FormControl>
+          {type === 'Action' && (
+            <Alert severity="warning">
+              This placeholder step performs no action when the automation runs. Pick a real step type — an automation
+              with placeholder steps can't be published.
+            </Alert>
+          )}
 
           {Object.keys(STEP_CONFIG_SCHEMAS[type].properties).length > 0 ? (
             <SchemaForm schema={STEP_CONFIG_SCHEMAS[type]} value={config} onChange={setConfig} />

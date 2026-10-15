@@ -81,6 +81,41 @@ public static partial class UserMemoryPrompt
         return budget;
     }
 
+    // Asked for before the memories, so the model commits to "nothing here" before it can start
+    // writing an item: without a reasoning pass, a small model asked only for a list fills it with
+    // whatever the exchange mentioned (a question about leave policy became a "Fact" memory).
+    private const string GateProperty = "user_said_something_lasting_about_themselves";
+
+    /// <summary>
+    /// The shape <see cref="BuildLearningPrompt"/> asks for, for a provider that can constrain decoding
+    /// to it. <see cref="ParseLearned"/> still checks every item, so this only has to be close.
+    /// </summary>
+    public static readonly string LearnedJsonSchema = JsonSerializer.Serialize(new Dictionary<string, object>
+    {
+        ["type"] = "object",
+        ["properties"] = new Dictionary<string, object>
+        {
+            [GateProperty] = new { type = "boolean" },
+            ["memories"] = new
+            {
+                type = "array",
+                maxItems = MaxLearnedPerTurn,
+                items = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        category = new { type = "string", @enum = Enum.GetNames<UserMemoryCategory>() },
+                        key = new { type = "string" },
+                        content = new { type = "string" },
+                    },
+                    required = new[] { "category", "key", "content" },
+                },
+            },
+        },
+        ["required"] = new[] { GateProperty, "memories" },
+    });
+
     public static string BuildLearningPrompt(IReadOnlyList<UserMemory> existing, string userMessage, string reply)
     {
         var known = existing.Count == 0
@@ -96,35 +131,40 @@ public static partial class UserMemoryPrompt
             "Skip anything already in the existing memories unless it has changed.\n\n" +
             $"Existing memories:\n{known}\n\n" +
             $"Exchange:\nUSER: {userMessage}\nASSISTANT: {reply}\n\n" +
-            "Reply with ONLY a JSON array, no other text. Each item: " +
-            "{\"category\":\"Profile|Preference|Instruction|Fact|Goal\",\"key\":\"short_snake_case_key\",\"content\":\"one short sentence, e.g. Prefers answers in Hindi.\"}. " +
-            "Reply [] if nothing qualifies.";
+            $"Reply with ONLY a JSON object, no other text: {{\"{GateProperty}\": true or false, \"memories\": [...]}}. " +
+            "Each memory: {\"category\":\"Profile|Preference|Instruction|Fact|Goal\",\"key\":\"short_snake_case_key\",\"content\":\"one short sentence, e.g. Prefers answers in Hindi.\"}. " +
+            "A question, a task, or a fact about the world is not something about the user: answer false with an empty list.";
     }
 
     /// <summary>
     /// Tolerant of what small local models actually return: a reasoning block, a code fence, prose
-    /// around the array. Anything that isn't a well-formed candidate is dropped, never guessed at.
+    /// around the JSON, a bare array instead of the object asked for. Anything that isn't a
+    /// well-formed candidate is dropped, never guessed at, and so is everything when the model said
+    /// there was nothing about the user.
     /// </summary>
     public static IReadOnlyList<LearnedCandidate> ParseLearned(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return [];
 
-        var text = ThinkBlock().Replace(raw, string.Empty);
-        var start = text.IndexOf('[');
-        var end = text.LastIndexOf(']');
-        if (start < 0 || end <= start) return [];
+        // A closing tag with no opening one: the template opened the reasoning block in the prompt
+        // and the provider passed the reasoning through as plain text (Ollama with thinking off on
+        // a thinking-only model), so everything before it is reasoning.
+        var close = raw.LastIndexOf(ThinkClose, StringComparison.OrdinalIgnoreCase);
+        var text = ThinkBlock().Replace(close < 0 ? raw : raw[(close + ThinkClose.Length)..], string.Empty);
 
-        JsonElement root;
-        try
+        var objectStart = text.IndexOf('{');
+        var arrayStart = text.IndexOf('[');
+        JsonElement? items = null;
+        if (objectStart >= 0 && (arrayStart < 0 || objectStart < arrayStart)
+            && TryParse(text, objectStart, text.LastIndexOf('}')) is { ValueKind: JsonValueKind.Object } reply
+            && TryGetProperty(reply, "memories", out var memories))
         {
-            using var doc = JsonDocument.Parse(text[start..(end + 1)]);
-            root = doc.RootElement.Clone();
+            if (TryGetProperty(reply, GateProperty, out var gate) && gate.ValueKind == JsonValueKind.False)
+                return [];
+            items = memories;
         }
-        catch (JsonException)
-        {
-            return [];
-        }
-        if (root.ValueKind != JsonValueKind.Array) return [];
+        items ??= TryParse(text, arrayStart, text.LastIndexOf(']'));
+        if (items is not { ValueKind: JsonValueKind.Array } root) return [];
 
         var result = new List<LearnedCandidate>();
         foreach (var item in root.EnumerateArray())
@@ -144,15 +184,38 @@ public static partial class UserMemoryPrompt
         return result;
     }
 
-    private static string? GetString(JsonElement item, string name)
+    private static JsonElement? TryParse(string text, int start, int end)
+    {
+        if (start < 0 || end <= start) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(text[start..(end + 1)]);
+            return doc.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool TryGetProperty(JsonElement item, string name, out JsonElement value)
     {
         foreach (var property in item.EnumerateObject())
         {
             if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
-                return property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString() : null;
+            {
+                value = property.Value;
+                return true;
+            }
         }
-        return null;
+        value = default;
+        return false;
     }
+
+    private static string? GetString(JsonElement item, string name) =>
+        TryGetProperty(item, name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private const string ThinkClose = "</think>";
 
     [GeneratedRegex(@"<think>[\s\S]*?(</think>|$)", RegexOptions.IgnoreCase)]
     private static partial Regex ThinkBlock();

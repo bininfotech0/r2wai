@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 using R2WAI.Application.Common.Interfaces;
 
 namespace R2WAI.Infrastructure.AI.ModelGateway;
@@ -29,7 +30,13 @@ public class ModelGateway : IModelGateway
         _providers = providers.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
     }
 
-    public void ConfigureKernel(IKernelBuilder builder, ResolvedModelConfig? config = null)
+    public void ConfigureKernel(IKernelBuilder builder, ResolvedModelConfig? config = null) =>
+        SelectProvider(config).Configure(builder, config);
+
+    public void DisableReasoning(OpenAIPromptExecutionSettings settings, string? replyJsonSchema, ResolvedModelConfig? config = null) =>
+        SelectProvider(config).DisableReasoning(settings, replyJsonSchema);
+
+    private IModelProvider SelectProvider(ResolvedModelConfig? config)
     {
         // A resolved config picks its own provider (e.g. a tenant's OpenAI ModelConfiguration even
         // though the process-wide default is "ollama") instead of always reading "AI:Provider".
@@ -41,6 +48,6 @@ public class ModelGateway : IModelGateway
             provider = _providers["openai"];
         }
 
-        provider.Configure(builder, config);
+        return provider;
     }
 }

@@ -18,6 +18,9 @@ public class UpdateWorkflowCommandValidator : AbstractValidator<UpdateWorkflowCo
     {
         RuleFor(v => v.Id).NotEmpty();
         RuleFor(v => v.Name).NotEmpty().MaximumLength(200);
+        RuleFor(v => v.Trigger)
+            .Must(t => WorkflowTriggerSpec.Validate(t) is null)
+            .WithMessage(v => WorkflowTriggerSpec.Validate(v.Trigger) ?? string.Empty);
     }
 }
 

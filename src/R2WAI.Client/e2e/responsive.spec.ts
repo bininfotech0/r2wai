@@ -17,6 +17,25 @@ test.describe('Responsive layout', () => {
     await expect(page.locator('.MuiBottomNavigation-root')).toHaveCount(0)
   })
 
+  // Regression: the shell's screen-reader live region used sx `width: 1` (MUI reads that as
+  // 100%), so it ran past the right edge and every page scrolled sideways.
+  test('no page scrolls sideways on desktop or phone', async ({ page }) => {
+    test.setTimeout(120_000)
+    await loginAsAdmin(page)
+
+    const overflows: string[] = []
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 })
+      for (const path of ['/', '/assistants', '/workspaces', '/profile', '/memory']) {
+        await page.goto(path, { waitUntil: 'domcontentloaded' })
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+        if (overflow > 0) overflows.push(`${path} at ${width}px: ${overflow}px`)
+      }
+    }
+    expect(overflows, `Pages wider than the viewport:\n  - ${overflows.join('\n  - ')}`).toEqual([])
+  })
+
   test('respects the operating system reduced-motion preference', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await loginAsAdmin(page)

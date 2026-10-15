@@ -23,7 +23,8 @@ public sealed class LearnUserMemoryJobHandler(
     IEncryptionService encryption,
     ILogger<LearnUserMemoryJobHandler> logger) : IBackgroundJobHandler
 {
-    // Room for a reasoning model's thinking plus three short items; bounds what one pass can cost.
+    // Room for a reasoning model's thinking (on a provider that can't switch it off) plus three
+    // short items; bounds what one pass can cost.
     private const int MaxOutputTokens = 1500;
 
     public string JobType => BackgroundJobTypes.LearnUserMemory;
@@ -53,7 +54,10 @@ public sealed class LearnUserMemoryJobHandler(
         string raw;
         try
         {
-            raw = await aiService.GenerateResponseAsync(prompt, modelConfig: modelConfig, maxTokens: MaxOutputTokens, temperature: 0.1, ct: ct);
+            // Without reasoning: a thinking pass multiplies this call's cost several times over on a
+            // local CPU model (qwen3 thinks for ~900 tokens) for a reply that is a short JSON array.
+            raw = await aiService.GenerateResponseWithoutReasoningAsync(prompt, UserMemoryPrompt.LearnedJsonSchema, modelConfig,
+                MaxOutputTokens, temperature: 0.1, ct: ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {

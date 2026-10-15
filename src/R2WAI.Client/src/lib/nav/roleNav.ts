@@ -139,7 +139,6 @@ const NAVIGATION: readonly NavigationEntry[] = [
   { id: 'channels-route', label: 'Channels', path: '/deploy', icon: 'Forum', routeLabel: 'Channels', breadcrumbParentPath: '/chatbots', visibleTo: ADMIN_PERSONAS, sidebar: false, tabGroup: 'publish' },
   { id: 'widget-route', label: 'Website Widget', path: '/deploy/widget', icon: 'Language', routeLabel: 'Website Widget', visibleTo: ADMIN_PERSONAS, sidebar: false, tabGroup: 'publish' },
   { id: 'widget-chatbot-route', label: 'Website Widget', path: '/deploy/widget/:chatbotId', icon: 'Language', routeLabel: 'Website Widget', visibleTo: ADMIN_PERSONAS, sidebar: false },
-  { id: 'whatsapp-route', label: 'WhatsApp', path: '/deploy/whatsapp/:chatbotId', icon: 'Forum', routeLabel: 'WhatsApp', visibleTo: ADMIN_PERSONAS, sidebar: false },
   { id: 'about-route', label: 'About', path: '/about', icon: 'Help', routeLabel: 'About', visibleTo: ALL_PERSONAS, sidebar: false },
   // Personal, like Profile: reached from the user menu and the Profile page, not the sidebar.
   { id: 'memory-route', label: 'Memory', path: '/memory', icon: 'Psychology', routeLabel: 'Memory', breadcrumbParentPath: '/profile', visibleTo: ALL_PERSONAS, sidebar: false },

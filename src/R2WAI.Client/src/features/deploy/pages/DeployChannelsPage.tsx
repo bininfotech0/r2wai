@@ -199,10 +199,8 @@ function ChatbotChannelsCard({ chatbot }: { chatbot: ChatbotDto }) {
                 detail={`Stored ${new Date(
                   (channelsQuery.data ?? []).find((c) => c.channel === channel)?.connectedAt ?? chatbot.createdAt,
                 ).toLocaleDateString()}`}
-                action={channel === 'WhatsApp' ? 'Set up WhatsApp' : 'Manage on chatbot'}
-                onAction={() =>
-                  channel === 'WhatsApp' ? navigate(`/deploy/whatsapp/${chatbot.id}`) : navigate(`/chatbots/${chatbot.id}`)
-                }
+                action="Manage on chatbot"
+                onAction={() => navigate(`/chatbots/${chatbot.id}`)}
               />
             </Grid>
           )

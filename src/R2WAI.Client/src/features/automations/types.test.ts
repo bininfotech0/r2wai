@@ -8,7 +8,7 @@ const baseWorkflow: WorkflowDto = {
   name: 'Employee Onboarding',
   description: 'Onboards new hires',
   type: 'Process',
-  trigger: 'Form Submitted',
+  trigger: 'schedule:0 9 * * 1-5|Asia/Kolkata',
   steps: '[{"order":0,"name":"Create Task","type":"Action"}]',
   isActive: true,
   version: 1,
@@ -27,7 +27,7 @@ describe('buildFullWorkflowUpdatePayload', () => {
     expect(payload.name).toBe('Employee Onboarding')
     expect(payload.description).toBe('Onboards new hires')
     expect(payload.type).toBe('Process')
-    expect(payload.trigger).toBe('Form Submitted')
+    expect(payload.trigger).toBe('schedule:0 9 * * 1-5|Asia/Kolkata')
     expect(payload.steps).toBe('[]')
   })
 
@@ -36,6 +36,11 @@ describe('buildFullWorkflowUpdatePayload', () => {
     expect(payload.trigger).toBe('Webhook')
     expect(payload.steps).toBe(baseWorkflow.steps)
     expect(payload.description).toBe(baseWorkflow.description)
+  })
+
+  it('drops a stored trigger that can never start a run, so the server accepts the save', () => {
+    expect(buildFullWorkflowUpdatePayload({ ...baseWorkflow, trigger: 'Form Submitted' }, {}).trigger).toBeUndefined()
+    expect(buildFullWorkflowUpdatePayload({ ...baseWorkflow, trigger: 'Schedule' }, {}).trigger).toBeUndefined()
   })
 
   it('converts null fields to undefined rather than sending literal nulls', () => {

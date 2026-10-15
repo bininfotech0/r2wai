@@ -57,7 +57,7 @@ function ChannelTile({ icon, title, description, state, detail, action }: {
 
 /**
  * Channels as tiles, as in Copilot Studio. Each channel is a chatbot backed by this agent; the
- * tiles open the existing set-up pages. Teams and Slack are shown, honestly, as not yet available:
+ * tiles open the existing set-up pages. Teams, Slack and WhatsApp are shown, honestly, as not yet available:
  * their inbound adapters don't exist (blueprint §3.3), so nothing here pretends they work.
  */
 export function AgentChannelsTab({ assistant }: { assistant: AssistantDto }) {
@@ -113,16 +113,7 @@ export function AgentChannelsTab({ assistant }: { assistant: AssistantDto }) {
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
-          <ChannelTile
-            icon={<WhatsApp />}
-            title="WhatsApp"
-            description="Answer on a WhatsApp Business number."
-            state={primary ? 'ready' : 'off'}
-            detail={primary ? undefined : needsChatbot}
-            action={primary && (
-              <Button size="small" variant="outlined" component={RouterLink} to={`/deploy/whatsapp/${primary.id}`}>Set up</Button>
-            )}
-          />
+          <ChannelTile icon={<WhatsApp />} title="WhatsApp" description="Answer on a WhatsApp Business number." state="soon" />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, lg: 4 }}>
           <ChannelTile

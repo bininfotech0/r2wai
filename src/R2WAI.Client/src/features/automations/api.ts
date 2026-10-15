@@ -25,14 +25,13 @@ export function createWorkflow(input: CreateWorkflowInput) {
   return postJson<WorkflowDto>('/workflows', input)
 }
 
-export async function updateWorkflow(id: string, input: UpdateWorkflowInput): Promise<WorkflowDto> {
-  const response = await authFetch(`/api/v1/workflows/${id}`, {
+// Via fetchJson so a 422 keeps its field errors (e.g. an invalid schedule) for apiErrorMessage.
+export function updateWorkflow(id: string, input: UpdateWorkflowInput): Promise<WorkflowDto> {
+  return fetchJson<WorkflowDto>(`/workflows/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   })
-  if (!response.ok) throw new ApiRequestError(response.status, 'Failed to update automation')
-  return (await response.json()) as WorkflowDto
 }
 
 export async function deleteWorkflow(id: string): Promise<void> {
@@ -50,6 +49,10 @@ export function getWorkflowTemplates() {
 
 export function publishWorkflow(id: string) {
   return postJson<{ id: string; version: number; versionStatus: string }>(`/workflows/${id}/publish`, {})
+}
+
+export function unpublishWorkflow(id: string) {
+  return postJson<{ id: string; versionStatus: string }>(`/workflows/${id}/unpublish`, {})
 }
 
 export function executeWorkflow(id: string, data?: string) {

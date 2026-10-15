@@ -18,7 +18,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import { AiDraftCreatePrompt } from '../../../components/AiDraftCreatePrompt'
 import { createWorkflow, draftWorkflow, getWorkflowTemplates } from '../api'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
-import type { WorkflowStep } from '../types'
+import { STEP_TYPES, type WorkflowStep } from '../types'
 
 interface CreateAutomationDialogProps {
   open: boolean
@@ -59,18 +59,23 @@ export function CreateAutomationDialog({ open, onClose, onCreated, initialDescri
     setIsGenerating(true)
     try {
       const draft = await draftWorkflow(description)
-      const steps: WorkflowStep[] = draft.actions.map((action, i) => ({
-        order: i,
-        name: action,
-        action,
-        type: 'Action',
-      }))
+      const drafted: { name: string; type: string }[] = draft.steps?.length
+        ? draft.steps
+        : draft.actions.map((type) => ({ name: type, type }))
+      const steps: WorkflowStep[] = drafted
+        .filter((s): s is { name: string; type: (typeof STEP_TYPES)[number] } => (STEP_TYPES as string[]).includes(s.type))
+        .map((s, i) => ({ order: i, name: s.name, type: s.type }))
+      // A drafted "Schedule" has no cron yet — create it Manual and let the detail page set the time.
+      const trigger = draft.trigger === 'Webhook' ? 'Webhook' : undefined
       const created = await createWorkflow({
         name: draft.name ?? description.slice(0, 60),
-        trigger: draft.trigger ?? undefined,
+        trigger,
         steps: JSON.stringify(steps),
       })
-      notify('Automation drafted', 'success')
+      notify(
+        draft.trigger === 'Schedule' ? 'Automation drafted — set when it runs under “How it starts”' : 'Automation drafted',
+        'success',
+      )
       reset()
       onCreated(created.id)
     } catch {
@@ -85,12 +90,14 @@ export function CreateAutomationDialog({ open, onClose, onCreated, initialDescri
     if (!template) return
     setIsCreating(true)
     try {
+      // A template step's `action` is its step type. Anything unrecognised (e.g. a tenant override
+      // still using the old "Action" placeholder) is kept as a placeholder so the user sees it.
       const steps: WorkflowStep[] = template.steps.map((s) => ({
         order: s.order,
         name: s.name,
-        action: s.action,
         assignedRole: s.assignedRole,
-        type: 'Action',
+        type: (STEP_TYPES as string[]).includes(s.action) ? (s.action as WorkflowStep['type']) : 'Action',
+        action: (STEP_TYPES as string[]).includes(s.action) ? undefined : s.action,
       }))
       const created = await createWorkflow({ name: template.name, type: template.type, steps: JSON.stringify(steps) })
       notify('Automation created from template', 'success')
