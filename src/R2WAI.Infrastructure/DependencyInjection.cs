@@ -87,6 +87,7 @@ public static class DependencyInjection
         services.AddScoped<IBackgroundJobQueue, Services.BackgroundJobs.BackgroundJobQueue>();
         services.AddScoped<IBackgroundJobHandler, Services.BackgroundJobs.NotifyApproversJobHandler>();
         services.AddScoped<IBackgroundJobHandler, Services.BackgroundJobs.IndexDocumentJobHandler>();
+        services.AddScoped<IBackgroundJobHandler, Services.BackgroundJobs.LearnUserMemoryJobHandler>();
         services.AddSingleton<IRequestMetricsStore, RequestMetricsStore>();
         services.AddHostedService<Services.BackgroundJobs.BackgroundJobProcessor>();
 
@@ -101,6 +102,9 @@ public static class DependencyInjection
         services.AddScoped<WorkflowPlugin>();
         services.AddScoped<AssistantPlugin>();
         services.AddScoped<AgentDelegationPlugin>();
+        services.AddScoped<AI.Plugins.UserMemoryPlugin>();
+        services.AddScoped<IUserMemoryScope, AI.Memory.UserMemoryScope>();
+        services.AddScoped<IUserMemoryService, AI.Memory.UserMemoryService>();
         services.AddScoped<IChatTraceCollector, ChatTraceCollector>();
         services.AddScoped<IChatStreamContext, AI.ChatStreamContext>();
         services.AddScoped<IEnabledToolScope, AI.EnabledToolScope>();

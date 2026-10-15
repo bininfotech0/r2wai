@@ -35,7 +35,8 @@ public class SendMessageCommandHandler(
     IStorageService storageService,
     IMapper mapper,
     IIdempotencyStore idempotencyStore,
-    ILogger<SendMessageCommandHandler> logger) : IRequestHandler<SendMessageCommand, MessageDto>
+    ILogger<SendMessageCommandHandler> logger,
+    IUserMemoryService? userMemory = null) : IRequestHandler<SendMessageCommand, MessageDto>
 {
     public async Task<MessageDto> Handle(SendMessageCommand command, CancellationToken cancellationToken)
     {
@@ -102,6 +103,9 @@ public class SendMessageCommandHandler(
             // code — this is now the one real caller).
             var history = await conversationMemory.BuildConversationContextAsync(command.ConversationId, cancellationToken);
 
+            // No agent here, so only the user's Personal memories apply, and no note-keeping tools.
+            var memoryBlock = userMemory is null ? null : await userMemory.PrepareTurnAsync(null, null, cancellationToken);
+
             var responseBuffer = new System.Text.StringBuilder();
 
             chatStreamContext.OnProgress = evt => evt.Kind == ToolCallProgressKind.Started
@@ -111,7 +115,7 @@ public class SendMessageCommandHandler(
             int? tokensUsed;
             using (var usage = AiTokenUsageScope.Begin())
             {
-                await foreach (var chunk in aiService.StreamChatAsync(command.Content, history, null, enableTools: true, ct: cancellationToken))
+                await foreach (var chunk in aiService.StreamChatAsync(command.Content, history, memoryBlock, enableTools: true, ct: cancellationToken))
                 {
                     responseBuffer.Append(chunk);
                     await streamingService.SendStreamChunkAsync(command.ConversationId, chunk, cancellationToken);
@@ -129,6 +133,9 @@ public class SendMessageCommandHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
 
             await streamingService.SendStreamCompleteAsync(command.ConversationId, cancellationToken);
+
+            if (userMemory is not null)
+                await userMemory.QueueLearningAsync(null, null, null, command.ConversationId, command.Content, aiResponse, cancellationToken);
 
             var result = mapper.Map<MessageDto>(assistantMessage);
 

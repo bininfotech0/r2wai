@@ -17,6 +17,21 @@ public sealed class AssistantBehaviorSettings
     /// keeps today's single-pass retrieval byte-identical. See IAgenticRetrievalOrchestrator.</summary>
     public string? RetrievalMode { get; init; }
 
+    /// <summary>How this agent uses the signed-in user's memory: "Off", "Read" (the default, also
+    /// null) to read the user's Personal memories, or "ReadWrite" to also keep notes in its own
+    /// partition through its memory tools. The user's own memory settings always win.</summary>
+    public string? UserMemory { get; init; }
+
+    public const string UserMemoryOff = "Off";
+    public const string UserMemoryReadWrite = "ReadWrite";
+
+    /// <summary>Null settings (an agent never configured) read memory, like the "Read" default.</summary>
+    public static bool ReadsUserMemory(AssistantBehaviorSettings? settings) =>
+        !string.Equals(settings?.UserMemory, UserMemoryOff, StringComparison.OrdinalIgnoreCase);
+
+    public static bool WritesUserMemory(AssistantBehaviorSettings? settings) =>
+        string.Equals(settings?.UserMemory, UserMemoryReadWrite, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Translates the qualitative knobs (ResponseStyle/AnswerLength/AskClarification) into a short
     /// natural-language instruction appended to the assistant's system prompt — the only lever

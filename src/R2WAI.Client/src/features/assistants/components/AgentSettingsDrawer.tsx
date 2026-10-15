@@ -176,6 +176,27 @@ function GenerativeAiSettings({ assistant, onSaved }: { assistant: AssistantDto;
         </Box>
       )}
 
+      <Box>
+        <TextField
+          select
+          fullWidth
+          label="User memory"
+          value={settings.userMemory ?? 'Read'}
+          onChange={(e) => setSettings((s) => ({ ...s, userMemory: e.target.value as BehaviorSettings['userMemory'] }))}
+        >
+          <MenuItem value="Off">Off — never uses what users saved</MenuItem>
+          <MenuItem value="Read">Use saved memory</MenuItem>
+          <MenuItem value="ReadWrite">Use saved memory and keep its own notes</MenuItem>
+        </TextField>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+          {settings.userMemory === 'Off'
+            ? 'Every conversation starts without anything the user saved about themselves.'
+            : settings.userMemory === 'ReadWrite'
+              ? 'Also lets the agent note lasting preferences in its own section of each user\u2019s memory. Users see, edit and delete those notes on their Memory page, and can switch agent notes off.'
+              : 'Personalises answers with what each user saved or approved on their Memory page. Users can switch memory off.'}
+        </Typography>
+      </Box>
+
       <Button size="small" onClick={() => setShowAdvanced((v) => !v)} sx={{ alignSelf: 'flex-start' }}>
         {showAdvanced ? 'Hide model parameters' : 'Model parameters ▸'}
       </Button>

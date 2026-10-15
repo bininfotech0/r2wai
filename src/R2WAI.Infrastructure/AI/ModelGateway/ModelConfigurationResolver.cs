@@ -35,6 +35,16 @@ public class ModelConfigurationResolver(
             }
         }
 
+        return ToResolved(config, encryption, logger);
+    }
+
+    /// <summary>
+    /// The checks and decryption every resolved config goes through. Shared with background work that
+    /// loads a tenant's config without an ambient tenant (the learning pass in LearnUserMemoryJobHandler),
+    /// so it can never skip the data-classification boundary.
+    /// </summary>
+    internal static ResolvedModelConfig? ToResolved(ModelConfiguration config, IEncryptionService encryption, ILogger logger)
+    {
         // Additive tightening, mirrors CreateModelCommandValidator's write-time check — a policy
         // or classification change made after this config was created must not silently let a
         // Confidential/Restricted-classified chat leave the tenant via a non-local provider.
@@ -42,7 +52,7 @@ public class ModelConfigurationResolver(
         {
             logger.LogWarning(
                 "ModelConfiguration {Id} violates its data-classification boundary at resolve time (Provider={Provider}, Classification={Classification}) — falling back to the global AI provider.",
-                modelConfigurationId, config.Provider, config.DataClassification);
+                config.Id, config.Provider, config.DataClassification);
             return null;
         }
 
@@ -57,7 +67,7 @@ public class ModelConfigurationResolver(
             {
                 logger.LogWarning(ex,
                     "Failed to decrypt ApiKeyEncrypted for ModelConfiguration {Id} — falling back to the global AI provider.",
-                    modelConfigurationId);
+                    config.Id);
                 return null;
             }
         }

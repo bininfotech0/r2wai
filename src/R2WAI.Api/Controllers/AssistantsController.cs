@@ -31,6 +31,7 @@ public class AssistantsController(
     ICurrentUserService currentUser,
     IChatStreamContext chatStreamContext,
     IPromptRenderer promptRenderer,
+    IUserMemoryService userMemory,
     ILogger<AssistantsController> logger) : ControllerBase
 {
     [HttpPost]
@@ -372,6 +373,10 @@ public class AssistantsController(
         if (behaviorSettings?.CitationsEnabled == false)
             citations = null;
 
+        // Same as ChatWithAssistantCommand: the user's memory block, and this turn's note-keeping tools.
+        if (await userMemory.PrepareTurnAsync(assistant.Id, behaviorSettings, streamCt) is { } memoryBlock)
+            systemPrompt += "\n\n" + memoryBlock;
+
         var modelConfig = await modelConfigResolver.ResolveAsync(assistant.ModelConfigurationId, assistant.TenantId, streamCt);
         if (modelConfig is not null && behaviorSettings is not null && (behaviorSettings.Temperature.HasValue || behaviorSettings.MaxOutputTokens.HasValue))
             modelConfig = modelConfig with
@@ -384,10 +389,12 @@ public class AssistantsController(
             ? WriteSseEventAsync("toolCallStarted", new { toolName = evt.ToolName }, streamCt)
             : WriteSseEventAsync("toolCallCompleted", new { toolName = evt.ToolName, success = evt.Success ?? true }, streamCt);
 
+        var replyBuffer = new System.Text.StringBuilder();
         try
         {
             await foreach (var chunk in aiService.StreamChatAsync(effectiveMessage, context, systemPrompt, enableTools: true, modelConfig: modelConfig, enabledToolIds: assistant.GetEnabledToolIds(), delegatableAssistantIds: assistant.GetDelegatableAssistantIds(), ct: streamCt))
             {
+                replyBuffer.Append(chunk);
                 await WriteSseEventAsync("chunk", new { content = chunk }, streamCt);
             }
         }
@@ -419,6 +426,9 @@ public class AssistantsController(
         }
 
         await WriteSseEventAsync("done", new { message = "Stream complete" }, streamCt);
+
+        await userMemory.QueueLearningAsync(assistant.Id, behaviorSettings, assistant.ModelConfigurationId,
+            command.ConversationId, effectiveMessage, replyBuffer.ToString(), CancellationToken.None);
     }
 
     private async Task WriteSseEventAsync(string eventType, object data, CancellationToken ct)

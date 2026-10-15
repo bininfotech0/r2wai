@@ -90,7 +90,10 @@ public class DatabaseBootstrapTests : IClassFixture<R2WAIWebApplicationFactory>
         Assert.Contains("SystemAdmin", roleNames);
         Assert.Equal(3, await context.Roles.IgnoreQueryFilters().CountAsync());
         Assert.Equal(1, await context.Tenants.CountAsync());
-        Assert.Equal(14, await context.ToolDefinitions.IgnoreQueryFilters().CountAsync());
+        Assert.Equal(16, await context.ToolDefinitions.IgnoreQueryFilters().CountAsync());
+        // Switched on by an agent's memory mode, not picked in its Tools tab, so never seeded as rows.
+        Assert.False(await context.ToolDefinitions.IgnoreQueryFilters()
+            .AnyAsync(t => t.Name == "remember_user_note" || t.Name == "forget_user_note"));
         Assert.DoesNotContain(await context.Users.IgnoreQueryFilters().Select(u => u.Email).ToListAsync(),
             email => email!.EndsWith("@r2wai.io", StringComparison.OrdinalIgnoreCase));
     }

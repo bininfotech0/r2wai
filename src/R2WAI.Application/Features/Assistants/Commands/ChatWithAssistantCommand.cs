@@ -46,7 +46,8 @@ public class ChatWithAssistantCommandHandler(
     ICurrentUserService currentUser,
     IUnitOfWork unitOfWork,
     ILogger<ChatWithAssistantCommandHandler> logger,
-    IPromptRenderer? promptRenderer = null) : IRequestHandler<ChatWithAssistantCommand, ChatWithAssistantResult>
+    IPromptRenderer? promptRenderer = null,
+    IUserMemoryService? userMemory = null) : IRequestHandler<ChatWithAssistantCommand, ChatWithAssistantResult>
 {
     public async Task<ChatWithAssistantResult> Handle(ChatWithAssistantCommand command, CancellationToken cancellationToken)
     {
@@ -224,6 +225,11 @@ public class ChatWithAssistantCommandHandler(
         if (behaviorSettings?.CitationsEnabled == false)
             citations = null;
 
+        // What this user saved or approved for agents to remember; also decides whether this agent
+        // gets its own note-keeping tools for the turn (IUserMemoryScope).
+        if (userMemory is not null && await userMemory.PrepareTurnAsync(assistant.Id, behaviorSettings, cancellationToken) is { } memoryBlock)
+            systemPrompt += "\n\n" + memoryBlock;
+
         string reply;
         int? tokensUsed;
         using (var usage = AiTokenUsageScope.Begin())
@@ -246,6 +252,10 @@ public class ChatWithAssistantCommandHandler(
         await messageRepo.AddAsync(assistantMessage, cancellationToken);
         assistant.IncrementUsageCount();
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (userMemory is not null)
+            await userMemory.QueueLearningAsync(assistant.Id, behaviorSettings, assistant.ModelConfigurationId,
+                conversation.Id, effectiveMessage, reply, cancellationToken);
 
         stopwatch.Stop();
         var functionCalls = traceCollector.GetTrace().ToList();

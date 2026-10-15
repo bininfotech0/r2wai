@@ -45,9 +45,31 @@ public static class BuiltInToolGovernance
         ["get_knowledge_base_context"] = new(Guid.Parse("00000000-0000-0000-0000-000000000414"), "Low", "Get context from a knowledge base for answering questions"),
         ["delegate_to_agent"] = new(Guid.Parse("00000000-0000-0000-0000-000000000415"), "Medium", "Hand a task off to another specialist agent"),
         ["delegate_to_agents"] = new(Guid.Parse("00000000-0000-0000-0000-000000000416"), "Medium", "Fan a task out to several specialist agents in parallel"),
+        // User memory (UserMemoryPlugin): writes only the calling agent's own notes about the signed-in
+        // user, which that user can see and delete. Not seeded as rows: they are switched on by the
+        // agent's memory setting, not the Tools tab, so they never appear as tools to pick.
+        [Plugins.UserMemoryPlugin.RememberFunction] = new(UserMemoryToolIds.Remember, "Low", "Save a note about the current user in the agent's own memory"),
+        [Plugins.UserMemoryPlugin.ForgetFunction] = new(UserMemoryToolIds.Forget, "Low", "Delete one of the agent's own notes about the current user"),
     };
 
-    public static IReadOnlyCollection<string> KnownFunctionNames => Defaults.Keys;
+    public static class UserMemoryToolIds
+    {
+        public static readonly Guid Remember = Guid.Parse("00000000-0000-0000-0000-000000000417");
+        public static readonly Guid Forget = Guid.Parse("00000000-0000-0000-0000-000000000418");
+        public static readonly IReadOnlyCollection<Guid> All = [Remember, Forget];
+    }
+
+    private static readonly HashSet<string> UserMemoryFunctionNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        Plugins.UserMemoryPlugin.RememberFunction,
+        Plugins.UserMemoryPlugin.ForgetFunction,
+    };
+
+    /// <summary>The functions DatabaseBootstrap seeds as ToolDefinition rows. The user-memory tools
+    /// are governed by their defaults but never seeded: a row would list them in the agent's Tools
+    /// tab, where selecting them does nothing (the agent's memory mode attaches them).</summary>
+    public static IReadOnlyCollection<string> KnownFunctionNames { get; } =
+        Defaults.Keys.Where(name => !UserMemoryFunctionNames.Contains(name)).ToArray();
 
     public static bool IsUtilityPlugin(string? pluginName) =>
         pluginName is not null && UtilityPlugins.Contains(pluginName);

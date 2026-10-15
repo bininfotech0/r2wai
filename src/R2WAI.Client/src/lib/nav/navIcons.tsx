@@ -24,6 +24,7 @@ import CodeOutlined from '@mui/icons-material/CodeOutlined'
 import CorporateFareOutlined from '@mui/icons-material/CorporateFareOutlined'
 import WorkspacesOutlined from '@mui/icons-material/WorkspacesOutlined'
 import MoreHorizOutlined from '@mui/icons-material/MoreHorizOutlined'
+import PsychologyOutlined from '@mui/icons-material/PsychologyOutlined'
 
 const ICONS: Record<string, SvgIconComponent> = {
   Apps: AppsOutlined,
@@ -51,6 +52,7 @@ const ICONS: Record<string, SvgIconComponent> = {
   CorporateFare: CorporateFareOutlined,
   Workspaces: WorkspacesOutlined,
   More: MoreHorizOutlined,
+  Psychology: PsychologyOutlined,
 }
 
 export function getNavIcon(name: string): SvgIconComponent {

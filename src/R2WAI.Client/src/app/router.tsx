@@ -87,6 +87,7 @@ export const router = createBrowserRouter([
               { path: '/tools', lazy: lazyPage(() => import('../features/tools/pages/ToolsListPage').then((m) => ({ default: m.ToolsListPage }))) },
               { path: '/tools/:id', lazy: lazyPage(() => import('../features/tools/pages/ToolDetailPage').then((m) => ({ default: m.ToolDetailPage }))) },
               { path: '/profile', lazy: lazyPage(() => import('../features/profile/pages/ProfilePage').then((m) => ({ default: m.ProfilePage }))) },
+              { path: '/memory', lazy: lazyPage(() => import('../features/memory/pages/MemoryPage').then((m) => ({ default: m.MemoryPage }))) },
               { path: '/inbox', lazy: lazyPage(() => import('../features/notifications/pages/InboxPage').then((m) => ({ default: m.InboxPage }))) },
               { path: '/about', lazy: lazyPage(() => import('../features/misc/pages/AboutPage').then((m) => ({ default: m.AboutPage }))) },
               { path: '*', lazy: lazyPage(() => import('../features/misc/pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage }))) },

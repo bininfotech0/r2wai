@@ -19,6 +19,8 @@ import {
 } from '@mui/material'
 import PersonOutlineIcon from '@mui/icons-material/PersonOutlineOutlined'
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined'
+import PsychologyOutlined from '@mui/icons-material/PsychologyOutlined'
+import { Link as RouterLink } from 'react-router-dom'
 import { useAuth } from '../../../lib/auth/useAuth'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import { authFetch, forgotPasswordRequest } from '../../../lib/auth/authClient'
@@ -224,6 +226,21 @@ export function ProfilePage() {
               <DetailRow label="Last login" value={user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : '—'} />
               <DetailRow label="Member since" value={new Date(user.createdAt).toLocaleDateString()} />
             </Stack>
+          </Paper>
+
+          <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
+              <PsychologyOutlined fontSize="small" color="primary" />
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                Memory
+              </Typography>
+            </Stack>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              What agents remember about you between conversations, and whether they may learn from your chats.
+            </Typography>
+            <Button size="small" variant="outlined" component={RouterLink} to="/memory">
+              Manage memory
+            </Button>
           </Paper>
 
           <Paper variant="outlined" sx={{ p: 3 }}>

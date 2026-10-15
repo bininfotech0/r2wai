@@ -57,6 +57,8 @@ public interface ITenantDbContext
     DbSet<AccessRequest> AccessRequests { get; }
     DbSet<WorkflowTemplateOverride> WorkflowTemplateOverrides { get; }
     DbSet<McpServerConnection> McpServerConnections { get; }
+    DbSet<UserMemory> UserMemories { get; }
+    DbSet<UserMemorySettings> UserMemorySettings { get; }
 }
 
 public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Application.Common.Interfaces.IApplicationDbContext
@@ -142,6 +144,8 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
     public DbSet<BackgroundJob> BackgroundJobs => Set<BackgroundJob>();
     public DbSet<WorkflowTemplateOverride> WorkflowTemplateOverrides => Set<WorkflowTemplateOverride>();
     public DbSet<McpServerConnection> McpServerConnections => Set<McpServerConnection>();
+    public DbSet<UserMemory> UserMemories => Set<UserMemory>();
+    public DbSet<UserMemorySettings> UserMemorySettings => Set<UserMemorySettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -243,6 +247,12 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
         "ApiKeyEncrypted", "SecretHash", "ClientSecret", "EncryptionKey"
     };
 
+    // A memory's text is the user's own personal data, and deleting a memory has to actually forget
+    // it: copying it into the append-only audit log would keep it after the user removed it.
+    private static bool IsSensitiveAuditField(object entity, string propertyName) =>
+        SensitiveAuditFields.Contains(propertyName)
+        || (entity is UserMemory && propertyName is nameof(UserMemory.Content) or nameof(UserMemory.Key));
+
     private List<AuditEntry> OnBeforeSaveAudit()
     {
         var entries = new List<AuditEntry>();
@@ -267,13 +277,13 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
                     ? JsonSerializer.Serialize(entry.Properties
                         .Where(p => p.IsModified && !p.Metadata.IsKey())
                         .ToDictionary(p => p.Metadata.Name,
-                            p => SensitiveAuditFields.Contains(p.Metadata.Name) ? "***REDACTED***" : p.OriginalValue))
+                            p => IsSensitiveAuditField(entry.Entity, p.Metadata.Name) ? "***REDACTED***" : p.OriginalValue))
                     : null,
                 NewValues = entry.State != EntityState.Deleted
                     ? JsonSerializer.Serialize(entry.Properties
                         .Where(p => p.IsModified || entry.State == EntityState.Added)
                         .ToDictionary(p => p.Metadata.Name,
-                            p => SensitiveAuditFields.Contains(p.Metadata.Name) ? "***REDACTED***" : p.CurrentValue))
+                            p => IsSensitiveAuditField(entry.Entity, p.Metadata.Name) ? "***REDACTED***" : p.CurrentValue))
                     : null
             };
             entries.Add(auditEntry);

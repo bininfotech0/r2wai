@@ -616,6 +616,18 @@ public class SemanticKernelService : IAIService
             toolScope.EnabledToolIds = enabledToolIds;
             toolScope.DelegatableAssistantIds = delegatableAssistantIds ?? [];
 
+            // User memory notes, like delegation, are switched on by their own setting (the agent's
+            // memory mode plus the user's own memory settings, resolved into IUserMemoryScope by the
+            // chat entry point) rather than the Tools tab — so their ids join the enabled list here,
+            // or the gateway's defense-in-depth check would deny them for any agent with a tool list.
+            var memoryScope = _serviceProvider.GetRequiredService<IUserMemoryScope>();
+            if (memoryScope.AgentNotesEnabled)
+            {
+                kernel.Plugins.AddFromObject(_serviceProvider.GetRequiredService<AI.Plugins.UserMemoryPlugin>());
+                if (enabledToolIds is not null)
+                    toolScope.EnabledToolIds = [.. enabledToolIds, .. BuiltInToolGovernance.UserMemoryToolIds.All];
+            }
+
             var workflowPlugin = _serviceProvider.GetRequiredService<AI.Plugins.WorkflowPlugin>();
             AddFilteredPlugin(kernel, workflowPlugin, enabledNames);
 

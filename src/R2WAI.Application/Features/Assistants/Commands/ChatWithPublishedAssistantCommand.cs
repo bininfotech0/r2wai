@@ -47,7 +47,8 @@ public class ChatWithPublishedAssistantCommandHandler(
     ICurrentUserService currentUser,
     IUnitOfWork unitOfWork,
     ILogger<ChatWithPublishedAssistantCommandHandler> logger,
-    IPromptRenderer? promptRenderer = null) : IRequestHandler<ChatWithPublishedAssistantCommand, ChatWithAssistantResult>
+    IPromptRenderer? promptRenderer = null,
+    IUserMemoryService? userMemory = null) : IRequestHandler<ChatWithPublishedAssistantCommand, ChatWithAssistantResult>
 {
     public async Task<ChatWithAssistantResult> Handle(ChatWithPublishedAssistantCommand command, CancellationToken cancellationToken)
     {
@@ -203,6 +204,11 @@ public class ChatWithPublishedAssistantCommandHandler(
         if (behaviorSettings?.CitationsEnabled == false)
             citations = null;
 
+        // The published snapshot's memory mode, like every other setting here. API-key callers never
+        // get memory: they run as the key's creator, not as a person (see UserMemoryService).
+        if (userMemory is not null && await userMemory.PrepareTurnAsync(assistant.Id, behaviorSettings, cancellationToken) is { } memoryBlock)
+            systemPrompt += "\n\n" + memoryBlock;
+
         string reply;
         int? tokensUsed;
         using (var usage = AiTokenUsageScope.Begin())
@@ -227,6 +233,10 @@ public class ChatWithPublishedAssistantCommandHandler(
         // the dashboard's per-agent usage ranking.
         assistant.IncrementUsageCount();
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (userMemory is not null)
+            await userMemory.QueueLearningAsync(assistant.Id, behaviorSettings, snapshot.ModelConfigurationId,
+                conversation.Id, effectiveMessage, reply, cancellationToken);
 
         stopwatch.Stop();
         var functionCalls = traceCollector.GetTrace().ToList();

@@ -63,6 +63,9 @@ export interface BehaviorSettings {
   // R2WAI 2.0 §6 — only meaningful when a Knowledge Base is linked. Undefined/'Standard' keeps
   // today's single-pass retrieval; 'Agentic' adds a bounded evidence-check + one rewritten retry.
   retrievalMode?: 'Standard' | 'Agentic'
+  // How the agent uses the signed-in user's memory. Undefined = 'Read' (the user's Personal
+  // memories); 'ReadWrite' also gives it tools to keep its own notes. The user's settings always win.
+  userMemory?: 'Off' | 'Read' | 'ReadWrite'
 }
 
 export interface CreateAssistantInput {

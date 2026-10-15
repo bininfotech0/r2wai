@@ -10,6 +10,7 @@ public static class BackgroundJobTypes
 {
     public const string NotifyApprovers = "NotifyApprovers";
     public const string IndexDocument = "IndexDocument";
+    public const string LearnUserMemory = "LearnUserMemory";
 }
 
 /// <summary>
@@ -31,3 +32,20 @@ public record NotifyApproversJobPayload(
     int? EscalationLevel);
 
 public record IndexDocumentJobPayload(Guid DocumentId, Guid TenantId);
+
+/// <summary>
+/// One finished chat turn for the opt-in memory learning pass. Carries the turn text because the
+/// agent test pane's stream path persists no Message rows to re-read; both are the already
+/// PII-processed text that reached the model, truncated by the enqueuer. The handler re-checks the
+/// user's settings, so switching learning off stops jobs that are already queued.
+/// ModelConfigurationId is the model that answered the turn (null: the tenant default), so the pass
+/// never sends the turn to a provider the chat itself would not have used.
+/// </summary>
+public record LearnUserMemoryJobPayload(
+    Guid TenantId,
+    Guid UserId,
+    Guid? AssistantId,
+    Guid? ConversationId,
+    Guid? ModelConfigurationId,
+    string UserMessage,
+    string Reply);

@@ -13,7 +13,7 @@ namespace R2WAI.Infrastructure.Tests.AI;
 public class BuiltInToolGovernanceTests
 {
     private static readonly Type[] BuiltInPlugins =
-        [typeof(WorkflowPlugin), typeof(DocumentPlugin), typeof(RAGPlugin), typeof(AssistantPlugin), typeof(AgentDelegationPlugin)];
+        [typeof(WorkflowPlugin), typeof(DocumentPlugin), typeof(RAGPlugin), typeof(AssistantPlugin), typeof(AgentDelegationPlugin), typeof(UserMemoryPlugin)];
 
     private static string[] DeclaredFunctionNames() =>
         BuiltInPlugins

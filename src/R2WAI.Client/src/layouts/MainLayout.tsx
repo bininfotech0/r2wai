@@ -466,6 +466,9 @@ export function MainLayout() {
             <MenuItem component={RouterLink} to="/profile" onClick={() => setUserMenuAnchor(null)}>
               Profile
             </MenuItem>
+            <MenuItem component={RouterLink} to="/memory" onClick={() => setUserMenuAnchor(null)}>
+              Memory
+            </MenuItem>
             <MenuItem component={RouterLink} to="/inbox" onClick={() => setUserMenuAnchor(null)}>
               Inbox
             </MenuItem>
