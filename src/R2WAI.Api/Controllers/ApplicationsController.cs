@@ -8,7 +8,7 @@ using R2WAI.Domain.Enums;
 namespace R2WAI.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Policy = "AdminOnly")]
 [Route("api/v1/[controller]")]
 public class ApplicationsController(IMediator mediator) : ControllerBase
 {

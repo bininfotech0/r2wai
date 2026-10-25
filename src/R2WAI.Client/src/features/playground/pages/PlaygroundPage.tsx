@@ -2,7 +2,7 @@ import { queryKeys } from '../../../lib/api/queryKeys'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Box, Chip, Grid, MenuItem, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
+import { Box, Chip, Grid, MenuItem, Paper, Skeleton, Stack, Tab, Tabs, TextField, Typography, useMediaQuery, useTheme } from '@mui/material'
 import ScienceOutlinedIcon from '@mui/icons-material/ScienceOutlined'
 import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined'
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined'
@@ -35,6 +35,8 @@ const PANEL_HEIGHT = 600
  */
 export function PlaygroundPage() {
   const navigate = useNavigate()
+  const theme = useTheme()
+  const useCompactPanels = useMediaQuery(theme.breakpoints.down('lg'))
   const { user } = useAuth()
   const persona = getPersona(user)
   const canManageAgents = persona === 'Admin' || persona === 'SuperAdmin'
@@ -46,6 +48,7 @@ export function PlaygroundPage() {
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null)
   const [selectedCapabilityId, setSelectedCapabilityId] = useState<string | null>(null)
+  const [compactPanel, setCompactPanel] = useState<'target' | 'chat' | 'inspector'>('chat')
 
   const [toolCallEvents, setToolCallEvents] = useState<ToolCallProgressEvent[]>([])
   const [automationInspector, setAutomationInspector] = useState<{
@@ -96,6 +99,10 @@ export function PlaygroundPage() {
     : mode === 'Automation'
       ? (targetCount === 1 ? 'automation' : 'automations')
       : (targetCount === 1 ? 'tool' : 'tools')
+  const panelDisplay = (panel: 'target' | 'chat' | 'inspector'): { xs: 'block' | 'none'; lg: 'block' } => ({
+    xs: !useCompactPanels || compactPanel === panel ? 'block' : 'none',
+    lg: 'block',
+  })
 
   return (
     <Box sx={{ maxWidth: 1680, mx: 'auto', pb: 3 }}>
@@ -126,8 +133,22 @@ export function PlaygroundPage() {
         </Stack>
       </Paper>
 
+      {useCompactPanels && (
+        <Tabs
+          value={compactPanel}
+          onChange={(_, value: 'target' | 'chat' | 'inspector') => setCompactPanel(value)}
+          variant="fullWidth"
+          aria-label="Playground panels"
+          sx={{ mb: 2, borderBottom: '1px solid', borderColor: 'divider', '& .MuiTab-root': { minHeight: 44, textTransform: 'none', fontWeight: 650 } }}
+        >
+          <Tab label="Target" value="target" />
+          <Tab label="Chat / test" value="chat" />
+          <Tab label="Inspector" value="inspector" />
+        </Tabs>
+      )}
+
       <Grid container spacing={2.25} sx={{ alignItems: 'stretch' }}>
-        <Grid size={{ xs: 12, lg: 3, xl: 2 }}>
+        <Grid size={{ xs: 12, lg: 3, xl: 2 }} sx={{ display: panelDisplay('target') }}>
           <Paper variant="outlined" sx={{ height: '100%', borderRadius: 3, overflow: 'hidden' }}>
             <Tabs
               value={mode}
@@ -297,7 +318,7 @@ export function PlaygroundPage() {
           </Paper>
         </Grid>
 
-        <Grid size={{ xs: 12, lg: 6, xl: 7 }}>
+        <Grid size={{ xs: 12, lg: 6, xl: 7 }} sx={{ display: panelDisplay('chat') }}>
           <Paper variant="outlined" sx={{ height: { xs: 480, sm: PANEL_HEIGHT }, minWidth: 0, display: 'flex', flexDirection: 'column', borderRadius: 3, overflow: 'hidden' }}>
             {mode === 'Assistant' &&
               (assistantId ? (
@@ -352,7 +373,7 @@ export function PlaygroundPage() {
           </Paper>
         </Grid>
 
-        <Grid size={{ xs: 12, lg: 3, xl: 3 }}>
+        <Grid size={{ xs: 12, lg: 3, xl: 3 }} sx={{ display: panelDisplay('inspector') }}>
           <Paper variant="outlined" sx={{ height: { xs: 420, sm: PANEL_HEIGHT }, minWidth: 0, display: 'flex', flexDirection: 'column', borderRadius: 3, overflow: 'hidden' }}>
             <ExecutionInspector
               mode={mode}

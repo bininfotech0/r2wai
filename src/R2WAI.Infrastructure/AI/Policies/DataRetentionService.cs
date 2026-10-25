@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using R2WAI.Application.Common.Interfaces;
+using R2WAI.Domain.Common;
 using R2WAI.Infrastructure.Persistence;
 
 namespace R2WAI.Infrastructure.AI.Policies;
@@ -14,6 +15,7 @@ namespace R2WAI.Infrastructure.AI.Policies;
 public class DataRetentionService(ApplicationDbContext dbContext, IConfiguration configuration, ILogger<DataRetentionService> logger) : IDataRetentionService
 {
     private const string PolicyType = "DataRetention";
+    private const int BatchSize = 500;
 
     public async Task<DataRetentionSweepResult> RunSweepAsync(CancellationToken ct = default)
     {
@@ -39,49 +41,85 @@ public class DataRetentionService(ApplicationDbContext dbContext, IConfiguration
             var cutoff = DateTime.UtcNow.AddDays(-retentionDays.Value);
             var tenantId = policy.TenantId;
 
-            var oldMessages = await dbContext.Messages
+            var oldMessages = await SoftDeleteExpiredAsync(dbContext.Messages
                 .IgnoreQueryFilters()
-                .Where(m => !m.IsDeleted && m.TenantId == tenantId && m.CreatedAt < cutoff)
-                .ToListAsync(ct);
-            foreach (var message in oldMessages)
-                message.SoftDelete();
+                .Where(m => !m.IsDeleted && m.TenantId == tenantId && m.CreatedAt < cutoff), ct);
 
-            var oldConversations = await dbContext.Conversations
+            var oldConversations = await SoftDeleteExpiredAsync(dbContext.Conversations
                 .IgnoreQueryFilters()
-                .Where(c => !c.IsDeleted && c.TenantId == tenantId && c.CreatedAt < cutoff)
-                .ToListAsync(ct);
-            foreach (var conversation in oldConversations)
-                conversation.SoftDelete();
+                .Where(c => !c.IsDeleted && c.TenantId == tenantId && c.CreatedAt < cutoff), ct);
 
-            var oldDocuments = await dbContext.Documents
+            var oldDocuments = await SoftDeleteExpiredAsync(dbContext.Documents
                 .IgnoreQueryFilters()
-                .Where(d => !d.IsDeleted && d.TenantId == tenantId && d.CreatedAt < cutoff)
-                .ToListAsync(ct);
-            foreach (var document in oldDocuments)
-                document.SoftDelete();
+                .Where(d => !d.IsDeleted && d.TenantId == tenantId && d.CreatedAt < cutoff), ct);
 
             if (cutoff > sessionCutoff)
                 sessionTurnsPurged += await PurgeChatbotSessionTurnsAsync(tenantId, cutoff, ct);
 
-            messagesPurged += oldMessages.Count;
-            conversationsPurged += oldConversations.Count;
-            documentsPurged += oldDocuments.Count;
+            messagesPurged += oldMessages;
+            conversationsPurged += oldConversations;
+            documentsPurged += oldDocuments;
 
-            if (oldMessages.Count > 0 || oldConversations.Count > 0 || oldDocuments.Count > 0)
+            if (oldMessages > 0 || oldConversations > 0 || oldDocuments > 0)
             {
                 logger.LogInformation(
                     "Data retention: tenant {TenantId} purged {Messages} messages, {Conversations} conversations, {Documents} documents older than {RetentionDays}d",
-                    tenantId, oldMessages.Count, oldConversations.Count, oldDocuments.Count, retentionDays);
+                    tenantId, oldMessages, oldConversations, oldDocuments, retentionDays);
             }
         }
-
-        if (activePolicies.Count > 0)
-            await dbContext.SaveChangesAsync(ct);
 
         if (sessionTurnsPurged > 0)
             logger.LogInformation("Data retention: purged {Count} chatbot session turns", sessionTurnsPurged);
 
         return new DataRetentionSweepResult(tenantsSwept, messagesPurged, conversationsPurged, documentsPurged, sessionTurnsPurged);
+    }
+
+    // Retention can target years of user data on a mature tenant. Loading every expired row into a
+    // single tracked DbContext made a routine hourly sweep grow with the full historical dataset and
+    // could exhaust API memory. Process stable, bounded batches; conditional updates also let API
+    // replicas safely race the same retention window without double-processing rows.
+    private async Task<int> SoftDeleteExpiredAsync<TEntity>(IQueryable<TEntity> expiredRows, CancellationToken ct)
+        where TEntity : BaseEntity<Guid>
+    {
+        var total = 0;
+        while (true)
+        {
+            var ids = await expiredRows
+                .Where(row => !row.IsDeleted)
+                .OrderBy(row => row.CreatedAt)
+                .ThenBy(row => row.Id)
+                .Take(BatchSize)
+                .Select(row => row.Id)
+                .ToListAsync(ct);
+
+            if (ids.Count == 0)
+                return total;
+
+            if (dbContext.Database.IsRelational())
+            {
+                var now = DateTime.UtcNow;
+                var updated = await expiredRows
+                    .Where(row => !row.IsDeleted && ids.Contains(row.Id))
+                    .ExecuteUpdateAsync(updates => updates
+                        .SetProperty(row => row.IsDeleted, true)
+                        .SetProperty(row => row.ModifiedAt, now), ct);
+                total += updated;
+                continue;
+            }
+
+            var batch = await expiredRows
+                .Where(row => !row.IsDeleted && ids.Contains(row.Id))
+                .ToListAsync(ct);
+            if (batch.Count == 0)
+                continue;
+
+            foreach (var row in batch)
+                row.SoftDelete();
+
+            await dbContext.SaveChangesAsync(ct);
+            dbContext.ChangeTracker.Clear();
+            total += batch.Count;
+        }
     }
 
     // Hard delete: soft-deleted session text would still be anonymous visitor data sitting in the

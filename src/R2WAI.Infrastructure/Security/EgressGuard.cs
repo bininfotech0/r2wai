@@ -1,74 +1,186 @@
 using System.Net;
+using System.Net.Sockets;
 
 namespace R2WAI.Infrastructure.Security;
 
 /// <summary>
-/// Blocks outbound tool calls from reaching internal/private network addresses — the SSRF guard
-/// flagged as P0-8 in the 2026-09-20 audit. Extracted from IntegrationsController's private
-/// IsAllowedTestEndpoint (which only ever gated the "Test Connection" button) so the exact same rule
-/// also gates real dispatch — <see cref="R2WAI.Infrastructure.AI.DynamicTools.DynamicToolExecutor"/>,
-/// the path every AI-invoked and approval-resumed tool call actually goes through. Before this, an
-/// AI (or a deferred call resumed after approval) could reach an internal address — including cloud
-/// metadata endpoints like 169.254.169.254 — via a governed tool with no guard on the real call at
-/// all, only on the separate test button.
-///
-/// IPv4 private-range detection is byte-range checks (RFC 1918 + link-local), carried over as-is from
-/// the original method. IPv6 uses IPAddress's own IsIPv6LinkLocal/IsIPv6UniqueLocal/IsLoopback rather
-/// than a literal string match against "::1" — the original method's string check silently never
-/// matched in practice because Uri.Host keeps the brackets on an IPv6 literal ("[::1]", not "::1"),
-/// so "http://[::1]" was never actually blocked despite looking like it should be; caught by this
-/// class's own test suite, not by the original code ever having IPv6 coverage.
-///
-/// Default-deny for private/internal ranges, no configuration override today — same behavior the
-/// Test button already shipped with, just applied consistently rather than newly invented. A real
-/// on-premises deployment whose legitimate integration targets are internal addresses is a genuine,
-/// still-open follow-on (an allowlist, e.g. Egress:AllowedNetworks) — not solved here; flagging
-/// rather than guessing at the right shape for it.
+/// Configuration controlled by the deployment operator. Private network access remains denied by
+/// default; exact hosts and CIDRs can be explicitly trusted for on-prem integrations.
+/// </summary>
+public sealed class EgressGuardOptions
+{
+    public List<string> AllowedHosts { get; set; } = [];
+    public List<string> AllowedNetworks { get; set; } = [];
+    public string? AllowedHostsCsv { get; set; }
+    public string? AllowedNetworksCsv { get; set; }
+
+    public IEnumerable<string> GetAllowedHosts() => AllowedHosts.Concat(SplitCsv(AllowedHostsCsv));
+    public IEnumerable<string> GetAllowedNetworks() => AllowedNetworks.Concat(SplitCsv(AllowedNetworksCsv));
+
+    private static IEnumerable<string> SplitCsv(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? [] : value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+}
+
+/// <summary>
+/// Validates outbound HTTP targets both before dispatch and against the resolved address used by
+/// the socket. The connection-time check prevents DNS rebinding and validates every address a DNS
+/// answer could select. Automatic redirects are disabled by the shared outbound client.
 /// </summary>
 public static class EgressGuard
 {
-    public static bool IsAllowedUrl(string? url)
+    private static readonly string[] BlockedHostSuffixes =
+        [".internal", ".local", ".corp", ".svc.cluster.local", ".localhost"];
+
+    private static readonly string[] BlockedNetworks =
+    [
+        // IPv4: unspecified, private, shared address space, loopback, link-local, documentation,
+        // protocol assignments, benchmarking, multicast and reserved ranges.
+        "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+        "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24", "192.168.0.0/16",
+        "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
+        // IPv6: unspecified/loopback are also checked by IPAddress; the CIDRs cover local, special,
+        // documentation, multicast and protocol-assignment ranges.
+        "fc00::/7", "fe80::/10", "fec0::/10", "ff00::/8", "100::/64", "2001:2::/48",
+        "2001:db8::/32", "2001::/23"
+    ];
+
+    public static bool IsAllowedUrl(string? url, EgressGuardOptions? options = null)
     {
-        if (string.IsNullOrWhiteSpace(url))
+        if (string.IsNullOrWhiteSpace(url)
+            || !Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("https" or "http")
+            || !string.IsNullOrEmpty(uri.UserInfo))
             return false;
 
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-            return false;
+        var host = NormalizeHost(uri.IdnHost);
+        if (IsExplicitlyAllowedHost(host, options))
+            return true;
 
-        if (uri.Scheme is not ("https" or "http"))
-            return false;
+        if (IPAddress.TryParse(host, out var address))
+            return IsAllowedAddress(address, host, options);
 
-        // Uri.Host keeps the brackets on an IPv6 literal ("[::1]") — strip them before any string or
-        // IPAddress.TryParse comparison, otherwise every IPv6 check below silently never matches.
-        var host = uri.Host.Trim('[', ']');
+        return !IsBlockedHost(host) || options?.GetAllowedNetworks().Any() == true;
+    }
 
-        if (host is "localhost" or "127.0.0.1" or "0.0.0.0" or "::1" or "::")
-            return false;
+    /// <summary>Returns the origin only, so credentials, paths, and query tokens never enter logs.</summary>
+    public static string SafeUrlForLog(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http"
+            ? $"{uri.Scheme}://{uri.IdnHost}:{uri.Port}"
+            : "<invalid-url>";
 
-        if (IPAddress.TryParse(host, out var ip))
+    /// <summary>Checks the actual IP selected for a connection and the hostname's explicit trust.</summary>
+    public static bool IsAllowedAddress(IPAddress address, string host, EgressGuardOptions? options = null)
+    {
+        host = NormalizeHost(host);
+        if (IsExplicitlyAllowedHost(host, options))
+            return true;
+
+        if (address.IsIPv4MappedToIPv6)
+            address = address.MapToIPv4();
+
+        if (IsBlockedHost(host) || IsInAnyNetwork(address, BlockedNetworks))
+            return IsInAnyNetwork(address, options?.GetAllowedNetworks());
+
+        return true;
+    }
+
+    /// <summary>
+    /// Opens a socket only after resolving and validating every DNS result. The supplied hostname is
+    /// retained by HttpClient for TLS SNI and certificate validation; only the TCP destination is
+    /// pinned to the approved address from this resolution.
+    /// </summary>
+    public static async ValueTask<Stream> ConnectAsync(
+        SocketsHttpConnectionContext context,
+        EgressGuardOptions options,
+        CancellationToken cancellationToken)
+    {
+        var host = NormalizeHost(context.DnsEndPoint.Host);
+        var addresses = IPAddress.TryParse(host, out var literal)
+            ? [literal]
+            : await Dns.GetHostAddressesAsync(host, cancellationToken);
+
+        if (addresses.Length == 0 || addresses.Any(address => !IsAllowedAddress(address, host, options)))
+            throw new HttpRequestException("The outbound target resolved to a network address that is not allowed.");
+
+        Exception? lastError = null;
+        foreach (var address in addresses)
         {
-            if (IPAddress.IsLoopback(ip))
-                return false;
-
-            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            try
             {
-                var bytes = ip.GetAddressBytes();
-                if (bytes[0] == 10) return false;
-                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return false;
-                if (bytes[0] == 192 && bytes[1] == 168) return false;
-                if (bytes[0] == 169 && bytes[1] == 254) return false; // link-local — includes cloud metadata endpoints
+                await socket.ConnectAsync(new IPEndPoint(address, context.DnsEndPoint.Port), cancellationToken);
+                return new NetworkStream(socket, ownsSocket: true);
             }
-            else if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                if (ip.IsIPv6LinkLocal || ip.IsIPv6UniqueLocal || ip.IsIPv6SiteLocal)
-                    return false;
+                socket.Dispose();
+                lastError = ex;
             }
         }
 
-        var blockedSuffixes = new[] { ".internal", ".local", ".corp", ".svc.cluster.local" };
-        if (blockedSuffixes.Any(s => host.EndsWith(s, StringComparison.OrdinalIgnoreCase)))
+        throw new HttpRequestException("Could not connect to the approved outbound target.", lastError);
+    }
+
+    private static bool IsBlockedHost(string host) =>
+        host is "localhost" or "localhost.localdomain"
+        || BlockedHostSuffixes.Any(suffix => host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsExplicitlyAllowedHost(string host, EgressGuardOptions? options) =>
+        options?.GetAllowedHosts().Any(allowed =>
+            string.Equals(NormalizeHost(allowed), host, StringComparison.OrdinalIgnoreCase)) == true;
+
+    private static string NormalizeHost(string host) => host.Trim().Trim('[', ']').TrimEnd('.').ToLowerInvariant();
+
+    private static bool IsInAnyNetwork(IPAddress address, IEnumerable<string>? cidrs)
+    {
+        if (cidrs is null)
             return false;
 
-        return true;
+        foreach (var cidr in cidrs)
+        {
+            if (TryParseCidr(cidr, out var network, out var prefixLength) && Contains(network, prefixLength, address))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryParseCidr(string cidr, out IPAddress network, out int prefixLength)
+    {
+        network = IPAddress.None;
+        prefixLength = 0;
+        var parts = cidr.Trim().Split('/', 2);
+        if (parts.Length != 2 || !IPAddress.TryParse(parts[0], out network)
+            || !int.TryParse(parts[1], out prefixLength))
+            return false;
+
+        if (network.IsIPv4MappedToIPv6)
+            network = network.MapToIPv4();
+
+        var maxPrefix = network.AddressFamily == AddressFamily.InterNetwork ? 32 : 128;
+        return prefixLength >= 0 && prefixLength <= maxPrefix;
+    }
+
+    private static bool Contains(IPAddress network, int prefixLength, IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6)
+            address = address.MapToIPv4();
+        if (network.AddressFamily != address.AddressFamily)
+            return false;
+
+        var networkBytes = network.GetAddressBytes();
+        var addressBytes = address.GetAddressBytes();
+        var wholeBytes = prefixLength / 8;
+        var remainingBits = prefixLength % 8;
+
+        for (var i = 0; i < wholeBytes; i++)
+            if (networkBytes[i] != addressBytes[i])
+                return false;
+
+        if (remainingBits == 0)
+            return true;
+
+        var mask = (byte)(0xff << (8 - remainingBits));
+        return (networkBytes[wholeBytes] & mask) == (addressBytes[wholeBytes] & mask);
     }
 }

@@ -3,6 +3,7 @@ using Elsa.Http;
 using Elsa.Workflows;
 using Elsa.Workflows.Activities;
 using Elsa.Workflows.Models;
+using Microsoft.Extensions.Options;
 using R2WAI.Infrastructure.Security;
 
 namespace R2WAI.Api.Workflows.NodeProviders;
@@ -23,7 +24,7 @@ namespace R2WAI.Api.Workflows.NodeProviders;
 /// runs fresh on every execution (see StepActivityFactory's own doc comment), so this is exactly
 /// equivalent to an execution-time check for this step type, with far less new surface area.
 /// </summary>
-public sealed class ApiCallNodeProvider : INodeProvider
+public sealed class ApiCallNodeProvider(IOptions<EgressGuardOptions> egressOptions) : INodeProvider
 {
     public string StepType => "API Call";
 
@@ -31,7 +32,7 @@ public sealed class ApiCallNodeProvider : INodeProvider
     {
         var config = context.Config;
 
-        if (!EgressGuard.IsAllowedUrl(config?.ApiUrl))
+        if (!EgressGuard.IsAllowedUrl(config?.ApiUrl, egressOptions.Value))
         {
             return new WriteLine(
                 $"Step '{context.Step.Name}' was not run: its target address is not allowed and cannot be called.")

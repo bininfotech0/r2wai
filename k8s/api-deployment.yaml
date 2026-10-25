@@ -8,6 +8,10 @@
 #   Authentication__Jwt__SecretKey         >= 32 random bytes, base64 or plain — see JwtService.
 #   Security__EncryptionKey                32-byte key, base64-encoded (AES-256) — see IEncryptionService.
 #   Authentication__ApiKeys__0__Key        A real, rotatable API key for the seeded default key row.
+#   AI__OpenAI__ApiKey                      Provider key for the default OpenAI configuration. For
+#                                           local models, edit r2wai-config to a reachable endpoint.
+#   Cache__Redis__ConnectionString           Authenticated Redis connection, e.g. redis:6379,password=...
+#   REDIS_PASSWORD                          Same Redis password for the in-cluster Redis server.
 #   Bootstrap__AdminEmail / Bootstrap__AdminPassword   (first start only, optional) The initial
 #                                           administrator, created ONLY on an empty database (>= 12
 #                                           character password). Demo accounts with public passwords
@@ -18,6 +22,9 @@
 #     --from-literal=ConnectionStrings__DefaultConnection='Host=...;Database=r2wai;Username=...;Password=...' \
 #     --from-literal=Authentication__Jwt__SecretKey='...' \
 #     --from-literal=Security__EncryptionKey='...' \
+#     --from-literal=AI__OpenAI__ApiKey='...' \
+#     --from-literal=Cache__Redis__ConnectionString='redis:6379,password=...' \
+#     --from-literal=REDIS_PASSWORD='...' \
 #     --from-literal=Authentication__ApiKeys__0__Key='...'
 apiVersion: apps/v1
 kind: Deployment
@@ -28,10 +35,10 @@ metadata:
     app: r2wai
     component: api
 spec:
-  # Deliberately 1 (and the HPA below pinned to 1) until the background sweepers are lease-based:
-  # every replica currently runs WorkflowSchedule / WorkflowDelayResume / Escalation / DataRetention
-  # with no claim or lock, so >1 replica fires scheduled workflows and resumes delayed runs once PER
-  # REPLICA (duplicate external side effects). See docs/audit/R2WAI-IQ200-AUDIT-2026-09-20.md, P0-3.
+  # Keep one API replica until a multi-pod SignalR backplane, shared object storage, review of
+  # remaining in-memory coordination, and production load measurements are complete. Schedule,
+  # delay-resume, and escalation work now use database claims/locks; that alone does not make the
+  # whole API horizontally scalable.
   replicas: 1
   selector:
     matchLabels:
@@ -42,16 +49,20 @@ spec:
         app: r2wai
         component: api
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: api
           image: ghcr.io/OWNER/REPO-api:latest # kustomize edit set image before applying — see cd.yml
           # docker/Dockerfile.api already creates and switches to a non-root "appuser" (RUN
           # groupadd/useradd + USER appuser) — runAsNonRoot here just enforces what the image
-          # already does by default, not a new constraint on it. No readOnlyRootFilesystem: the
-          # app writes to /app/App_Data/Storage (Storage__Provider=Local, this ConfigMap),
-          # /app/Logs, and the OS temp dir (DocumentService.ExtractTextAsync) — doable with 3
-          # explicit emptyDir mounts, but not added here without a live cluster to verify it
-          # against; flagged as a real follow-on, not silently skipped.
+          # already does by default, not a new constraint on it. Uploaded files use a persistent
+          # volume while this deployment is single-replica; move to shared S3-compatible storage
+          # before increasing replicas. Logs and document-processing temp files remain pod-local.
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
@@ -64,6 +75,9 @@ spec:
                 name: r2wai-config
             - secretRef:
                 name: r2wai-secrets
+          volumeMounts:
+            - name: api-storage
+              mountPath: /app/App_Data/Storage
           readinessProbe:
             httpGet: { path: /health, port: 8080 }
             initialDelaySeconds: 15
@@ -75,6 +89,10 @@ spec:
           resources:
             requests: { cpu: "250m", memory: "384Mi" }
             limits: { cpu: "1", memory: "768Mi" }
+      volumes:
+        - name: api-storage
+          persistentVolumeClaim:
+            claimName: api-storage
 ---
 apiVersion: v1
 kind: Service
@@ -101,7 +119,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: r2wai-api
-  # Pinned to 1 — see the note on `replicas` above (audit P0-3). Raise only after the sweepers are safe.
+  # Pinned to 1 — see the note on `replicas` above. Raise after shared-state and load-readiness work.
   minReplicas: 1
   maxReplicas: 1
   metrics:
@@ -109,3 +127,14 @@ spec:
       resource:
         name: cpu
         target: { type: Utilization, averageUtilization: 70 }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: api-storage
+  namespace: r2wai
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 20Gi

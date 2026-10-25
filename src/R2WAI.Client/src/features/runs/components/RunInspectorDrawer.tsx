@@ -17,6 +17,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useNavigate } from 'react-router-dom'
 import { getWorkflow } from '../../automations/api'
+import { useAuth } from '../../../lib/auth/useAuth'
 import { Timeline } from '../../../components/Timeline'
 import { useSnackbar } from '../../../lib/notifications/useSnackbar'
 import {
@@ -39,6 +40,8 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { notify } = useSnackbar()
+  const { user } = useAuth()
+  const canViewTenantRuns = user?.roles.some((role) => role === 'Admin' || role === 'SystemAdmin') ?? false
   const [showTechnical, setShowTechnical] = useState(false)
 
   const isAutomation = run?.type === 'Automation'
@@ -58,7 +61,7 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
   const workflowQuery = useQuery({
     queryKey: ['run-workflow', instanceQuery.data?.workflowId],
     queryFn: () => getWorkflow(instanceQuery.data!.workflowId),
-    enabled: !!instanceQuery.data,
+    enabled: !!instanceQuery.data && canViewTenantRuns,
   })
 
   const conversationQuery = useQuery({
@@ -80,7 +83,7 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
   const auditQuery = useQuery({
     queryKey: ['run-audit', run?.type, run?.id],
     queryFn: () => listAuditLogsByEntityType(isAutomation ? 'WorkflowInstance' : 'Conversation'),
-    enabled: !!run && !isToolCall,
+    enabled: !!run && !isToolCall && canViewTenantRuns,
   })
   const correlationId = auditQuery.data?.items.find((a) => a.entityId === run?.id)?.correlationId ?? null
 
@@ -152,7 +155,7 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
                   }))}
                 />
 
-                {hasFailedStep && (
+                {hasFailedStep && canViewTenantRuns && (
                   <Alert
                     severity="warning"
                     action={
@@ -191,11 +194,13 @@ export function RunInspectorDrawer({ run, onClose }: RunInspectorDrawerProps) {
 
             <Divider />
 
-            <Stack direction="row" spacing={2}>
-              <Button size="small" onClick={handleViewAudit}>
-                View Audit
-              </Button>
-            </Stack>
+            {canViewTenantRuns && (
+              <Stack direction="row" spacing={2}>
+                <Button size="small" onClick={handleViewAudit}>
+                  View Audit
+                </Button>
+              </Stack>
+            )}
 
             <Divider />
 

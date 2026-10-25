@@ -13,6 +13,7 @@ public sealed class Workflow : BaseEntity<Guid>, IWorkspaceScoped
     public string? Type { get; private set; }
     public string? Trigger { get; private set; }
     public string? Steps { get; private set; }
+    public DateTime? LastScheduleOccurrenceAt { get; private set; }
     public bool IsActive { get; private set; }
     public int Version { get; private set; } = 1;
     public string VersionStatus { get; private set; } = "Draft";
@@ -107,5 +108,14 @@ public sealed class Workflow : BaseEntity<Guid>, IWorkspaceScoped
     {
         WorkspaceId = workspaceId;
         MarkAsModified();
+    }
+
+    public void AdvanceScheduleOccurrence(DateTime occurrenceUtc)
+    {
+        if (LastScheduleOccurrenceAt is not { } current || occurrenceUtc > current)
+        {
+            LastScheduleOccurrenceAt = occurrenceUtc;
+            MarkAsModified();
+        }
     }
 }

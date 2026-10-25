@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Readers;
 using R2WAI.Application.Common.Exceptions;
 using R2WAI.Application.Common.Interfaces;
@@ -12,10 +13,14 @@ namespace R2WAI.Infrastructure.Integrations;
 /// callable ToolDefinition happens via the existing CreateIntegrationCommand, same as every other
 /// integration creation path (see IntegrationsController.CommitOpenApiImport).
 /// </summary>
-public class OpenApiImportService(IHttpClientFactory httpClientFactory, ILogger<OpenApiImportService> logger)
+public class OpenApiImportService(
+    IHttpClientFactory httpClientFactory,
+    ILogger<OpenApiImportService> logger,
+    IOptions<EgressGuardOptions> egressOptions)
     : IOpenApiImportService
 {
     private const long MaxSpecBytes = 5 * 1024 * 1024;
+    private readonly EgressGuardOptions _egressOptions = egressOptions.Value;
 
     public async Task<OpenApiAnalyzeResult> AnalyzeAsync(string? url, string? fileContent, CancellationToken ct = default)
     {
@@ -86,7 +91,7 @@ public class OpenApiImportService(IHttpClientFactory httpClientFactory, ILogger<
 
     private async Task<string> FetchSpecAsync(string url, CancellationToken ct)
     {
-        if (!EgressGuard.IsAllowedUrl(url))
+        if (!EgressGuard.IsAllowedUrl(url, _egressOptions))
             throw new ValidationException("url", "This URL is not allowed. Internal network addresses are blocked.");
 
         var client = httpClientFactory.CreateClient("HttpTool");

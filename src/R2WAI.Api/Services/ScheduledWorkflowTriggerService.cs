@@ -11,17 +11,15 @@ namespace R2WAI.Api.Services;
 /// <see cref="WorkflowTriggerSpec"/>). Before this existed the wizard offered "Schedule" but nothing
 /// ever fired it.
 ///
-/// Replica-safe without new schema: each tick runs under a Postgres session advisory lock, so only one
-/// API replica evaluates schedules at a time, and every scheduled run records its occurrence in the
-/// instance's input data (<c>{"trigger":"schedule","scheduledFor":"…"}</c>), which is what dedupes an
-/// occurrence across ticks, replicas and restarts. Misfire policy is "skip": an occurrence older than
-/// <see cref="Lookback"/> (API down for longer than that) is not caught up.
+/// Replica-safe: each tick runs under a Postgres session advisory lock, so only one API replica
+/// evaluates schedules at a time. Each scheduled run records its occurrence in the instance input
+/// data, and a per-workflow cursor catches up occurrences missed during downtime.
 /// </summary>
 public sealed class ScheduledWorkflowTriggerService(
     IServiceProvider serviceProvider, ILogger<ScheduledWorkflowTriggerService> logger) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
-    public static readonly TimeSpan Lookback = TimeSpan.FromMinutes(5);
+    private const int MaxOccurrencesPerWorkflowPerSweep = 100;
 
     // Arbitrary but fixed: identifies this sweeper's advisory lock across replicas.
     private const long AdvisoryLockKey = 7_204_215_001;
@@ -75,24 +73,61 @@ public sealed class ScheduledWorkflowTriggerService(
                 .AsNoTracking()
                 .Where(w => !w.IsDeleted && w.IsActive && w.VersionStatus == "Published"
                     && w.Trigger != null && w.Trigger.StartsWith(WorkflowTriggerSpec.SchedulePrefix))
-                .Select(w => new { w.Id, w.TenantId, w.UserId, w.Name, w.Trigger, Since = w.ModifiedAt ?? w.CreatedAt })
+                .Select(w => new
+                {
+                    w.Id,
+                    w.TenantId,
+                    w.UserId,
+                    w.Name,
+                    w.Trigger,
+                    Since = w.ModifiedAt ?? w.CreatedAt,
+                    w.LastScheduleOccurrenceAt
+                })
                 .ToListAsync(ct);
 
             var started = 0;
             foreach (var workflow in candidates)
             {
-                // Never fire an occurrence from before the schedule (or anything else) was last saved —
-                // otherwise publishing at 09:02 would immediately run the 09:00 slot.
-                var from = workflow.Since > nowUtc - Lookback ? workflow.Since : nowUtc - Lookback;
-                foreach (var occurrence in WorkflowTriggerSpec.Parse(workflow.Trigger).OccurrencesBetween(from, nowUtc))
+                // A saved schedule cursor catches up missed runs after an outage. The modified time
+                // remains a lower bound so editing/publishing a schedule never fires old slots.
+                var from = workflow.LastScheduleOccurrenceAt is { } cursor && cursor > workflow.Since
+                    ? cursor
+                    : workflow.Since;
+                var occurrences = WorkflowTriggerSpec.Parse(workflow.Trigger)
+                    .OccurrencesBetween(from, nowUtc)
+                    .Take(MaxOccurrencesPerWorkflowPerSweep + 1)
+                    .ToList();
+
+                var processedAll = occurrences.Count <= MaxOccurrencesPerWorkflowPerSweep;
+                DateTime? lastProcessed = workflow.LastScheduleOccurrenceAt;
+                foreach (var occurrence in occurrences.Take(MaxOccurrencesPerWorkflowPerSweep))
                 {
                     var scheduledFor = occurrence.ToString("O");
                     if (await AlreadyStartedAsync(dbContext, workflow.Id, scheduledFor, isNpgsql, ct))
+                    {
+                        lastProcessed = occurrence;
                         continue;
+                    }
 
                     if (await StartAsync(workflow.Id, workflow.TenantId, workflow.UserId, workflow.Name, scheduledFor, ct))
+                    {
                         started++;
+                        lastProcessed = occurrence;
+                    }
+                    else
+                    {
+                        // Retry this occurrence on the next poll instead of silently skipping it.
+                        processedAll = false;
+                        break;
+                    }
                 }
+
+                if (lastProcessed is { } lastOccurrence
+                    && (workflow.LastScheduleOccurrenceAt is null || lastOccurrence > workflow.LastScheduleOccurrenceAt))
+                    await AdvanceScheduleCursorAsync(dbContext, workflow.Id, lastOccurrence, ct);
+
+                if (processedAll)
+                    await AdvanceScheduleCursorAsync(dbContext, workflow.Id, nowUtc, ct);
             }
 
             return started;
@@ -105,6 +140,28 @@ public sealed class ScheduledWorkflowTriggerService(
                 await dbContext.Database.CloseConnectionAsync();
             }
         }
+    }
+
+    private static async Task AdvanceScheduleCursorAsync(
+        ApplicationDbContext dbContext, Guid workflowId, DateTime cursorUtc, CancellationToken ct)
+    {
+        var query = dbContext.Workflows.IgnoreQueryFilters()
+            .Where(w => w.Id == workflowId
+                && (w.LastScheduleOccurrenceAt == null || w.LastScheduleOccurrenceAt < cursorUtc));
+
+        if (dbContext.Database.IsRelational())
+        {
+            await query.ExecuteUpdateAsync(
+                updates => updates.SetProperty(w => w.LastScheduleOccurrenceAt, cursorUtc), ct);
+            return;
+        }
+
+        var workflow = await query.FirstOrDefaultAsync(ct);
+        if (workflow is null)
+            return;
+
+        workflow.AdvanceScheduleOccurrence(cursorUtc);
+        await dbContext.SaveChangesAsync(ct);
     }
 
     private static async Task<bool> AlreadyStartedAsync(

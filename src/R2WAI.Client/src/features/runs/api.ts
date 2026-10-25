@@ -33,11 +33,11 @@ export function getToolCall(id: string) {
 }
 
 export function getWorkflowInstance(id: string) {
-  return fetchJson<WorkflowInstanceDto>(`/workflows/instances/${id}`)
+  return fetchJson<WorkflowInstanceDto>(`/runs/automations/${id}`)
 }
 
 export function getWorkflowInstanceSteps(id: string) {
-  return fetchJson<{ items: WorkflowStepExecutionDto[] }>(`/workflows/instances/${id}/steps`)
+  return fetchJson<{ items: WorkflowStepExecutionDto[] }>(`/runs/automations/${id}/steps`)
 }
 
 export async function retryFailedStep(instanceId: string): Promise<{ message: string }> {

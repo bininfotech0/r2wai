@@ -18,7 +18,8 @@ RUN dotnet publish "R2WAI.Api.csproj" -c Release -o /app/publish
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
-RUN groupadd -r appuser && useradd -r -g appuser -s /sbin/nologin appuser
+RUN groupadd --system --gid 10001 appuser \
+    && useradd --system --uid 10001 --gid 10001 --create-home --shell /sbin/nologin appuser
 WORKDIR /app
 EXPOSE 8080
 ENV ASPNETCORE_ENVIRONMENT=Production

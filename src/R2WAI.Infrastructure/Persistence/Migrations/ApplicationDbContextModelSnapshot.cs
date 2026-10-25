@@ -133,6 +133,8 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("KeyHash");
+
                     b.ToTable("ApiKeys");
                 });
 
@@ -397,10 +399,16 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = FALSE AND \"IsActive\" = TRUE AND \"WorkflowType\" IS NULL");
+
                     b.HasIndex("TenantId", "Name")
                         .IsUnique();
 
-                    b.HasIndex("TenantId", "WorkflowType");
+                    b.HasIndex("TenantId", "WorkflowType")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = FALSE AND \"IsActive\" = TRUE AND \"WorkflowType\" IS NOT NULL");
 
                     b.ToTable("ApprovalPolicies", (string)null);
                 });
@@ -2776,6 +2784,42 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.ToTable("UserRoles", (string)null);
                 });
 
+            modelBuilder.Entity("R2WAI.Domain.Entities.WebhookDeliveryRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeliveryKeyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WebhookEndpointId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("WebhookEndpointId", "DeliveryKeyHash")
+                        .IsUnique();
+
+                    b.ToTable("WebhookDeliveryRecords", (string)null);
+                });
+
             modelBuilder.Entity("R2WAI.Domain.Entities.WebhookEndpoint", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2823,6 +2867,10 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = FALSE");
+
                     b.HasIndex("WorkflowId");
 
                     b.ToTable("WebhookEndpoints");
@@ -2851,6 +2899,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastScheduleOccurrenceAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("ModifiedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2950,6 +3001,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("PendingResumeLeaseExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("PendingResumeLeaseId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("PendingResumeStepIndex")
                         .HasColumnType("integer");
 
@@ -2973,6 +3027,9 @@ namespace R2WAI.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("InitiatedBy");
+
+                    b.HasIndex("PendingResumeAt", "PendingResumeLeaseExpiresAt")
+                        .HasFilter("\"PendingResumeAt\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "Status");
 

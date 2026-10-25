@@ -45,6 +45,7 @@ public class ApprovalsController(
         => (Math.Max(1, page), Math.Clamp(pageSize, 1, 100));
 
     [HttpGet]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? status = null,
         [FromQuery] int page = 1,
@@ -55,7 +56,7 @@ public class ApprovalsController(
         if (string.IsNullOrEmpty(status) || status.Equals("Pending", StringComparison.OrdinalIgnoreCase))
         {
             var (items, totalCount) = await approvalService.GetPendingPagedAsync(
-                CurrentTenantId, CurrentUserId, null, page, pageSize, ct);
+                CurrentTenantId, null, null, page, pageSize, ct);
             return Ok(new { items, totalCount, page, pageSize });
         }
 
@@ -97,11 +98,12 @@ public class ApprovalsController(
     {
         (page, pageSize) = ClampPagination(page, pageSize);
         var (items, totalCount) = await approvalService.GetPendingPagedAsync(
-            CurrentTenantId, null, role, page, pageSize, ct);
+            CurrentTenantId, CurrentUserId, role, page, pageSize, ct);
         return Ok(new { items, totalCount, page, pageSize });
     }
 
     [HttpGet("policies")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetPolicies(
         [FromQuery] bool? activeOnly = null,
         CancellationToken ct = default)
@@ -111,6 +113,7 @@ public class ApprovalsController(
     }
 
     [HttpGet("policies/{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetPolicy(Guid id, CancellationToken ct = default)
     {
         var policy = await approvalService.GetPolicyByIdAsync(CurrentTenantId, id, ct);
@@ -118,6 +121,7 @@ public class ApprovalsController(
     }
 
     [HttpPost("policies")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> CreatePolicy(
         [FromBody] CreateApprovalPolicyRequest request,
         CancellationToken ct = default)
@@ -127,6 +131,7 @@ public class ApprovalsController(
     }
 
     [HttpPut("policies/{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdatePolicy(Guid id,
         [FromBody] UpdateApprovalPolicyRequest request,
         CancellationToken ct = default)
@@ -136,6 +141,7 @@ public class ApprovalsController(
     }
 
     [HttpDelete("policies/{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeletePolicy(Guid id, CancellationToken ct = default)
     {
         await approvalService.DeletePolicyAsync(CurrentTenantId, id, ct);
@@ -143,6 +149,7 @@ public class ApprovalsController(
     }
 
     [HttpPost("policies/{id:guid}/toggle")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> TogglePolicy(Guid id, CancellationToken ct = default)
     {
         var policy = await approvalService.TogglePolicyActiveAsync(CurrentTenantId, id, ct);

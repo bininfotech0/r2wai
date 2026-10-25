@@ -5,6 +5,14 @@ namespace R2WAI.Infrastructure.Cache;
 
 public class RedisCacheService : ICacheService, IDisposable
 {
+    private const string IncrementWithExpiryScript = """
+        local count = redis.call('INCR', KEYS[1])
+        if count == 1 then
+            redis.call('PEXPIRE', KEYS[1], ARGV[1])
+        end
+        return { count, redis.call('PTTL', KEYS[1]) }
+        """;
+
     private readonly ConnectionMultiplexer _redis;
     private readonly IDatabase _database;
     private readonly ILogger<RedisCacheService> _logger;
@@ -80,6 +88,30 @@ public class RedisCacheService : ICacheService, IDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Redis cache set failed for key {Key}", key);
+        }
+    }
+
+    public async Task<(long Count, TimeSpan Remaining)?> IncrementWithExpiryAsync(
+        string key, TimeSpan expiration, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var expirationMs = Math.Max(1L, (long)Math.Ceiling(expiration.TotalMilliseconds));
+
+        try
+        {
+            var result = await _database.ScriptEvaluateAsync(
+                IncrementWithExpiryScript,
+                [Namespaced(key)],
+                [expirationMs]);
+            var values = (RedisResult[])result!;
+            var count = (long)values[0];
+            var remainingMs = Math.Max(0L, (long)values[1]);
+            return (count, TimeSpan.FromMilliseconds(remainingMs));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Redis atomic counter failed for key {Key}", key);
+            return null;
         }
     }
 

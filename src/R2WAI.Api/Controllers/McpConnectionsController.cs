@@ -1,6 +1,7 @@
 using R2WAI.Application.Common.AI;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using R2WAI.Application.Common.Exceptions;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Domain.Entities;
@@ -20,7 +21,7 @@ namespace R2WAI.Api.Controllers;
 /// it explicitly (see <see cref="Commit"/>).
 /// </summary>
 [ApiController]
-[Authorize]
+[Authorize(Roles = "Admin,SystemAdmin")]
 [Route("api/v1/mcp-connections")]
 public class McpConnectionsController(
     IRepository<McpServerConnection> connections,
@@ -28,6 +29,7 @@ public class McpConnectionsController(
     ICurrentUserService currentUser,
     IEncryptionService encryptionService,
     McpClientAdapter mcpClient,
+    IOptions<EgressGuardOptions> egressOptions,
     IUnitOfWork unitOfWork,
     ILogger<McpConnectionsController> logger) : ControllerBase
 {
@@ -56,7 +58,7 @@ public class McpConnectionsController(
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateMcpConnectionRequest request, CancellationToken ct = default)
     {
-        if (!EgressGuard.IsAllowedUrl(request.EndpointUrl))
+        if (!EgressGuard.IsAllowedUrl(request.EndpointUrl, egressOptions.Value))
             throw new ValidationException(nameof(request.EndpointUrl), "This URL is not allowed. Internal network addresses are blocked.");
 
         var credentialEncrypted = string.IsNullOrWhiteSpace(request.Credential)
@@ -76,7 +78,7 @@ public class McpConnectionsController(
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateMcpConnectionRequest request, CancellationToken ct = default)
     {
-        if (!EgressGuard.IsAllowedUrl(request.EndpointUrl))
+        if (!EgressGuard.IsAllowedUrl(request.EndpointUrl, egressOptions.Value))
             throw new ValidationException(nameof(request.EndpointUrl), "This URL is not allowed. Internal network addresses are blocked.");
 
         var connection = await GetOwnedConnectionAsync(id, ct);

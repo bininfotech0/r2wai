@@ -104,7 +104,7 @@ const NAVIGATION: readonly NavigationEntry[] = [
     tabGroup: 'publish', tabLabel: 'Chatbots',
   },
   { id: 'activity', section: 'Activity', label: 'Activity', path: '/runs', icon: 'PlayCircleOutline', routeLabel: 'Activity', visibleTo: ADMIN_PERSONAS },
-  { id: 'confirmations', section: 'Activity', label: 'Confirmations', path: '/approvals', icon: 'FactCheck', routeLabel: 'Confirmations', visibleTo: ADMIN_PERSONAS },
+  { id: 'confirmations', section: 'Activity', label: 'Confirmations', path: '/approvals', icon: 'FactCheck', routeLabel: 'Confirmations', visibleTo: ALL_PERSONAS },
   { id: 'monitor', section: 'Activity', label: 'Monitor', path: '/monitor', icon: 'MonitorHeart', routeLabel: 'Monitor', visibleTo: ADMIN_PERSONAS },
   { id: 'settings', section: 'Settings', label: 'Settings', path: '/settings', icon: 'Settings', routeLabel: 'Settings', visibleTo: ADMIN_PERSONAS },
   {

@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Extensions.Http;
+using R2WAI.Infrastructure.Security;
 
 namespace R2WAI.Infrastructure.Services.ToolFramework;
 
@@ -28,6 +30,23 @@ public static class HttpToolClient
 {
     public const string Name = "HttpTool";
 
+    public static SocketsHttpHandler CreateSecureHandler(IServiceProvider serviceProvider)
+    {
+        var egressOptions = serviceProvider.GetRequiredService<IOptions<EgressGuardOptions>>().Value;
+        return new SocketsHttpHandler
+        {
+            // Redirect targets are untrusted and may point into private networks. Callers receive
+            // the 3xx response and can choose a separately validated target.
+            AllowAutoRedirect = false,
+            // A proxy would move the socket destination away from the URL being validated.
+            // Configure a trusted outbound proxy explicitly in a future proxy-aware policy.
+            UseProxy = false,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            ConnectCallback = (context, cancellationToken) =>
+                EgressGuard.ConnectAsync(context, egressOptions, cancellationToken)
+        };
+    }
+
     public static bool IsSafeToRetry(HttpMethod method) =>
         method == HttpMethod.Get || method == HttpMethod.Head || method == HttpMethod.Options;
 
@@ -45,6 +64,7 @@ public static class HttpToolClient
                 client.DefaultRequestHeaders.Add("User-Agent", "R2WAI-ToolFramework/1.0");
                 client.Timeout = TimeSpan.FromSeconds(30);
             })
+            .ConfigurePrimaryHttpMessageHandler(CreateSecureHandler)
             .AddPolicyHandler((_, request) => IsSafeToRetry(request.Method)
                 ? HttpPolicyExtensions.HandleTransientHttpError()
                     .WaitAndRetryAsync(options.RetryCount, options.RetryDelay)

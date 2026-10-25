@@ -27,14 +27,16 @@ public class GetConversationsQueryHandler(
               && !c.IsArchived
               && (query.Module == null || c.Module == query.Module);
 
-        var total = await conversationRepo.CountAsync(filter, cancellationToken);
-
-        var allMatching = await conversationRepo.FindAsync(filter, cancellationToken);
-        var items = allMatching
-            .OrderByDescending(c => c.ModifiedAt ?? c.CreatedAt)
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
-            .ToList();
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+        var result = await conversationRepo.FindPagedAsync(
+            filter,
+            c => c.ModifiedAt ?? c.CreatedAt,
+            page,
+            pageSize,
+            descending: true,
+            cancellationToken: cancellationToken);
+        var items = result.Items;
 
         var dtos = mapper.Map<List<ConversationDto>>(items);
 
@@ -65,9 +67,9 @@ public class GetConversationsQueryHandler(
         return new PagedResult<ConversationDto>
         {
             Items = dtos,
-            TotalCount = total,
-            Page = query.Page,
-            PageSize = query.PageSize,
+            TotalCount = result.TotalCount,
+            Page = page,
+            PageSize = pageSize,
         };
     }
 }

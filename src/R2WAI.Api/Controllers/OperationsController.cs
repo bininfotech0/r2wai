@@ -49,6 +49,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     }
 
     [HttpGet("workflow-instances")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetWorkflowInstances(
         [FromQuery] Guid? workflowId = null,
         [FromQuery] int page = 1,
@@ -131,6 +132,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     // Prometheus scrape target has 401'd every attempt since the monitoring stack was added).
 
     [HttpGet("metrics")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetMetrics(CancellationToken ct = default)
     {
         var result = await mediator.Send(new GetMetricsQuery(), ct);
@@ -138,6 +140,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     }
 
     [HttpGet("daily-trend")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetDailyTrend([FromQuery] int days = 7, CancellationToken ct = default)
     {
         var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
@@ -175,6 +178,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     }
 
     [HttpGet("ai-stats")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetAiStats(CancellationToken ct = default)
     {
         var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
@@ -294,6 +298,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     }
 
     [HttpGet("reports")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetReports([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
         var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
@@ -383,6 +388,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     }
 
     [HttpPost("reports/generate")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GenerateReport([FromBody] GenerateReportRequest request, CancellationToken ct = default)
     {
         var currentUser = HttpContext.RequestServices.GetRequiredService<R2WAI.Application.Common.Interfaces.ICurrentUserService>();
@@ -443,6 +449,7 @@ public class OperationsController(IMediator mediator, R2WAI.Infrastructure.Persi
     public record GenerateReportRequest(string Type, string? Period = "last30days");
 
     [HttpGet("reports/download")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DownloadReport(
         [FromQuery] string type,
         [FromQuery] string format = "csv",

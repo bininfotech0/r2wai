@@ -126,6 +126,7 @@ export function ApprovalsPage() {
   const queryClient = useQueryClient()
   const { notify } = useSnackbar()
   const { user } = useAuth()
+  const canViewHistory = user?.roles.some((role) => role === 'Admin' || role === 'SystemAdmin') ?? false
   const [tab, setTab] = useState<'Pending' | 'Approved' | 'Rejected'>('Pending')
   const [page, setPage] = useState(1)
   const [acting, setActing] = useState<{ item: PendingApprovalDto; action: 'approve' | 'reject' } | null>(null)
@@ -140,7 +141,7 @@ export function ApprovalsPage() {
   const historyQuery = useQuery({
     queryKey: ['approvals', 'history', tab, page],
     queryFn: () => listApprovalHistory(tab as 'Approved' | 'Rejected', page, 50),
-    enabled: tab === 'Approved' || tab === 'Rejected',
+    enabled: canViewHistory && (tab === 'Approved' || tab === 'Rejected'),
   })
 
   const actionMutation = useMutation({
@@ -179,8 +180,8 @@ export function ApprovalsPage() {
 
       <Tabs value={tab} onChange={(_, v) => { setTab(v); setPage(1) }} variant="scrollable" scrollButtons="auto" sx={{ mb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Tab label={`Pending${pendingQuery.data?.totalCount ? ` (${pendingQuery.data.totalCount})` : ''}`} value="Pending" />
-        <Tab label="Approved" value="Approved" />
-        <Tab label="Rejected" value="Rejected" />
+        {canViewHistory && <Tab label="Approved" value="Approved" />}
+        {canViewHistory && <Tab label="Rejected" value="Rejected" />}
       </Tabs>
 
       {tab === 'Pending' && (

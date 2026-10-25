@@ -1,7 +1,8 @@
-import { Box, InputAdornment, Paper, Stack, TextField } from '@mui/material'
+import { Box, InputAdornment, Paper, Stack, TextField, Typography, useMediaQuery, useTheme } from '@mui/material'
 import { TooltipIconButton as IconButton } from '../TooltipIconButton'
 import SearchIcon from '@mui/icons-material/Search'
 import ClearIcon from '@mui/icons-material/Close'
+import SwipeLeftIcon from '@mui/icons-material/SwipeLeft'
 import { DataGrid, type GridColDef, type GridRowsProp } from '@mui/x-data-grid'
 import { EmptyState } from '../EmptyState'
 import { ErrorState } from '../ErrorState'
@@ -57,6 +58,8 @@ export function DataTable<T extends { id: string }>({
   onRetry,
   paginationMode = 'server',
 }: DataTableProps<T>) {
+  const theme = useTheme()
+  const showHorizontalScrollHint = useMediaQuery(theme.breakpoints.down('md')) && columns.length > 3
   const isEmpty = !loading && rows.length === 0
   const searchTarget = searchPlaceholder.replace(/^Search\b/i, '').replace(/[.…]+$/g, '').trim()
   const gridLabel = ariaLabel ?? `${searchTarget && searchTarget.toLowerCase() !== 'this list' ? searchTarget : columns[0]?.headerName ?? 'Data'} results`
@@ -108,6 +111,18 @@ export function DataTable<T extends { id: string }>({
           {emptyContent}
         </Box>
       ) : (
+      <>
+      {showHorizontalScrollHint && (
+        <Stack
+          direction="row"
+          spacing={0.75}
+          role="note"
+          sx={{ px: 1.5, py: 0.75, alignItems: 'center', color: 'text.secondary', bgcolor: 'action.hover', borderBottom: '1px solid', borderColor: 'divider' }}
+        >
+          <SwipeLeftIcon fontSize="small" aria-hidden="true" />
+          <Typography variant="caption">Swipe or scroll horizontally to see all columns</Typography>
+        </Stack>
+      )}
       <DataGrid
         aria-label={gridLabel}
         rows={rows as unknown as GridRowsProp}
@@ -147,6 +162,7 @@ export function DataTable<T extends { id: string }>({
           ),
         }}
       />
+      </>
       )}
     </Paper>
   )

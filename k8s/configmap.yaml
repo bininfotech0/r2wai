@@ -11,23 +11,13 @@ metadata:
   namespace: r2wai
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  # UNDECIDED FOR PRODUCTION — this session found local Ollama tool-calling can exceed 90s under
-  # load, which isn't viable for a user-facing SLA. Either point AI__Ollama__Endpoint at a properly
-  # GPU-resourced Ollama deployment (no manifest for one is included here — it isn't defined by
-  # this ConfigMap's "ollama:11434" placeholder), or switch AI__Provider to "openai"/another hosted
-  # provider with real API keys (in the Secret, not here) and cost/rate-limit controls.
-  AI__Provider: "ollama"
-  AI__Ollama__Endpoint: "http://ollama:11434"
-  AI__Ollama__ModelId: "qwen3:4b"
-  AI__Ollama__EmbeddingModel: "nomic-embed-text"
-  VectorStore__VectorSize: "768"
-  # "Local" writes to the pod's own filesystem — fine for the single-container docker-compose setup,
-  # but with more than one API replica (api-deployment.yaml is pinned to 1 for now) each pod would have its own separate, non-shared
-  # storage, so a document uploaded via one replica could 404 when a later request lands on the
-  # other. Switch Storage__Provider to "Minio" (S3-compatible — see MinioStorageService, points at
-  # any real S3-compatible endpoint including AWS S3 itself) before running more than one replica.
+  # Working default for the included manifests. Put AI__OpenAI__ApiKey in r2wai-secrets; for an
+  # on-prem model, override AI__Provider and set its real endpoint/model and matching vector size.
+  AI__Provider: "openai"
+  VectorStore__VectorSize: "1536"
+  # The API Deployment has a persistent volume mounted here. Keep one replica until this is moved
+  # to shared S3-compatible storage and the rest of the API is ready for horizontal scaling.
   Storage__Provider: "Local"
-  Cache__Redis__ConnectionString: "redis:6379"
   Authentication__Jwt__ExpirationMinutes: "15"
   Authentication__Jwt__RefreshTokenExpirationDays: "7"
   Authentication__ApiKeys__0__Name: "Default Key"

@@ -1,10 +1,12 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Domain.Entities;
 using R2WAI.Domain.Enums;
 using R2WAI.Infrastructure.AI.DynamicTools;
 using R2WAI.Infrastructure.Services.ToolFramework;
+using R2WAI.Infrastructure.Security;
 
 namespace R2WAI.Infrastructure.Tests.AI;
 
@@ -53,7 +55,8 @@ public class DynamicToolExecutorTests
     }
 
     private static DynamicToolExecutor CreateExecutor(IToolRegistry registry) =>
-        new(registry, new FakeEncryptionService(), NullLogger<DynamicToolExecutor>.Instance);
+        new(registry, new FakeEncryptionService(), NullLogger<DynamicToolExecutor>.Instance,
+            Options.Create(new EgressGuardOptions()));
 
     // ApplicationApi is an EF navigation property with a private setter — populated by EF when the
     // owning query includes it, not settable through ToolDefinition's public API. Reflection here

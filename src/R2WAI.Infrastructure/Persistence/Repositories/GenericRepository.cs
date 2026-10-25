@@ -123,6 +123,28 @@ public class GenericRepository<T> : IRepository<T> where T : BaseEntity<Guid>
         return await _dbSet.Where(predicate).ToListAsync(cancellationToken);
     }
 
+    public virtual async Task<(IReadOnlyList<T> Items, int TotalCount)> FindPagedAsync(
+        Expression<Func<T, bool>> predicate,
+        Expression<Func<T, DateTime>> orderBy,
+        int page,
+        int pageSize,
+        bool descending = false,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _dbSet.Where(predicate);
+        var totalCount = await query.CountAsync(cancellationToken);
+        IOrderedQueryable<T> ordered = descending
+            ? query.OrderByDescending(orderBy)
+            : query.OrderBy(orderBy);
+        var items = await ordered
+            .ThenBy(entity => entity.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, totalCount);
+    }
+
     public virtual async Task<IReadOnlyList<T>> FindAsync(Expression<Func<T, bool>> predicate,
         string includePath, CancellationToken cancellationToken = default)
     {

@@ -132,6 +132,13 @@ export function listWebhooks(page: number, pageSize: number) {
 export function createWebhook(input: CreateWebhookInput) {
   return postJson<{ id: string; name: string; endpointUrl: string }>('/admin/webhooks', input)
 }
+export function updateWebhook(id: string, input: CreateWebhookInput) {
+  return fetchJson<{ id: string; name: string }>(`/admin/webhooks/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
 export function toggleWebhook(id: string) {
   return postJson<{ id: string; isActive: boolean }>(`/admin/webhooks/${id}/toggle`, {})
 }

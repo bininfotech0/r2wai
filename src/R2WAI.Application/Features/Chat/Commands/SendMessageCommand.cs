@@ -42,21 +42,30 @@ public class SendMessageCommandHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!string.IsNullOrEmpty(command.IdempotencyKey))
-        {
-            var cached = await idempotencyStore.GetAsync<MessageDto>(command.IdempotencyKey, cancellationToken);
-            if (cached is not null)
-                return cached;
-        }
-
         var userId = currentUser.UserId ?? throw new UnauthorizedException();
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
 
         var conversation = await conversationRepo.GetByIdAsync(command.ConversationId, cancellationToken)
             ?? throw new NotFoundException(nameof(Conversation), command.ConversationId);
 
+        // The repository's tenant filter does not enforce per-user ownership. Do this before
+        // reading the idempotency cache or persisting anything so a guessed ID cannot be used to
+        // read another user's result or append messages to their conversation.
+        if (conversation.TenantId != tenantId || conversation.UserId != userId)
+            throw new NotFoundException(nameof(Conversation), command.ConversationId);
+
         if (conversation.IsDeleted || conversation.IsArchived)
             throw new UnauthorizedException("Conversation is archived or deleted.");
+
+        var scopedIdempotencyKey = string.IsNullOrWhiteSpace(command.IdempotencyKey)
+            ? null
+            : $"chat:{tenantId:N}:{userId:N}:{command.IdempotencyKey}";
+        if (scopedIdempotencyKey is not null)
+        {
+            var cached = await idempotencyStore.GetAsync<MessageDto>(scopedIdempotencyKey, cancellationToken);
+            if (cached is not null)
+                return cached;
+        }
 
         var userMessage = conversation.AddMessage(
             Guid.NewGuid(), null, MessageRole.User, command.Content);
@@ -139,8 +148,8 @@ public class SendMessageCommandHandler(
 
             var result = mapper.Map<MessageDto>(assistantMessage);
 
-            if (!string.IsNullOrEmpty(command.IdempotencyKey))
-                await idempotencyStore.SetAsync(command.IdempotencyKey, result, ct: cancellationToken);
+            if (scopedIdempotencyKey is not null)
+                await idempotencyStore.SetAsync(scopedIdempotencyKey, result, ct: cancellationToken);
 
             return result;
         }

@@ -2,6 +2,7 @@ using R2WAI.Application.Common.AI;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using R2WAI.Application.Common.Exceptions;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Features.Integrations.Commands;
@@ -15,7 +16,7 @@ using R2WAI.Infrastructure.Security;
 namespace R2WAI.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Roles = "Admin,SystemAdmin")]
 [Route("api/v1/[controller]")]
 public class IntegrationsController(
     IMediator mediator,
@@ -24,6 +25,7 @@ public class IntegrationsController(
     DynamicToolExecutor dynamicToolExecutor,
     IOpenApiImportService openApiImportService,
     IUnitOfWork unitOfWork,
+    IOptions<EgressGuardOptions> egressOptions,
     ILogger<IntegrationsController> logger) : ControllerBase
 {
     // docs/api/MISSING-BACKEND-ENDPOINTS.md §3.5 #72 — curated suggestions the "Integration
@@ -227,5 +229,5 @@ public class IntegrationsController(
     // BadRequest fast-fail UX for the Test button is unchanged; DynamicToolExecutor.ExecuteAsync now
     // enforces the identical rule on the real call too, so this is a fast-fail convenience, not the
     // only place the block happens.
-    private static bool IsAllowedTestEndpoint(string endpoint) => EgressGuard.IsAllowedUrl(endpoint);
+    private bool IsAllowedTestEndpoint(string endpoint) => EgressGuard.IsAllowedUrl(endpoint, egressOptions.Value);
 }

@@ -57,23 +57,13 @@ public class ApiKeyAuthenticationMiddleware(RequestDelegate next, IConfiguration
         var dbContext = context.RequestServices.GetRequiredService<ApplicationDbContext>();
         var incomingHashBase64 = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(incomingKey)));
 
-        // Filter to active, unexpired, non-deleted keys before pulling into memory, but still
-        // compare every candidate's hash in constant time rather than short-circuiting on the
-        // first match, for the same timing-attack-avoidance reason as the config-key loop above.
-        var candidates = await dbContext.ApiKeys
+        // KeyHash is indexed, so authenticate with a single database lookup instead of loading
+        // every active API key into application memory on every request.
+        var matchedDbKey = await dbContext.ApiKeys
             .IgnoreQueryFilters()
-            .Where(k => !k.IsDeleted && k.IsActive && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow))
-            .ToListAsync(context.RequestAborted);
-
-        Domain.Entities.ApiKey? matchedDbKey = null;
-        var incomingHashBytes = Encoding.UTF8.GetBytes(incomingHashBase64);
-        foreach (var candidate in candidates)
-        {
-            var storedHashBytes = Encoding.UTF8.GetBytes(candidate.KeyHash);
-            if (storedHashBytes.Length == incomingHashBytes.Length
-                && CryptographicOperations.FixedTimeEquals(storedHashBytes, incomingHashBytes))
-                matchedDbKey = candidate;
-        }
+            .FirstOrDefaultAsync(k => k.KeyHash == incomingHashBase64
+                && !k.IsDeleted && k.IsActive && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow),
+                context.RequestAborted);
 
         if (matchedDbKey is null)
         {
@@ -84,8 +74,14 @@ public class ApiKeyAuthenticationMiddleware(RequestDelegate next, IConfiguration
         }
 
         AuthenticateFromDbKey(context, matchedDbKey);
-        matchedDbKey.RecordUsage();
-        await dbContext.SaveChangesAsync(context.RequestAborted);
+        // LastUsedAt is observability data; persisting it on every API call adds a write to the
+        // authentication path. Update at most once per minute per key instead.
+        var usageCutoff = DateTime.UtcNow.AddMinutes(-1);
+        if (matchedDbKey.LastUsedAt is null || matchedDbKey.LastUsedAt < usageCutoff)
+        {
+            matchedDbKey.RecordUsage();
+            await dbContext.SaveChangesAsync(context.RequestAborted);
+        }
 
         logger.LogInformation("API key authenticated: {Name} from {IP}", matchedDbKey.Name, context.Connection.RemoteIpAddress);
         if (!await EnforceScopeAsync(context)) return;

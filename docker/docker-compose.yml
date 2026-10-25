@@ -23,7 +23,7 @@ services:
     ports:
       - "5000:8080"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_ENVIRONMENT=Development
       # LOCAL DEV / CI ONLY. Seeds the demo tenant and accounts with publicly known passwords
       # (admin@r2wai.io, user@r2wai.io, ...) — the Playwright suite logs in as them. Demo seeding is
       # opt-in everywhere else (docker-compose.production.yml and k8s deliberately don't set this; they

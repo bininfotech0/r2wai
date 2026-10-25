@@ -29,6 +29,7 @@ public sealed class RunsController(ApplicationDbContext dbContext) : ControllerB
         var tenantId = dbContext.TenantId;
         if (tenantId is null) return Unauthorized();
         if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var currentUserId)) return Unauthorized();
+        var canViewTenantRuns = User.IsInRole("Admin") || User.IsInRole("SystemAdmin");
 
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -39,6 +40,8 @@ public sealed class RunsController(ApplicationDbContext dbContext) : ControllerB
 
         var workflowRuns = dbContext.WorkflowInstances.AsNoTracking()
             .Where(instance => instance.TenantId == tenantId.Value);
+        if (!canViewTenantRuns)
+            workflowRuns = workflowRuns.Where(instance => instance.InitiatedBy == currentUserId);
         if (string.Equals(normalizedType, "Assistant", StringComparison.OrdinalIgnoreCase) || onlyToolCalls)
             workflowRuns = workflowRuns.Where(_ => false);
         if (applicationId.HasValue)
@@ -252,6 +255,69 @@ public sealed class RunsController(ApplicationDbContext dbContext) : ControllerB
         return toolCall is null ? NotFound() : Ok(toolCall);
     }
 
+    [HttpGet("automations/{instanceId:guid}")]
+    public async Task<IActionResult> GetAutomationRun(Guid instanceId, CancellationToken ct = default)
+    {
+        if (dbContext.TenantId is not { } tenantId) return Unauthorized();
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var currentUserId)) return Unauthorized();
+        var canViewTenantRuns = User.IsInRole("Admin") || User.IsInRole("SystemAdmin");
+
+        var run = await dbContext.WorkflowInstances.AsNoTracking()
+            .Where(instance => instance.Id == instanceId && instance.TenantId == tenantId &&
+                (canViewTenantRuns || instance.InitiatedBy == currentUserId))
+            .Select(instance => new
+            {
+                instance.Id,
+                instance.WorkflowId,
+                WorkflowName = instance.Workflow.Name,
+                ApplicationId = instance.Workflow.ApplicationId,
+                ApplicationName = instance.Workflow.Application == null ? null : instance.Workflow.Application.Name,
+                InitiatedByUserName = instance.Initiator.FirstName + " " + instance.Initiator.LastName,
+                Status = instance.Status.ToString(),
+                instance.CurrentStep,
+                instance.Data,
+                instance.StartedAt,
+                instance.CompletedAt,
+                instance.CreatedAt
+            })
+            .FirstOrDefaultAsync(ct);
+
+        return run is null ? NotFound() : Ok(run);
+    }
+
+    [HttpGet("automations/{instanceId:guid}/steps")]
+    public async Task<IActionResult> GetAutomationRunSteps(Guid instanceId, CancellationToken ct = default)
+    {
+        if (dbContext.TenantId is not { } tenantId) return Unauthorized();
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var currentUserId)) return Unauthorized();
+        var canViewTenantRuns = User.IsInRole("Admin") || User.IsInRole("SystemAdmin");
+
+        var canViewRun = await dbContext.WorkflowInstances.AsNoTracking()
+            .AnyAsync(instance => instance.Id == instanceId && instance.TenantId == tenantId &&
+                (canViewTenantRuns || instance.InitiatedBy == currentUserId), ct);
+        if (!canViewRun)
+            return NotFound(new { error = "Workflow run not found." });
+
+        var steps = await dbContext.WorkflowStepExecutions.AsNoTracking()
+            .Where(step => step.WorkflowInstanceId == instanceId)
+            .OrderBy(step => step.StepIndex)
+            .Select(step => new
+            {
+                step.Id,
+                step.StepIndex,
+                step.StepName,
+                step.StepType,
+                Status = step.Status.ToString(),
+                step.StartedAt,
+                step.CompletedAt,
+                step.Output,
+                step.Error
+            })
+            .ToListAsync(ct);
+
+        return Ok(new { items = steps });
+    }
+
     private const string ToolCallType = "ToolCall";
 
     // Tenant-scoped by the global query filter; narrowed to the caller's own rows unless they administer the tenant.
@@ -266,17 +332,44 @@ public sealed class RunsController(ApplicationDbContext dbContext) : ControllerB
     [HttpGet("filters")]
     public async Task<IActionResult> GetFilters(CancellationToken ct = default)
     {
-        if (dbContext.TenantId is null) return Unauthorized();
+        if (dbContext.TenantId is not { } tenantId) return Unauthorized();
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var currentUserId)) return Unauthorized();
 
-        var applications = await dbContext.Applications.AsNoTracking()
+        var canViewTenantRuns = User.IsInRole("Admin") || User.IsInRole("SystemAdmin");
+        var applicationsQuery = dbContext.Applications.AsNoTracking();
+        var usersQuery = dbContext.Users.AsNoTracking();
+        var assistantsQuery = dbContext.AssistantDefinitions.AsNoTracking();
+
+        if (!canViewTenantRuns)
+        {
+            var workflowApplicationIds = dbContext.WorkflowInstances.AsNoTracking()
+                .Where(instance => instance.TenantId == tenantId && instance.InitiatedBy == currentUserId &&
+                    instance.Workflow.ApplicationId.HasValue)
+                .Select(instance => instance.Workflow.ApplicationId!.Value);
+            var assistantIds = dbContext.Conversations.AsNoTracking()
+                .Where(conversation => conversation.TenantId == tenantId && conversation.UserId == currentUserId &&
+                    !conversation.IsArchived && conversation.Module == "assistant" && conversation.ReferenceId.HasValue)
+                .Select(conversation => conversation.ReferenceId!.Value)
+                .Distinct();
+            var assistantApplicationIds = dbContext.AssistantDefinitions.AsNoTracking()
+                .Where(assistant => assistantIds.Contains(assistant.Id) && assistant.ApplicationId.HasValue)
+                .Select(assistant => assistant.ApplicationId!.Value);
+            var visibleApplicationIds = workflowApplicationIds.Concat(assistantApplicationIds).Distinct();
+
+            applicationsQuery = applicationsQuery.Where(application => visibleApplicationIds.Contains(application.Id));
+            usersQuery = usersQuery.Where(user => user.Id == currentUserId);
+            assistantsQuery = assistantsQuery.Where(assistant => assistantIds.Contains(assistant.Id));
+        }
+
+        var applications = await applicationsQuery
             .OrderBy(application => application.Name)
             .Select(application => new FilterOption(application.Id, application.Name))
             .ToListAsync(ct);
-        var users = await dbContext.Users.AsNoTracking()
+        var users = await usersQuery
             .OrderBy(user => user.FirstName).ThenBy(user => user.LastName)
             .Select(user => new FilterOption(user.Id, user.FirstName + " " + user.LastName))
             .ToListAsync(ct);
-        var assistants = await dbContext.AssistantDefinitions.AsNoTracking()
+        var assistants = await assistantsQuery
             .OrderBy(assistant => assistant.Name)
             .Select(assistant => new FilterOption(assistant.Id, assistant.Name))
             .ToListAsync(ct);

@@ -29,12 +29,14 @@ public class AssistantsController(
     IRepository<AuditLog> auditLogRepo,
     IUnitOfWork unitOfWork,
     ICurrentUserService currentUser,
+    IRepository<Conversation> conversationRepo,
     IChatStreamContext chatStreamContext,
     IPromptRenderer promptRenderer,
     IUserMemoryService userMemory,
     ILogger<AssistantsController> logger) : ControllerBase
 {
     [HttpPost]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Create([FromBody] CreateAssistantCommand command, CancellationToken ct = default)
     {
         logger.LogInformation("Creating assistant: {Name}", command.Name);
@@ -47,12 +49,51 @@ public class AssistantsController(
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = new GetAssistantsQuery { Page = page, PageSize = pageSize, Search = search, ApplicationId = applicationId, PublishStatus = publishStatus, SortBy = sortBy };
+        var isAdmin = User.IsInRole("Admin") || User.IsInRole("SystemAdmin");
+        var query = new GetAssistantsQuery
+        {
+            Page = page,
+            PageSize = pageSize,
+            Search = search,
+            ApplicationId = applicationId,
+            PublishStatus = isAdmin ? publishStatus : PublishStatus.Published,
+            SortBy = sortBy
+        };
         var result = await mediator.Send(query, ct);
+
+        // The Playground only needs public display fields. AssistantDto also contains the private
+        // system prompt, enabled tool IDs, model/knowledge configuration, and delegation graph.
+        // Do not serialize those fields to ordinary users, even for published assistants.
+        if (!isAdmin)
+        {
+            return Ok(new
+            {
+                result.Page,
+                result.PageSize,
+                result.TotalCount,
+                Items = result.Items.Select(a => new
+                {
+                    a.Id,
+                    a.Name,
+                    a.Description,
+                    a.Type,
+                    a.IsActive,
+                    a.PublishStatus,
+                    a.PublishedVersion,
+                    a.PublishedAt,
+                    a.Tags,
+                    a.AvatarUrl,
+                    a.UsageCount,
+                    a.CreatedAt
+                })
+            });
+        }
+
         return Ok(result);
     }
 
     [HttpPost("{id:guid}/application")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> AssignApplication(Guid id, [FromBody] AssignApplicationRequest request, CancellationToken ct = default)
     {
         var command = new AssignAssistantApplicationCommand { Id = id, ApplicationId = request.ApplicationId };
@@ -63,6 +104,7 @@ public class AssistantsController(
     public record AssignApplicationRequest(Guid? ApplicationId);
 
     [HttpGet("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default)
     {
         var query = new GetAssistantByIdQuery { Id = id };
@@ -71,6 +113,7 @@ public class AssistantsController(
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAssistantCommand command, CancellationToken ct = default)
     {
         command = command with { Id = id };
@@ -79,6 +122,7 @@ public class AssistantsController(
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {
         var command = new DeleteAssistantCommand { Id = id };
@@ -87,6 +131,7 @@ public class AssistantsController(
     }
 
     [HttpGet("{id:guid}/prompt-history")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetPromptHistory(Guid id, CancellationToken ct = default)
     {
         var result = await mediator.Send(new GetAssistantPromptHistoryQuery { AssistantDefinitionId = id }, ct);
@@ -97,6 +142,7 @@ public class AssistantsController(
     // versions/rollback endpoints exactly (same pattern already proven on Workflows/KnowledgeBases/
     // Capabilities).
     [HttpGet("{id:guid}/versions")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetVersions(Guid id, CancellationToken ct = default)
     {
         var result = await mediator.Send(new GetAssistantVersionsQuery { AssistantDefinitionId = id }, ct);
@@ -104,6 +150,7 @@ public class AssistantsController(
     }
 
     [HttpPost("{id:guid}/versions")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> CreateVersion(Guid id, [FromBody] CreateAssistantVersionCommand command, CancellationToken ct = default)
     {
         command = command with { AssistantDefinitionId = id };
@@ -112,6 +159,7 @@ public class AssistantsController(
     }
 
     [HttpPost("{id:guid}/versions/{versionId:guid}/rollback")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> RollbackVersion(Guid id, Guid versionId, CancellationToken ct = default)
     {
         var result = await mediator.Send(new RollbackAssistantVersionCommand { VersionId = versionId }, ct);
@@ -120,6 +168,7 @@ public class AssistantsController(
 
     // docs/api/MISSING-BACKEND-ENDPOINTS.md §3.3 #65 — the brief's "Duplicate" card action.
     [HttpPost("{id:guid}/clone")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Clone(Guid id, CancellationToken ct = default)
     {
         var result = await mediator.Send(new CloneAssistantCommand { AssistantDefinitionId = id }, ct);
@@ -127,6 +176,7 @@ public class AssistantsController(
     }
 
     [HttpGet("prompt-templates")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetPromptTemplates(CancellationToken ct = default)
     {
         if (currentUser.TenantId is not { } tenantId)
@@ -141,6 +191,7 @@ public class AssistantsController(
     public record SetPromptTemplateRequest(string Content);
 
     [HttpPut("prompt-templates/{type}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> SetPromptTemplate(string type, [FromBody] SetPromptTemplateRequest request, CancellationToken ct = default)
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
@@ -156,6 +207,7 @@ public class AssistantsController(
     }
 
     [HttpDelete("prompt-templates/{type}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> ResetPromptTemplate(string type, CancellationToken ct = default)
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedAccessException();
@@ -168,6 +220,7 @@ public class AssistantsController(
     }
 
     [HttpPost("{id:guid}/publish")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Publish(Guid id, CancellationToken ct = default)
     {
         var assistant = await dbContext.AssistantDefinitions.FirstOrDefaultAsync(a => a.Id == id, ct);
@@ -183,6 +236,7 @@ public class AssistantsController(
     }
 
     [HttpGet("{id:guid}/readiness")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetPublishReadiness(Guid id, CancellationToken ct = default)
     {
         var assistant = await dbContext.AssistantDefinitions.FirstOrDefaultAsync(a => a.Id == id, ct);
@@ -217,6 +271,7 @@ public class AssistantsController(
     private sealed record AssistantPublishCheck(string Label, bool Ready, string? Detail);
 
     [HttpPost("{id:guid}/unpublish")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Unpublish(Guid id, CancellationToken ct = default)
     {
         var assistant = await dbContext.AssistantDefinitions.FirstOrDefaultAsync(a => a.Id == id, ct);
@@ -228,6 +283,7 @@ public class AssistantsController(
     }
 
     [HttpPost("{id:guid}/archive")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Archive(Guid id, CancellationToken ct = default)
     {
         var assistant = await dbContext.AssistantDefinitions.FirstOrDefaultAsync(a => a.Id == id, ct);
@@ -271,6 +327,22 @@ public class AssistantsController(
         {
             await WriteSseEventAsync("error", new { message = "Assistant not found" }, streamCt);
             return;
+        }
+
+        if (command.ConversationId.HasValue)
+        {
+            var userId = currentUser.UserId;
+            var conversation = userId.HasValue
+                ? await conversationRepo.GetByIdAsync(command.ConversationId.Value, streamCt)
+                : null;
+            if (conversation is null || conversation.TenantId != assistant.TenantId
+                || conversation.UserId != userId || conversation.Module != "assistant"
+                || conversation.ReferenceId != assistant.Id || conversation.IsArchived)
+            {
+                Response.StatusCode = StatusCodes.Status404NotFound;
+                await WriteSseEventAsync("error", new { message = "Conversation not found" }, streamCt);
+                return;
+            }
         }
 
         // Same Draft/Archived gate as the non-streaming ChatWithAssistantCommand — this SSE path
@@ -441,6 +513,7 @@ public class AssistantsController(
     }
 
     [HttpPost("generate-config")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GenerateConfig([FromBody] GenerateConfigRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Description))

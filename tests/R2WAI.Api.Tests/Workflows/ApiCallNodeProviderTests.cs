@@ -1,7 +1,9 @@
 using Elsa.Http;
 using Elsa.Workflows.Activities;
+using Microsoft.Extensions.Options;
 using R2WAI.Api.Workflows.NodeProviders;
 using R2WAI.Application.Features.Workflows.DTOs;
+using R2WAI.Infrastructure.Security;
 
 namespace R2WAI.Api.Tests.Workflows;
 
@@ -27,7 +29,7 @@ public class ApiCallNodeProviderTests
     [Fact]
     public void CreateActivity_PublicUrl_BuildsARealSendHttpRequest()
     {
-        var provider = new ApiCallNodeProvider();
+        var provider = new ApiCallNodeProvider(Options.Create(new EgressGuardOptions()));
         var context = CreateContext("https://api.example.com/orders");
 
         var activity = provider.CreateActivity(context);
@@ -42,7 +44,7 @@ public class ApiCallNodeProviderTests
     [InlineData(null)] // no URL configured at all
     public void CreateActivity_BlockedOrMissingUrl_DoesNotBuildASendHttpRequest(string? blockedUrl)
     {
-        var provider = new ApiCallNodeProvider();
+        var provider = new ApiCallNodeProvider(Options.Create(new EgressGuardOptions()));
         var context = CreateContext(blockedUrl);
 
         var activity = provider.CreateActivity(context);
@@ -58,7 +60,7 @@ public class ApiCallNodeProviderTests
     [Fact]
     public void CreateActivity_BlockedUrl_NamesTheStepInThePlaceholder()
     {
-        var provider = new ApiCallNodeProvider();
+        var provider = new ApiCallNodeProvider(Options.Create(new EgressGuardOptions()));
         var context = CreateContext("http://169.254.169.254/latest/meta-data/");
 
         var activity = provider.CreateActivity(context);

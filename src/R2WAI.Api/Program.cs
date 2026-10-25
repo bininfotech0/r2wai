@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.IdentityModel.Tokens;
@@ -22,6 +23,7 @@ using R2WAI.Application.Common;
 using R2WAI.Infrastructure;
 using R2WAI.Infrastructure.Persistence;
 using R2WAI.Infrastructure.SignalR;
+using R2WAI.Infrastructure.Services.ToolFramework;
 using Elsa.Extensions;
 using Elsa.Mediator;
 using Elsa.Persistence.EFCore.Extensions;
@@ -53,6 +55,19 @@ builder.Host.UseSerilog();
 
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+
+    foreach (var proxy in builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+        if (System.Net.IPAddress.TryParse(proxy, out var address))
+            options.KnownProxies.Add(address);
+
+    foreach (var network in builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [])
+        if (Microsoft.AspNetCore.HttpOverrides.IPNetwork.TryParse(network.AsSpan(), out var parsedNetwork))
+            options.KnownNetworks.Add(parsedNetwork);
+});
 
 var elsaConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var jwtSecret = builder.Configuration["Authentication:Jwt:SecretKey"]
@@ -89,7 +104,8 @@ if (!string.IsNullOrEmpty(elsaConnectionString) && !builder.Environment.IsEnviro
         });
 
         elsa
-            .UseHttp()
+            .UseHttp(http => http.HttpClientBuilder = clientBuilder =>
+                clientBuilder.ConfigurePrimaryHttpMessageHandler(HttpToolClient.CreateSecureHandler))
             .UseScheduling()
             .UseEmail()
             .UseJavaScript()
@@ -386,12 +402,14 @@ var app = builder.Build();
 // and makes routine client aborts look like a flood). RequestLoggingMiddleware below is the one
 // real request logger — it already does everything UseSerilogRequestLogging would, plus metrics
 // recording and client-abort-aware status handling that the built-in middleware doesn't have.
+app.UseForwardedHeaders();
 app.UseResponseCompression();
 app.UseHttpsRedirection();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
-app.UseMiddleware<RateLimitingMiddleware>();
+// Guard bad/anonymous traffic by its source IP before authentication.
+app.UseMiddleware<RateLimitingMiddleware>(2000, 60, false, false);
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
@@ -407,6 +425,8 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 app.UseCors("ApiCorsPolicy");
 app.UseAuthentication();
 app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
+// Apply tighter endpoint policies and per-user buckets after JWT/API-key identity is available.
+app.UseMiddleware<RateLimitingMiddleware>(300, 60, true, true);
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseMiddleware<WorkspaceContextMiddleware>();
 app.UseMiddleware<MfaSetupScopeMiddleware>();
@@ -468,17 +488,7 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
         ctx.Response.ContentType = "application/json";
         var json = System.Text.Json.JsonSerializer.Serialize(new
         {
-            status = report.Status.ToString(),
-            duration = report.TotalDuration.TotalMilliseconds,
-            environment = app.Environment.EnvironmentName,
-            checks = report.Entries.Select(e => new
-            {
-                name = e.Key,
-                status = e.Value.Status.ToString(),
-                description = e.Value.Description,
-                tags = e.Value.Tags,
-                exception = e.Value.Exception?.Message
-            })
+            status = report.Status.ToString()
         }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
         await ctx.Response.WriteAsync(json);
     }
@@ -495,32 +505,18 @@ try
     {
         ValidateProductionConfig(app);
 
-        try
-        {
-            Log.Information("Initializing database...");
-            await DatabaseInitializer.InitializeAsync(app.Services);
-        }
-        catch (Exception dbEx)
-        {
-            Log.Warning(dbEx, "Database initialization failed — API will start without a database. Ensure PostgreSQL is running.");
-        }
+        Log.Information("Initializing database...");
+        await DatabaseInitializer.InitializeAsync(app.Services);
 
         if (!string.IsNullOrEmpty(elsaConnectionString))
         {
-            try
-            {
-                Log.Information("Applying Elsa persistence migrations...");
-                using var elsaScope = app.Services.CreateScope();
+            Log.Information("Applying Elsa persistence migrations...");
+            using var elsaScope = app.Services.CreateScope();
 
-                await elsaScope.ServiceProvider.GetRequiredService<ManagementElsaDbContext>().Database.MigrateAsync();
-                await elsaScope.ServiceProvider.GetRequiredService<RuntimeElsaDbContext>().Database.MigrateAsync();
+            await elsaScope.ServiceProvider.GetRequiredService<ManagementElsaDbContext>().Database.MigrateAsync();
+            await elsaScope.ServiceProvider.GetRequiredService<RuntimeElsaDbContext>().Database.MigrateAsync();
 
-                Log.Information("Elsa persistence migrations applied.");
-            }
-            catch (Exception elsaDbEx)
-            {
-                Log.Warning(elsaDbEx, "Elsa persistence migration failed — workflow definitions/instances/bookmarks may not persist.");
-            }
+            Log.Information("Elsa persistence migrations applied.");
         }
     }
     Log.Information("Starting R2WAI API");
@@ -529,6 +525,8 @@ try
 catch (Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
+    Environment.ExitCode = 1;
+    throw;
 }
 finally
 {
@@ -581,7 +579,7 @@ static void ValidateProductionConfig(WebApplication app)
     else if (aiProvider == "ollama")
     {
         var endpoint = config["AI:Ollama:Endpoint"] ?? "http://localhost:11434";
-        Log.Information("AI provider: Ollama at {Endpoint}", endpoint);
+        Log.Information("AI provider: Ollama at {Origin}", R2WAI.Infrastructure.Security.EgressGuard.SafeUrlForLog(endpoint));
     }
 
     var smtpHost = config["Email:SmtpHost"];

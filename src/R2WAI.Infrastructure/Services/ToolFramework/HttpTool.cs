@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using R2WAI.Infrastructure.Security;
 
 namespace R2WAI.Infrastructure.Services.ToolFramework;
 
@@ -44,7 +45,7 @@ public sealed class HttpTool : ITool
             var baseUrl = baseUrlObj as string ?? _options.BaseUrl;
             var url = baseUrl.TrimEnd('/') + "/" + path.TrimStart('/');
 
-            _logger.LogInformation("HttpTool executing {Method} {Url}", method, url);
+            _logger.LogInformation("HttpTool executing {Method} against {Origin}", method, EgressGuard.SafeUrlForLog(url));
 
             // A body that's already a JSON string (e.g. from a dynamically-built tool call) is sent
             // as-is; anything else is serialized.

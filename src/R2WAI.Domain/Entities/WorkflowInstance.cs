@@ -37,6 +37,7 @@ public sealed class WorkflowInstance : BaseEntity<Guid>
     // durable "this needs resuming" signal; only this field marks a claim in flight, and only its
     // expiry decides whether that claim is stale.
     public DateTime? PendingResumeLeaseExpiresAt { get; private set; }
+    public Guid? PendingResumeLeaseId { get; private set; }
 
     public Workflow Workflow { get; private set; } = null!;
     public Tenant Tenant { get; private set; } = null!;
@@ -100,6 +101,15 @@ public sealed class WorkflowInstance : BaseEntity<Guid>
     {
         PendingResumeAt = resumeAt;
         PendingResumeStepIndex = stepIndex;
+        PendingResumeLeaseExpiresAt = null;
+        PendingResumeLeaseId = null;
+        MarkAsModified();
+    }
+
+    public void SetPendingResumeLease(Guid leaseId, DateTime leaseExpiresAt)
+    {
+        PendingResumeLeaseId = leaseId;
+        PendingResumeLeaseExpiresAt = leaseExpiresAt;
         MarkAsModified();
     }
 
@@ -108,6 +118,7 @@ public sealed class WorkflowInstance : BaseEntity<Guid>
         PendingResumeAt = null;
         PendingResumeStepIndex = null;
         PendingResumeLeaseExpiresAt = null;
+        PendingResumeLeaseId = null;
         MarkAsModified();
     }
 

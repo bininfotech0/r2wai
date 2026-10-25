@@ -118,6 +118,13 @@ public class ChatWithPublishedAssistantCommandHandler(
         {
             conversation = await conversationRepo.GetByIdAsync(command.ConversationId.Value, cancellationToken)
                 ?? throw new NotFoundException(nameof(Conversation), command.ConversationId.Value);
+
+            if (conversation.TenantId != tenantId || conversation.UserId != userId
+                || conversation.Module != "published-assistant" || conversation.ReferenceId != assistant.Id
+                || conversation.IsArchived)
+            {
+                throw new NotFoundException(nameof(Conversation), command.ConversationId.Value);
+            }
         }
         else
         {

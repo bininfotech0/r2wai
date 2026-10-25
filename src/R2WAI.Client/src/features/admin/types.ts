@@ -183,8 +183,8 @@ export interface CreateWebhookInput {
   name: string
   slug?: string
   triggerType: string
-  workflowId?: string
-  secret?: string
+  workflowId: string
+  secret: string
 }
 
 // Users/Roles/Models go through MediatR (shared PagedResult<T>: totalCount).

@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using R2WAI.Infrastructure.AI.Policies;
+using R2WAI.Infrastructure.Security;
+using R2WAI.Infrastructure.Services.ToolFramework;
 using R2WAI.Infrastructure.VectorStore;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -18,6 +21,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
     private readonly IVectorStoreService _vectorStore;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IKnowledgePolicyService _knowledgePolicyService;
+    private readonly EgressGuardOptions _egressOptions;
     private readonly ILogger<KnowledgeBaseService> _logger;
 
     public KnowledgeBaseService(
@@ -26,6 +30,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         IVectorStoreService vectorStore,
         IHttpClientFactory httpClientFactory,
         IKnowledgePolicyService knowledgePolicyService,
+        IOptions<EgressGuardOptions> egressOptions,
         ILogger<KnowledgeBaseService> logger)
     {
         _context = context;
@@ -33,6 +38,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         _vectorStore = vectorStore;
         _httpClientFactory = httpClientFactory;
         _knowledgePolicyService = knowledgePolicyService;
+        _egressOptions = egressOptions.Value;
         _logger = logger;
     }
 
@@ -108,7 +114,7 @@ public class KnowledgeBaseService : IKnowledgeBaseService
             try { textToIndex = await FetchUrlTextAsync(url, ct); }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to fetch URL content for source {SourceId}: {Url}", source.Id, url);
+                _logger.LogWarning(ex, "Failed to fetch URL content for source {SourceId} at {Origin}", source.Id, EgressGuard.SafeUrlForLog(url));
                 source.MarkFailed($"Could not fetch URL: {ex.Message}");
                 await _context.SaveChangesAsync(ct);
                 textToIndex = null;
@@ -205,11 +211,11 @@ public class KnowledgeBaseService : IKnowledgeBaseService
         // (DynamicToolExecutor, McpClientAdapter, OpenApiImportService, IntegrationsController) —
         // this one was the remaining gap, and the guard is only meaningful at the real dispatch
         // point, not on some separate "test" button.
-        if (!Security.EgressGuard.IsAllowedUrl(url))
+        if (!EgressGuard.IsAllowedUrl(url, _egressOptions))
             throw new InvalidOperationException(
                 "URL is not an allowed ingestion target (private, link-local, or non-HTTP address).");
 
-        var client = _httpClientFactory.CreateClient();
+        var client = _httpClientFactory.CreateClient(HttpToolClient.Name);
         client.Timeout = TimeSpan.FromSeconds(20);
         client.DefaultRequestHeaders.UserAgent.ParseAdd("R2WAI-KnowledgeIndexer/1.0");
 

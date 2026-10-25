@@ -37,7 +37,14 @@ public class ApprovalPolicyConfiguration : IEntityTypeConfiguration<ApprovalPoli
             .HasForeignKey(ap => ap.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(ap => new { ap.TenantId, ap.WorkflowType });
+        // One active policy per tenant and workflow type keeps creation, escalation, and approval
+        // authorization on the same policy instead of an arbitrary FirstOrDefault row.
+        builder.HasIndex(ap => new { ap.TenantId, ap.WorkflowType })
+            .IsUnique()
+            .HasFilter("\"IsDeleted\" = FALSE AND \"IsActive\" = TRUE AND \"WorkflowType\" IS NOT NULL");
+        builder.HasIndex(ap => ap.TenantId)
+            .IsUnique()
+            .HasFilter("\"IsDeleted\" = FALSE AND \"IsActive\" = TRUE AND \"WorkflowType\" IS NULL");
         builder.HasIndex(ap => new { ap.TenantId, ap.Name }).IsUnique();
     }
 }

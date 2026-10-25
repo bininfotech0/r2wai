@@ -1,10 +1,11 @@
 namespace R2WAI.Application.Features.Workflows.Queries;
 
-public record GetWorkflowInstancesQuery : IRequest<PagedResult<WorkflowInstanceDto>>
+public record GetWorkflowInstancesQuery : IRequest<PagedResult<WorkflowInstanceDto>>, IAuthorizedRequest
 {
     public Guid? WorkflowId { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
+    public string[] RequiredRoles => ["Admin", "SystemAdmin"];
 }
 
 public class GetWorkflowInstancesQueryHandler(
@@ -19,14 +20,18 @@ public class GetWorkflowInstancesQueryHandler(
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
 
-        var all = await instanceRepo.FindAsync(
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+        var result = await instanceRepo.FindPagedAsync(
             i => i.TenantId == tenantId
               && (!query.WorkflowId.HasValue || i.WorkflowId == query.WorkflowId),
-            cancellationToken);
+            i => i.CreatedAt,
+            page,
+            pageSize,
+            descending: true,
+            cancellationToken: cancellationToken);
 
-        var ordered = all.OrderByDescending(i => i.CreatedAt);
-        var total = ordered.Count();
-        var items = ordered.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToList();
+        var items = result.Items;
 
         var dtos = mapper.Map<List<WorkflowInstanceDto>>(items);
 
@@ -64,9 +69,9 @@ public class GetWorkflowInstancesQueryHandler(
         return new PagedResult<WorkflowInstanceDto>
         {
             Items = dtos,
-            TotalCount = total,
-            Page = query.Page,
-            PageSize = query.PageSize,
+            TotalCount = result.TotalCount,
+            Page = page,
+            PageSize = pageSize,
         };
     }
 }

@@ -42,5 +42,7 @@ public class WorkflowInstanceConfiguration : IEntityTypeConfiguration<WorkflowIn
 
         builder.HasIndex(i => new { i.WorkflowId, i.Status });
         builder.HasIndex(i => new { i.TenantId, i.Status });
+        builder.HasIndex(i => new { i.PendingResumeAt, i.PendingResumeLeaseExpiresAt })
+            .HasFilter("\"PendingResumeAt\" IS NOT NULL");
     }
 }

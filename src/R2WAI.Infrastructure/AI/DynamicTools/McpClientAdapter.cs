@@ -1,9 +1,11 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using R2WAI.Application.Common.Exceptions;
 using R2WAI.Infrastructure.Security;
+using R2WAI.Infrastructure.Services.ToolFramework;
 
 namespace R2WAI.Infrastructure.AI.DynamicTools;
 
@@ -22,16 +24,26 @@ public record McpToolCandidate(string Name, string? Description, JsonElement Inp
 public class McpClientAdapter
 {
     private readonly ILogger<McpClientAdapter> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly EgressGuardOptions _egressOptions;
 
-    public McpClientAdapter(ILogger<McpClientAdapter> logger)
+    public McpClientAdapter(
+        ILogger<McpClientAdapter> logger,
+        IHttpClientFactory httpClientFactory,
+        ILoggerFactory loggerFactory,
+        IOptions<EgressGuardOptions> egressOptions)
     {
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
+        _loggerFactory = loggerFactory;
+        _egressOptions = egressOptions.Value;
     }
 
     public async Task<IReadOnlyList<McpToolCandidate>> DiscoverToolsAsync(
         string endpointUrl, string? authHeaderName, string? authHeaderValue, CancellationToken ct = default)
     {
-        if (!EgressGuard.IsAllowedUrl(endpointUrl))
+        if (!EgressGuard.IsAllowedUrl(endpointUrl, _egressOptions))
             throw new ValidationException("endpointUrl", "This URL is not allowed. Internal network addresses are blocked.");
 
         try
@@ -46,7 +58,7 @@ public class McpClientAdapter
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "MCP discovery failed for {Endpoint}", endpointUrl);
+            _logger.LogWarning(ex, "MCP discovery failed for {Origin}", EgressGuard.SafeUrlForLog(endpointUrl));
             throw new ValidationException("endpointUrl", $"Could not connect to the MCP server: {ex.Message}");
         }
     }
@@ -58,7 +70,7 @@ public class McpClientAdapter
         string endpointUrl, string? authHeaderName, string? authHeaderValue,
         string toolName, string? argumentsJson, CancellationToken ct = default)
     {
-        if (!EgressGuard.IsAllowedUrl(endpointUrl))
+        if (!EgressGuard.IsAllowedUrl(endpointUrl, _egressOptions))
             return "This action targets a network address that is not allowed and cannot be performed.";
 
         Dictionary<string, object?>? arguments = null;
@@ -87,19 +99,21 @@ public class McpClientAdapter
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "MCP tool call to {Endpoint}/{Tool} failed", endpointUrl, toolName);
+            _logger.LogWarning(ex, "MCP tool call to {Origin}/{Tool} failed", EgressGuard.SafeUrlForLog(endpointUrl), toolName);
             return $"MCP tool call failed: {ex.Message}";
         }
     }
 
-    private static async Task<McpClient> ConnectAsync(
+    private async Task<McpClient> ConnectAsync(
         string endpointUrl, string? authHeaderName, string? authHeaderValue, CancellationToken ct)
     {
         var options = new HttpClientTransportOptions { Endpoint = new Uri(endpointUrl) };
         if (!string.IsNullOrEmpty(authHeaderName) && !string.IsNullOrEmpty(authHeaderValue))
             options.AdditionalHeaders = new Dictionary<string, string> { [authHeaderName] = authHeaderValue };
 
-        var transport = new HttpClientTransport(options);
+        // MCP uses the same DNS-pinned, redirect-disabled transport as other server-side fetches.
+        var httpClient = _httpClientFactory.CreateClient(HttpToolClient.Name);
+        var transport = new HttpClientTransport(options, httpClient, _loggerFactory, ownsHttpClient: true);
         return await McpClient.CreateAsync(transport, cancellationToken: ct);
     }
 }

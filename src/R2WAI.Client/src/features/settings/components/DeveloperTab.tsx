@@ -4,6 +4,7 @@ import { Box, Button, Chip, List, ListItem, ListItemText, Stack, Switch, Typogra
 import { TooltipIconButton as IconButton } from '../../../components/TooltipIconButton'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import {
   createApiKey,
@@ -15,7 +16,9 @@ import {
   regenerateApiKey,
   toggleApiKey,
   toggleWebhook,
+  updateWebhook,
 } from '../../admin/api'
+import type { CreateWebhookInput, WebhookDto } from '../../admin/types'
 import { CreateApiKeyDialog } from '../../admin/dialogs/CreateApiKeyDialog'
 import { CreateEditWebhookDialog } from '../../admin/dialogs/CreateEditWebhookDialog'
 import { RevealKeyDialog } from '../../admin/dialogs/RevealKeyDialog'
@@ -36,6 +39,7 @@ export function DeveloperTab() {
   const [keyDialogOpen, setKeyDialogOpen] = useState(false)
   const [revealedKey, setRevealedKey] = useState<string | null>(null)
   const [webhookDialogOpen, setWebhookDialogOpen] = useState(false)
+  const [editingWebhook, setEditingWebhook] = useState<WebhookDto | null>(null)
   // Deletes are staged rather than fired straight from the trash icon: revoking a live API
   // key breaks callers immediately and silently, and there is no undo or re-reveal — the
   // full secret is only ever returned once, at creation or regeneration.
@@ -83,6 +87,16 @@ export function DeveloperTab() {
       void queryClient.invalidateQueries({ queryKey: ['settings-webhooks'] })
     },
     onError: () => notify('Failed to create webhook', 'error'),
+  })
+  const updateWebhookMutation = useMutation({
+    mutationFn: ({ id, input }: { id: string; input: CreateWebhookInput }) => updateWebhook(id, input),
+    onSuccess: () => {
+      notify('Webhook updated', 'success')
+      setWebhookDialogOpen(false)
+      setEditingWebhook(null)
+      void queryClient.invalidateQueries({ queryKey: ['settings-webhooks'] })
+    },
+    onError: () => notify('Failed to update webhook', 'error'),
   })
   const toggleWebhookMutation = useMutation({
     mutationFn: toggleWebhook,
@@ -145,7 +159,7 @@ export function DeveloperTab() {
           <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
             Webhooks
           </Typography>
-          <Button size="small" startIcon={<AddIcon />} onClick={() => setWebhookDialogOpen(true)}>
+          <Button size="small" startIcon={<AddIcon />} onClick={() => { setEditingWebhook(null); setWebhookDialogOpen(true) }}>
             New Webhook
           </Button>
         </Stack>
@@ -167,6 +181,13 @@ export function DeveloperTab() {
               secondaryAction={
                 <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
                   <Switch size="small" checked={w.isActive} onChange={() => toggleWebhookMutation.mutate(w.id)} />
+                  <IconButton
+                    size="small"
+                    aria-label={`Edit ${w.name}`}
+                    onClick={() => { setEditingWebhook(w); setWebhookDialogOpen(true) }}
+                  >
+                    <EditOutlinedIcon fontSize="small" />
+                  </IconButton>
                   <IconButton
                     size="small"
                     aria-label={`Delete ${w.name}`}
@@ -201,9 +222,12 @@ export function DeveloperTab() {
       <RevealKeyDialog open={!!revealedKey} onClose={() => setRevealedKey(null)} apiKey={revealedKey} />
       <CreateEditWebhookDialog
         open={webhookDialogOpen}
-        onClose={() => setWebhookDialogOpen(false)}
-        onSubmit={(values) => createWebhookMutation.mutate(values)}
-        isSubmitting={createWebhookMutation.isPending}
+        webhook={editingWebhook}
+        onClose={() => { setWebhookDialogOpen(false); setEditingWebhook(null) }}
+        onSubmit={(values) => editingWebhook
+          ? updateWebhookMutation.mutate({ id: editingWebhook.id, input: values })
+          : createWebhookMutation.mutate(values)}
+        isSubmitting={createWebhookMutation.isPending || updateWebhookMutation.isPending}
       />
 
       <ConfirmDialog

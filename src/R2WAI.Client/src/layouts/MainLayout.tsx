@@ -359,10 +359,10 @@ export function MainLayout() {
             onClick={() => setPaletteOpen(true)}
             aria-label="Search agents, knowledge, tools"
             sx={{
-              display: { xs: 'none', md: 'flex' },
+              display: { xs: 'none', lg: 'flex' },
               alignItems: 'center',
               gap: 1,
-              width: { md: 280, lg: 360 },
+              width: { lg: 360 },
               height: 34,
               px: 1.5,
               border: '1px solid',
@@ -404,7 +404,7 @@ export function MainLayout() {
               size="small"
               onClick={() => setPaletteOpen(true)}
               aria-label="Search"
-              sx={{ display: { xs: 'inline-flex', md: 'none' } }}
+              sx={{ display: { xs: 'inline-flex', lg: 'none' } }}
             >
               <SearchIcon fontSize="small" />
             </IconButton>
@@ -422,13 +422,13 @@ export function MainLayout() {
               onClick={() => setCopilotOpen((o) => !o)}
               aria-label="AI Copilot"
               aria-pressed={copilotOpen}
-              sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+              sx={{ display: { xs: 'none', lg: 'inline-flex' } }}
             >
               <AutoAwesomeIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Help">
-            <IconButton size="small" component={RouterLink} to="/about" aria-label="Help" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
+            <IconButton size="small" component={RouterLink} to="/about" aria-label="Help" sx={{ display: { xs: 'none', lg: 'inline-flex' } }}>
               <HelpOutlineIcon fontSize="small" />
             </IconButton>
           </Tooltip>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { formatDistanceToNowStrict } from 'date-fns'
 import {
   Alert,
@@ -13,11 +13,14 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  MenuItem,
   Paper,
+  Pagination,
   Skeleton,
   Stack,
   Tab,
   Tabs,
+  TextField,
   Tooltip,
   Typography,
   useMediaQuery,
@@ -39,6 +42,7 @@ import { useNotificationFeed } from '../../../lib/notifications/NotificationFeed
 import { getSafeNotificationPath } from '../../../lib/notifications/notificationLinks'
 
 type Filter = 'all' | 'unread'
+const PAGE_SIZE = 10
 
 function notificationTone(type: string | null): 'primary' | 'success' | 'warning' | 'error' | 'info' {
   const value = type?.toLowerCase() ?? ''
@@ -70,9 +74,34 @@ export function InboxPage() {
   const theme = useTheme()
   const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
   const [filter, setFilter] = useState<Filter>('all')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const [markingAll, setMarkingAll] = useState(false)
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set())
-  const visible = filter === 'unread' ? notifications.filter((n) => !n.read) : notifications
+  const notificationTypes = [...new Set(notifications.map((n) => n.type?.trim()).filter((type): type is string => !!type))]
+    .sort((a, b) => a.localeCompare(b))
+  const normalizedSearch = search.trim().toLocaleLowerCase()
+  const visible = notifications.filter((notification) => {
+    if (filter === 'unread' && notification.read) return false
+    if (typeFilter !== 'all' && notification.type?.trim() !== typeFilter) return false
+    if (!normalizedSearch) return true
+    return `${notification.title} ${notification.message} ${notification.type ?? ''}`.toLocaleLowerCase().includes(normalizedSearch)
+  })
+  const hasRefiningFilters = typeFilter !== 'all' || normalizedSearch.length > 0
+  const pageCount = Math.ceil(visible.length / PAGE_SIZE)
+  const pageNotifications = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, Math.max(1, pageCount)))
+  }, [pageCount])
+
+  function clearFilters() {
+    setFilter('all')
+    setTypeFilter('all')
+    setSearch('')
+    setPage(1)
+  }
 
   async function handleMarkAllRead() {
     if (markingAll) return
@@ -142,13 +171,38 @@ export function InboxPage() {
 
       <Tabs
         value={filter}
-        onChange={(_, value: Filter) => setFilter(value)}
+        onChange={(_, value: Filter) => { setFilter(value); setPage(1) }}
         aria-label="Filter inbox notifications"
         sx={{ mb: 2, borderBottom: '1px solid', borderColor: 'divider' }}
       >
         <Tab value="all" label={`All (${notifications.length})`} />
         <Tab value="unread" label={`Unread (${unreadCount})`} />
       </Tabs>
+
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2, alignItems: { xs: 'stretch', sm: 'center' } }}>
+        <TextField
+          size="small"
+          type="search"
+          label="Search notifications"
+          placeholder="Search title, message, or type"
+          value={search}
+          onChange={(event) => { setSearch(event.target.value); setPage(1) }}
+          sx={{ flex: 1, maxWidth: { sm: 480 } }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Type"
+          value={typeFilter}
+          onChange={(event) => { setTypeFilter(event.target.value); setPage(1) }}
+          sx={{ width: { xs: '100%', sm: 220 } }}
+        >
+          <MenuItem value="all">All types</MenuItem>
+          {notificationTypes.map((type) => (
+            <MenuItem key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</MenuItem>
+          ))}
+        </TextField>
+      </Stack>
 
       <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
         {historyLoading && notifications.length === 0 ? (
@@ -173,10 +227,21 @@ export function InboxPage() {
         ) : notifications.length === 0 ? (
           <EmptyState icon={InboxOutlinedIcon} title="Nothing yet" description="You'll see updates here as they happen." />
         ) : visible.length === 0 ? (
-          <EmptyState icon={InboxOutlinedIcon} title="You're all caught up" description="There are no unread notifications." />
+          hasRefiningFilters ? (
+            <EmptyState
+              icon={InboxOutlinedIcon}
+              title="No notifications match"
+              description="Try a different search or filter, or clear the filters to see your inbox."
+              actionLabel="Clear filters"
+              onAction={clearFilters}
+            />
+          ) : (
+            <EmptyState icon={InboxOutlinedIcon} title="You're all caught up" description="There are no unread notifications." />
+          )
         ) : (
+          <>
           <List disablePadding aria-label="Notifications">
-            {visible.map((n) => {
+            {pageNotifications.map((n) => {
               const tone = notificationTone(n.type)
               const target = getSafeNotificationPath(n.link)
               const timestamp = Number.isFinite(n.timestamp) && n.timestamp > 0 ? new Date(n.timestamp) : null
@@ -289,6 +354,19 @@ export function InboxPage() {
               )
             })}
           </List>
+          {pageCount > 1 && (
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1}
+              sx={{ px: 2, py: 1.5, alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid', borderColor: 'divider' }}
+            >
+              <Typography variant="caption" color="text.secondary" aria-live="polite">
+                Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, visible.length)} of {visible.length}
+              </Typography>
+              <Pagination count={pageCount} page={page} onChange={(_, value) => setPage(value)} size="small" showFirstButton showLastButton aria-label="Inbox pages" />
+            </Stack>
+          )}
+          </>
         )}
       </Paper>
     </Box>

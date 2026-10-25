@@ -7,7 +7,7 @@ using R2WAI.Application.Features.Navigation.Queries;
 namespace R2WAI.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Policy = "AdminOnly")]
 [Route("api/v1/[controller]")]
 public class NavigationController(IMediator mediator) : ControllerBase
 {

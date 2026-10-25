@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using R2WAI.Application.Common.Exceptions;
 using R2WAI.Infrastructure.AI.DynamicTools;
+using R2WAI.Infrastructure.Security;
+using Moq;
 
 namespace R2WAI.Infrastructure.Tests.AI;
 
@@ -11,7 +14,9 @@ namespace R2WAI.Infrastructure.Tests.AI;
 /// </summary>
 public class McpClientAdapterTests
 {
-    private static McpClientAdapter CreateAdapter() => new(NullLogger<McpClientAdapter>.Instance);
+    private static McpClientAdapter CreateAdapter() => new(
+        NullLogger<McpClientAdapter>.Instance, Mock.Of<IHttpClientFactory>(), NullLoggerFactory.Instance,
+        Options.Create(new EgressGuardOptions()));
 
     [Theory]
     [InlineData("http://[::1]/mcp")]

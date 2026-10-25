@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 using Microsoft.Extensions.DependencyInjection;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Common.Models;
@@ -96,6 +97,7 @@ public interface IApprovalService
 
 public class ApprovalService : IApprovalService
 {
+    private const int MaxEscalationsPerSweep = 100;
     private readonly ApplicationDbContext _context;
     private readonly IEmailService _emailService;
     private readonly INotificationService _notificationService;
@@ -118,13 +120,24 @@ public class ApprovalService : IApprovalService
     public async Task<Guid> CreateApprovalRequestAsync(Guid tenantId, Guid? workflowInstanceId,
         Guid? workflowId, Guid requesterId, string? data = null, string? subject = null, CancellationToken ct = default)
     {
+        string? workflowType = null;
+        if (workflowId is { } definitionId)
+        {
+            var workflow = await _context.Workflows
+                .IgnoreQueryFilters()
+                .Where(w => w.Id == definitionId && w.TenantId == tenantId && !w.IsDeleted)
+                .Select(w => new { w.Type })
+                .FirstOrDefaultAsync(ct);
+            if (workflow is null)
+                throw new ValidationException("workflowId", "The workflow does not belong to this tenant or no longer exists.");
+            workflowType = workflow.Type;
+        }
+
         // DueAt drives EscalateOverdueAsync (the 5-minute background sweep) — without it set here,
         // every approval request stays DueAt=null forever and escalation can never trigger for it,
         // no matter how long it sits pending. Computed from the tenant's active policy up front so
         // it's set at creation, not patched in later.
-        var creationPolicy = await _context.ApprovalPolicies
-            .Where(p => p.TenantId == tenantId && p.IsActive)
-            .FirstOrDefaultAsync(ct);
+        var creationPolicy = await FindPolicyAsync(tenantId, workflowType, ct);
         var dueAt = creationPolicy?.EscalationMinutes is int minutes ? DateTime.UtcNow.AddMinutes(minutes) : (DateTime?)null;
 
         var request = new ApprovalRequest(
@@ -291,26 +304,38 @@ public class ApprovalService : IApprovalService
 
     private async Task<bool> VerifyApproverAuthorization(ApprovalRequest request, Guid approverId, CancellationToken ct)
     {
-        var policy = await _context.ApprovalPolicies
-            .Where(p => p.TenantId == request.TenantId && p.IsActive)
-            .FirstOrDefaultAsync(ct);
+        string? workflowType = null;
+        if (request.WorkflowId is { } workflowId)
+        {
+            var workflow = await _context.Workflows
+                .IgnoreQueryFilters()
+                .Where(w => w.Id == workflowId && w.TenantId == request.TenantId && !w.IsDeleted)
+                .Select(w => new { w.Type })
+                .FirstOrDefaultAsync(ct);
+            if (workflow is null)
+                return false;
+            workflowType = workflow.Type;
+        }
 
-        var allowedRoles = new List<string>();
-        if (policy?.ApproverRoles is not null)
-            allowedRoles.AddRange(ParseRoles(policy.ApproverRoles));
+        var policy = await FindPolicyAsync(request.TenantId, workflowType, ct);
 
-        // An escalated request is routed to the policy's escalation roles, so those roles may decide it.
-        if (request.Status == ApprovalStatus.Escalated && !string.IsNullOrWhiteSpace(request.ApproverRole))
-            allowedRoles.AddRange(ParseRoles(request.ApproverRole));
+        // Requests routed to a specific role (a chained approval level or escalation)
+        // must be decided by that role. Otherwise, use the policy's primary approver roles.
+        var allowedRoles = !string.IsNullOrWhiteSpace(request.ApproverRole)
+            ? ParseRoles(request.ApproverRole)
+            : policy?.ApproverRoles is not null
+                ? ParseRoles(policy.ApproverRoles)
+                : [];
 
-        var roles = allowedRoles.Distinct().ToArray();
+        var roles = allowedRoles.Distinct(StringComparer.Ordinal).ToArray();
         if (roles.Length == 0)
             return false;
 
-        return await _context.Users
-            .AnyAsync(u => u.Id == approverId &&
-                u.TenantId == request.TenantId &&
-                u.UserRoles.Any(ur => roles.Contains(ur.Role!.Name)), ct);
+        return await _context.UserRoles
+            .AnyAsync(ur => ur.UserId == approverId &&
+                ur.User.TenantId == request.TenantId && !ur.User.IsDeleted &&
+                ur.Role.TenantId == request.TenantId && !ur.Role.IsDeleted &&
+                roles.Contains(ur.Role.Name), ct);
     }
 
     // ApprovalPolicy.ApproverRoles has shipped in two incompatible shapes:
@@ -324,6 +349,37 @@ public class ApprovalService : IApprovalService
     // of role. Tolerates both formats without touching the seed data itself.
     private static string[] ParseRoles(string raw) =>
         raw.Trim('[', ']').Split(',', StringSplitOptions.TrimEntries).Select(r => r.Trim('"')).ToArray();
+
+    private static Expression<Func<ApprovalRequest, bool>> BuildRoleAssignmentPredicate(IReadOnlyCollection<string> roles)
+    {
+        var request = Expression.Parameter(typeof(ApprovalRequest), "request");
+        var assignedRole = Expression.Property(request, nameof(ApprovalRequest.ApproverRole));
+        var notNull = Expression.NotEqual(assignedRole, Expression.Constant(null, typeof(string)));
+        Expression body = Expression.Constant(false);
+        var contains = typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])!;
+        var startsWith = typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)])!;
+        var endsWith = typeof(string).GetMethod(nameof(string.EndsWith), [typeof(string)])!;
+
+        foreach (var role in roles)
+        {
+            Expression[] matches =
+            {
+                Expression.Equal(assignedRole, Expression.Constant(role)),
+                Expression.Call(assignedRole, startsWith, Expression.Constant(role + ",")),
+                Expression.Call(assignedRole, startsWith, Expression.Constant(role + ", ")),
+                Expression.Call(assignedRole, contains, Expression.Constant("," + role + ",")),
+                Expression.Call(assignedRole, contains, Expression.Constant(", " + role + ",")),
+                Expression.Call(assignedRole, endsWith, Expression.Constant("," + role)),
+                Expression.Call(assignedRole, endsWith, Expression.Constant(", " + role)),
+                Expression.Call(assignedRole, contains, Expression.Constant("\"" + role + "\""))
+            };
+
+            var roleMatches = matches.Aggregate((left, right) => Expression.OrElse(left, right));
+            body = Expression.OrElse(body, Expression.AndAlso(notNull, roleMatches));
+        }
+
+        return Expression.Lambda<Func<ApprovalRequest, bool>>(body, request);
+    }
 
     public async Task<List<PendingApprovalDto>> GetPendingForApproverAsync(
         Guid tenantId, Guid approverId, CancellationToken ct = default)
@@ -389,18 +445,81 @@ public class ApprovalService : IApprovalService
             .Where(ar => ar.TenantId == tenantId
                 && (ar.Status == ApprovalStatus.Pending || ar.Status == ApprovalStatus.Escalated));
 
-        // A freshly-created ApprovalRequest (ApprovalStepActivity -> CreateApprovalRequestAsync)
-        // never calls AssignApprover — ApproverId/ApproverRole only get populated later, by
-        // ApproveAsync/RejectAsync (after the fact), EscalateOverdueAsync, or
-        // CreateNextLevelApprovalAsync for a chained level. A strict `== approverId.Value` filter
-        // here means a normal first-level pending approval never matches anyone, so /approvals/pending
-        // (and the default /approvals?status=Pending) always returned empty regardless of caller —
-        // confirmed live: an Approval step really does create a Pending ApprovalRequest, but no
-        // "pending" endpoint could ever find it. Broadened to also include not-yet-assigned requests.
         if (approverId.HasValue)
-            query = query.Where(ar => ar.ApproverId == null || ar.ApproverId == Guid.Empty || ar.ApproverId == approverId.Value);
-        if (!string.IsNullOrEmpty(role))
-            query = query.Where(ar => ar.ApproverRole == null || ar.ApproverRole == role);
+        {
+            var userRolesQuery = _context.UserRoles
+                .Where(ur => ur.UserId == approverId.Value &&
+                    ur.User.TenantId == tenantId && !ur.User.IsDeleted &&
+                    ur.Role.TenantId == tenantId && !ur.Role.IsDeleted);
+            if (!string.IsNullOrWhiteSpace(role))
+                userRolesQuery = userRolesQuery.Where(ur => ur.Role.Name == role);
+
+            var callerRoles = await userRolesQuery
+                .Select(ur => ur.Role.Name)
+                .Distinct()
+                .ToListAsync(ct);
+
+            if (!string.IsNullOrWhiteSpace(role) && callerRoles.Count == 0)
+                return ([], 0);
+
+            var activePolicies = await _context.ApprovalPolicies
+                .IgnoreQueryFilters()
+                .Where(ap => ap.TenantId == tenantId && !ap.IsDeleted && ap.IsActive)
+                .Select(ap => new { ap.WorkflowType, ap.ApproverRoles })
+                .ToListAsync(ct);
+
+            var defaultPolicy = activePolicies.FirstOrDefault(p => p.WorkflowType == null);
+            var defaultRoles = defaultPolicy?.ApproverRoles is { } rawDefaultRoles
+                ? ParseRoles(rawDefaultRoles)
+                : [];
+            var specificPolicies = activePolicies
+                .Where(p => !string.IsNullOrWhiteSpace(p.WorkflowType))
+                .ToList();
+            var specificTypes = specificPolicies
+                .Select(p => p.WorkflowType!)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            var allowedSpecificTypes = specificPolicies
+                .Where(p => p.ApproverRoles is not null &&
+                    ParseRoles(p.ApproverRoles).Intersect(callerRoles, StringComparer.Ordinal).Any())
+                .Select(p => p.WorkflowType!)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            var canUseDefaultPolicy = defaultRoles.Intersect(callerRoles, StringComparer.Ordinal).Any();
+
+            // Admins can use the unfiltered listing endpoint. Regular approvers only see
+            // requests assigned to them or roles they hold, plus first-level unassigned
+            // requests whose active policy grants one of their roles. Workflow-specific
+            // policies override the default policy for that workflow type.
+            var directAssignments = query.Where(ar =>
+                ar.RequesterId != approverId.Value && ar.ApproverId == approverId.Value);
+            var unassigned = query.Where(ar => ar.RequesterId != approverId.Value &&
+                (ar.ApproverId == null || ar.ApproverId == Guid.Empty));
+            var roleAssignments = unassigned.Where(BuildRoleAssignmentPredicate(callerRoles));
+            var initialRequests = unassigned.Where(ar => ar.ApproverRole == null);
+
+            var visibleBySpecificPolicy = initialRequests.Where(ar =>
+                ar.WorkflowId != null && allowedSpecificTypes.Length > 0 &&
+                _context.Workflows.IgnoreQueryFilters().Any(w =>
+                    w.Id == ar.WorkflowId && w.TenantId == tenantId && !w.IsDeleted &&
+                    allowedSpecificTypes.Contains(w.Type)));
+            var visibleByDefaultPolicy = canUseDefaultPolicy
+                ? initialRequests.Where(ar => ar.WorkflowId == null ||
+                    (ar.WorkflowId != null && _context.Workflows.IgnoreQueryFilters().Any(w =>
+                        w.Id == ar.WorkflowId && w.TenantId == tenantId && !w.IsDeleted &&
+                        !specificTypes.Contains(w.Type))))
+                : initialRequests.Where(_ => false);
+
+            query = directAssignments
+                .Concat(roleAssignments)
+                .Concat(visibleBySpecificPolicy)
+                .Concat(visibleByDefaultPolicy);
+        }
+        else if (!string.IsNullOrWhiteSpace(role))
+        {
+            // Internal role-only lookups must match the requested role exactly.
+            query = query.Where(ar => ar.ApproverRole == role);
+        }
 
         var totalCount = await query.CountAsync(ct);
 
@@ -439,6 +558,9 @@ public class ApprovalService : IApprovalService
         var overdueIds = await _context.ApprovalRequests
             .IgnoreQueryFilters()
             .Where(ar => !ar.IsDeleted && ar.Status == ApprovalStatus.Pending && ar.DueAt != null && ar.DueAt < DateTime.UtcNow)
+            .OrderBy(ar => ar.DueAt)
+            .ThenBy(ar => ar.Id)
+            .Take(MaxEscalationsPerSweep)
             .Select(ar => ar.Id)
             .ToListAsync(ct);
 
@@ -450,6 +572,13 @@ public class ApprovalService : IApprovalService
 
         foreach (var id in overdueIds)
         {
+            // Keep the claim and the state transition in one database transaction. If the process
+            // dies after claiming but before the escalation details are saved, the transaction rolls
+            // back and the next sweep can retry instead of leaving a half-escalated request forever.
+            await using var transaction = canClaimAtomically
+                ? await _context.Database.BeginTransactionAsync(ct)
+                : null;
+
             // Atomic claim: flip Status Pending -> Escalated in one conditional UPDATE, WHERE it's
             // still Pending and still due. Only the replica whose UPDATE actually affects a row owns
             // this request's escalation — same idiom BackgroundJobProcessor uses (Status: Pending ->
@@ -479,19 +608,21 @@ public class ApprovalService : IApprovalService
             // place Status gets set — same end state either way.
             request.Escalate();
 
-            var policy = await _context.ApprovalPolicies
-                .Where(ap => ap.TenantId == request.TenantId && ap.WorkflowType == null && ap.IsActive)
-                .FirstOrDefaultAsync(ct);
+            var workflowType = await GetWorkflowTypeAsync(request.TenantId, request.WorkflowId, ct);
+            var policy = await FindPolicyAsync(request.TenantId, workflowType, ct);
 
             if (policy?.EscalationRoles != null && request.ApproverRole != policy.EscalationRoles)
             {
+                var escalationRole = string.Join(",", ParseRoles(policy.EscalationRoles));
                 if (request.ApproverId is { } assigned && assigned != Guid.Empty)
-                    request.AssignApprover(assigned, policy.EscalationRoles);
+                    request.AssignApprover(assigned, escalationRole);
                 else
-                    request.AssignApproverRole(policy.EscalationRoles);
+                    request.AssignApproverRole(escalationRole);
             }
 
             await _context.SaveChangesAsync(ct);
+            if (transaction is not null)
+                await transaction.CommitAsync(ct);
 
             _logger.LogWarning("Escalated approval request {RequestId} to level {Level}",
                 request.Id, request.EscalationLevel);
@@ -536,9 +667,11 @@ public class ApprovalService : IApprovalService
     public async Task<ApprovalPolicyDto> CreatePolicyAsync(Guid tenantId,
         CreateApprovalPolicyRequest request, CancellationToken ct = default)
     {
+        var workflowType = NormalizeWorkflowType(request.WorkflowType);
+        await EnsureNoActivePolicyConflictAsync(tenantId, workflowType, excludedPolicyId: null, ct);
         var policy = new ApprovalPolicy(
             Guid.NewGuid(), tenantId, request.Name, request.Description,
-            request.WorkflowType, request.ApproverRoles,
+            workflowType, request.ApproverRoles,
             request.MinApprovers, request.EscalationMinutes, request.EscalationRoles);
 
         _context.ApprovalPolicies.Add(policy);
@@ -562,7 +695,11 @@ public class ApprovalService : IApprovalService
         if (policy is null)
             throw new NotFoundException(nameof(ApprovalPolicy), policyId);
 
-        policy.Update(request.Name, request.Description, request.WorkflowType,
+        var workflowType = NormalizeWorkflowType(request.WorkflowType);
+        if (policy.IsActive)
+            await EnsureNoActivePolicyConflictAsync(tenantId, workflowType, policyId, ct);
+
+        policy.Update(request.Name, request.Description, workflowType,
             request.ApproverRoles, request.MinApprovers,
             request.EscalationMinutes, request.EscalationRoles);
 
@@ -604,7 +741,10 @@ public class ApprovalService : IApprovalService
         if (policy.IsActive)
             policy.Deactivate();
         else
+        {
+            await EnsureNoActivePolicyConflictAsync(tenantId, policy.WorkflowType, policyId, ct);
             policy.Activate();
+        }
 
         await _context.SaveChangesAsync(ct);
 
@@ -620,23 +760,66 @@ public class ApprovalService : IApprovalService
     public async Task<ApprovalPolicy?> FindPolicyAsync(Guid tenantId, string? workflowType,
         CancellationToken ct = default)
     {
+        workflowType = NormalizeWorkflowType(workflowType);
         if (!string.IsNullOrEmpty(workflowType))
         {
             var policy = await _context.ApprovalPolicies
-                .Where(ap => ap.TenantId == tenantId && ap.WorkflowType == workflowType && ap.IsActive)
+                .IgnoreQueryFilters()
+                .Where(ap => ap.TenantId == tenantId && !ap.IsDeleted
+                    && ap.WorkflowType == workflowType && ap.IsActive)
                 .FirstOrDefaultAsync(ct);
             if (policy is not null)
                 return policy;
         }
 
         return await _context.ApprovalPolicies
-            .Where(ap => ap.TenantId == tenantId && ap.WorkflowType == null && ap.IsActive)
+            .IgnoreQueryFilters()
+            .Where(ap => ap.TenantId == tenantId && !ap.IsDeleted
+                && ap.WorkflowType == null && ap.IsActive)
             .FirstOrDefaultAsync(ct);
     }
 
+    private async Task EnsureNoActivePolicyConflictAsync(Guid tenantId, string? workflowType,
+        Guid? excludedPolicyId, CancellationToken ct)
+    {
+        workflowType = NormalizeWorkflowType(workflowType);
+        var conflicts = _context.ApprovalPolicies
+            .IgnoreQueryFilters()
+            .Where(ap => ap.TenantId == tenantId && !ap.IsDeleted && ap.IsActive);
+
+        conflicts = workflowType is null
+            ? conflicts.Where(ap => ap.WorkflowType == null)
+            : conflicts.Where(ap => ap.WorkflowType == workflowType);
+
+        if (excludedPolicyId.HasValue)
+            conflicts = conflicts.Where(ap => ap.Id != excludedPolicyId.Value);
+
+        if (await conflicts.AnyAsync(ct))
+            throw new ValidationException("workflowType", "An active approval policy already exists for this workflow type.");
+    }
+
+    private async Task<string?> GetWorkflowTypeAsync(Guid tenantId, Guid? workflowId, CancellationToken ct)
+    {
+        if (workflowId is not { } id)
+            return null;
+
+        var workflow = await _context.Workflows
+            .IgnoreQueryFilters()
+            .Where(w => w.Id == id && w.TenantId == tenantId && !w.IsDeleted)
+            .Select(w => new { w.Type })
+            .FirstOrDefaultAsync(ct);
+
+        return workflow?.Type;
+    }
+
+    private static string? NormalizeWorkflowType(string? workflowType) =>
+        string.IsNullOrWhiteSpace(workflowType) ? null : workflowType.Trim();
+
     private async Task<bool> CreateNextLevelApprovalAsync(ApprovalRequest completedRequest, CancellationToken ct)
     {
-        var policy = await FindPolicyAsync(completedRequest.TenantId, null, ct);
+        var workflowType = await GetWorkflowTypeAsync(
+            completedRequest.TenantId, completedRequest.WorkflowId, ct);
+        var policy = await FindPolicyAsync(completedRequest.TenantId, workflowType, ct);
         if (policy?.ApproverRoles is null)
             return false;
 

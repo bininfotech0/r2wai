@@ -117,6 +117,13 @@ public class ChatWithAssistantCommandHandler(
         {
             conversation = await conversationRepo.GetByIdAsync(command.ConversationId.Value, cancellationToken)
                 ?? throw new NotFoundException(nameof(Conversation), command.ConversationId.Value);
+
+            if (conversation.TenantId != tenantId || conversation.UserId != userId
+                || conversation.Module != "assistant" || conversation.ReferenceId != assistant.Id
+                || conversation.IsArchived)
+            {
+                throw new NotFoundException(nameof(Conversation), command.ConversationId.Value);
+            }
         }
         else
         {

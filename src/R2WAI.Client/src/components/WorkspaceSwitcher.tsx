@@ -76,10 +76,12 @@ export function WorkspaceSwitcher() {
         aria-haspopup="menu"
         aria-expanded={anchor !== null}
         sx={{
-          gap: 0.75,
           height: 34,
-          px: 1.25,
-          maxWidth: { xs: 160, sm: 260 },
+          width: { xs: 40, md: 'auto' },
+          minWidth: { xs: 40, md: 'auto' },
+          maxWidth: { xs: 40, md: 260 },
+          px: { xs: 0, md: 1.25 },
+          gap: { xs: 0, md: 0.75 },
           border: '1px solid',
           borderColor: 'divider',
           borderRadius: 1,
@@ -87,9 +89,10 @@ export function WorkspaceSwitcher() {
           transition: (t) => t.transitions.create(['border-color', 'background-color']),
           '&:hover': { bgcolor: 'action.hover', borderColor: 'text.secondary' },
         }}
+        title={`Workspace: ${active.name}`}
       >
         <WorkspacesOutlined sx={{ fontSize: 18, color: 'text.secondary' }} />
-        <Box sx={{ minWidth: 0, textAlign: 'left' }}>
+        <Box sx={{ minWidth: 0, textAlign: 'left', display: { xs: 'none', md: 'block' } }}>
           <Typography component="span" sx={{ display: { xs: 'none', md: 'block' }, fontSize: 11, lineHeight: 1.1, color: 'text.secondary' }}>
             Workspace
           </Typography>
@@ -97,7 +100,7 @@ export function WorkspaceSwitcher() {
             {active.name}
           </Typography>
         </Box>
-        <ExpandMoreIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+        <ExpandMoreIcon sx={{ display: { xs: 'none', md: 'block' }, fontSize: 18, color: 'text.secondary' }} />
       </ButtonBase>
 
       <Menu

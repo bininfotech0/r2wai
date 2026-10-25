@@ -22,11 +22,11 @@ public class WorkflowsController(
     IMediator mediator,
     IWorkflowBridge workflowBridge,
     ApplicationDbContext dbContext,
-    IConfiguration configuration,
     IAIService aiService,
     IModelConfigurationResolver modelConfigResolver,
     IWorkflowTemplateService workflowTemplateService,
     ICurrentUserService currentUser,
+    IEncryptionService encryptionService,
     ILogger<WorkflowsController> logger) : ControllerBase
 {
     private Guid CurrentUserId
@@ -383,113 +383,192 @@ public class WorkflowsController(
     [AllowAnonymous]
     public async Task<IActionResult> WebhookTrigger(
         string slug,
-        [FromBody] object? payload,
-        [FromHeader(Name = "X-Webhook-Secret")] string? webhookSecret = null,
         [FromHeader(Name = "X-Webhook-Signature")] string? webhookSignature = null,
         [FromHeader(Name = "X-Webhook-Timestamp")] string? webhookTimestamp = null,
         CancellationToken ct = default)
     {
-        // Webhooks created through the admin UI (WebhooksController) persist a WebhookEndpoint row
-        // keyed by its own Slug/Secret/WorkflowId — that row is the source of truth whenever one
-        // exists for this slug, since it's the only thing the admin panel actually lets anyone
-        // configure. Workflow.Trigger is a separate, older field with no admin UI at all; kept only
-        // as a fallback against the single global config secret for anything still relying on it.
-        //
-        // IgnoreQueryFilters: this action is [AllowAnonymous], so there is no ambient tenant_id claim
-        // and the fail-closed tenant filter (P0-5) matches zero rows for every webhook caller — which
-        // silently downgraded the whole endpoint to the 503 "not configured" path below. The real
-        // boundary here is the unguessable Slug plus the endpoint's own secret/HMAC check further
-        // down, not the ambient filter; the linked Workflow is then loaded with the same bypass
-        // because the ambient tenant is still null. Same reasoning as ChatbotsController.GetPublicInfo
-        // and AuthController.Refresh. Guarded by RegressionTests.D12.
+        // Keep authentication on an exact, tenant-owned endpoint row. The older global-secret
+        // fallback could trigger a workflow in any tenant by guessing its Workflow.Trigger value.
+        const int maxBodyBytes = 1_048_576;
+        if (Request.ContentLength > maxBodyBytes)
+            return StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = "Webhook payload exceeds the 1 MiB limit." });
+
+        Request.EnableBuffering();
+        await using var bodyBuffer = new MemoryStream();
+        var readBuffer = new byte[16 * 1024];
+        while (true)
+        {
+            var read = await Request.Body.ReadAsync(readBuffer, ct);
+            if (read == 0) break;
+            if (bodyBuffer.Length + read > maxBodyBytes)
+                return StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = "Webhook payload exceeds the 1 MiB limit." });
+            await bodyBuffer.WriteAsync(readBuffer.AsMemory(0, read), ct);
+        }
+
+        var rawBody = bodyBuffer.ToArray();
+        Request.Body.Position = 0;
+        if (rawBody.Length > 0)
+        {
+            try { using var _ = JsonDocument.Parse(rawBody); }
+            catch (JsonException) { return BadRequest(new { error = "Webhook payload must be valid JSON." }); }
+        }
+
         var webhookEndpoint = await dbContext.WebhookEndpoints
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(w => w.Slug == slug && !w.IsDeleted, ct);
 
-        R2WAI.Domain.Entities.Workflow? workflow;
-        string? configuredSecret;
+        if (webhookEndpoint is null || !webhookEndpoint.IsActive || webhookEndpoint.WorkflowId is null)
+            return NotFound(new { error = "No active webhook endpoint found." });
 
-        if (webhookEndpoint is not null)
+        var storedSecret = webhookEndpoint.Secret;
+        if (string.IsNullOrWhiteSpace(storedSecret))
         {
-            if (!webhookEndpoint.IsActive || webhookEndpoint.WorkflowId is null)
-                return NotFound(new { error = $"No active webhook with slug '{slug}'" });
-
-            configuredSecret = webhookEndpoint.Secret;
-            if (string.IsNullOrEmpty(configuredSecret))
-            {
-                logger.LogError("Webhook rejected: webhook '{Slug}' has no secret configured", slug);
-                return StatusCode(503, new { error = "Webhook endpoint not configured. Contact administrator." });
-            }
-
-            workflow = await dbContext.Workflows.IgnoreQueryFilters()
-                .FirstOrDefaultAsync(w => w.Id == webhookEndpoint.WorkflowId && w.IsActive, ct);
-            if (workflow is null)
-                return NotFound(new { error = "Linked workflow not found or inactive" });
-        }
-        else
-        {
-            configuredSecret = configuration["Webhooks:Secret"];
-            if (string.IsNullOrEmpty(configuredSecret))
-            {
-                logger.LogError("Webhook rejected: no webhook secret configured — all webhooks blocked until Webhooks:Secret is set");
-                return StatusCode(503, new { error = "Webhook endpoint not configured. Contact administrator." });
-            }
-
-            workflow = await dbContext.Workflows.IgnoreQueryFilters()
-                .FirstOrDefaultAsync(w => w.Trigger == slug && w.IsActive, ct);
-            if (workflow is null)
-                return NotFound(new { error = $"No active workflow with trigger '{slug}'" });
+            logger.LogError("Webhook rejected: webhook '{Slug}' has no secret configured", slug);
+            return StatusCode(503, new { error = "Webhook endpoint not configured. Contact administrator." });
         }
 
-        if (!string.IsNullOrEmpty(webhookSignature) && !string.IsNullOrEmpty(webhookTimestamp))
+        // New values are version-prefixed AES-GCM ciphertext. Plaintext is accepted only for legacy
+        // rows and upgraded after a successful call so existing customers can migrate without a
+        // keyless database migration.
+        var isLegacySecret = !storedSecret.StartsWith("enc:v1:", StringComparison.Ordinal);
+        var configuredSecret = isLegacySecret
+            ? storedSecret
+            : encryptionService.Decrypt(storedSecret["enc:v1:".Length..]);
+
+        var workflow = await dbContext.Workflows.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(w => w.Id == webhookEndpoint.WorkflowId
+                && w.TenantId == webhookEndpoint.TenantId && w.IsActive && !w.IsDeleted, ct);
+        if (workflow is null)
+            return NotFound(new { error = "Linked automation not found or inactive." });
+
+        var hasSignature = !string.IsNullOrWhiteSpace(webhookSignature);
+        var hasTimestamp = !string.IsNullOrWhiteSpace(webhookTimestamp);
+        if (!hasSignature || !hasTimestamp)
+            return Unauthorized(new { error = "Signed webhook requests require signature and timestamp headers." });
+
         {
-            if (!long.TryParse(webhookTimestamp, out var ts)
-                || Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - ts) > 300)
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            if (!long.TryParse(webhookTimestamp, out var ts) || ts < now - 300 || ts > now + 300)
             {
                 logger.LogWarning("Webhook rejected: timestamp too old or invalid for slug {Slug}", slug);
                 return Unauthorized(new { error = "Webhook timestamp expired or invalid" });
             }
 
-            var body = payload is not null ? System.Text.Json.JsonSerializer.Serialize(payload) : "";
-            var signPayload = $"{webhookTimestamp}.{body}";
-            using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(configuredSecret));
-            var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(signPayload));
-            var expected = Convert.ToHexStringLower(hash);
+            var signPayload = System.Text.Encoding.UTF8.GetBytes($"{webhookTimestamp}.").Concat(rawBody).ToArray();
+            var expected = System.Security.Cryptography.HMACSHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(configuredSecret), signPayload);
+            var suppliedSignature = webhookSignature!.StartsWith("sha256=", StringComparison.OrdinalIgnoreCase)
+                ? webhookSignature[7..]
+                : webhookSignature;
 
-            if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-                System.Text.Encoding.UTF8.GetBytes(expected),
-                System.Text.Encoding.UTF8.GetBytes(webhookSignature)))
+            byte[] suppliedBytes;
+            try { suppliedBytes = Convert.FromHexString(suppliedSignature); }
+            catch (FormatException) { return Unauthorized(new { error = "Invalid webhook signature" }); }
+
+            if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(expected, suppliedBytes))
             {
                 logger.LogWarning("Webhook rejected: HMAC signature mismatch for slug {Slug}", slug);
                 return Unauthorized(new { error = "Invalid webhook signature" });
             }
         }
-        else if (string.IsNullOrEmpty(webhookSecret) || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-            System.Text.Encoding.UTF8.GetBytes(configuredSecret),
-            System.Text.Encoding.UTF8.GetBytes(webhookSecret)))
-        {
-            logger.LogWarning("Webhook rejected: invalid or missing secret for slug {Slug}", slug);
-            return Unauthorized(new { error = "Invalid or missing webhook secret" });
-        }
 
-        var data = payload is not null ? System.Text.Json.JsonSerializer.Serialize(payload) : null;
+        var providerDeliveryKey = new[]
+            {
+                Request.Headers["Idempotency-Key"].FirstOrDefault(),
+                Request.Headers["X-Webhook-Delivery"].FirstOrDefault(),
+                Request.Headers["X-GitHub-Delivery"].FirstOrDefault()
+            }
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        var deliveryKey = providerDeliveryKey?.Trim()
+            ?? $"signature:{webhookTimestamp}:{webhookSignature!.Trim().ToLowerInvariant()}";
+        if (deliveryKey.Length > 256)
+            return BadRequest(new { error = "Webhook delivery key exceeds the 256 character limit." });
 
+        // Store only a digest; provider delivery IDs can otherwise reveal identifiers in database
+        // exports. The signature fallback still catches exact signed-request replays when a sender
+        // does not provide a stable delivery ID header.
+        var deliveryKeyHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"{webhookEndpoint.Id:N}:{deliveryKey}")));
+        var data = rawBody.Length > 0 ? System.Text.Encoding.UTF8.GetString(rawBody) : null;
+
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
         try
         {
+            if (dbContext.Database.IsRelational())
+                transaction = await dbContext.Database.BeginTransactionAsync(ct);
+
+            var receivedAt = DateTime.UtcNow;
+            if (dbContext.Database.IsNpgsql())
+            {
+                // Keep the replay table bounded without putting an unbounded cleanup query in the
+                // request path. Each accepted delivery removes at most 100 expired claims.
+                await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                    DELETE FROM "WebhookDeliveryRecords"
+                    WHERE "Id" IN (
+                        SELECT "Id" FROM "WebhookDeliveryRecords"
+                        WHERE "ExpiresAt" <= {receivedAt}
+                        ORDER BY "ExpiresAt"
+                        LIMIT 100
+                    )
+                    """, ct);
+
+                var inserted = await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO "WebhookDeliveryRecords"
+                        ("Id", "WebhookEndpointId", "DeliveryKeyHash", "ExpiresAt", "CreatedAt", "ModifiedAt", "IsDeleted")
+                    VALUES
+                        ({Guid.NewGuid()}, {webhookEndpoint.Id}, {deliveryKeyHash}, {receivedAt.AddHours(24)}, {receivedAt}, {receivedAt}, FALSE)
+                    ON CONFLICT ("WebhookEndpointId", "DeliveryKeyHash") DO NOTHING
+                    """, ct);
+
+                if (inserted == 0)
+                {
+                    if (transaction is not null)
+                        await transaction.CommitAsync(ct);
+                    return Accepted(new { workflowId = workflow.Id, duplicate = true, status = "already accepted" });
+                }
+            }
+            else
+            {
+                var alreadyReceived = await dbContext.WebhookDeliveryRecords
+                    .AnyAsync(record => record.WebhookEndpointId == webhookEndpoint.Id
+                        && record.DeliveryKeyHash == deliveryKeyHash && record.ExpiresAt > receivedAt, ct);
+                if (alreadyReceived)
+                {
+                    if (transaction is not null)
+                        await transaction.CommitAsync(ct);
+                    return Accepted(new { workflowId = workflow.Id, duplicate = true, status = "already accepted" });
+                }
+
+                dbContext.WebhookDeliveryRecords.Add(new WebhookDeliveryRecord(
+                    Guid.NewGuid(), webhookEndpoint.Id, deliveryKeyHash, receivedAt.AddHours(24)));
+                await dbContext.SaveChangesAsync(ct);
+            }
+
             var defaultTenantId = workflow.TenantId;
             var (elsaInstanceId, instanceId) = await workflowBridge.StartWorkflowAsync(
                 workflow.Id, defaultTenantId, workflow.UserId, data, ct);
 
-            webhookEndpoint?.RecordCall();
+            webhookEndpoint.RecordCall();
+            if (isLegacySecret)
+                webhookEndpoint.SetSecret($"enc:v1:{encryptionService.Encrypt(configuredSecret)}");
             await dbContext.SaveChangesAsync(ct);
+            if (transaction is not null)
+                await transaction.CommitAsync(ct);
 
             logger.LogInformation("Webhook triggered workflow {WorkflowId} → instance {InstanceId}", workflow.Id, instanceId);
             return Accepted(new { workflowId = workflow.Id, instanceId, elsaInstanceId, status = "running" });
         }
         catch (Exception ex)
         {
+            if (transaction is not null)
+                await transaction.RollbackAsync(CancellationToken.None);
             logger.LogError(ex, "Webhook trigger failed for workflow {WorkflowId}", workflow.Id);
             return StatusCode(500, new { error = "Workflow execution failed" });
+        }
+        finally
+        {
+            if (transaction is not null)
+                await transaction.DisposeAsync();
         }
     }
 

@@ -1,9 +1,12 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Domain.Entities;
 using R2WAI.Domain.Enums;
 using R2WAI.Infrastructure.AI.DynamicTools;
+using R2WAI.Infrastructure.Security;
+using Moq;
 
 namespace R2WAI.Infrastructure.Tests.AI;
 
@@ -24,7 +27,8 @@ public class McpDynamicToolExecutorTests
     }
 
     private static McpDynamicToolExecutor CreateExecutor(IEncryptionService? encryptionService = null) =>
-        new(new McpClientAdapter(NullLogger<McpClientAdapter>.Instance),
+        new(new McpClientAdapter(NullLogger<McpClientAdapter>.Instance, Mock.Of<IHttpClientFactory>(),
+                NullLoggerFactory.Instance, Options.Create(new EgressGuardOptions())),
             encryptionService ?? new FakeEncryptionService(),
             NullLogger<McpDynamicToolExecutor>.Instance);
 

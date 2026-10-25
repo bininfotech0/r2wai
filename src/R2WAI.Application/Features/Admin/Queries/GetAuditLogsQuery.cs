@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+
 namespace R2WAI.Application.Features.Admin.Queries;
 
 public record GetAuditLogsQuery : IRequest<PagedResult<AuditLogDto>>, IAuthorizedRequest
@@ -26,27 +28,32 @@ public class GetAuditLogsQueryHandler(
     {
         var tenantId = currentUser.TenantId ?? throw new UnauthorizedException();
 
-        var all = await auditLogRepo.FindAsync(
-            l => l.TenantId == tenantId
+        var filter =
+            (Expression<Func<AuditLog, bool>>)(l => l.TenantId == tenantId
               && (!query.UserId.HasValue || l.UserId == query.UserId)
               && (!query.ApplicationId.HasValue || l.ApplicationId == query.ApplicationId)
               && (!query.Action.HasValue || l.Action == query.Action)
               && (string.IsNullOrWhiteSpace(query.EntityType) || l.EntityType == query.EntityType)
               && (string.IsNullOrWhiteSpace(query.EntityId) || l.EntityId == query.EntityId)
               && (!query.From.HasValue || l.Timestamp >= query.From.Value)
-              && (!query.To.HasValue || l.Timestamp <= query.To.Value),
-            cancellationToken);
+              && (!query.To.HasValue || l.Timestamp <= query.To.Value));
 
-        var ordered = all.OrderByDescending(l => l.Timestamp);
-        var total = ordered.Count();
-        var items = ordered.Skip((query.Page - 1) * query.PageSize).Take(query.PageSize).ToList();
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 1000);
+        var result = await auditLogRepo.FindPagedAsync(
+            filter,
+            l => l.Timestamp,
+            page,
+            pageSize,
+            descending: true,
+            cancellationToken: cancellationToken);
 
         return new PagedResult<AuditLogDto>
         {
-            Items = mapper.Map<List<AuditLogDto>>(items),
-            TotalCount = total,
-            Page = query.Page,
-            PageSize = query.PageSize,
+            Items = mapper.Map<List<AuditLogDto>>(result.Items),
+            TotalCount = result.TotalCount,
+            Page = page,
+            PageSize = pageSize,
         };
     }
 }

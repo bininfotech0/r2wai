@@ -11,7 +11,7 @@ namespace R2WAI.Api.Controllers;
 // is already Admin/SuperAdmin-only in roleNav.ts; there is no separate, wider-reachable surface
 // for it the way CapabilitiesController's "Tools & APIs" management page has.
 [ApiController]
-[Authorize]
+[Authorize(Policy = "AdminOnly")]
 [Route("api/v1/business-capabilities")]
 public class BusinessCapabilitiesController(IMediator mediator) : ControllerBase
 {

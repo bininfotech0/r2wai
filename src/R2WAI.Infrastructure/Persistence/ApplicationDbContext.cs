@@ -48,6 +48,7 @@ public interface ITenantDbContext
     DbSet<PromptTemplate> PromptTemplates { get; }
     DbSet<AssistantPromptHistory> AssistantPromptHistories { get; }
     DbSet<WebhookEndpoint> WebhookEndpoints { get; }
+    DbSet<WebhookDeliveryRecord> WebhookDeliveryRecords { get; }
     DbSet<ApiKey> ApiKeys { get; }
     DbSet<ChatbotChannel> ChatbotChannels { get; }
     DbSet<ChatbotSessionTurn> ChatbotSessionTurns { get; }
@@ -134,6 +135,7 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
     public DbSet<PromptTemplate> PromptTemplates => Set<PromptTemplate>();
     public DbSet<AssistantPromptHistory> AssistantPromptHistories => Set<AssistantPromptHistory>();
     public DbSet<WebhookEndpoint> WebhookEndpoints => Set<WebhookEndpoint>();
+    public DbSet<WebhookDeliveryRecord> WebhookDeliveryRecords => Set<WebhookDeliveryRecord>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<ChatbotChannel> ChatbotChannels => Set<ChatbotChannel>();
     public DbSet<ChatbotSessionTurn> ChatbotSessionTurns => Set<ChatbotSessionTurn>();
@@ -244,7 +246,8 @@ public class ApplicationDbContext : DbContext, ITenantDbContext, R2WAI.Applicati
     {
         "PasswordHash", "RefreshTokenHash", "PasswordResetToken", "MfaSecret",
         "AadhaarNumberEncrypted", "AadhaarNumberHash",
-        "ApiKeyEncrypted", "SecretHash", "ClientSecret", "EncryptionKey"
+        "ApiKey", "ApiKeyEncrypted", "Secret", "SecretHash", "ClientSecret", "EncryptionKey",
+        "CredentialEncrypted", "CredentialSecretEncrypted", "EncryptedCredentials"
     };
 
     // A memory's text is the user's own personal data, and deleting a memory has to actually forget

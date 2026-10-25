@@ -37,6 +37,13 @@ public sealed class WebhookEndpoint : BaseEntity<Guid>
         Name = name;
         TriggerType = triggerType;
         WorkflowId = workflowId;
+        if (secret is not null)
+            Secret = secret;
+        MarkAsModified();
+    }
+
+    public void SetSecret(string secret)
+    {
         Secret = secret;
         MarkAsModified();
     }

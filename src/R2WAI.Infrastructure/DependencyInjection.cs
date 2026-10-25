@@ -10,6 +10,7 @@ using R2WAI.Infrastructure.Persistence.Repositories;
 using R2WAI.Infrastructure.Services;
 using R2WAI.Infrastructure.Services.ToolFramework;
 using R2WAI.Infrastructure.SignalR;
+using R2WAI.Infrastructure.Security;
 using R2WAI.Infrastructure.Storage;
 using R2WAI.Infrastructure.VectorStore;
 
@@ -19,6 +20,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
+        services.Configure<EgressGuardOptions>(configuration.GetSection("Egress"));
+
         services.AddDbContext<ApplicationDbContext>(options =>
         {
             var connectionString = configuration.GetConnectionString("DefaultConnection")

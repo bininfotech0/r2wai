@@ -5,14 +5,26 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.client
+      args:
+        NGINX_CONFIG: studio.production.conf
     ports:
-      - "8080:8080"
+      - "80:8080"
+      - "443:8443"
     depends_on:
       r2wai-api:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - r2wai-network
+      r2wai-network:
+        ipv4_address: 172.30.0.2
+    volumes:
+      - ${TLS_CERT_DIR:-./certs}:/etc/nginx/certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -kf https://localhost:8443/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     deploy:
       resources:
         limits:
@@ -23,18 +35,17 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.api
-    ports:
-      - "5000:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - ForwardedHeaders__KnownProxies__0=172.30.0.2
       # First-run administrator. On an EMPTY database the API creates the default tenant, roles and
       # built-in tools plus this one admin (email + password of >= 12 characters). No demo accounts are
       # ever created here. Remove BOOTSTRAP_ADMIN_PASSWORD from the environment after the first start.
       - Bootstrap__AdminEmail=${BOOTSTRAP_ADMIN_EMAIL:-}
       - Bootstrap__AdminPassword=${BOOTSTRAP_ADMIN_PASSWORD:-}
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=r2wai;Username=r2wai;Password=${DB_PASSWORD}
-      - ConnectionStrings__Redis=redis:6379
-      - Cache__Redis__ConnectionString=redis:6379
+      - ConnectionStrings__Redis=redis:6379,password=${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+      - Cache__Redis__ConnectionString=redis:6379,password=${REDIS_PASSWORD:?Set REDIS_PASSWORD}
       # Traces/metrics/logs export to console when unset (default). Bring up
       # docker-compose.monitoring.yml and set OTLP_ENDPOINT=http://jaeger:4317
       # to route real distributed traces to Jaeger instead.
@@ -56,6 +67,11 @@ services:
       - AI__Ollama__ModelId=${OLLAMA_MODEL:-}
       - AI__Ollama__EmbeddingModel=${OLLAMA_EMBEDDING_MODEL:-}
       - Storage__Provider=local
+      # Private targets remain blocked unless the deployment operator explicitly trusts them.
+      # Comma-separated exact hostnames and CIDRs; example: EGRESS_ALLOWED_HOSTS=erp.corp and
+      # EGRESS_ALLOWED_NETWORKS=10.20.1.0/24. Keep these as narrow as the integration requires.
+      - Egress__AllowedHostsCsv=${EGRESS_ALLOWED_HOSTS:-}
+      - Egress__AllowedNetworksCsv=${EGRESS_ALLOWED_NETWORKS:-}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - Email__SmtpHost=${SMTP_HOST:-}
       - Email__SmtpPort=${SMTP_PORT:-587}
@@ -63,7 +79,7 @@ services:
       - Email__SmtpPassword=${SMTP_PASSWORD:-}
       - Email__FromAddress=${EMAIL_FROM:-noreply@r2wai.com}
       - Email__EnableSsl=true
-      - CORS__AllowedOrigins__0=${CORS_ORIGIN_0:-http://localhost:8080}
+      - CORS__AllowedOrigins__0=${CORS_ORIGIN_0:-https://localhost}
       - CORS__AllowedOrigins__1=${CORS_ORIGIN_1:-}
       - CORS__AllowedOrigins__2=${CORS_ORIGIN_2:-}
     healthcheck:
@@ -93,11 +109,13 @@ services:
   redis:
     container_name: r2wai-redis
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -119,8 +137,6 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./backups:/backups
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U r2wai -d r2wai"]
       interval: 10s
@@ -143,3 +159,6 @@ volumes:
 networks:
   r2wai-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24

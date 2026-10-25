@@ -1,10 +1,12 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Common.Security;
 using R2WAI.Domain.Entities;
 using R2WAI.Domain.Enums;
 using R2WAI.Infrastructure.Services.ToolFramework;
+using R2WAI.Infrastructure.Security;
 
 namespace R2WAI.Infrastructure.AI.DynamicTools;
 
@@ -26,12 +28,18 @@ public class DynamicToolExecutor
     private readonly IToolRegistry _toolRegistry;
     private readonly IEncryptionService _encryptionService;
     private readonly ILogger<DynamicToolExecutor> _logger;
+    private readonly EgressGuardOptions _egressOptions;
 
-    public DynamicToolExecutor(IToolRegistry toolRegistry, IEncryptionService encryptionService, ILogger<DynamicToolExecutor> logger)
+    public DynamicToolExecutor(
+        IToolRegistry toolRegistry,
+        IEncryptionService encryptionService,
+        ILogger<DynamicToolExecutor> logger,
+        IOptions<EgressGuardOptions> egressOptions)
     {
         _toolRegistry = toolRegistry;
         _encryptionService = encryptionService;
         _logger = logger;
+        _egressOptions = egressOptions.Value;
     }
 
     // Same eligibility as DynamicToolFunctionFactory.BuildPluginAsync's query — a tool this class can
@@ -54,9 +62,9 @@ public class DynamicToolExecutor
         // P0-8: every real dispatch, not just the "Test Connection" button, must be blocked from
         // reaching an internal/private address — see EgressGuard's doc comment for why this check
         // used to only exist there.
-        if (!Security.EgressGuard.IsAllowedUrl(target.BaseUrl))
+        if (!EgressGuard.IsAllowedUrl(target.BaseUrl, _egressOptions))
         {
-            _logger.LogWarning("Dynamic tool {Tool} blocked — target address is not allowed: {BaseUrl}", toolDef.Name, target.BaseUrl);
+            _logger.LogWarning("Dynamic tool {Tool} blocked — target address is not allowed: {Origin}", toolDef.Name, EgressGuard.SafeUrlForLog(target.BaseUrl));
             return "This action targets a network address that is not allowed and cannot be performed.";
         }
 

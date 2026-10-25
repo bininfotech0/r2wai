@@ -162,10 +162,10 @@ jobs:
       - name: Check for vulnerable packages
         run: dotnet list R2WAI.slnx package --vulnerable --include-transitive 2>&1 | tee vulnerability-report.txt
 
-      - name: Fail on critical vulnerabilities
+      - name: Fail on high or critical vulnerabilities
         run: |
-          if grep -qi "Critical" vulnerability-report.txt; then
-            echo "::error::Critical vulnerabilities found in dependencies"
+          if grep -Eqi "High|Critical" vulnerability-report.txt; then
+            echo "::error::High or critical vulnerabilities found in dependencies"
             exit 1
           fi
 

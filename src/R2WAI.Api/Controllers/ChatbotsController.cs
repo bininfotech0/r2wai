@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.ComponentModel.DataAnnotations;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -19,7 +20,7 @@ using R2WAI.Infrastructure.Persistence;
 namespace R2WAI.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Policy = "AdminOnly")]
 [Route("api/v1/[controller]")]
 public class ChatbotsController(
     IMediator mediator,
@@ -43,6 +44,8 @@ public class ChatbotsController(
     // has to be bounded harder. 5 MB and images/PDF/plain-text only — no Office documents (macro
     // risk, no legitimate use case for a support-chat attachment) and no archives.
     private const long MaxAttachmentSize = 5 * 1024 * 1024; // 5 MB
+    private const int MaxChatMessageLength = 10_000;
+    private const int MaxChatRequestSize = 256 * 1024;
     private static readonly HashSet<string> AllowedAttachmentContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf", "text/plain",
@@ -224,13 +227,19 @@ public class ChatbotsController(
 
     // SessionId is optional: the widget sends a random id per visitor conversation so the bot
     // remembers earlier turns. Without it each message is answered stand-alone.
-    public record ChatbotChatRequest(string Message, string? SessionId = null);
+    public record ChatbotChatRequest(
+        [property: Required]
+        [property: StringLength(MaxChatMessageLength, MinimumLength = 1)]
+        string Message,
+        [property: StringLength(ChatbotSessionIds.MaxLength)]
+        string? SessionId = null);
 
     // Anonymous for the same reason as GetPublicInfo above — this is the endpoint the public
     // embed widget calls to actually send a message.
     [HttpPost("{id:guid}/chat")]
     [AllowAnonymous]
     [EnableCors("PublicChatbotCors")]
+    [RequestSizeLimit(MaxChatRequestSize)]
     public async Task<IActionResult> Chat(Guid id, [FromBody] ChatbotChatRequest request, CancellationToken ct = default)
     {
         // IgnoreQueryFilters — see GetPublicInfo above for why this is required, not just safe.
@@ -417,6 +426,7 @@ public class ChatbotsController(
     [HttpPost("{id:guid}/chat/stream")]
     [AllowAnonymous]
     [EnableCors("PublicChatbotCors")]
+    [RequestSizeLimit(MaxChatRequestSize)]
     public async Task StreamChat(Guid id, [FromBody] ChatbotChatRequest request, CancellationToken ct = default)
     {
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
@@ -646,7 +656,12 @@ public class ChatbotsController(
 
     // SessionId: the caller's own thread key (chat id, phone number...) to give the bot memory
     // across messages of one conversation. Omit it for stand-alone replies.
-    public record ChatbotWebhookRequest(string Message, string? SessionId = null);
+    public record ChatbotWebhookRequest(
+        [property: Required]
+        [property: StringLength(MaxChatMessageLength, MinimumLength = 1)]
+        string Message,
+        [property: StringLength(ChatbotSessionIds.MaxLength)]
+        string? SessionId = null);
     public record ChatbotWebhookReply(string Reply);
 
     // Closes the gap the Webhook Key panel on the chatbot detail page used to disclose honestly:
@@ -662,6 +677,7 @@ public class ChatbotsController(
     // never even ran. A distinct header name is what keeps the two key spaces from colliding.
     [HttpPost("{id:guid}/webhook")]
     [AllowAnonymous]
+    [RequestSizeLimit(MaxChatRequestSize)]
     public async Task<IActionResult> Webhook(Guid id, [FromBody] ChatbotWebhookRequest request, CancellationToken ct = default)
     {
         // IgnoreQueryFilters — see GetPublicInfo above for why this is required, not just safe. The

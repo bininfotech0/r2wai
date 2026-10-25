@@ -41,7 +41,7 @@ public class OllamaModelProvider : IModelProvider
         builder.AddOpenAIChatCompletion(ollamaModel, ollamaClient);
         builder.AddOpenAIEmbeddingGenerator(embeddingModel, ollamaClient);
 
-        _logger.LogInformation("AI provider: Ollama at {Endpoint}, model: {Model}", ollamaEndpoint, ollamaModel);
+        _logger.LogInformation("AI provider: Ollama at {Origin}, model: {Model}", R2WAI.Infrastructure.Security.EgressGuard.SafeUrlForLog(ollamaEndpoint), ollamaModel);
     }
 
     public void DisableReasoning(OpenAIPromptExecutionSettings settings, string? replyJsonSchema)

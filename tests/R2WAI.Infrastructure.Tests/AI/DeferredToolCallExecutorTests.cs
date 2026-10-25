@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using R2WAI.Application.Common.Interfaces;
 using R2WAI.Application.Common.Models;
@@ -7,6 +8,7 @@ using R2WAI.Domain.Entities;
 using R2WAI.Domain.Enums;
 using R2WAI.Infrastructure.AI.DynamicTools;
 using R2WAI.Infrastructure.Services.ToolFramework;
+using R2WAI.Infrastructure.Security;
 
 namespace R2WAI.Infrastructure.Tests.AI;
 
@@ -113,8 +115,10 @@ public class DeferredToolCallExecutorTests
     {
         var registry = new FakeRegistry();
         registry.Register(fakeTool);
-        var dynamicExecutor = new DynamicToolExecutor(registry, new NoOpEncryptionService(), NullLogger<DynamicToolExecutor>.Instance);
-        var mcpClient = new McpClientAdapter(NullLogger<McpClientAdapter>.Instance);
+        var dynamicExecutor = new DynamicToolExecutor(registry, new NoOpEncryptionService(),
+            NullLogger<DynamicToolExecutor>.Instance, Options.Create(new EgressGuardOptions()));
+        var mcpClient = new McpClientAdapter(NullLogger<McpClientAdapter>.Instance,
+            Mock.Of<IHttpClientFactory>(), NullLoggerFactory.Instance, Options.Create(new EgressGuardOptions()));
         var mcpExecutor = new McpDynamicToolExecutor(mcpClient, new NoOpEncryptionService(), NullLogger<McpDynamicToolExecutor>.Instance);
         return new DeferredToolCallExecutor(
             new FakeToolDefinitionRepository(toolDefs), dynamicExecutor, mcpExecutor, CreateAuditScopeFactory(),

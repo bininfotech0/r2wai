@@ -36,6 +36,6 @@ public class ZaiModelProvider : IModelProvider
         var zaiClient = new OpenAIClient(new ApiKeyCredential(zaiApiKey), new OpenAIClientOptions { Endpoint = new Uri(zaiEndpoint), RetryPolicy = new ClientRetryPolicy(3), NetworkTimeout = ModelGatewayDefaults.CloudNetworkTimeout });
         builder.AddOpenAIChatCompletion(zaiModel, zaiClient);
 
-        _logger.LogInformation("AI provider: Z.ai at {Endpoint}, model: {Model}", zaiEndpoint, zaiModel);
+        _logger.LogInformation("AI provider: Z.ai at {Origin}, model: {Model}", R2WAI.Infrastructure.Security.EgressGuard.SafeUrlForLog(zaiEndpoint), zaiModel);
     }
 }

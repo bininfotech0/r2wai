@@ -56,7 +56,9 @@ public static class DatabaseInitializer
             if (!connected)
             {
                 logger.LogError(lastConnectEx, "Could not connect to the database after {MaxAttempts} attempts. Ensure PostgreSQL is running and accessible; migrations were not applied.", maxConnectAttempts);
-                return;
+                throw new InvalidOperationException(
+                    $"Could not connect to the database after {maxConnectAttempts} attempts. Startup cannot continue without the application database.",
+                    lastConnectEx);
             }
 
             var availableMigrations = context.Database.GetMigrations().ToList();
@@ -92,8 +94,8 @@ public static class DatabaseInitializer
             if (DatabaseBootstrap.ShouldSeedDemoData(environment, configuration))
             {
                 if (!environment.IsDevelopment())
-                    logger.LogWarning(
-                        "Database:SeedDemoData is enabled outside Development. On an empty database this creates demo accounts whose passwords are public (admin@r2wai.io, user@r2wai.io, ...). Never enable it on a real deployment.");
+                    throw new InvalidOperationException(
+                        "Database:SeedDemoData is enabled outside Development. Refusing to create accounts with publicly known demo passwords.");
 
                 logger.LogInformation("Seeding database with demo data...");
                 await ApplicationDbContextSeed.SeedAsync(context, cancellationToken);
@@ -101,7 +103,16 @@ public static class DatabaseInitializer
             else
             {
                 logger.LogInformation("Bootstrapping database (no demo data)...");
-                await DatabaseBootstrap.SeedAsync(context, BootstrapAdmin.From(configuration), logger, cancellationToken);
+                var bootstrapAdmin = BootstrapAdmin.From(configuration);
+                if (!environment.IsDevelopment() && !await context.Tenants.AnyAsync(cancellationToken))
+                {
+                    var adminProblem = DatabaseBootstrap.ValidateAdmin(bootstrapAdmin);
+                    if (adminProblem is not null)
+                        throw new InvalidOperationException(
+                            $"A valid bootstrap administrator is required to initialize an empty non-development database: {adminProblem}.");
+                }
+
+                await DatabaseBootstrap.SeedAsync(context, bootstrapAdmin, logger, cancellationToken);
             }
 
             logger.LogInformation("Database initialization completed successfully.");

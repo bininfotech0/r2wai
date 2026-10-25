@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using R2WAI.Application.Common.Exceptions;
 using R2WAI.Infrastructure.Integrations;
+using R2WAI.Infrastructure.Security;
 
 namespace R2WAI.Infrastructure.Tests.Integrations;
 
@@ -19,7 +21,8 @@ public class OpenApiImportServiceTests
         var httpClientFactory = new Mock<IHttpClientFactory>(MockBehavior.Strict);
         // Strict + no Setup: any call to CreateClient throws a Moq MockException — proving the
         // blocked URL never reached the point of even requesting an HttpClient to fetch it with.
-        return new OpenApiImportService(httpClientFactory.Object, Mock.Of<ILogger<OpenApiImportService>>());
+        return new OpenApiImportService(httpClientFactory.Object, Mock.Of<ILogger<OpenApiImportService>>(),
+            Options.Create(new EgressGuardOptions()));
     }
 
     [Fact]

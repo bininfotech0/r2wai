@@ -3,7 +3,8 @@
 # RateLimitingMiddleware both degrade gracefully to a stricter-than-needed default on connect
 # failure), not a source of truth. For a larger deployment, prefer a managed Redis
 # (ElastiCache/Azure Cache/Memorystore) and point Cache__Redis__ConnectionString at it instead of
-# this Service.
+# this Service. r2wai-secrets must contain REDIS_PASSWORD; API pods also read the authenticated
+# connection from Cache__Redis__ConnectionString in that Secret.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,7 +29,13 @@ spec:
       containers:
         - name: redis
           image: redis:7-alpine
-          command: ["redis-server", "--appendonly", "yes"]
+          command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$REDIS_PASSWORD\""]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: r2wai-secrets
+                  key: REDIS_PASSWORD
           # No runAsNonRoot/readOnlyRootFilesystem here: the upstream redis:7-alpine image runs as
           # root by default with no built-in non-root user (verified — `docker run --rm
           # redis:7-alpine id` returns uid=0, and /etc/passwd has no "redis" entry to switch to),
@@ -37,15 +44,6 @@ spec:
           # allowPrivilegeEscalation/capabilities are safe regardless — redis-server never needs
           # elevated privileges to bind an unprivileged port or write its own data directory.
           #
-          # KNOWN GAP, not fixed here: this Redis has no authentication (--requirepass) at all — any
-          # pod in the namespace can currently read/flush/rewrite its state. Fixing it properly means
-          # moving Cache__Redis__ConnectionString from the ConfigMap into the Secret (it becomes
-          # secret-shaped once it carries a password) and sourcing REDIS_PASSWORD here from the same
-          # Secret via an entrypoint that does `redis-server --requirepass "$REDIS_PASSWORD"` rather
-          # than a literal command arg (which would otherwise leak via `kubectl get pod -o yaml`).
-          # Not attempted in this pass: it changes the documented Secret contract and there is no
-          # live cluster available here to verify the auth wiring actually works end to end before
-          # every replica's rate-limiting/session state depends on it.
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -57,12 +55,12 @@ spec:
               mountPath: /data
           readinessProbe:
             exec:
-              command: ["redis-cli", "ping"]
+              command: ["sh", "-c", "REDISCLI_AUTH=\"$REDIS_PASSWORD\" redis-cli ping"]
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             exec:
-              command: ["redis-cli", "ping"]
+              command: ["sh", "-c", "REDISCLI_AUTH=\"$REDIS_PASSWORD\" redis-cli ping"]
             initialDelaySeconds: 10
             periodSeconds: 20
           resources:
